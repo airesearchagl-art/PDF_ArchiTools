@@ -1,5 +1,5 @@
 import React from 'react';
-import { PenTool, Layers, Ruler, Target, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings } from 'lucide-react';
+import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings } from 'lucide-react';
 
 export function HowToUse() {
     // Responsive grid style

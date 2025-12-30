@@ -168,7 +168,7 @@ export async function processMargin(file: File, options: MarginOptions): Promise
     const newPdf = await PDFDocument.create();
 
     const pages = pdfDoc.getPages();
-    const embeddedPages = await newPdf.embedPages(pdfDoc.getPages());
+
     // Note: embedPages works if we copy pages. 
     // But wait, pdf-lib embedPages takes an array of pages. 
     // Actually, to embed pages from another doc, we usually use `embedPdf` or `copyPages`.
