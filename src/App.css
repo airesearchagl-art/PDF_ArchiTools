@@ -1,0 +1,12 @@
+.app-container {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  /* margin-bottom removed */
+}
