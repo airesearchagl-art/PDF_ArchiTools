@@ -17,6 +17,10 @@ export function HowToUse() {
                 <p style={{ color: '#ccc', fontSize: '1.1rem' }}>
                     設計業務の効率化を目指して開発された、5つの主要なPDFツール機能の使い方ガイドです。
                 </p>
+                <p style={{ margin: '10px 0 0', fontSize: '0.9em', color: '#ffecb3', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    ※ アップロードされたPDFデータは、すべてお客様のブラウザ内（ローカル環境）でのみ処理されます。<br />
+                    外部サーバーへ送信・保存されることは一切ありませんので、機密情報を含む図面データでも安心してご利用いただけます。
+                </p>
             </div>
 
             {/* 1. ANNOTATOR */}
@@ -145,7 +149,12 @@ export function HowToUse() {
                         <p>右上のコントロールバーで表示を調整します。</p>
                         <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
                             <li><b>Diff Threshold:</b> 微妙な位置ズレやスキャンノイズを無視するため、差分判定の閾値を調整できます。</li>
-                            <li><b>Export PDF:</b> 現在の重ね合わせ状態をそのまま1枚のPDF（画像化）として保存します。</li>
+                            <li><b>Export PDF:</b> <Settings size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> アイコンから<b>書き出し設定</b>（ページ範囲・解像度）を変更し、結果をPDFとして保存します。
+                                <ul style={{ marginTop: '5px', color: '#666' }}>
+                                    <li><b>Pages:</b> "All" (全ページ), "Current" (表示中のみ), "Range" (例: 1-3, 5) から選択可能。</li>
+                                    <li><b>Quality:</b> 72 DPI (軽量) 〜 1200 DPI (最高画質) まで選択可能。</li>
+                                </ul>
+                            </li>
                         </ul>
                     </div>
                 </div>

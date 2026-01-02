@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { renderPageToCanvas, computeMultiPdfComposite } from '../utils/pdfDiff';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Settings } from 'lucide-react';
 import jsPDF from 'jspdf';
 
 // Configure PDF worker
@@ -23,10 +23,15 @@ export const PdfComparator: React.FC = () => {
 
     const [pageNumber, setPageNumber] = useState(1);
     const [numPages, setNumPages] = useState(0);
-    const [scale, setScale] = useState(1.0);
+    const [scale, setScale] = useState(1.0); // Visual Zoom Scale (1.0 = 100% relative to 72DPI standard)
+    const [dpi, setDpi] = useState(150);     // Render Resolution
     const [threshold, setThreshold] = useState(0);
-    const [loading, setLoading] = useState(false);
     const [exportingProgress, setExportingProgress] = useState<{ current: number, total: number } | null>(null);
+
+    // Export Settings
+    const [exportScope, setExportScope] = useState<'all' | 'current' | 'range'>('all');
+    const [exportRange, setExportRange] = useState('');
+    const [showExportSettings, setShowExportSettings] = useState(false);
 
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -100,7 +105,6 @@ export const PdfComparator: React.FC = () => {
     useEffect(() => {
         const renderComposite = async () => {
             // Check if we have at least one visible PDF
-
             if (activeIndices.length === 0) {
                 // Clear canvas
                 if (canvasRef.current) {
@@ -112,10 +116,38 @@ export const PdfComparator: React.FC = () => {
 
             if (!canvasRef.current) return;
 
-            setLoading(true);
             try {
                 const ctx = canvasRef.current.getContext('2d');
                 if (!ctx) return;
+
+                // 0. Determine Safe Render Scale
+                // Get base dimensions from the first active PDF
+                const basePdf = pdfs[activeIndices[0]]!;
+                let baseVp = { width: 600, height: 800 }; // Fallback
+                try {
+                    const page = await basePdf.getPage(pageNumber);
+                    baseVp = page.getViewport({ scale: 1.0 });
+                } catch (e) { console.warn("Could not get viewport", e); }
+
+                let renderScale = scale * (dpi / 72);
+
+                // Safety Limits for Canvas Buffer
+                const MAX_DIM = 12000;
+                const MAX_AREA = 80000000; // ~80MP
+
+                const estW = baseVp.width * renderScale;
+                const estH = baseVp.height * renderScale;
+
+                if (estW > MAX_DIM || estH > MAX_DIM || (estW * estH) > MAX_AREA) {
+                    // Reduce scale to fit limits
+                    const ratioW = MAX_DIM / estW;
+                    const ratioH = MAX_DIM / estH;
+                    const ratioA = Math.sqrt(MAX_AREA / (estW * estH));
+                    const safeFactor = Math.min(ratioW, ratioH, ratioA);
+                    renderScale *= safeFactor;
+                    console.warn(`Canvas size limit reached. Capping render scale to ${renderScale.toFixed(2)} (Requested: ${(scale * dpi / 72).toFixed(2)})`);
+                }
+
 
                 // 1. Render all active pages to buffers
                 const layerData = [];
@@ -125,7 +157,7 @@ export const PdfComparator: React.FC = () => {
                     const pdf = pdfs[i]!;
                     if (pageNumber > pdf.numPages) continue; // Skip if page doesn't exist
 
-                    const canvas = await renderPageToCanvas(pdf, pageNumber, scale);
+                    const canvas = await renderPageToCanvas(pdf, pageNumber, renderScale);
                     w = Math.max(w, canvas.width);
                     h = Math.max(h, canvas.height);
 
@@ -139,12 +171,16 @@ export const PdfComparator: React.FC = () => {
                 }
 
                 if (w === 0 || h === 0 || layerData.length === 0) {
-                    setLoading(false);
                     return;
                 }
 
                 canvasRef.current.width = w;
                 canvasRef.current.height = h;
+
+                // Set CSS dimensions to match Visual Scale
+                const displayFactor = scale / renderScale;
+                canvasRef.current.style.width = `${w * displayFactor}px`;
+                canvasRef.current.style.height = `${h * displayFactor}px`;
 
                 // 2. Compute Composite
                 const compositeData = computeMultiPdfComposite(layerData, w, h, threshold);
@@ -152,8 +188,6 @@ export const PdfComparator: React.FC = () => {
 
             } catch (err) {
                 console.error("Error compositing:", err);
-            } finally {
-                setLoading(false);
             }
         };
 
@@ -162,24 +196,54 @@ export const PdfComparator: React.FC = () => {
         }, 300); // Debounce
 
         return () => clearTimeout(timer);
-    }, [pdfs, visible, pageNumber, scale, threshold]);
+    }, [pdfs, activeIndices, visible, pageNumber, scale, threshold]);
 
     // Handle PDF Download
     const handleDownload = async () => {
         if (activeIndices.length === 0) return;
         if (numPages === 0) return;
 
-        setExportingProgress({ current: 0, total: numPages });
+        // Determine Pages to Export
+        let pagesToExport: number[] = [];
+        if (exportScope === 'all') {
+            pagesToExport = Array.from({ length: numPages }, (_, i) => i + 1);
+        } else if (exportScope === 'current') {
+            pagesToExport = [pageNumber];
+        } else if (exportScope === 'range') {
+            const parts = exportRange.split(',').map(s => s.trim());
+            const uniquePages = new Set<number>();
+            parts.forEach(part => {
+                if (part.includes('-')) {
+                    const [start, end] = part.split('-').map(Number);
+                    if (!isNaN(start) && !isNaN(end)) {
+                        for (let k = Math.min(start, end); k <= Math.max(start, end); k++) {
+                            if (k >= 1 && k <= numPages) uniquePages.add(k);
+                        }
+                    }
+                } else {
+                    const p = Number(part);
+                    if (!isNaN(p) && p >= 1 && p <= numPages) uniquePages.add(p);
+                }
+            });
+            pagesToExport = Array.from(uniquePages).sort((a, b) => a - b);
+        }
 
-        // Use a higher scale for export quality
-        const exportScale = 2.0;
+        if (pagesToExport.length === 0) {
+            alert("No valid pages selected for export.");
+            return;
+        }
+
+        setExportingProgress({ current: 0, total: pagesToExport.length });
+
+        // Calculate Export Scale (dpi / 72)
+        const exportScale = dpi / 72;
 
         try {
             const doc = new jsPDF({
                 orientation: 'portrait',
                 unit: 'px',
+                hotfixes: ["px_scaling"]
             });
-            // Delete initial empty page
             doc.deletePage(1);
 
             const tempCanvas = document.createElement('canvas');
@@ -187,55 +251,128 @@ export const PdfComparator: React.FC = () => {
 
             if (!tempCtx) throw new Error("No 2D Context");
 
-            for (let p = 1; p <= numPages; p++) {
-                setExportingProgress({ current: p, total: numPages });
+            // Safety Limits for Export Canvas (same as preview)
+            const MAX_DIM = 12000;
+            const MAX_AREA = 80000000; // ~80MP
 
-                // 1. Render Layers
-                const layerData = [];
-                let w = 0, h = 0;
+            let processedCount = 0;
+
+            for (const p of pagesToExport) {
+                setExportingProgress({ current: processedCount + 1, total: pagesToExport.length });
+
+                // Determine Safe Scale for this page
+                let safeExportScale = exportScale;
+
+                try {
+                    // Peek at dimensions using the first active base PDF
+                    let basePdf = null;
+                    for (const idx of activeIndices) {
+                        if (pdfs[idx] && p <= pdfs[idx].numPages) {
+                            basePdf = pdfs[idx];
+                            break;
+                        }
+                    }
+
+                    if (basePdf) {
+                        const page = await basePdf.getPage(p);
+                        const vp = page.getViewport({ scale: 1.0 });
+                        const estW = vp.width * exportScale;
+                        const estH = vp.height * exportScale;
+
+                        if (estW > MAX_DIM || estH > MAX_DIM || (estW * estH) > MAX_AREA) {
+                            const ratioW = MAX_DIM / estW;
+                            const ratioH = MAX_DIM / estH;
+                            const ratioA = Math.sqrt(MAX_AREA / (estW * estH));
+                            safeExportScale = exportScale * Math.min(1, ratioW, ratioH, ratioA);
+                            console.warn(`Export: Cap scale to ${safeExportScale.toFixed(2)} for safe rendering.`);
+                        }
+                    }
+                } catch (e) { console.warn("Error estimating export size", e); }
+
+                // 1. Render Layers to individual canvases first
+                // This allows us to determine the Max Width/Height before compositing
+                const rawLayers: { canvas: HTMLCanvasElement, color: [number, number, number] }[] = [];
+                let maxW = 0;
+                let maxH = 0;
 
                 for (const i of activeIndices) {
                     const pdf = pdfs[i];
                     if (!pdf || p > pdf.numPages) continue;
 
                     try {
-                        const canvas = await renderPageToCanvas(pdf, p, exportScale);
-                        w = Math.max(w, canvas.width);
-                        h = Math.max(h, canvas.height);
-                        const pCtx = canvas.getContext('2d');
-                        if (pCtx) {
-                            layerData.push({
-                                data: pCtx.getImageData(0, 0, canvas.width, canvas.height).data,
-                                color: SLOTS[i].rgb
-                            });
-                        }
+                        const canvas = await renderPageToCanvas(pdf, p, safeExportScale);
+                        maxW = Math.max(maxW, canvas.width);
+                        maxH = Math.max(maxH, canvas.height);
+                        rawLayers.push({
+                            canvas: canvas,
+                            color: SLOTS[i].rgb
+                        });
                     } catch (err) {
                         console.warn(`Skipping page ${p} of PDF ${i}`, err);
                     }
                 }
 
-                if (w === 0 || h === 0 || layerData.length === 0) {
-                    continue; // Skip empty page? Or add blank?
+                if (maxW === 0 || maxH === 0 || rawLayers.length === 0) {
+                    processedCount++;
+                    continue;
                 }
 
-                // 2. Composite
-                const compositeData = computeMultiPdfComposite(layerData, w, h, threshold);
+                // 2. Normalize and Extract Data
+                // Ensure all buffers are exactly maxW x maxH, padded with white
+                const normalizedLayerData = [];
 
-                tempCanvas.width = w;
-                tempCanvas.height = h;
+                tempCanvas.width = maxW;
+                tempCanvas.height = maxH;
+
+                for (const layer of rawLayers) {
+                    // Fill white (background)
+                    tempCtx.fillStyle = 'white';
+                    tempCtx.fillRect(0, 0, maxW, maxH);
+
+                    // Draw layer (top-left aligned)
+                    tempCtx.drawImage(layer.canvas, 0, 0);
+
+                    normalizedLayerData.push({
+                        data: tempCtx.getImageData(0, 0, maxW, maxH).data,
+                        color: layer.color
+                    });
+
+                    // Cleanup individual canvas
+                    layer.canvas.width = 0;
+                    layer.canvas.height = 0;
+                }
+
+                // 3. Composite
+                const compositeData = computeMultiPdfComposite(normalizedLayerData, maxW, maxH, threshold);
+
+                // Put composite back to tempCanvas
                 tempCtx.putImageData(compositeData, 0, 0);
 
                 const imgData = tempCanvas.toDataURL('image/jpeg', 0.85);
 
-                const orientation = w > h ? 'landscape' : 'portrait';
-                doc.addPage([w, h], orientation);
-                doc.addImage(imgData, 'JPEG', 0, 0, w, h);
+                const orientation = maxW > maxH ? 'landscape' : 'portrait';
+
+                // Calculate Logical Size
+                const pdfW = maxW / safeExportScale;
+                const pdfH = maxH / safeExportScale;
+
+                doc.addPage([pdfW, pdfH], orientation);
+                doc.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+
+                processedCount++;
 
                 // Yield to event loop to allow UI update
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
 
-            doc.save(`comparison_export_${new Date().toISOString().slice(0, 10)}.pdf`);
+            // Generate Filename
+            let baseName = "comparison";
+            if (files[0]) {
+                baseName = files[0].name.replace(/\.pdf$/i, "");
+            }
+            const filename = `comparison_${baseName}_${dpi}dpi.pdf`;
+
+            doc.save(filename);
 
         } catch (error) {
             console.error("Export Failed", error);
@@ -254,7 +391,8 @@ export const PdfComparator: React.FC = () => {
                 background: '#f5f5f5',
                 borderBottom: '1px solid #ddd',
                 zIndex: 10,
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                color: '#333'
             }}>
                 <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px' }}>
                     {SLOTS.map((slot, i) => (
@@ -319,7 +457,7 @@ export const PdfComparator: React.FC = () => {
                         <button onClick={() => setPageNumber(p => Math.max(1, p - 1))} disabled={pageNumber <= 1}>
                             <ChevronLeft />
                         </button>
-                        <span style={{ fontWeight: 'bold' }}>Page {pageNumber} / {numPages || '-'}</span>
+                        <span style={{ fontWeight: 'bold', color: 'black' }}>Page {pageNumber} / {numPages || '-'}</span>
                         <button onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} disabled={pageNumber >= numPages}>
                             <ChevronRight />
                         </button>
@@ -353,26 +491,7 @@ export const PdfComparator: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Download Btn */}
-                    <button
-                        onClick={handleDownload}
-                        disabled={!!exportingProgress}
-                        title="Export Comparison PDF"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '5px 10px',
-                            background: '#2ba6cb',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        <Download size={16} />
-                        Export PDF
-                    </button>
+
 
                     {/* Threshold Slider */}
                     <div className="threshold-control" style={{
@@ -408,6 +527,116 @@ export const PdfComparator: React.FC = () => {
                             {threshold}px
                         </div>
                     </div>
+
+
+
+                    {/* Export Controls */}
+                    <div className="export-controls" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        background: '#e0f2f1',
+                        padding: '5px 10px',
+                        borderRadius: '20px',
+                        border: '1px solid #b2dfdb',
+                        position: 'relative' // For dropdown
+                    }}>
+                        {/* Toggle Settings */}
+                        <button
+                            onClick={() => setShowExportSettings(!showExportSettings)}
+                            title="Export Settings"
+                            style={{
+                                background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
+                                display: 'flex', alignItems: 'center'
+                            }}
+                        >
+                            <Settings size={18} color={showExportSettings ? "#00796b" : "#555"} />
+                        </button>
+
+                        <div style={{ height: '20px', width: '1px', background: '#ccc', margin: '0 5px' }} />
+
+                        {/* Download Btn */}
+                        <button
+                            onClick={handleDownload}
+                            disabled={!!exportingProgress}
+                            title="Export PDF with Current Settings"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                background: 'transparent',
+                                color: '#00796b',
+                                border: 'none',
+                                fontWeight: 'bold',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <Download size={18} />
+                            Export
+                        </button>
+
+                        {/* Settings Dropdown/Popover */}
+                        {showExportSettings && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                marginTop: '10px',
+                                background: 'white',
+                                padding: '15px',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                zIndex: 100,
+                                minWidth: '220px',
+                                border: '1px solid #eee'
+                            }}>
+                                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9em', color: '#333' }}>Export Settings</h4>
+
+                                {/* Scope */}
+                                <div style={{ marginBottom: '10px' }}>
+                                    <label style={{ display: 'block', fontSize: '0.75em', fontWeight: 'bold', marginBottom: '4px', color: '#666' }}>Pages</label>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.85em', gap: '5px', cursor: 'pointer', color: '#333' }}>
+                                            <input type="radio" checked={exportScope === 'all'} onChange={() => setExportScope('all')} />
+                                            All Pages ({numPages})
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.85em', gap: '5px', cursor: 'pointer', color: '#333' }}>
+                                            <input type="radio" checked={exportScope === 'current'} onChange={() => setExportScope('current')} />
+                                            Current Page ({pageNumber})
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.85em', gap: '5px', cursor: 'pointer', color: '#333' }}>
+                                            <input type="radio" checked={exportScope === 'range'} onChange={() => setExportScope('range')} />
+                                            Range (e.g. 1-3, 5)
+                                        </label>
+                                        {exportScope === 'range' && (
+                                            <input
+                                                type="text"
+                                                placeholder="1-3, 5"
+                                                value={exportRange}
+                                                onChange={e => setExportRange(e.target.value)}
+                                                style={{ fontSize: '0.85em', padding: '4px', width: '100%', boxSizing: 'border-box', color: '#333', backgroundColor: 'white' }}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Quality */}
+                                <div style={{ marginBottom: '5px' }}>
+                                    <label style={{ display: 'block', fontSize: '0.75em', fontWeight: 'bold', marginBottom: '4px', color: '#666' }}>Quality</label>
+                                    <select
+                                        value={dpi}
+                                        onChange={(e) => setDpi(Number(e.target.value))}
+                                        style={{ width: '100%', padding: '4px', fontSize: '0.85em', color: '#333', backgroundColor: 'white' }}
+                                    >
+                                        <option value={72}>72 DPI (Low)</option>
+                                        <option value={150}>150 DPI (Std)</option>
+                                        <option value={300}>300 DPI (High)</option>
+                                        <option value={450}>450 DPI (Very High)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -419,31 +648,14 @@ export const PdfComparator: React.FC = () => {
                 style={{
                     flex: 1,
                     overflow: 'auto',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'flex-start',
-                    padding: '20px',
+                    position: 'relative',
                     backgroundColor: '#e5e5e5',
-                    position: 'relative'
+                    // Use a layout that supports scrolling centered content without clipping
+                    display: 'grid',
+                    placeItems: 'center',
+                    padding: '20px',
                 }}
             >
-                {loading && (
-                    <div style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        background: 'rgba(255,255,255,0.9)',
-                        padding: '15px 30px',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                        zIndex: 10,
-                        fontWeight: 'bold'
-                    }}>
-                        Processing Diff...
-                    </div>
-                )}
-
                 {exportingProgress && (
                     <div style={{
                         position: 'fixed',
@@ -466,7 +678,13 @@ export const PdfComparator: React.FC = () => {
                     </div>
                 )}
                 {/* Canvas */}
-                <canvas ref={canvasRef} style={{ boxShadow: '0 0 10px rgba(0,0,0,0.1)', background: 'white' }} />
+                <canvas
+                    ref={canvasRef}
+                    style={{
+                        boxShadow: '0 0 10px rgba(0,0,0,0.1)',
+                        background: 'white',
+                    }}
+                />
 
                 {/* Empty State Hint */}
                 {activeIndices.length === 0 && (
@@ -475,6 +693,6 @@ export const PdfComparator: React.FC = () => {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };

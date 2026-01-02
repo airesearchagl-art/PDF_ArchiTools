@@ -70,6 +70,14 @@ async function createDummyPdf() {
             await inputs[0].uploadFile('dummy.pdf');
             await inputs[1].uploadFile('dummy.pdf'); // Ideally different file, but same is okay for UI demo
             await new Promise(r => setTimeout(r, 2000));
+
+            // Open Export Settings to show the new UI
+            const settingsBtn = await page.$('button[title="Export Settings"]');
+            if (settingsBtn) {
+                console.log('Opening Export Settings...');
+                await settingsBtn.click();
+                await new Promise(r => setTimeout(r, 500));
+            }
         }
         await page.screenshot({ path: 'public/screenshots/comparator.png' });
 
