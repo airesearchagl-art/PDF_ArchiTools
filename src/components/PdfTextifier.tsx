@@ -9,6 +9,8 @@ import { renderPageToCanvas } from '../utils/pdfDiff';
 
 // Reuse worker configuration
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+import { VersionFooter } from './VersionFooter';
+import { TOOL_VERSIONS } from '../config/versions';
 
 interface TextifierOptions {
     cleanNoise: boolean;
@@ -266,6 +268,11 @@ export const PdfTextifier: React.FC = () => {
             </div>
 
 
+            <VersionFooter
+                toolName="textifier"
+                version={TOOL_VERSIONS.textifier.version}
+                lastUpdate={TOOL_VERSIONS.textifier.lastUpdate}
+            />
         </div>
     );
 };

@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { renderPageToCanvas, computeMultiPdfComposite } from '../utils/pdfDiff';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Settings } from 'lucide-react';
+import { renderPageToCanvas, computeMultiPdfComposite, detectChangeBounds } from '../utils/pdfDiff';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Settings, FileText } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { VersionFooter } from './VersionFooter';
+import { TOOL_VERSIONS } from '../config/versions';
 
 // Configure PDF worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 // Config for the 4 slots
 const SLOTS = [
-    { id: 0, name: 'Red (Base)', color: 'red', rgb: [1, 0, 0] as [number, number, number] },
-    { id: 1, name: 'Blue', color: 'blue', rgb: [0, 0, 1] as [number, number, number] },
+    { id: 0, name: 'Blue (Base)', color: 'blue', rgb: [0, 0, 1] as [number, number, number] },
+    { id: 1, name: 'Red', color: 'red', rgb: [1, 0, 0] as [number, number, number] },
     { id: 2, name: 'Green', color: 'green', rgb: [0, 0.5, 0] as [number, number, number] }, // Darker green for visibility
     { id: 3, name: 'Yellow', color: '#e6b800', rgb: [0.9, 0.7, 0] as [number, number, number] }, // Darker yellow for visibility against white
 ];
@@ -26,6 +28,8 @@ export const PdfComparator: React.FC = () => {
     const [scale, setScale] = useState(1.0); // Visual Zoom Scale (1.0 = 100% relative to 72DPI standard)
     const [dpi, setDpi] = useState(150);     // Render Resolution
     const [threshold, setThreshold] = useState(0);
+    const [matchColor, setMatchColor] = useState('#C0C0C0'); // 一致箇所の色（デフォルト: 薄いグレー）
+    const [matchOpacity, setMatchOpacity] = useState(0.7);   // 一致箇所の透明度（デフォルト: 70%）
     const [exportingProgress, setExportingProgress] = useState<{ current: number, total: number } | null>(null);
 
     // Export Settings
@@ -38,6 +42,14 @@ export const PdfComparator: React.FC = () => {
 
     // Derived state
     const activeIndices = pdfs.map((pdf, i) => (pdf && visible[i] ? i : -1)).filter(i => i !== -1);
+
+    // Helper: hex to RGB conversion
+    const hexToRgb = (hex: string): [number, number, number] => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result
+            ? [parseInt(result[1], 16) / 255, parseInt(result[2], 16) / 255, parseInt(result[3], 16) / 255]
+            : [0, 0, 0];
+    };
 
     // Handle File Upload
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
@@ -182,8 +194,9 @@ export const PdfComparator: React.FC = () => {
                 canvasRef.current.style.width = `${w * displayFactor}px`;
                 canvasRef.current.style.height = `${h * displayFactor}px`;
 
-                // 2. Compute Composite
-                const compositeData = computeMultiPdfComposite(layerData, w, h, threshold);
+                // 2. Compute Composite with match color/opacity
+                const matchColorRGB = hexToRgb(matchColor);
+                const compositeData = computeMultiPdfComposite(layerData, w, h, threshold, matchColorRGB, matchOpacity);
                 ctx.putImageData(compositeData, 0, 0);
 
             } catch (err) {
@@ -196,7 +209,7 @@ export const PdfComparator: React.FC = () => {
         }, 300); // Debounce
 
         return () => clearTimeout(timer);
-    }, [pdfs, activeIndices, visible, pageNumber, scale, threshold]);
+    }, [pdfs, activeIndices, visible, pageNumber, scale, threshold, dpi, matchColor, matchOpacity]);
 
     // Handle PDF Download
     const handleDownload = async () => {
@@ -343,7 +356,8 @@ export const PdfComparator: React.FC = () => {
                 }
 
                 // 3. Composite
-                const compositeData = computeMultiPdfComposite(normalizedLayerData, maxW, maxH, threshold);
+                const matchColorRGB = hexToRgb(matchColor);
+                const compositeData = computeMultiPdfComposite(normalizedLayerData, maxW, maxH, threshold, matchColorRGB, matchOpacity);
 
                 // Put composite back to tempCanvas
                 tempCtx.putImageData(compositeData, 0, 0);
@@ -382,6 +396,100 @@ export const PdfComparator: React.FC = () => {
         }
     };
 
+
+    // Generate Change Report function
+    const generateChangeReport = async () => {
+        if (activeIndices.length < 2) {
+            alert('比較するPDFが2つ以上必要です');
+            return;
+        }
+
+        try {
+            const reportPdf = new jsPDF();
+            let isFirstPage = true;
+            let changesFound = 0;
+
+            for (let page = 1; page <= numPages; page++) {
+                // 各ページをレンダリング
+                const pixelScale = scale * (dpi / 72);
+                const layerData = [];
+                let maxW = 0, maxH = 0;
+
+                for (const i of activeIndices) {
+                    const pdf = pdfs[i]!;
+                    if (page > pdf.numPages) continue;
+                    const canvas = await renderPageToCanvas(pdf, page, pixelScale);
+                    maxW = Math.max(maxW, canvas.width);
+                    maxH = Math.max(maxH, canvas.height);
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        layerData.push({
+                            data: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+                            color: SLOTS[i].rgb
+                        });
+                    }
+                }
+
+                if (layerData.length < 2) continue;
+
+                // 変更箇所を検出
+                const bounds = detectChangeBounds(layerData, maxW, maxH, threshold);
+
+                if (bounds) {
+                    changesFound++;
+
+                    // 合成画像を生成
+                    const matchColorRGB = hexToRgb(matchColor);
+                    const composite = computeMultiPdfComposite(layerData, maxW, maxH, threshold, matchColorRGB, matchOpacity);
+
+                    // 一時キャンバスに描画
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = maxW;
+                    tempCanvas.height = maxH;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    if (!tempCtx) continue;
+                    tempCtx.putImageData(composite, 0, 0);
+
+                    // 変更箇所のみ切り抜き
+                    const croppedCanvas = document.createElement('canvas');
+                    croppedCanvas.width = bounds.width;
+                    croppedCanvas.height = bounds.height;
+                    const croppedCtx = croppedCanvas.getContext('2d');
+                    if (!croppedCtx) continue;
+
+                    croppedCtx.drawImage(
+                        tempCanvas,
+                        bounds.x, bounds.y, bounds.width, bounds.height,
+                        0, 0, bounds.width, bounds.height
+                    );
+
+                    // PDFに追加
+                    if (!isFirstPage) reportPdf.addPage();
+                    isFirstPage = false;
+
+                    const imgData = croppedCanvas.toDataURL('image/png');
+                    const pdfWidth = reportPdf.internal.pageSize.getWidth() - 20; // マージン
+                    const aspectRatio = bounds.height / bounds.width;
+                    const pdfHeight = pdfWidth * aspectRatio;
+
+                    reportPdf.addImage(imgData, 'PNG', 10, 10, pdfWidth, pdfHeight);
+                    reportPdf.setFontSize(10);
+                    reportPdf.text(`Page ${page} - Change Detected (位置: x=${bounds.x}, y=${bounds.y})`, 10, pdfHeight + 20);
+                }
+            }
+
+            if (changesFound === 0) {
+                alert('変更箇所が検出されませんでした');
+                return;
+            }
+
+            reportPdf.save('change_report.pdf');
+            alert(`レポート生成完了: ${changesFound}ページの変更を検出しました`);
+        } catch (error) {
+            console.error('Report generation error:', error);
+            alert('レポート生成に失敗しました: ' + (error as Error).message);
+        }
+    };
 
     return (
         <div className="pdf-comparator" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -447,6 +555,69 @@ export const PdfComparator: React.FC = () => {
                             )}
                         </div>
                     ))}
+                </div>
+
+                {/* Match Color/Opacity Control */}
+                <div className="match-color-control" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    borderLeft: '2px solid #ccc',
+                    paddingLeft: '15px'
+                }}>
+                    <label style={{ fontSize: '0.8em', fontWeight: 'bold', color: '#555' }}>一致箇所:</label>
+                    <input
+                        type="color"
+                        value={matchColor}
+                        onChange={(e) => setMatchColor(e.target.value)}
+                        style={{
+                            width: '40px',
+                            height: '30px',
+                            cursor: 'pointer',
+                            border: '1px solid #ccc',
+                            borderRadius: '4px'
+                        }}
+                        title="一致箇所の色"
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <label style={{ fontSize: '0.7em', color: '#666', marginBottom: '2px' }}>透明度</label>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={matchOpacity}
+                            onChange={(e) => setMatchOpacity(parseFloat(e.target.value))}
+                            style={{ width: '80px', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '0.7em', color: '#666' }}>{Math.round(matchOpacity * 100)}%</span>
+                    </div>
+                </div>
+
+                {/* Change Report Button */}
+                <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                    <button
+                        onClick={generateChangeReport}
+                        disabled={activeIndices.length < 2}
+                        style={{
+                            padding: '10px 20px',
+                            backgroundColor: activeIndices.length < 2 ? '#ccc' : '#ff9800',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: activeIndices.length < 2 ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            boxShadow: activeIndices.length < 2 ? 'none' : '0 2px 4px rgba(255,152,0,0.3)',
+                            fontSize: '0.9em',
+                            fontWeight: 'bold'
+                        }}
+                        title="変更箇所のみを抽出したレポートPDFを生成"
+                    >
+                        <FileText size={18} />
+                        変更箇所抽出レポート
+                    </button>
                 </div>
 
                 {/* View Controls Line */}
@@ -693,6 +864,11 @@ export const PdfComparator: React.FC = () => {
                     </div>
                 )}
             </div>
+            <VersionFooter
+                toolName="comparator"
+                version={TOOL_VERSIONS.comparator.version}
+                lastUpdate={TOOL_VERSIONS.comparator.lastUpdate}
+            />
         </div >
     );
 };

@@ -6,6 +6,8 @@ import { PdfPage } from './PdfPage';
 import type { ToolType, MeasurementScale } from './DrawingCanvas';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { VersionFooter } from './VersionFooter';
+import { TOOL_VERSIONS } from '../config/versions';
 
 import './PdfViewer.css';
 
@@ -626,6 +628,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                     Saving PDF... Do not close.
                 </div>
             )}
+            <VersionFooter
+                toolName="annotator"
+                version={TOOL_VERSIONS.annotator.version}
+                lastUpdate={TOOL_VERSIONS.annotator.lastUpdate}
+            />
         </div>
     );
 };

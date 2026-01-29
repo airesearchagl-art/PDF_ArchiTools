@@ -4,6 +4,8 @@ import { Settings, Sliders, Layers, FileText, UploadCloud, Play, X, Check, Alert
 import { processLayer, processMonochrome, processOptimize, processMargin } from '../../utils/pdf-processor';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
+import { VersionFooter } from '../VersionFooter';
+import { TOOL_VERSIONS } from '../../config/versions';
 
 type ToolType = 'layer' | 'monochrome' | 'both' | 'optimize' | 'margin';
 
@@ -355,6 +357,11 @@ export function PdfTools() {
                     )}
                 </button>
             </div>
+            <VersionFooter
+                toolName="tools"
+                version={TOOL_VERSIONS.tools.version}
+                lastUpdate={TOOL_VERSIONS.tools.lastUpdate}
+            />
         </div>
     );
 }

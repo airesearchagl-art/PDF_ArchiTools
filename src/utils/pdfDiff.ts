@@ -50,7 +50,9 @@ export const computeMultiPdfComposite = (
     layers: LayerData[],
     width: number,
     height: number,
-    threshold: number
+    threshold: number,
+    matchColor: [number, number, number] = [0, 0, 0],  // デフォルト: 黒
+    matchOpacity: number = 1.0  // デフォルト: 完全不透明
 ): ImageData => {
     const output = new ImageData(width, height);
     const out = output.data;
@@ -118,25 +120,27 @@ export const computeMultiPdfComposite = (
                     }
 
                     // Determine Ink Color
-                    // If matched -> Black (0,0,0)
+                    // If matched -> matchColor with matchOpacity
                     // If unique -> Layer color
-                    const inkR = isMatch ? 0 : layers[l].color[0];
-                    const inkG = isMatch ? 0 : layers[l].color[1];
-                    const inkB = isMatch ? 0 : layers[l].color[2];
+                    const inkR = isMatch ? matchColor[0] : layers[l].color[0];
+                    const inkG = isMatch ? matchColor[1] : layers[l].color[1];
+                    const inkB = isMatch ? matchColor[2] : layers[l].color[2];
 
-                    // Multiply blending:
-                    // Color = Color * InkColor
-                    // (Normalized 0-1 multiplication)
-
-                    // Note: If InkColor is 1 (White/Transparent property), no change?
-                    // Wait, our definition of InkColor above: 
-                    // Black Ink = (0,0,0). Multiply by 0 -> 0 (Black). Correct.
-                    // Red Ink (1,0,0). Multiply by (1,0,0) -> Keep R, kill G/B. Correct.
-
-                    // Implementation:
-                    r = (r * inkR); // e.g. 255 * 1 = 255. 255 * 0 = 0.
-                    g = (g * inkG);
-                    b = (b * inkB);
+                    // Multiply blending with opacity support for matches:
+                    if (isMatch && matchOpacity < 1.0) {
+                        // Alpha blending: result = background * (1 - alpha) + (background * ink) * alpha
+                        const matchedR = r * inkR;
+                        const matchedG = g * inkG;
+                        const matchedB = b * inkB;
+                        r = r * (1 - matchOpacity) + matchedR * matchOpacity;
+                        g = g * (1 - matchOpacity) + matchedG * matchOpacity;
+                        b = b * (1 - matchOpacity) + matchedB * matchOpacity;
+                    } else {
+                        // Standard multiply blending
+                        r = (r * inkR);
+                        g = (g * inkG);
+                        b = (b * inkB);
+                    }
                 }
                 // If not ink (White), it treats as (1,1,1) multiplier effectively (transparent)
             }
@@ -150,3 +154,99 @@ export const computeMultiPdfComposite = (
 
     return output;
 };
+
+/**
+ * 変更箇所のバウンディングボックスを検出
+ * 各レイヤーで他のレイヤーと一致しない（unique）ピクセルがある領域を検出
+ * 
+ * @param layers Array of image data and their assigned colors
+ * @param width Canvas width
+ * @param height Canvas height
+ * @param threshold Radius to search for matching ink in other layers
+ * @returns Bounding box {x, y, width, height} or null if no changes detected
+ */
+export const detectChangeBounds = (
+    layers: LayerData[],
+    width: number,
+    height: number,
+    threshold: number
+): { x: number; y: number; width: number; height: number } | null => {
+    if (layers.length < 2) return null;
+
+    let minX = width, minY = height, maxX = 0, maxY = 0;
+    let hasChange = false;
+
+    const buffers = layers.map(l => l.data);
+
+    // Helper: Is pixel ink?
+    const isInk = (buf: Uint8ClampedArray, i: number): boolean => {
+        const threshold = 200;
+        return buf[i] < threshold || buf[i + 1] < threshold || buf[i + 2] < threshold;
+    };
+
+    // Helper: has neighbor ink in any buffer
+    const hasNeighborInAny = (bufs: Uint8ClampedArray[], x: number, y: number, radius: number): boolean => {
+        for (const buf of bufs) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                    const ni = (ny * width + nx) * 4;
+                    if (isInk(buf, ni)) return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+
+            // 各レイヤーでinkがあるか確認
+            for (let l = 0; l < layers.length; l++) {
+                const buf = buffers[l];
+                if (isInk(buf, i)) {
+                    // 他のレイヤーと一致しない = 変更箇所
+                    let isMatch = false;
+
+                    if (threshold === 0) {
+                        // Strict check
+                        for (let k = 0; k < layers.length; k++) {
+                            if (k === l) continue;
+                            if (isInk(buffers[k], i)) {
+                                isMatch = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        // Threshold check
+                        const others = buffers.filter((_, idx) => idx !== l);
+                        isMatch = hasNeighborInAny(others, x, y, threshold);
+                    }
+
+                    if (!isMatch) {
+                        hasChange = true;
+                        minX = Math.min(minX, x);
+                        minY = Math.min(minY, y);
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+        }
+    }
+
+    if (!hasChange) return null;
+
+    // マージン追加 (余白を確保)
+    const margin = 20;
+    return {
+        x: Math.max(0, minX - margin),
+        y: Math.max(0, minY - margin),
+        width: Math.min(width, maxX + margin + 1) - Math.max(0, minX - margin),
+        height: Math.min(height, maxY + margin + 1) - Math.max(0, minY - margin)
+    };
+};
+

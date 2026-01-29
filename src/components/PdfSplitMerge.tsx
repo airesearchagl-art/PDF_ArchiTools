@@ -6,6 +6,8 @@ import { GlobalWorkerOptions } from 'pdfjs-dist';
 
 // Ensure worker is set
 GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+import { VersionFooter } from './VersionFooter';
+import { TOOL_VERSIONS } from '../config/versions';
 
 interface ExtractPage {
     pageNum: number;
@@ -390,6 +392,11 @@ export const PdfSplitMerge: React.FC = () => {
                     </div>
                 )}
             </div>
+            <VersionFooter
+                toolName="splitMerge"
+                version={TOOL_VERSIONS.splitMerge.version}
+                lastUpdate={TOOL_VERSIONS.splitMerge.lastUpdate}
+            />
         </div>
     );
 };

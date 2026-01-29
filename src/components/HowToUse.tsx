@@ -1,5 +1,23 @@
 import React from 'react';
 import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings } from 'lucide-react';
+import { TOOL_VERSIONS } from '../config/versions';
+
+const VersionBadge = ({ version }: { version: string }) => (
+    <span style={{
+        marginLeft: 'auto',
+        fontSize: '0.8rem',
+        backgroundColor: '#f0f0f0',
+        color: '#666',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        border: '1px solid #ddd',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px'
+    }}>
+        v{version}
+    </span>
+);
 
 export function HowToUse() {
     // Responsive grid style
@@ -27,6 +45,7 @@ export function HowToUse() {
             <section style={{ marginBottom: '60px' }}>
                 <h3 style={{ borderBottom: '2px solid #4a90e2', paddingBottom: '10px', color: '#4a90e2', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <PenTool size={24} /> 1. PDF加筆 (Annotator)
+                    <VersionBadge version={TOOL_VERSIONS.annotator.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
                     PDF図面に手書き感覚で加筆修正を行えるツールです。タブレットやペン入力に最適化されています。
@@ -108,6 +127,7 @@ export function HowToUse() {
             <section style={{ marginBottom: '60px' }}>
                 <h3 style={{ borderBottom: '2px solid #e24a4a', paddingBottom: '10px', color: '#e24a4a', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Eye size={24} /> 2. PDF比較 (Comparator)
+                    <VersionBadge version={TOOL_VERSIONS.comparator.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
                     修正前後の図面など、最大4つのPDFファイルを重ね合わせて差分を視覚的に確認できます。
@@ -165,6 +185,7 @@ export function HowToUse() {
             <section style={{ marginBottom: '60px' }}>
                 <h3 style={{ borderBottom: '2px solid #4ae290', paddingBottom: '10px', color: '#4ae290', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <FileText size={24} /> 3. PDF加工 (Processor)
+                    <VersionBadge version={TOOL_VERSIONS.tools.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
                     一括処理ツールです。「半透明レイヤー追加」「モノクロ化」「最適化」などを複数のファイルに対して一度に行えます。
@@ -216,6 +237,7 @@ export function HowToUse() {
             <section style={{ marginBottom: '60px' }}>
                 <h3 style={{ borderBottom: '2px solid #e2a84a', paddingBottom: '10px', color: '#e2a84a', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Blend size={24} /> 4. PDF抽出・統合 (Extract & Merge)
+                    <VersionBadge version={TOOL_VERSIONS.splitMerge.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
                     ページ単位の抜き出し（抽出）と、複数ファイルの結合（統合）を行うツールです。
@@ -264,6 +286,7 @@ export function HowToUse() {
             <section style={{ marginBottom: '60px' }}>
                 <h3 style={{ borderBottom: '2px solid #9e4ae2', paddingBottom: '10px', color: '#9e4ae2', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <ScanText size={24} /> 5. PDFテキスト化 (Textifier)
+                    <VersionBadge version={TOOL_VERSIONS.textifier.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
                     スキャンデータを解析し、テキスト情報を付与(OCR)したり、Word/Excel形式に変換したりします。
