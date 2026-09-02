@@ -115,7 +115,14 @@ async function textNativePdf(out) {
   return bytes.length;
 }
 
-const browser = await puppeteer.launch({ headless: true });
+// GitHub Actions Ubuntu runners disable the Chromium sandbox path used by
+// Puppeteer. The spike only renders synthetic local fixtures, so no-sandbox is
+// acceptable for this isolated research harness and keeps local/CI reproduction
+// equivalent without changing production application code.
+const browser = await puppeteer.launch({
+  headless: true,
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+});
 const results = [];
 
 results.push(['text-native-ja-en.pdf', await textNativePdf('text-native-ja-en.pdf')]);
