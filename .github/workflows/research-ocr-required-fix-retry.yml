@@ -1,4 +1,4 @@
-name: OCR research required-fix bounded final
+name: OCR research required-fix terminating final
 
 on:
   push:
@@ -14,46 +14,37 @@ jobs:
   compare-and-record:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: research/textifier-ocr-architecture
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Install baseline plus comparative-only PaddleOCR.js
         run: |
           npm ci
           npm install --no-save --package-lock=false @paddleocr/paddleocr-js@0.4.2
-
       - name: Generate synthetic fixtures and font probe
         run: |
           node spike/fetch-assets.mjs
           node spike/make-fixtures.mjs
           node spike/probe-font-subset.mjs
-
       - name: Use correctness-first subset false in searchable-PDF spike
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('spike/pipeline.js')
-          s = p.read_text(encoding='utf-8')
-          old = "const font = await out.embedFont(fontBytes, { subset: true });"
-          new = "const font = await out.embedFont(fontBytes, { subset: false });"
-          if old in s:
-              s = s.replace(old, new)
-          elif new not in s:
-              raise SystemExit('font subset setting not found')
-          s = s.replace('subset:true is safe HERE specifically', 'subset:true was measured here but is not production-safe evidence by itself')
-          s = s.replace('Do NOT reuse this setting for text that is meant to be seen.', 'M1 uses subset:false. The known subset:true path must not be used for visible CJK.')
-          p.write_text(s, encoding='utf-8')
+          p=Path('spike/pipeline.js')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('const font = await out.embedFont(fontBytes, { subset: true });','const font = await out.embedFont(fontBytes, { subset: false });')
+          s=s.replace('subset:true is safe HERE specifically','subset:true was measured here but is not production-safe evidence by itself')
+          s=s.replace('Do NOT reuse this setting for text that is meant to be seen.','M1 uses subset:false. The known subset:true path must not be used for visible CJK.')
+          if 'subset: false' not in s: raise SystemExit('subset:false not applied')
+          p.write_text(s,encoding='utf-8')
           PY
-
       - name: Re-run original searchable-PDF spike
         id: original
         shell: bash
@@ -64,7 +55,6 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           cat /tmp/original.log
           exit 0
-
       - name: Run bounded official PaddleOCR.js comparison
         id: compare
         shell: bash
@@ -75,7 +65,6 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           cat /tmp/compare.log
           exit 0
-
       - name: Baseline-compatible lint and build
         id: checks
         shell: bash
@@ -90,7 +79,6 @@ jobs:
           cat /tmp/lint.log
           cat /tmp/build.log
           exit 0
-
       - name: Record check evidence
         env:
           ORIGINAL_EXIT: ${{ steps.original.outputs.exit_code }}
@@ -109,7 +97,6 @@ jobs:
             "production_src_changed_by_required_fix": false
           }
           JSON
-
       - name: Commit evidence and remove temporary workflows
         run: |
           rm -f .github/workflows/research-ocr-required-fix.yml
