@@ -1,4 +1,4 @@
-name: OCR research required-fix retry
+name: OCR research required-fix bounded final
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
   compare-and-record:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
