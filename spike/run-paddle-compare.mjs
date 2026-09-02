@@ -6,7 +6,7 @@ import puppeteer from 'puppeteer';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, 'out', 'paddleocr-comparison.json');
-const HARD_WALL_MS = 120_000;
+const HARD_WALL_MS = 60_000;
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
 const server = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['vite', '--host', '127.0.0.1', '--port', '5198'], {
@@ -31,12 +31,8 @@ async function waitForServer() {
   throw new Error(`Vite server did not start. Log:\n${serverLog}`);
 }
 
-function externalNetwork(network) {
-  return network.filter((r) => !r.url.startsWith('http://127.0.0.1:5198'));
-}
-
 function networkEvidence(network, failedRequests, consoleErrors) {
-  const external = externalNetwork(network);
+  const external = network.filter((r) => !r.url.startsWith('http://127.0.0.1:5198'));
   return {
     externalRequestCount: external.length,
     externalKnownContentLengthBytes: external.reduce(
@@ -54,7 +50,7 @@ async function closeBrowserHard(browser) {
   let closed = false;
   await Promise.race([
     browser.close().then(() => { closed = true; }).catch(() => {}),
-    new Promise((resolve) => setTimeout(resolve, 5_000)),
+    new Promise((resolve) => setTimeout(resolve, 3_000)),
   ]);
   if (!closed) {
     try { browser.process()?.kill('SIGKILL'); } catch {}
@@ -65,18 +61,16 @@ const network = [];
 const failedRequests = [];
 const consoleErrors = [];
 let browser;
-let page;
 try {
   await waitForServer();
   browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  page = await browser.newPage();
+  const page = await browser.newPage();
   page.setDefaultTimeout(0);
 
   page.on('response', (response) => {
-    const url = response.url();
     const headers = response.headers();
     network.push({
-      url,
+      url: response.url(),
       status: response.status(),
       contentLength: headers['content-length'] ? Number(headers['content-length']) : null,
       contentType: headers['content-type'] ?? null,
@@ -119,5 +113,8 @@ try {
   console.log(JSON.stringify(payload, null, 2));
 } finally {
   await closeBrowserHard(browser);
-  server.kill('SIGTERM');
+  try { server.kill('SIGKILL'); } catch {}
+  // `npx vite` can leave a child process/pipe handle alive on Linux runners.
+  // Force the research harness process to exit after evidence is flushed.
+  setTimeout(() => process.exit(0), 500).unref();
 }
