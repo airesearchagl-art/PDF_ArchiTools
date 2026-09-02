@@ -12,11 +12,24 @@ const TESS_OPTS = {
   workerBlobURL: false,
 };
 
+const PADDLE_INIT_TIMEOUT_MS = 90_000;
+const PADDLE_PREDICT_TIMEOUT_MS = 60_000;
+
 const FIXTURES = [
   { name: 'scanned-ja.pdf', expected: ['建築', '図面'] },
   { name: 'scanned-en.pdf', expected: ['Architectural', 'Drawing'] },
   { name: 'scanned-ja-en.pdf', expected: ['建築', 'Architectural'] },
 ];
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms} ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 function flattenTesseractWords(blocks) {
   const out = [];
@@ -136,7 +149,7 @@ async function runPaddle(rendered) {
   const started = performance.now();
   let ocr;
   try {
-    ocr = await PaddleOCR.create({
+    ocr = await withTimeout(PaddleOCR.create({
       lang: 'japan',
       ocrVersion: 'PP-OCRv5',
       worker: true,
@@ -145,13 +158,18 @@ async function runPaddle(rendered) {
         numThreads: 1,
         simd: true,
       },
-    });
+    }), PADDLE_INIT_TIMEOUT_MS, 'PaddleOCR.create');
     const initMs = Math.round(performance.now() - started);
     const summary = typeof ocr.getInitializationSummary === 'function' ? ocr.getInitializationSummary() : null;
     const outputs = {};
     for (const fixture of FIXTURES) {
       const t0 = performance.now();
-      const [result] = await ocr.predict(rendered[fixture.name].canvas);
+      const prediction = await withTimeout(
+        ocr.predict(rendered[fixture.name].canvas),
+        PADDLE_PREDICT_TIMEOUT_MS,
+        `PaddleOCR.predict ${fixture.name}`,
+      );
+      const [result] = prediction;
       const items = normalizePaddleItems(result?.items);
       const text = items.map((i) => i.text).join(' ');
       outputs[fixture.name] = {
@@ -189,6 +207,7 @@ async function runPaddle(rendered) {
       version: '0.4.2',
       error: String(error?.stack || error?.message || error),
       initAttemptMs: Math.round(performance.now() - started),
+      timeoutPolicy: { initMs: PADDLE_INIT_TIMEOUT_MS, predictMs: PADDLE_PREDICT_TIMEOUT_MS },
     };
   }
 }
