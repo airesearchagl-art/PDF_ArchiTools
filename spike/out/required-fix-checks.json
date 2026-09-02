@@ -1,0 +1,9 @@
+{
+  "original_spike_exit": 1,
+  "paddle_compare_exit": 0,
+  "lint_exit": 1,
+  "build_exit": 0,
+  "lint_expected_baseline": "exit 1 / 31 pre-existing problems",
+  "font_subset_m1_default": false,
+  "production_src_changed_by_required_fix": false
+}

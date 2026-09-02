@@ -198,13 +198,13 @@ export async function makeSearchablePdf(pdfBytes, opts = {}) {
   out.registerFontkit(fontkit);
 
   const fontBytes = await (await fetch('/spike/assets/MPLUS1p-Regular.ttf')).arrayBuffer();
-  // subset:true is safe HERE specifically, and the distinction is measured, not
+  // subset:true was measured here but is not production-safe evidence by itself, and the distinction is measured, not
   // assumed. @pdf-lib/fontkit@1.1.1 has a known CJK subsetting bug; the spike
   // confirmed it damages VISIBLE Japanese glyphs (1.8% of pixels differ against
   // an unsubsetted embed). But it leaves the cmap and advance widths intact, so
   // text still round-trips exactly -- and a Tr 3 layer never draws an outline.
-  // Do NOT reuse this setting for text that is meant to be seen.
-  const font = await out.embedFont(fontBytes, { subset: true });
+  // M1 uses subset:false. The known subset:true path must not be used for visible CJK.
+  const font = await out.embedFont(fontBytes, { subset: false });
 
   let worker = null;
   const ensureWorker = async () => {
