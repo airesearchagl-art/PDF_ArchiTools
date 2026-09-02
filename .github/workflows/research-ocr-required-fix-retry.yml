@@ -1,0 +1,116 @@
+name: OCR research required-fix retry
+
+on:
+  push:
+    branches:
+      - research/textifier-ocr-architecture
+    paths:
+      - .github/workflows/research-ocr-required-fix-retry.yml
+
+permissions:
+  contents: write
+
+jobs:
+  compare-and-record:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: research/textifier-ocr-architecture
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install baseline plus comparative-only PaddleOCR.js
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false @paddleocr/paddleocr-js@0.4.2
+
+      - name: Generate existing synthetic fixtures
+        run: |
+          node spike/fetch-assets.mjs
+          node spike/make-fixtures.mjs
+          node spike/probe-font-subset.mjs
+
+      - name: Apply correctness-first subset false to research pipeline
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('spike/pipeline.js')
+          s = p.read_text(encoding='utf-8')
+          old = """  // subset:true is safe HERE specifically, and the distinction is measured, not\n  // assumed. @pdf-lib/fontkit@1.1.1 has a known CJK subsetting bug; the spike\n  // confirmed it damages VISIBLE Japanese glyphs (1.8% of pixels differ against\n  // an unsubsetted embed). But it leaves the cmap and advance widths intact, so\n  // text still round-trips exactly -- and a Tr 3 layer never draws an outline.\n  // Do NOT reuse this setting for text that is meant to be seen.\n  const font = await out.embedFont(fontBytes, { subset: true });"""
+          new = """  // Correctness-first M1 default: do not subset CJK with the known-stale\n  // @pdf-lib/fontkit path. The earlier spike showed subset:true preserved PDF.js\n  // extraction while changing visible glyph outlines, which is not enough evidence\n  // to call it production-safe across PDF consumers. Keep subset:false until a\n  // separate multi-consumer validation proves the optimized path safe.\n  // Visible CJK must never reuse the known subset:true path.\n  const font = await out.embedFont(fontBytes, { subset: false });"""
+          if old not in s:
+              raise SystemExit('expected subset:true block not found')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+
+      - name: Re-run original searchable-PDF spike
+        id: original
+        shell: bash
+        run: |
+          set +e
+          node spike/run-spike.mjs > /tmp/original.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat /tmp/original.log
+          exit 0
+
+      - name: Run official PaddleOCR.js comparative browser spike
+        id: compare
+        shell: bash
+        run: |
+          set +e
+          node spike/run-paddle-compare.mjs > /tmp/compare.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat /tmp/compare.log
+          exit 0
+
+      - name: Baseline-compatible lint and build
+        id: checks
+        shell: bash
+        run: |
+          set +e
+          npm run lint > /tmp/lint.log 2>&1
+          lint=$?
+          npm run build > /tmp/build.log 2>&1
+          build=$?
+          echo "lint_code=$lint" >> "$GITHUB_OUTPUT"
+          echo "build_code=$build" >> "$GITHUB_OUTPUT"
+          cat /tmp/lint.log
+          cat /tmp/build.log
+          exit 0
+
+      - name: Record run check evidence
+        env:
+          ORIGINAL_EXIT: ${{ steps.original.outputs.exit_code }}
+          COMPARE_EXIT: ${{ steps.compare.outputs.exit_code }}
+          LINT_EXIT: ${{ steps.checks.outputs.lint_code }}
+          BUILD_EXIT: ${{ steps.checks.outputs.build_code }}
+        run: |
+          cat > spike/out/required-fix-checks.json <<JSON
+          {
+            "original_spike_exit": ${ORIGINAL_EXIT},
+            "paddle_compare_exit": ${COMPARE_EXIT},
+            "lint_exit": ${LINT_EXIT},
+            "build_exit": ${BUILD_EXIT},
+            "lint_expected_baseline": "exit 1 / 31 pre-existing problems",
+            "production_src_changed_by_required_fix": false
+          }
+          JSON
+
+      - name: Commit evidence and remove temporary workflows
+        run: |
+          rm -f .github/workflows/research-ocr-required-fix.yml
+          rm -f .github/workflows/research-ocr-required-fix-retry.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "research: record PaddleOCR comparative evidence"
+          git push origin HEAD:research/textifier-ocr-architecture
