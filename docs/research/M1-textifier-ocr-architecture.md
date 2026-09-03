@@ -154,7 +154,7 @@ The implementation consequence is concrete: **measure widths with the same font 
 |---|---|---|---|---|---|---|---|
 | **pdfjs-dist 5.4.449** (already in repo) | ✗ | ✅ render + text extract | ✗ | ✅ | ✅ (reads) | Apache-2.0 | **reuse_existing** |
 | **pdf-lib 1.17.1** (already in repo) | ✗ | ✅ load/preserve | ✅ *(verified §3.1)* | ✅ | ⚠ needs embedded font | MIT | **reuse_existing** |
-| **Tesseract.js 7.0.0** | ✅ | ✗ | ✗ | ✅ WASM | ✅ `jpn`/`jpn_vert` | Apache-2.0 | **adopt_dependency** |
+| **Tesseract.js 7.0.0** | ✅ | ✗ | ✗ | ✅ WASM | ✅ `jpn`/`jpn_vert` | Apache-2.0 | **adopt_dependency (M1 Primary)** |
 | **@pdf-lib/fontkit 1.1.1** | ✗ | ✗ | ✅ enables font embed | ✅ | ⚠ subset bug | MIT | **adopt_dependency** (conditional) |
 | **M PLUS 1p / Noto Sans JP** | — | — | ✅ supplies cmap+widths | ✅ | ✅ | OFL-1.1 | **adopt_asset** (choice open) |
 | **scribe.js 0.15.0** | ✅ | ✅ | ✅ | ✅ | ⚠ untested | **AGPL-3.0** | **reference_pattern** |
@@ -163,7 +163,7 @@ The implementation consequence is concrete: **measure widths with the same font 
 | **tesseract-wasm** | ✅ | ✗ | ✗ | ✅ | ? | BSD-2-Clause | **defer** (fallback engine) |
 | **ocrs** | ✅ | ✗ | ✗ | ✅ | ✗ **Latin only** | Apache-2.0 | **reject** |
 | **transformers.js + manga-ocr** | ✅ | ✗ | ✗ | ✅ | ✅ strong | Apache-2.0 | **reject** (no bboxes) |
-| **PaddleOCR browser/ONNX ports** | ✅ | ✗ | ✗ | ⚠ | ⚠ | Apache-2.0 | **reject** (no maintained JA browser pkg) |
+| **@paddleocr/paddleocr-js 0.4.2** | ✅ | ✗ | ✗ | ✅ WASM | ✅ **measured** | Apache-2.0 | **defer** (viable alternative, §5.3) |
 | **jsPDF 3.0.4** (already in repo) | ✗ | ✗ | ✗ | ✅ | ⚠ | MIT | **keep for fixtures only** |
 | **Cloud OCR APIs** | ✅ | ✅ | ✅ | ✅ | ✅ | — | **reject** (§18 privacy) |
 | **hocr2pdf / hocrjs** | ✗ | — | ✗ | ⚠ | ✗ | various | **reject** (dead / not PDF output) |
@@ -188,15 +188,71 @@ This was the survey's most decision-relevant result. Tesseract.js's own document
 
 **Therefore the invisible-text-layer writer is genuinely `build_custom`.** That is not a preference; it is what the ecosystem offers. §3.1 shows the cost is low, because pdf-lib already exposes every operator required.
 
-### 5.3 Tesseract.js is the only viable browser OCR engine for Japanese with bounding boxes
+### 5.3 Engine choice: Tesseract.js is M1 Primary, PaddleOCR.js is a deferred viable alternative
 
-Every alternative failed a hard requirement: `ocrs` recognises Latin only; `manga-ocr` via transformers.js is Japanese-strong but recognition-only with **no bounding boxes**; PaddleOCR has no officially maintained browser package covering Japanese. Tesseract.js 7.0.0 (Apache-2.0, released 2025-12-15) provides Japanese, word/line/symbol bboxes, confidence, workers, and a scheduler.
+**This section retracts an earlier claim.** It previously read *"Tesseract.js is the
+only viable browser OCR engine for Japanese with bounding boxes"*, on the grounds
+that PaddleOCR had no maintained browser package covering Japanese. A later
+bounded, real-browser comparison measured `@paddleocr/paddleocr-js` 0.4.2
+directly, and that claim did not survive contact with the evidence. It is
+corrected here rather than quietly amended.
 
-Three engine facts that must shape the implementation:
+**PaddleOCR.js is viable for browser Japanese OCR.** Measured on the same
+synthetic fixtures, in headless Chrome, within a bounded run:
+
+| | Tesseract.js 7.0.0 | @paddleocr/paddleocr-js 0.4.2 |
+|---|---|---|
+| Init | 148 ms | 4,319 ms |
+| Japanese | 308 ms, 27 words, score 89 | 1,764 ms, 4 items, score 0.9635 |
+| English | 119 ms, 15 words, score 91 | 1,544 ms, 4 items, score 0.9893 |
+| Mixed ja+en | 118 ms, 20 words, score 93 | 1,517 ms, 4 items, score 0.9627 |
+| Expected tokens found | 3/3 | **3/3** |
+| Geometry | word-level bbox | **line-level polygon + bbox** |
+| Coordinate normalization | possible | **possible** |
+| In-flight cancel API | none, `terminate()` only | none, `dispose()` is lifecycle cleanup |
+| External network at run time | **0 requests** | **4 requests, ~26.3 MB** |
+
+Japanese, English and mixed all PASS on both engines, and both expose geometry
+that can be normalized into PDF user space.
+
+**Why Tesseract.js is still M1 Primary**, stated as trade-offs rather than as a
+disqualification of the alternative:
+
+- The M1 deliverable is a searchable-PDF writer, and it places one invisible run
+  per recognized unit. **Tesseract's word-level boxes are the right granularity
+  for that**; PaddleOCR returns line-level geometry, which would need splitting
+  before it could drive the same writer.
+- In the tested configuration PaddleOCR.js fetches its models and runtime from
+  third-party CDNs on every cold run: `PP-OCRv5_mobile_det_onnx_infer.tar`
+  (4.84 MB) and `PP-OCRv5_mobile_rec_onnx_infer.tar` (16.7 MB) from
+  `paddle-model-ecology.bj.bcebos.com`, plus the ONNX Runtime WASM (4.73 MB) from
+  `cdn.jsdelivr.net`. Tesseract runs entirely from self-hosted assets and makes
+  no external request. This bears directly on the browser-local posture in
+  section 18 of the brief.
+- On these fixtures Tesseract is roughly an order of magnitude faster.
+
+**PaddleOCR.js is therefore `defer`, not `reject`.** It is a viable alternative
+held for a later decision, not an engine ruled out. Its recognition scores are
+higher than Tesseract's on every fixture measured, which is a real point in its
+favour.
+
+**If PaddleOCR is ever considered for production**, two things must be verified
+separately and are explicitly not settled here: whether its ONNX models and
+runtime can be **self-hosted** rather than fetched from Baidu object storage and
+jsDelivr, and what the resulting **network boundary** actually is. The 26.3 MB
+figure above describes the tested default configuration only; it is not a claim
+that self-hosting is impossible.
+
+The other alternatives surveyed were not re-tested and their original grounds
+still stand: `ocrs` recognises Latin script only, and `manga-ocr` via
+transformers.js is Japanese-strong but recognition-only with **no bounding
+boxes** at all.
+
+Three Tesseract facts that must shape the implementation:
 
 1. **Since v6, all output except `text` is disabled by default.** Bounding boxes require explicitly passing `output: { blocks: true }`. Omitting it silently yields no coordinates.
-2. **For Japanese, Tesseract emits roughly one "word" per character** (issue #413, closed won't-fix — CJK has no inter-word spaces). For an *invisible* layer this is acceptable and arguably better, since each character gets its own box, but the writer must not assume space-delimited words.
-3. **There is no mid-recognition cancel** — only `terminate()` on the whole worker. UI cancellation is therefore coarse: abandon the worker and rebuild it.
+2. **For Japanese, Tesseract emits roughly one "word" per character** (issue #413, closed won't-fix -- CJK has no inter-word spaces). For an *invisible* layer this is acceptable and arguably better, since each character gets its own box, but the writer must not assume space-delimited words.
+3. **There is no mid-recognition cancel** -- only `terminate()` on the whole worker. UI cancellation is therefore coarse: abandon the worker and rebuild it.
 
 ### 5.4 The Japanese font is the real open risk, not the OCR
 
@@ -265,8 +321,11 @@ Reuse existing:
   public/pdf.worker.min.mjs   local worker, already version-matched at 5.4.449
 
 Adopt dependency:
-  tesseract.js ^7.0.0        Apache-2.0. Self-hosted worker + core + traineddata,
-                             no CDN. output: { blocks: true } for bboxes.
+  tesseract.js ^7.0.0        Apache-2.0. M1 PRIMARY. Self-hosted worker + core +
+                             traineddata, no CDN. output: { blocks: true } for
+                             bboxes. Chosen for word-level geometry and a zero
+                             external-request footprint, not because it was the
+                             only viable engine -- see 5.3.
   @pdf-lib/fontkit ^1.1.1    MIT. Conditional — see Human Decision on the CJK
                              subsetting bug; pdf-fontkit@1.8.9 is the fallback.
   Japanese font asset        OFL-1.1. M PLUS 1p Regular leading (1.68 MiB).
@@ -290,11 +349,22 @@ Build custom:
   4. Invisible layer writer   pdf-lib operators: Tr 3, Tm placement, Tz width fit
   5. Font strategy            embed + measure with one font object; subset policy
 
+Defer (viable, held for a later decision -- NOT rejected):
+  @paddleocr/paddleocr-js     Apache-2.0. Measured viable for browser Japanese,
+    0.4.2                     English and mixed OCR, with polygons and
+                              normalizable coordinates, and higher recognition
+                              scores than Tesseract on every fixture. Deferred
+                              for M1 because it returns line-level geometry and,
+                              as tested, downloads ~26.3 MB from Baidu object
+                              storage and jsDelivr per cold run. Self-hosting the
+                              assets and the resulting network boundary must be
+                              verified before any production use.
+  tesseract-wasm              BSD-2-Clause. Fallback engine, untested here.
+
 Rejected:
   scribe.js as a dependency   AGPL-3.0 copyleft reaches a browser-shipped app
   ocrs                        Latin script only
   transformers.js + manga-ocr no bounding boxes (recognition only)
-  PaddleOCR browser ports     no maintained official Japanese browser package
   cloud OCR APIs              violates the browser-local privacy requirement
   hocr2pdf / hocrjs           abandoned / does not emit PDF
   jsPDF for output            cannot preserve an existing PDF; fixtures only
