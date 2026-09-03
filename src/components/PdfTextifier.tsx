@@ -8,7 +8,7 @@ import { renderPageToCanvas } from '../utils/pdfDiff';
 
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
-import { textifyPdf, TextifyError, configurePdfWorker } from '../utils/pdf-textifier';
+import { textifyPdf, TextifyError, configurePdfWorker, getTrace } from '../utils/pdf-textifier';
 import type { PageResult, ProgressEvent } from '../utils/pdf-textifier';
 
 interface TextifierOptions {
@@ -33,6 +33,8 @@ export const PdfTextifier: React.FC = () => {
     const [result, setResult] = useState<CompletedRun | null>(null);
     const [error, setError] = useState<{ title: string; detail?: string } | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    // TEMPORARY: last diagnostic stage, for the Preview OCR stall investigation.
+    const [diag, setDiag] = useState<string>('');
 
     // Default options
     const [options, setOptions] = useState<TextifierOptions>({
@@ -114,6 +116,13 @@ export const PdfTextifier: React.FC = () => {
         cancelRef.current = false;
         setIsProcessing(true);
 
+        // TEMPORARY: poll the trace so the running stage is visible on Preview.
+        const diagTimer = window.setInterval(() => {
+            const events = getTrace();
+            const last = events[events.length - 1];
+            setDiag(last ? `${last.t}ms ${last.event}${last.data ? ' ' + JSON.stringify(last.data) : ''}` : '');
+        }, 250);
+
         try {
             const run = await textifyPdf(file, {
                 langs: 'jpn+eng',
@@ -151,6 +160,7 @@ export const PdfTextifier: React.FC = () => {
                 });
             }
         } finally {
+            window.clearInterval(diagTimer);   // TEMPORARY
             setIsProcessing(false);
             setProgress(null);
             cancelRef.current = false;
@@ -333,6 +343,12 @@ export const PdfTextifier: React.FC = () => {
                                     <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#999' }}>
                                         キャンセルは現在のページの認識完了後に反映されます。
                                     </div>
+                                    {/* TEMPORARY: Preview stall diagnostics */}
+                                    {diag && (
+                                        <div style={{ marginTop: '10px', fontSize: '0.7rem', color: '#b06', fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all' }}>
+                                            diag: {diag}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
