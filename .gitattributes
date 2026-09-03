@@ -1,0 +1,6 @@
+# OCR runtime assets are shipped byte-for-byte. Never let end-of-line
+# normalisation touch them: the Emscripten glue and the language data must
+# reach the browser exactly as the upstream published them.
+public/ocr/tesseract/*.js  -text
+public/ocr/tessdata/*      binary
+public/ocr/fonts/*.ttf     binary
