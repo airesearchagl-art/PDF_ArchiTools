@@ -283,7 +283,15 @@ async function renderPage(page: PDFPageProxy, scale: number) {
     // the canvas already has, and Tesseract reads the pixels back out.
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new TextifyError('ocr-page', 'ページの描画に失敗しました。');
-    await page.render({ canvas, viewport }).promise;
+    // intent 'print', not the default 'display'.
+    //
+    // pdf.js schedules display rendering with requestAnimationFrame
+    // (`useRequestAnimationFrame: !intentPrint`), and rAF does not fire while a
+    // tab is hidden -- so the render promise simply never settles and the whole
+    // pipeline stalls with no error. This canvas is never shown to anyone; it
+    // exists only to feed the OCR engine, so it must not depend on the page
+    // being visible. Print intent schedules on microtasks instead.
+    await page.render({ canvas, viewport, intent: 'print' }).promise;
     trace('render:done', { page: page.pageNumber });   // TEMPORARY
     return { canvas, viewport };
 }
