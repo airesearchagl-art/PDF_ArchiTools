@@ -9,7 +9,24 @@ import { drawInvisibleWords } from './searchable-pdf';
 import { TextifyError } from './types';
 import type { PageResult, TextifyOptions, TextifyResult } from './types';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+/** Worker bundled with the app, never a CDN. */
+const PDF_WORKER_URL = '/pdf.worker.min.mjs';
+
+/**
+ * Point PDF.js at our own worker.
+ *
+ * `GlobalWorkerOptions.workerSrc` is one global, and several components in this
+ * app assign it at module scope -- three of them to unpkg. In a production
+ * bundle they all evaluate on load and the last one wins, which is how the
+ * shipped app ended up fetching its PDF.js worker from a CDN. Setting it at the
+ * point of use makes this feature's behaviour independent of import order, and
+ * keeps every request same-origin.
+ */
+export function configurePdfWorker(): void {
+    if (pdfjsLib.GlobalWorkerOptions.workerSrc !== PDF_WORKER_URL) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+    }
+}
 
 const FONT_URL = '/ocr/fonts/MPLUS1p-Regular.ttf';
 const DEFAULT_DPI = 150;
@@ -35,6 +52,8 @@ export async function textifyPdf(
         onProgress = () => { },
         shouldCancel = () => false,
     } = options;
+
+    configurePdfWorker();
 
     const startedAt = performance.now();
     const source = file instanceof File ? await file.arrayBuffer() : file;
@@ -160,8 +179,11 @@ export async function textifyPdf(
                     message: `文字認識中... ページ ${pageNumber} / ${totalPages}`,
                 });
             } catch (error) {
-                // One bad page should not cost the whole document. Record it and
-                // carry on; the caller surfaces it.
+                // A stalled page kills the worker, so there is nothing left to
+                // continue with -- surface it instead of pretending otherwise.
+                if (error instanceof TextifyError && error.fatal) throw error;
+                // Otherwise one bad page should not cost the whole document.
+                // Record it and carry on; the caller surfaces it.
                 pages.push({
                     pageNumber, kind, ocrWords: 0, placed: 0,
                     meanConfidence: null, textSample: '',

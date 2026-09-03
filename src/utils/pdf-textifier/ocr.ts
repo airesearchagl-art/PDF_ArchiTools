@@ -19,6 +19,16 @@ const TESSERACT_OPTIONS = {
     workerBlobURL: false,
 } as const;
 
+/**
+ * Upper bound on a single page's recognition.
+ *
+ * A page normally finishes in a few hundred milliseconds. This is not a
+ * performance knob -- it exists because recognition can otherwise stall with no
+ * error at all, leaving the UI on a spinner forever. Generous enough that a
+ * genuinely slow page still completes, short enough that a stall is reported.
+ */
+export const PAGE_OCR_TIMEOUT_MS = 120_000;
+
 export interface OcrPageOutput {
     words: OcrWord[];
     text: string;
@@ -53,6 +63,22 @@ function flattenWords(blocks: RecognisedBlock[] | null | undefined): OcrWord[] {
         }
     }
     return out;
+}
+
+/**
+ * Hand Tesseract bytes, never the canvas itself.
+ *
+ * Given an HTMLCanvasElement, tesseract.js calls `canvas.toBlob()` and waits on
+ * its callback with no error path and no timeout, so a callback that never
+ * fires stalls the whole pipeline silently. `toDataURL` is synchronous: it
+ * cannot fail to call back. It also measured ~2 ms against ~1000 ms for
+ * `toBlob` on a throttled page, which is the same difference by another name.
+ *
+ * The cost is a base64 string in memory for the duration of the conversion.
+ * That is a fair trade for removing a class of unkillable hang.
+ */
+function canvasToDataUrl(canvas: HTMLCanvasElement): string {
+    return canvas.toDataURL('image/png');
 }
 
 /**
@@ -99,15 +125,48 @@ export class OcrEngine {
      * `blocks: true` is not optional: since tesseract.js v6 every output except
      * plain text is off by default, and without it the result carries no
      * coordinates at all, which would silently produce an empty text layer.
+     *
+     * Bounded on purpose. If recognition does not finish, the worker is torn
+     * down and the caller gets an error rather than an endless spinner.
      */
-    async recognisePage(canvas: HTMLCanvasElement): Promise<OcrPageOutput> {
+    async recognisePage(
+        canvas: HTMLCanvasElement,
+        timeoutMs = PAGE_OCR_TIMEOUT_MS,
+    ): Promise<OcrPageOutput> {
         if (!this.worker) throw new TextifyError('ocr-page', 'OCRエンジンが起動していません。');
-        const { data } = await this.worker.recognize(canvas, {}, { blocks: true, text: true });
-        const words = flattenWords(data.blocks as RecognisedBlock[] | null);
-        const meanConfidence = words.length
-            ? Math.round(words.reduce((sum, w) => sum + w.confidence, 0) / words.length)
-            : null;
-        return { words, text: data.text ?? '', meanConfidence };
+        const image = canvasToDataUrl(canvas);
+
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+                () => reject(new TextifyError(
+                    'ocr-page',
+                    `文字認識が ${Math.round(timeoutMs / 1000)} 秒以内に完了しませんでした。`,
+                    'recognition timed out',
+                    true,
+                )),
+                timeoutMs,
+            );
+        });
+
+        try {
+            const { data } = await Promise.race([
+                this.worker.recognize(image, {}, { blocks: true, text: true }),
+                timeout,
+            ]);
+            const words = flattenWords(data.blocks as RecognisedBlock[] | null);
+            const meanConfidence = words.length
+                ? Math.round(words.reduce((sum, w) => sum + w.confidence, 0) / words.length)
+                : null;
+            return { words, text: data.text ?? '', meanConfidence };
+        } catch (error) {
+            // A stalled recognition leaves the worker unusable, and there is no
+            // way to abort one in flight, so the worker goes with it.
+            if (error instanceof TextifyError && error.fatal) await this.terminate();
+            throw error;
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     /**

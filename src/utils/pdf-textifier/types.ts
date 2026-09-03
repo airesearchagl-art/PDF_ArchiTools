@@ -88,12 +88,15 @@ export type TextifyErrorCode =
 export class TextifyError extends Error {
     readonly code: TextifyErrorCode;
     readonly detail?: string;
+    /** True when the run cannot continue, e.g. the OCR worker had to be killed. */
+    readonly fatal: boolean;
 
-    constructor(code: TextifyErrorCode, message: string, detail?: string) {
+    constructor(code: TextifyErrorCode, message: string, detail?: string, fatal = false) {
         super(message);
         this.name = 'TextifyError';
         this.code = code;
         this.detail = detail;
+        this.fatal = fatal;
     }
 }
 

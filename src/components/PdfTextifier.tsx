@@ -6,11 +6,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { Upload, FileText, Check, Download, Loader, Settings, ArrowRight, AlertTriangle, XCircle } from 'lucide-react';
 import { renderPageToCanvas } from '../utils/pdfDiff';
 
-// Reuse worker configuration
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
-import { textifyPdf, TextifyError } from '../utils/pdf-textifier';
+import { textifyPdf, TextifyError, configurePdfWorker } from '../utils/pdf-textifier';
 import type { PageResult, ProgressEvent } from '../utils/pdf-textifier';
 
 interface TextifierOptions {
@@ -66,6 +64,9 @@ export const PdfTextifier: React.FC = () => {
         resetRun();
 
         try {
+            // Other tools assign the shared PDF.js worker global at import time;
+            // claim it here so the preview loads from our own origin.
+            configurePdfWorker();
             const arrayBuffer = await selectedFile.arrayBuffer();
             const loadedPdf = await pdfjsLib.getDocument(arrayBuffer).promise;
 
