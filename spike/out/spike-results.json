@@ -1,0 +1,392 @@
+{
+  "classify:text-native-ja-en.pdf": [
+    {
+      "page": 1,
+      "kind": "text-native",
+      "allChars": 126,
+      "interiorChars": 126,
+      "imageOps": 0
+    }
+  ],
+  "classify:scanned-ja.pdf": [
+    {
+      "page": 1,
+      "kind": "scanned",
+      "allChars": 0,
+      "interiorChars": 0,
+      "imageOps": 1
+    }
+  ],
+  "classify:scanned-multipage.pdf": [
+    {
+      "page": 1,
+      "kind": "scanned",
+      "allChars": 0,
+      "interiorChars": 0,
+      "imageOps": 1
+    },
+    {
+      "page": 2,
+      "kind": "scanned",
+      "allChars": 0,
+      "interiorChars": 0,
+      "imageOps": 1
+    },
+    {
+      "page": 3,
+      "kind": "scanned",
+      "allChars": 0,
+      "interiorChars": 0,
+      "imageOps": 1
+    }
+  ],
+  "text-native-ja-en.pdf": {
+    "fixture": "text-native-ja-en.pdf",
+    "report": {
+      "pages": [
+        {
+          "page": 1,
+          "kind": "text-native",
+          "allChars": 126,
+          "interiorChars": 126,
+          "imageOps": 0,
+          "ocrWords": 0,
+          "placed": 0,
+          "ms": 0
+        }
+      ],
+      "langs": "jpn+eng",
+      "cancelled": false,
+      "timings": {
+        "totalMs": 247
+      },
+      "inputBytes": 1065021,
+      "outputBytes": 2128816
+    },
+    "extracted": [
+      "建築図面 — Architectural Drawing第一版 / Version 1平面図 Floor PlanThis page has real embedded text. It must not be OCR processed.このページには本物のテキストが埋め込まれています。"
+    ],
+    "appearance": {
+      "identical": true,
+      "differingPixels": 0,
+      "totalPixels": 1127859,
+      "percent": 0,
+      "maxChannelDelta": 0
+    },
+    "selection": {
+      "selectable": true,
+      "spans": 5,
+      "spansWithinPage": 5,
+      "selectedChars": 126,
+      "selectedSample": "建築図面 — Architectural Drawing 第一版 / Version 1 平面図 Floor Plan This page has real embedded text. It must not be OCR processed. このページには本物のテキストが埋め込まれています。"
+    },
+    "progressEvents": 0,
+    "wallMs": 671
+  },
+  "scanned-en.pdf": {
+    "fixture": "scanned-en.pdf",
+    "report": {
+      "pages": [
+        {
+          "page": 1,
+          "kind": "scanned",
+          "allChars": 0,
+          "interiorChars": 0,
+          "imageOps": 1,
+          "ocrWords": 15,
+          "placed": 15,
+          "ms": 447,
+          "text": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page",
+          "meanConfidence": 96
+        }
+      ],
+      "langs": "eng",
+      "cancelled": false,
+      "timings": {
+        "ocrInitMs": 150,
+        "totalMs": 619
+      },
+      "inputBytes": 29190,
+      "outputBytes": 1093834
+    },
+    "extracted": [
+      "Architectural DrawingVersion 1 Floor PlanDesign Office Inc.Saved as a scanned raster page"
+    ],
+    "appearance": {
+      "identical": true,
+      "differingPixels": 0,
+      "totalPixels": 1127859,
+      "percent": 0,
+      "maxChannelDelta": 0
+    },
+    "selection": {
+      "selectable": true,
+      "spans": 14,
+      "spansWithinPage": 14,
+      "selectedChars": 78,
+      "selectedSample": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page"
+    },
+    "progressEvents": 2,
+    "wallMs": 1070
+  },
+  "scanned-ja.pdf": {
+    "fixture": "scanned-ja.pdf",
+    "report": {
+      "pages": [
+        {
+          "page": 1,
+          "kind": "scanned",
+          "allChars": 0,
+          "interiorChars": 0,
+          "imageOps": 1,
+          "ocrWords": 27,
+          "placed": 27,
+          "ms": 375,
+          "text": "建築図面 第一上 平面図 株式会社 設計事務所 スキャン画像として保存されたページ",
+          "meanConfidence": 85
+        }
+      ],
+      "langs": "jpn",
+      "cancelled": false,
+      "timings": {
+        "ocrInitMs": 112,
+        "totalMs": 588
+      },
+      "inputBytes": 29592,
+      "outputBytes": 1094439
+    },
+    "extracted": [
+      "建築 図面第一上 平面図株 式 会社 設計 事務 所スキ ャ ン 画 像とし て 保存 されたペー ジ"
+    ],
+    "appearance": {
+      "identical": true,
+      "differingPixels": 0,
+      "totalPixels": 1127859,
+      "percent": 0,
+      "maxChannelDelta": 0
+    },
+    "selection": {
+      "selectable": true,
+      "spans": 26,
+      "spansWithinPage": 26,
+      "selectedChars": 36,
+      "selectedSample": "建築 図面 第 一上 平面 図 株 式 会社 設計 事務 所 スキ ャ ン 画 像とし て 保存 されたペー ジ"
+    },
+    "progressEvents": 2,
+    "wallMs": 995
+  },
+  "scanned-ja-en.pdf": {
+    "fixture": "scanned-ja-en.pdf",
+    "report": {
+      "pages": [
+        {
+          "page": 1,
+          "kind": "scanned",
+          "allChars": 0,
+          "interiorChars": 0,
+          "imageOps": 1,
+          "ocrWords": 20,
+          "placed": 20,
+          "ms": 389,
+          "text": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在",
+          "meanConfidence": 92
+        }
+      ],
+      "langs": "jpn+eng",
+      "cancelled": false,
+      "timings": {
+        "ocrInitMs": 100,
+        "totalMs": 568
+      },
+      "inputBytes": 32520,
+      "outputBytes": 1097296
+    },
+    "extracted": [
+      "建築 図面 Architectural Drawing第 一版Version 1平面図Floor Plan日 本 語と English の 混在"
+    ],
+    "appearance": {
+      "identical": true,
+      "differingPixels": 0,
+      "totalPixels": 1127859,
+      "percent": 0,
+      "maxChannelDelta": 0
+    },
+    "selection": {
+      "selectable": true,
+      "spans": 19,
+      "spansWithinPage": 19,
+      "selectedChars": 61,
+      "selectedSample": "建築 図面 Architectural Drawing 第 一版Version 1 平面図Floor Plan 日 本 語と English の 混在"
+    },
+    "progressEvents": 2,
+    "wallMs": 992
+  },
+  "scanned-multipage.pdf": {
+    "fixture": "scanned-multipage.pdf",
+    "report": {
+      "pages": [
+        {
+          "page": 1,
+          "kind": "scanned",
+          "allChars": 0,
+          "interiorChars": 0,
+          "imageOps": 1,
+          "ocrWords": 17,
+          "placed": 17,
+          "ms": 359,
+          "text": "建築図面 Page 1 第 1 葉 Sheet 1 Floor Plan 平面図 Page 1 of 3",
+          "meanConfidence": 92
+        },
+        {
+          "page": 2,
+          "kind": "scanned",
+          "allChars": 0,
+          "interiorChars": 0,
+          "imageOps": 1,
+          "ocrWords": 17,
+          "placed": 17,
+          "ms": 163,
+          "text": "建築図面 Page 2 第 2 葉 Sheet 2 Floor Plan 平面図 Page 2 of 3",
+          "meanConfidence": 91
+        },
+        {
+          "page": 3,
+          "kind": "scanned",
+          "allChars": 0,
+          "interiorChars": 0,
+          "imageOps": 1,
+          "ocrWords": 17,
+          "placed": 17,
+          "ms": 173,
+          "text": "建築図面 Page 3 第 3 葉 Sheet 3 Floor Plan 平面図 Page 3 of 3",
+          "meanConfidence": 91
+        }
+      ],
+      "langs": "jpn+eng",
+      "cancelled": false,
+      "timings": {
+        "ocrInitMs": 100,
+        "totalMs": 872
+      },
+      "inputBytes": 79433,
+      "outputBytes": 1145397
+    },
+    "extracted": [
+      "建築 図面 Page 1第 1 葉 Sheet 1Floor Plan 平面図Page1 of3",
+      "建築 図面 Page 2第 2 葉 Sheet 2Floor Plan 平面図Page2 of 3",
+      "建築 図面 Page 3第 3 葉 Sheet 3Floor Plan 平面図Page3 of 3"
+    ],
+    "appearance": {
+      "identical": true,
+      "differingPixels": 0,
+      "totalPixels": 1127859,
+      "percent": 0,
+      "maxChannelDelta": 0
+    },
+    "selection": {
+      "selectable": true,
+      "spans": 16,
+      "spansWithinPage": 16,
+      "selectedChars": 38,
+      "selectedSample": "建築 図面 Page 1 第 1 葉 Sheet 1 Floor Plan 平面図 Page1 of3"
+    },
+    "progressEvents": 4,
+    "wallMs": 1347
+  },
+  "fontSubset": {
+    "identical": false,
+    "differingPixels": 8635,
+    "totalPixels": 480000,
+    "percent": 1.799,
+    "maxChannelDelta": 765
+  },
+  "cancel": {
+    "cancelled": true,
+    "pagesProcessed": 1,
+    "ms": 541
+  },
+  "__runStartedAt": "2026-09-03T05:19:10.055Z",
+  "__runFinishedAt": "2026-09-03T05:19:17.663Z",
+  "__runStatus": "completed",
+  "__completed": true,
+  "__checks": [
+    {
+      "name": "text-native PDF uses existing text, no OCR",
+      "ok": true
+    },
+    {
+      "name": "text-native text is present in output",
+      "ok": true
+    },
+    {
+      "name": "scanned-en.pdf: OCR text present in output  (Architectural,Drawing)",
+      "ok": true
+    },
+    {
+      "name": "scanned-ja.pdf: OCR text present in output  (建築,図面)",
+      "ok": true
+    },
+    {
+      "name": "scanned-ja-en.pdf: OCR text present in output  (Architectural)",
+      "ok": true
+    },
+    {
+      "name": "scanned-multipage.pdf: OCR text present in output  (Page)",
+      "ok": true
+    },
+    {
+      "name": "multi-page: all 3 pages processed",
+      "ok": true
+    },
+    {
+      "name": "multi-page: every page got invisible words",
+      "ok": true
+    },
+    {
+      "name": "output text is selectable",
+      "ok": true
+    },
+    {
+      "name": "appearance preserved (zero differing pixels)",
+      "ok": true
+    },
+    {
+      "name": "cancellation stops before all pages",
+      "ok": true
+    },
+    {
+      "name": "no failed requests (favicon excluded)  [0 real, 1 total]",
+      "ok": true
+    },
+    {
+      "name": "no page errors / uncaught exceptions",
+      "ok": true
+    },
+    {
+      "name": "M1 font policy is subset:false in pipeline.js",
+      "ok": true
+    }
+  ],
+  "__checksPassed": 14,
+  "__checksTotal": 14,
+  "__driverError": null,
+  "__network": {
+    "externalRequestCount": 0,
+    "externalKnownContentLengthBytes": 0,
+    "external": [],
+    "localhostRequestCount": 73,
+    "nonNetworkSchemeCounts": {},
+    "failedRequests": [
+      "HTTP 404 http://localhost:5199/favicon.ico"
+    ],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  "__gate": {
+    "pass": true,
+    "reasons": []
+  },
+  "__semanticGatePass": true,
+  "__failureReason": null
+}

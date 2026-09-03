@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PDF ArchiTools — M1 OCR architecture spike</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; }
+  #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
+  /* The text layer must be positioned exactly over the canvas for selection to
+     be meaningful, so it gets the same box and is stacked on top of it. */
+  .stage { position: relative; }
+  .stage canvas { display: block; }
+  .textLayer {
+    position: absolute; inset: 0; overflow: hidden; opacity: 1; line-height: 1;
+    text-align: initial; transform-origin: 0 0;
+  }
+  .textLayer span { position: absolute; color: transparent; white-space: pre; transform-origin: 0 0; cursor: text; }
+</style>
+</head>
+<body>
+<h1>M1 OCR architecture spike</h1>
+<p>Driven by <code>spike/run-spike.mjs</code>. Nothing here is the M1 implementation.</p>
+<div id="log">idle</div>
+<div id="stage" class="stage"></div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { TextLayer } from 'pdfjs-dist';
+import { makeSearchablePdf, extractText, classifyPage } from './pipeline.js';
+import { describeError } from './evidence.js';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+/** Render one page of a document to a fresh canvas at a fixed scale. */
+async function renderToCanvas(bytes, pageNo, scale) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+  const page = await doc.getPage(pageNo);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return { canvas, ctx, doc, page, viewport };
+}
+
+/**
+ * Appearance preservation, measured rather than eyeballed: render the input and
+ * the output at the same scale and count pixels that differ. A correct
+ * invisible layer must change nothing visible, so the expected answer is zero.
+ */
+async function compareAppearance(inputBytes, outputBytes, pageNo = 1, scale = 1.5) {
+  const a = await renderToCanvas(inputBytes, pageNo, scale);
+  const b = await renderToCanvas(outputBytes, pageNo, scale);
+  if (a.canvas.width !== b.canvas.width || a.canvas.height !== b.canvas.height) {
+    return { identical: false, reason: 'page size changed', a: [a.canvas.width, a.canvas.height], b: [b.canvas.width, b.canvas.height] };
+  }
+  const da = a.ctx.getImageData(0, 0, a.canvas.width, a.canvas.height).data;
+  const db = b.ctx.getImageData(0, 0, b.canvas.width, b.canvas.height).data;
+  let diff = 0, maxDelta = 0;
+  for (let i = 0; i < da.length; i += 4) {
+    const d = Math.abs(da[i] - db[i]) + Math.abs(da[i + 1] - db[i + 1]) + Math.abs(da[i + 2] - db[i + 2]);
+    if (d > 0) { diff++; if (d > maxDelta) maxDelta = d; }
+  }
+  const total = da.length / 4;
+  return {
+    identical: diff === 0,
+    differingPixels: diff,
+    totalPixels: total,
+    percent: +(100 * diff / total).toFixed(4),
+    maxChannelDelta: maxDelta,
+  };
+}
+
+/**
+ * Text selection, exercised for real: build the PDF.js text layer over the
+ * rendered page, then run a DOM selection across it and read back what the
+ * browser thinks the user selected.
+ */
+async function testSelection(outputBytes, pageNo = 1, scale = 1.5) {
+  const stage = document.getElementById('stage');
+  stage.innerHTML = '';
+  const { canvas, doc, page, viewport } = await renderToCanvas(outputBytes, pageNo, scale);
+  stage.style.width = canvas.width + 'px';
+  stage.style.height = canvas.height + 'px';
+  stage.appendChild(canvas);
+
+  const container = document.createElement('div');
+  container.className = 'textLayer';
+  container.style.width = canvas.width + 'px';
+  container.style.height = canvas.height + 'px';
+  stage.appendChild(container);
+
+  const textLayer = new TextLayer({
+    textContentSource: await page.getTextContent(),
+    container,
+    viewport,
+  });
+  await textLayer.render();
+
+  const spans = [...container.querySelectorAll('span')].filter(s => s.textContent.trim());
+  if (!spans.length) return { selectable: false, reason: 'text layer produced no spans' };
+
+  // Select from the first span to the last, the way a drag-select would.
+  const range = document.createRange();
+  range.setStartBefore(spans[0]);
+  range.setEndAfter(spans[spans.length - 1]);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  const selected = sel.toString();
+  sel.removeAllRanges();
+
+  // Are the selectable spans actually sitting over the page, not off in a corner?
+  const stageBox = stage.getBoundingClientRect();
+  let inside = 0;
+  for (const s of spans) {
+    const r = s.getBoundingClientRect();
+    if (r.width > 0 && r.left >= stageBox.left - 2 && r.right <= stageBox.right + 2
+        && r.top >= stageBox.top - 2 && r.bottom <= stageBox.bottom + 2) inside++;
+  }
+
+  return {
+    selectable: selected.replace(/\s/g, '').length > 0,
+    spans: spans.length,
+    spansWithinPage: inside,
+    selectedChars: selected.replace(/\s/g, '').length,
+    selectedSample: selected.replace(/\s+/g, ' ').trim().slice(0, 200),
+  };
+}
+
+/** Classify every page of a document without running OCR. */
+async function classifyAll(bytes) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+  const out = [];
+  for (let i = 1; i <= doc.numPages; i++) out.push({ page: i, ...(await classifyPage(await doc.getPage(i))) });
+  return out;
+}
+
+const toBase64 = (u8) => {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+const rawSpike = {
+  /** Full pipeline over one fixture, plus every acceptance check. */
+  async run(fixture, opts = {}) {
+    log(`running ${fixture} ...`);
+    const inputBytes = await (await fetch(`/spike/fixtures/${fixture}`)).arrayBuffer();
+
+    const progress = [];
+    const { bytes, report } = await makeSearchablePdf(inputBytes, {
+      langs: opts.langs ?? 'jpn+eng',
+      clean: opts.clean ?? true,
+      onProgress: (p) => { if (p.phase === 'ocr-page' || p.phase === 'ocr-init') progress.push(p); },
+    });
+
+    const extracted = await extractText(bytes);
+    const appearance = await compareAppearance(inputBytes, bytes, 1, 1.5);
+    const selection = await testSelection(bytes, 1, 1.5);
+
+    log(`done ${fixture}`);
+    return {
+      fixture, report, extracted, appearance, selection,
+      progressEvents: progress.length,
+      outputBase64: opts.keepBytes === false ? null : toBase64(bytes),
+    };
+  },
+
+  /**
+   * Render two PDFs and compare them pixel for pixel. Used to answer whether
+   * font subsetting damages visible Japanese glyphs, which is the open half of
+   * the known @pdf-lib/fontkit CJK subsetting bug.
+   */
+  async compareFiles(aUrl, bUrl, scale = 2) {
+    const a = await (await fetch(aUrl)).arrayBuffer();
+    const b = await (await fetch(bUrl)).arrayBuffer();
+    return compareAppearance(a, b, 1, scale);
+  },
+
+  /** Classification only — used to prove text-native pages are left alone. */
+  async classify(fixture) {
+    const bytes = await (await fetch(`/spike/fixtures/${fixture}`)).arrayBuffer();
+    return classifyAll(bytes);
+  },
+
+  /** Cancellation: start a job, cancel it, confirm it stops early. */
+  async cancelProbe(fixture) {
+    const inputBytes = await (await fetch(`/spike/fixtures/${fixture}`)).arrayBuffer();
+    let seen = 0;
+    const t0 = performance.now();
+    const { report } = await makeSearchablePdf(inputBytes, {
+      onProgress: (p) => { if (p.phase === 'ocr-page') seen++; },
+      shouldCancel: () => seen >= 1,     // cancel once the first page starts
+    });
+    return { cancelled: report.cancelled, pagesProcessed: report.pages.length, ms: Math.round(performance.now() - t0) };
+  },
+
+};
+
+// Puppeteer collapses a thrown browser error into a bare message string, losing
+// name, details and stack -- which is how a real failure here became an
+// undiagnosable "Evaluation failed" in the driver. Return the structured
+// description instead of throwing, and let the driver decide what it means.
+window.__spike = Object.fromEntries(
+  Object.entries(rawSpike).map(([name, fn]) => [name, async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      return { __error: describeError(error, `spike.${name}(${args[0] ?? ''})`) };
+    }
+  }]),
+);
+window.__spike.ready = true;
+log('ready');
+</script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+{
+  "date": "2026-09-03T05:19:09.289Z",
+  "fixtures": [
+    "scanned-ja.pdf",
+    "scanned-en.pdf",
+    "scanned-ja-en.pdf"
+  ],
+  "tesseract": {
+    "engine": "tesseract.js",
+    "version": "7.0.0",
+    "initMs": 338,
+    "lifecycle": {
+      "terminate": true,
+      "explicitCancelApi": false,
+      "cancellationMode": "terminate worker / page boundary"
+    },
+    "outputs": {
+      "scanned-ja.pdf": {
+        "ms": 329,
+        "text": "建築図面\n\n第一版 平面図\n\n株式会社 設計事務所\n\nスキャン画像として保存されたページ\n",
+        "wordCount": 27,
+        "meanScore": 89,
+        "boxesAvailable": true,
+        "coordinateNormalizable": true,
+        "quality": {
+          "containsExpected": true,
+          "expected": [
+            "建築",
+            "図面"
+          ],
+          "sample": "建築図面 第一版 平面図 株式会社 設計事務所 スキャン画像として保存されたページ"
+        }
+      },
+      "scanned-en.pdf": {
+        "ms": 132,
+        "text": "Architectural Drawing\nVersion 1 Floor Plan\n\nDesign Office Inc.\n\nSaved as a scanned raster pade\n",
+        "wordCount": 15,
+        "meanScore": 91,
+        "boxesAvailable": true,
+        "coordinateNormalizable": true,
+        "quality": {
+          "containsExpected": true,
+          "expected": [
+            "Architectural",
+            "Drawing"
+          ],
+          "sample": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster pade"
+        }
+      },
+      "scanned-ja-en.pdf": {
+        "ms": 128,
+        "text": "建築図面 Architectural Drawing\n第一版 Version 1\n\n平面図 Floor Plan\n\n日本語と English の混在\n",
+        "wordCount": 20,
+        "meanScore": 93,
+        "boxesAvailable": true,
+        "coordinateNormalizable": true,
+        "quality": {
+          "containsExpected": true,
+          "expected": [
+            "建築",
+            "Architectural"
+          ],
+          "sample": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在"
+        }
+      }
+    }
+  },
+  "paddle": {
+    "engine": "@paddleocr/paddleocr-js",
+    "version": "0.4.2",
+    "initMs": 5658,
+    "summary": {
+      "backend": "wasm",
+      "webgpuAvailable": true,
+      "detProvider": "wasm",
+      "recProvider": "wasm",
+      "assets": [
+        {
+          "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_onnx_infer.tar",
+          "bytes": 4843520
+        },
+        {
+          "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_onnx_infer.tar",
+          "bytes": 16701440
+        }
+      ],
+      "elapsedMs": 4510,
+      "pipelineConfigWarnings": [
+        "DocPreprocessor is not yet supported in PaddleOCR.js: config will be ignored for now.",
+        "TextLineOrientation is not yet supported in PaddleOCR.js: config will be ignored for now."
+      ]
+    },
+    "lifecycle": {
+      "dispose": true,
+      "explicitCancelApi": false,
+      "cancellationMode": "no documented cancel/abort API; dispose is lifecycle cleanup, in-flight cancellation not claimed",
+      "workerMode": true
+    },
+    "outputs": {
+      "scanned-ja.pdf": {
+        "ms": 1862,
+        "text": "建築図面 第一版 平面図 株式会社 設計事務所 スキャン画像として保存されたページ",
+        "itemCount": 4,
+        "meanScore": 0.9635,
+        "polyAvailable": true,
+        "boxesAvailable": true,
+        "coordinateNormalizable": true,
+        "metrics": {
+          "detMs": 1332.2000000476837,
+          "recMs": 496.7000000476837,
+          "totalMs": 1859,
+          "detectedBoxes": 4,
+          "recognizedCount": 4
+        },
+        "runtime": {
+          "requestedBackend": "wasm",
+          "detProvider": "wasm",
+          "recProvider": "wasm",
+          "webgpuAvailable": true
+        },
+        "quality": {
+          "containsExpected": true,
+          "expected": [
+            "建築",
+            "図面"
+          ],
+          "sample": "建築図面 第一版 平面図 株式会社 設計事務所 スキャン画像として保存されたページ"
+        }
+      },
+      "scanned-en.pdf": {
+        "ms": 1714,
+        "text": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page",
+        "itemCount": 4,
+        "meanScore": 0.9893,
+        "polyAvailable": true,
+        "boxesAvailable": true,
+        "coordinateNormalizable": true,
+        "metrics": {
+          "detMs": 1220.5,
+          "recMs": 463.09999990463257,
+          "totalMs": 1703.4000000953674,
+          "detectedBoxes": 4,
+          "recognizedCount": 4
+        },
+        "runtime": {
+          "requestedBackend": "wasm",
+          "detProvider": "wasm",
+          "recProvider": "wasm",
+          "webgpuAvailable": true
+        },
+        "quality": {
+          "containsExpected": true,
+          "expected": [
+            "Architectural",
+            "Drawing"
+          ],
+          "sample": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page"
+        }
+      },
+      "scanned-ja-en.pdf": {
+        "ms": 1702,
+        "text": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在",
+        "itemCount": 4,
+        "meanScore": 0.9627,
+        "polyAvailable": true,
+        "boxesAvailable": true,
+        "coordinateNormalizable": true,
+        "metrics": {
+          "detMs": 1278.2000000476837,
+          "recMs": 406,
+          "totalMs": 1701.0999999046326,
+          "detectedBoxes": 4,
+          "recognizedCount": 4
+        },
+        "runtime": {
+          "requestedBackend": "wasm",
+          "detProvider": "wasm",
+          "recProvider": "wasm",
+          "webgpuAvailable": true
+        },
+        "quality": {
+          "containsExpected": true,
+          "expected": [
+            "建築",
+            "Architectural"
+          ],
+          "sample": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在"
+        }
+      }
+    }
+  },
+  "checks": {
+    "tesseractInitialized": true,
+    "tesseractAllFixtures": true,
+    "paddleInitialized": true,
+    "paddleJapanese": true,
+    "paddleEnglish": true,
+    "paddleMixed": true,
+    "paddlePolys": true,
+    "paddleCoordinateNormalizable": true,
+    "paddleWorkerMode": true,
+    "paddleDispose": true
+  },
+  "runStartedAt": "2026-09-03T05:18:52.735Z",
+  "hardWallTimeout": false,
+  "hardWallMs": 600000,
+  "fatalError": null,
+  "network": {
+    "externalRequestCount": 4,
+    "externalKnownContentLengthBytes": 26292987,
+    "external": [
+      {
+        "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_onnx_infer.tar",
+        "status": 200,
+        "contentLength": 4843520,
+        "contentType": "application/octet-stream"
+      },
+      {
+        "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_onnx_infer.tar",
+        "status": 200,
+        "contentLength": 16701440,
+        "contentType": "application/octet-stream"
+      },
+      {
+        "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort-wasm-simd-threaded.jsep.mjs",
+        "status": 200,
+        "contentLength": 15999,
+        "contentType": "application/javascript; charset=utf-8"
+      },
+      {
+        "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort-wasm-simd-threaded.jsep.wasm",
+        "status": 200,
+        "contentLength": 4732028,
+        "contentType": "application/wasm"
+      }
+    ],
+    "localhostRequestCount": 27,
+    "nonNetworkSchemeCounts": {
+      "data:": 2
+    },
+    "failedRequests": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "\u001b[0;93m2026-09-03 14:19:03.888300 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.53.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.890700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.9.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.890899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.46.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.3.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.1.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891399 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.42.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891500 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.41.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.892800 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.40.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.892899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.48.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.892999 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.34.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.36.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893200 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.26.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893300 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.49.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893500 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.21.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893600 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.6.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.7.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.50.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893800 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.8.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894000 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.2.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.51.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894200 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.35.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894300 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.43.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894500 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.13.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894600 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.47.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.4.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.895000 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.38.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.895100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.39.0'. It is not used by any node and should be removed from the model.\u001b[m"
+    ]
+  },
+  "terminatedCleanly": true,
+  "gate": {
+    "pass": true,
+    "reasons": []
+  },
+  "semanticGatePass": true,
+  "runFinishedAt": "2026-09-03T05:19:09.574Z",
+  "runStatus": "completed",
+  "completed": true,
+  "failureReason": null
+}
