@@ -27,6 +27,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { TextLayer } from 'pdfjs-dist';
 import { makeSearchablePdf, extractText, classifyPage } from './pipeline.js';
+import { describeError } from './evidence.js';
 
 const log = (m) => { document.getElementById('log').textContent = m; };
 
@@ -144,7 +145,7 @@ const toBase64 = (u8) => {
   return btoa(s);
 };
 
-window.__spike = {
+const rawSpike = {
   /** Full pipeline over one fixture, plus every acceptance check. */
   async run(fixture, opts = {}) {
     log(`running ${fixture} ...`);
@@ -198,8 +199,22 @@ window.__spike = {
     return { cancelled: report.cancelled, pagesProcessed: report.pages.length, ms: Math.round(performance.now() - t0) };
   },
 
-  ready: true,
 };
+
+// Puppeteer collapses a thrown browser error into a bare message string, losing
+// name, details and stack -- which is how a real failure here became an
+// undiagnosable "Evaluation failed" in the driver. Return the structured
+// description instead of throwing, and let the driver decide what it means.
+window.__spike = Object.fromEntries(
+  Object.entries(rawSpike).map(([name, fn]) => [name, async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      return { __error: describeError(error, `spike.${name}(${args[0] ?? ''})`) };
+    }
+  }]),
+);
+window.__spike.ready = true;
 log('ready');
 </script>
 </body>

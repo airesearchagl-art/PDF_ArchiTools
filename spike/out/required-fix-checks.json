@@ -1,9 +1,36 @@
 {
-  "original_spike_exit": 1,
+  "evidence_generated_at": "2026-09-03T04:03:10.322Z",
+  "harness_base_commit": "684ed57b29c55b31845b6903dd36fc84bb013f8e",
+  "note": "Produced locally from the working tree that becomes the Required Fix commit. Both runners are fail-closed: these exit codes are the runners own semantic gates, not just process survival.",
+  "original_spike_exit": 0,
+  "original_spike_checks": "14/14",
+  "original_spike_driver_error": null,
   "paddle_compare_exit": 0,
+  "paddle_fatal_error": null,
+  "paddle_driver_error": null,
+  "paddle_hard_wall_timeout": false,
+  "paddle_hard_wall_ms": 600000,
+  "paddle_terminated_cleanly": true,
+  "tesseract_result_exists": true,
+  "paddle_result_exists": true,
+  "external_requests": {
+    "spike_harness": 0,
+    "paddle_comparison": 4,
+    "paddle_comparison_bytes": 26292987,
+    "paddle_comparison_hosts": [
+      "paddle-model-ecology.bj.bcebos.com",
+      "cdn.jsdelivr.net"
+    ],
+    "note": "Tesseract runs entirely from self-hosted assets. PaddleOCR.js fetches its ONNX models and runtime from third-party CDNs at run time."
+  },
   "lint_exit": 1,
+  "lint_baseline": "exit 1 / 31 problems (29 errors, 2 warnings)",
+  "lint_observed": "exit 1 / 31 problems (29 errors, 2 warnings)",
+  "lint_regression_vs_baseline": false,
+  "lint_note": "eslint.config.js matches **/*.{ts,tsx} only, so the .js/.mjs/.html harness files are outside its scope and cannot change this count.",
   "build_exit": 0,
-  "lint_expected_baseline": "exit 1 / 31 pre-existing problems",
+  "build_bundle": "1,922.74 kB (gzip 624.65 kB) - unchanged from baseline",
   "font_subset_m1_default": false,
+  "font_subset_asserted_by_spike": true,
   "production_src_changed_by_required_fix": false
 }

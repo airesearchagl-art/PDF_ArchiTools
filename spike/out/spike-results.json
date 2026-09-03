@@ -58,10 +58,10 @@
       "langs": "jpn+eng",
       "cancelled": false,
       "timings": {
-        "totalMs": 115
+        "totalMs": 227
       },
       "inputBytes": 1065021,
-      "outputBytes": 1066385
+      "outputBytes": 2128816
     },
     "extracted": [
       "建築図面 — Architectural Drawing第一版 / Version 1平面図 Floor PlanThis page has real embedded text. It must not be OCR processed.このページには本物のテキストが埋め込まれています。"
@@ -81,7 +81,7 @@
       "selectedSample": "建築図面 — Architectural Drawing 第一版 / Version 1 平面図 Floor Plan This page has real embedded text. It must not be OCR processed. このページには本物のテキストが埋め込まれています。"
     },
     "progressEvents": 0,
-    "wallMs": 515
+    "wallMs": 647
   },
   "scanned-en.pdf": {
     "fixture": "scanned-en.pdf",
@@ -95,7 +95,7 @@
           "imageOps": 1,
           "ocrWords": 15,
           "placed": 15,
-          "ms": 391,
+          "ms": 389,
           "text": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page",
           "meanConfidence": 96
         }
@@ -103,11 +103,11 @@
       "langs": "eng",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 110,
-        "totalMs": 449
+        "ocrInitMs": 112,
+        "totalMs": 549
       },
       "inputBytes": 29190,
-      "outputBytes": 33084
+      "outputBytes": 1093834
     },
     "extracted": [
       "Architectural DrawingVersion 1 Floor PlanDesign Office Inc.Saved as a scanned raster page"
@@ -127,7 +127,7 @@
       "selectedSample": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page"
     },
     "progressEvents": 2,
-    "wallMs": 729
+    "wallMs": 955
   },
   "scanned-ja.pdf": {
     "fixture": "scanned-ja.pdf",
@@ -141,7 +141,7 @@
           "imageOps": 1,
           "ocrWords": 27,
           "placed": 27,
-          "ms": 341,
+          "ms": 345,
           "text": "建築図面 第一上 平面図 株式会社 設計事務所 スキャン画像として保存されたページ",
           "meanConfidence": 85
         }
@@ -149,11 +149,11 @@
       "langs": "jpn",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 97,
-        "totalMs": 394
+        "ocrInitMs": 99,
+        "totalMs": 507
       },
       "inputBytes": 29592,
-      "outputBytes": 36076
+      "outputBytes": 1094439
     },
     "extracted": [
       "建築 図面第一上 平面図株 式 会社 設計 事務 所スキ ャ ン 画 像とし て 保存 されたペー ジ"
@@ -173,7 +173,7 @@
       "selectedSample": "建築 図面 第 一上 平面 図 株 式 会社 設計 事務 所 スキ ャ ン 画 像とし て 保存 されたペー ジ"
     },
     "progressEvents": 2,
-    "wallMs": 685
+    "wallMs": 879
   },
   "scanned-ja-en.pdf": {
     "fixture": "scanned-ja-en.pdf",
@@ -187,7 +187,7 @@
           "imageOps": 1,
           "ocrWords": 20,
           "placed": 20,
-          "ms": 380,
+          "ms": 375,
           "text": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在",
           "meanConfidence": 92
         }
@@ -195,11 +195,11 @@
       "langs": "jpn+eng",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 100,
-        "totalMs": 435
+        "ocrInitMs": 98,
+        "totalMs": 533
       },
       "inputBytes": 32520,
-      "outputBytes": 38154
+      "outputBytes": 1097296
     },
     "extracted": [
       "建築 図面 Architectural Drawing第 一版Version 1平面図Floor Plan日 本 語と English の 混在"
@@ -219,7 +219,7 @@
       "selectedSample": "建築 図面 Architectural Drawing 第 一版Version 1 平面図Floor Plan 日 本 語と English の 混在"
     },
     "progressEvents": 2,
-    "wallMs": 707
+    "wallMs": 943
   },
   "scanned-multipage.pdf": {
     "fixture": "scanned-multipage.pdf",
@@ -233,7 +233,7 @@
           "imageOps": 1,
           "ocrWords": 17,
           "placed": 17,
-          "ms": 336,
+          "ms": 344,
           "text": "建築図面 Page 1 第 1 葉 Sheet 1 Floor Plan 平面図 Page 1 of 3",
           "meanConfidence": 92
         },
@@ -245,7 +245,7 @@
           "imageOps": 1,
           "ocrWords": 17,
           "placed": 17,
-          "ms": 156,
+          "ms": 172,
           "text": "建築図面 Page 2 第 2 葉 Sheet 2 Floor Plan 平面図 Page 2 of 3",
           "meanConfidence": 91
         },
@@ -257,7 +257,7 @@
           "imageOps": 1,
           "ocrWords": 17,
           "placed": 17,
-          "ms": 172,
+          "ms": 164,
           "text": "建築図面 Page 3 第 3 葉 Sheet 3 Floor Plan 平面図 Page 3 of 3",
           "meanConfidence": 91
         }
@@ -265,11 +265,11 @@
       "langs": "jpn+eng",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 95,
-        "totalMs": 725
+        "ocrInitMs": 98,
+        "totalMs": 857
       },
       "inputBytes": 79433,
-      "outputBytes": 85155
+      "outputBytes": 1145397
     },
     "extracted": [
       "建築 図面 Page 1第 1 葉 Sheet 1Floor Plan 平面図Page1 of3",
@@ -291,7 +291,7 @@
       "selectedSample": "建築 図面 Page 1 第 1 葉 Sheet 1 Floor Plan 平面図 Page1 of3"
     },
     "progressEvents": 4,
-    "wallMs": 1012
+    "wallMs": 1261
   },
   "fontSubset": {
     "identical": false,
@@ -303,8 +303,10 @@
   "cancel": {
     "cancelled": true,
     "pagesProcessed": 1,
-    "ms": 393
+    "ms": 494
   },
+  "__runStartedAt": "2026-09-03T04:01:32.932Z",
+  "__runFinishedAt": "2026-09-03T04:01:40.026Z",
   "__checks": [
     {
       "name": "text-native PDF uses existing text, no OCR",
@@ -357,12 +359,30 @@
     {
       "name": "no page errors / uncaught exceptions",
       "ok": true
+    },
+    {
+      "name": "M1 font policy is subset:false in pipeline.js",
+      "ok": true
     }
   ],
-  "__consoleErrors": [
-    "Failed to load resource: the server responded with a status of 404 (Not Found)"
-  ],
-  "__failedRequests": [
-    "HTTP 404 http://localhost:5199/favicon.ico"
-  ]
+  "__checksPassed": 14,
+  "__checksTotal": 14,
+  "__driverError": null,
+  "__network": {
+    "externalRequestCount": 0,
+    "externalKnownContentLengthBytes": 0,
+    "external": [],
+    "localhostRequestCount": 73,
+    "nonNetworkSchemeCounts": {},
+    "failedRequests": [
+      "HTTP 404 http://localhost:5199/favicon.ico"
+    ],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  "__gate": {
+    "pass": true,
+    "reasons": []
+  }
 }
