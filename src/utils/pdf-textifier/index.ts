@@ -7,7 +7,6 @@ import { classifyDocument } from './classify';
 import { OcrEngine } from './ocr';
 import { drawInvisibleWords } from './searchable-pdf';
 import { TextifyError } from './types';
-import { resetTrace, trace, getTrace } from './diagnostics';   // TEMPORARY
 import type { PageResult, TextifyOptions, TextifyResult } from './types';
 
 /** Worker bundled with the app, never a CDN. */
@@ -39,7 +38,6 @@ const FONT_URL = '/ocr/fonts/MPLUS1p-Regular.ttf';
 const DEFAULT_DPI = 150;
 
 export * from './types';
-export { getTrace } from './diagnostics';   // TEMPORARY
 export { classifyPage, classifyDocument } from './classify';
 
 /**
@@ -62,7 +60,6 @@ export async function textifyPdf(
     } = options;
 
     configurePdfWorker();
-    resetTrace();   // TEMPORARY: trace lands on window.__textifierTrace
 
     const startedAt = performance.now();
     const source = file instanceof File ? await file.arrayBuffer() : file;
@@ -219,7 +216,6 @@ export async function textifyPdf(
     const bytes = await save(out);
     onProgress({ phase: 'done', totalPages, message: '完了しました。' });
 
-    trace('run:done', { events: getTrace().length });   // TEMPORARY
     return {
         bytes,
         pages,
@@ -278,7 +274,6 @@ async function renderPage(page: PDFPageProxy, scale: number) {
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
-    trace('render:start', { page: page.pageNumber, scale, width: canvas.width, height: canvas.height });   // TEMPORARY
     // Ask for the read-friendly context first: pdf.js reuses whatever context
     // the canvas already has, and Tesseract reads the pixels back out.
     const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -292,7 +287,6 @@ async function renderPage(page: PDFPageProxy, scale: number) {
     // exists only to feed the OCR engine, so it must not depend on the page
     // being visible. Print intent schedules on microtasks instead.
     await page.render({ canvas, viewport, intent: 'print' }).promise;
-    trace('render:done', { page: page.pageNumber });   // TEMPORARY
     return { canvas, viewport };
 }
 

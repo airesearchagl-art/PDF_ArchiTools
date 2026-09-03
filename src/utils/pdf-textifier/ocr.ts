@@ -1,7 +1,6 @@
 import { createWorker } from 'tesseract.js';
 import type { Worker as TesseractWorker } from 'tesseract.js';
 import { TextifyError } from './types';
-import { trace } from './diagnostics';   // TEMPORARY
 import type { OcrWord } from './types';
 
 /**
@@ -79,10 +78,7 @@ function flattenWords(blocks: RecognisedBlock[] | null | undefined): OcrWord[] {
  * That is a fair trade for removing a class of unkillable hang.
  */
 function canvasToDataUrl(canvas: HTMLCanvasElement): string {
-    trace('ocrInput:start', { width: canvas.width, height: canvas.height });   // TEMPORARY
-    const dataUrl = canvas.toDataURL('image/png');
-    trace('ocrInput:done', { inputType: 'dataURL', chars: dataUrl.length });   // TEMPORARY
-    return dataUrl;
+    return canvas.toDataURL('image/png');
 }
 
 /**
@@ -111,7 +107,6 @@ export class OcrEngine {
             this.worker = await createWorker(this.langs, 1, {
                 ...TESSERACT_OPTIONS,
                 logger: (message: { status: string; progress: number }) => {
-                    trace(`tess:${message.status}`, { progress: message.progress });   // TEMPORARY
                     if (message.status === 'recognizing text') this.onPageProgress?.(message.progress);
                 },
             });
@@ -138,7 +133,6 @@ export class OcrEngine {
         canvas: HTMLCanvasElement,
         timeoutMs = PAGE_OCR_TIMEOUT_MS,
     ): Promise<OcrPageOutput> {
-        trace('recognise:enter', { workerStarted: this.worker !== null });   // TEMPORARY
         if (!this.worker) throw new TextifyError('ocr-page', 'OCRエンジンが起動していません。');
         const image = canvasToDataUrl(canvas);
 
@@ -156,22 +150,16 @@ export class OcrEngine {
         });
 
         try {
-            trace('recognise:start');   // TEMPORARY
             const { data } = await Promise.race([
                 this.worker.recognize(image, {}, { blocks: true, text: true }),
                 timeout,
             ]);
-            trace('recognise:resolve');   // TEMPORARY
             const words = flattenWords(data.blocks as RecognisedBlock[] | null);
             const meanConfidence = words.length
                 ? Math.round(words.reduce((sum, w) => sum + w.confidence, 0) / words.length)
                 : null;
             return { words, text: data.text ?? '', meanConfidence };
         } catch (error) {
-            trace('recognise:reject', {   // TEMPORARY
-                message: error instanceof Error ? error.message : String(error),
-                timedOut: error instanceof TextifyError && error.fatal,
-            });
             // A stalled recognition leaves the worker unusable, and there is no
             // way to abort one in flight, so the worker goes with it.
             if (error instanceof TextifyError && error.fatal) await this.terminate();
