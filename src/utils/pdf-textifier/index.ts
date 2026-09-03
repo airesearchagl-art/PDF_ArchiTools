@@ -28,6 +28,12 @@ export function configurePdfWorker(): void {
     }
 }
 
+// Set a sane default the moment this module is imported, so any caller that
+// reaches pdf.js directly (the classifier, a test harness) still gets our
+// worker. The point-of-use call above is what survives another module
+// overwriting the global afterwards.
+configurePdfWorker();
+
 const FONT_URL = '/ocr/fonts/MPLUS1p-Regular.ttf';
 const DEFAULT_DPI = 150;
 
