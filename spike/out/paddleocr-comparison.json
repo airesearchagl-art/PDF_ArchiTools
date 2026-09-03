@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-03T04:00:43.443Z",
+  "date": "2026-09-03T05:19:09.289Z",
   "fixtures": [
     "scanned-ja.pdf",
     "scanned-en.pdf",
@@ -8,7 +8,7 @@
   "tesseract": {
     "engine": "tesseract.js",
     "version": "7.0.0",
-    "initMs": 148,
+    "initMs": 338,
     "lifecycle": {
       "terminate": true,
       "explicitCancelApi": false,
@@ -16,7 +16,7 @@
     },
     "outputs": {
       "scanned-ja.pdf": {
-        "ms": 308,
+        "ms": 329,
         "text": "建築図面\n\n第一版 平面図\n\n株式会社 設計事務所\n\nスキャン画像として保存されたページ\n",
         "wordCount": 27,
         "meanScore": 89,
@@ -32,7 +32,7 @@
         }
       },
       "scanned-en.pdf": {
-        "ms": 119,
+        "ms": 132,
         "text": "Architectural Drawing\nVersion 1 Floor Plan\n\nDesign Office Inc.\n\nSaved as a scanned raster pade\n",
         "wordCount": 15,
         "meanScore": 91,
@@ -48,7 +48,7 @@
         }
       },
       "scanned-ja-en.pdf": {
-        "ms": 118,
+        "ms": 128,
         "text": "建築図面 Architectural Drawing\n第一版 Version 1\n\n平面図 Floor Plan\n\n日本語と English の混在\n",
         "wordCount": 20,
         "meanScore": 93,
@@ -68,7 +68,7 @@
   "paddle": {
     "engine": "@paddleocr/paddleocr-js",
     "version": "0.4.2",
-    "initMs": 4319,
+    "initMs": 5658,
     "summary": {
       "backend": "wasm",
       "webgpuAvailable": true,
@@ -84,7 +84,7 @@
           "bytes": 16701440
         }
       ],
-      "elapsedMs": 3345.2999999523163,
+      "elapsedMs": 4510,
       "pipelineConfigWarnings": [
         "DocPreprocessor is not yet supported in PaddleOCR.js: config will be ignored for now.",
         "TextLineOrientation is not yet supported in PaddleOCR.js: config will be ignored for now."
@@ -98,7 +98,7 @@
     },
     "outputs": {
       "scanned-ja.pdf": {
-        "ms": 1764,
+        "ms": 1862,
         "text": "建築図面 第一版 平面図 株式会社 設計事務所 スキャン画像として保存されたページ",
         "itemCount": 4,
         "meanScore": 0.9635,
@@ -106,9 +106,9 @@
         "boxesAvailable": true,
         "coordinateNormalizable": true,
         "metrics": {
-          "detMs": 1291.3999998569489,
-          "recMs": 441.10000014305115,
-          "totalMs": 1760.9000000953674,
+          "detMs": 1332.2000000476837,
+          "recMs": 496.7000000476837,
+          "totalMs": 1859,
           "detectedBoxes": 4,
           "recognizedCount": 4
         },
@@ -128,7 +128,7 @@
         }
       },
       "scanned-en.pdf": {
-        "ms": 1544,
+        "ms": 1714,
         "text": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page",
         "itemCount": 4,
         "meanScore": 0.9893,
@@ -136,9 +136,9 @@
         "boxesAvailable": true,
         "coordinateNormalizable": true,
         "metrics": {
-          "detMs": 1137.6999998092651,
-          "recMs": 384.10000014305115,
-          "totalMs": 1539.1000001430511,
+          "detMs": 1220.5,
+          "recMs": 463.09999990463257,
+          "totalMs": 1703.4000000953674,
           "detectedBoxes": 4,
           "recognizedCount": 4
         },
@@ -158,7 +158,7 @@
         }
       },
       "scanned-ja-en.pdf": {
-        "ms": 1517,
+        "ms": 1702,
         "text": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在",
         "itemCount": 4,
         "meanScore": 0.9627,
@@ -166,9 +166,9 @@
         "boxesAvailable": true,
         "coordinateNormalizable": true,
         "metrics": {
-          "detMs": 1193,
-          "recMs": 309.89999985694885,
-          "totalMs": 1516.3999998569489,
+          "detMs": 1278.2000000476837,
+          "recMs": 406,
+          "totalMs": 1701.0999999046326,
           "detectedBoxes": 4,
           "recognizedCount": 4
         },
@@ -201,7 +201,7 @@
     "paddleWorkerMode": true,
     "paddleDispose": true
   },
-  "runStartedAt": "2026-09-03T04:00:32.035Z",
+  "runStartedAt": "2026-09-03T05:18:52.735Z",
   "hardWallTimeout": false,
   "hardWallMs": 600000,
   "fatalError": null,
@@ -241,33 +241,33 @@
     "failedRequests": [],
     "consoleErrors": [
       "Failed to load resource: the server responded with a status of 404 (Not Found)",
-      "\u001b[0;93m2026-09-03 13:00:38.513299 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.53.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.515199 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.9.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.515499 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.46.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.515598 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.3.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.515798 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.1.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.515999 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.42.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.516098 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.41.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517199 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.40.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517299 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.48.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517399 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.34.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517499 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.36.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517599 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.26.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517699 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.49.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517699 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.21.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517799 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.6.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.7.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.517899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.50.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518199 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.8.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518298 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.2.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518399 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.51.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518499 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.35.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518699 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.43.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518699 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.13.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518798 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.47.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.518899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.4.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.519199 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.38.0'. It is not used by any node and should be removed from the model.\u001b[m",
-      "\u001b[0;93m2026-09-03 13:00:38.519199 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.39.0'. It is not used by any node and should be removed from the model.\u001b[m"
+      "\u001b[0;93m2026-09-03 14:19:03.888300 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.53.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.890700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.9.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.890899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.46.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.3.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.1.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891399 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.42.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.891500 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.41.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.892800 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.40.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.892899 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.48.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.892999 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.34.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.36.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893200 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.26.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893300 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.49.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893500 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.21.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893600 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.6.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.7.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.50.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.893800 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.8.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894000 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.2.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.51.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894200 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.35.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894300 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.43.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894500 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.13.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894600 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.47.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.894700 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full.4.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.895000 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.38.0'. It is not used by any node and should be removed from the model.\u001b[m",
+      "\u001b[0;93m2026-09-03 14:19:03.895100 [W:onnxruntime:, graph.cc:5241 CleanUnusedInitializersAndNodeArgs] Removing initializer 'p2o.pd_op.full_int_array.39.0'. It is not used by any node and should be removed from the model.\u001b[m"
     ]
   },
   "terminatedCleanly": true,
@@ -275,5 +275,9 @@
     "pass": true,
     "reasons": []
   },
-  "runFinishedAt": "2026-09-03T04:00:43.712Z"
+  "semanticGatePass": true,
+  "runFinishedAt": "2026-09-03T05:19:09.574Z",
+  "runStatus": "completed",
+  "completed": true,
+  "failureReason": null
 }

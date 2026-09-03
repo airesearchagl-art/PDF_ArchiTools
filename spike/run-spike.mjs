@@ -34,9 +34,11 @@ const say = (s) => console.log(s);
 
 // Stale-artifact guard. Written before the server even starts.
 fs.writeFileSync(RESULTS, JSON.stringify({
-  runStartedAt: startedAt,
-  status: 'in-progress',
-  note: 'Run did not complete. If this is the final content, the driver died before recording results.',
+  __runStartedAt: startedAt,
+  __runStatus: 'in-progress',
+  __completed: false,
+  __failureReason: null,
+  __note: 'Run did not complete. If this is the final content, the driver died before recording results.',
 }, null, 2));
 
 const results = {};
@@ -236,6 +238,11 @@ try {
 
   results.__runStartedAt = startedAt;
   results.__runFinishedAt = new Date().toISOString();
+  // Explicit run metadata so a leftover artifact from an earlier commit can
+  // never be read as this run's result -- the exact confusion that let a
+  // subset:true-era 13/13 file stand in for a run that never wrote one.
+  results.__runStatus = 'completed';
+  results.__completed = true;
   results.__checks = checks.map(([name, ok]) => ({ name, ok }));
   results.__checksPassed = pass;
   results.__checksTotal = total;
@@ -249,6 +256,8 @@ try {
       ...checks.filter(([, ok]) => !ok).map(([name]) => `failed check: ${name}`),
     ],
   };
+  results.__semanticGatePass = gatePass;
+  results.__failureReason = gatePass ? null : results.__gate.reasons;
   fs.writeFileSync(RESULTS, JSON.stringify(results, null, 2));
   say(`\n  wrote ${path.join('spike', 'out', 'spike-results.json')}`);
   say(gatePass ? '  GATE: PASS' : `  GATE: FAIL\n    - ${results.__gate.reasons.join('\n    - ')}`);

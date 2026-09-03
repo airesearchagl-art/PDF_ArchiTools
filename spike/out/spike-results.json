@@ -58,7 +58,7 @@
       "langs": "jpn+eng",
       "cancelled": false,
       "timings": {
-        "totalMs": 227
+        "totalMs": 247
       },
       "inputBytes": 1065021,
       "outputBytes": 2128816
@@ -81,7 +81,7 @@
       "selectedSample": "建築図面 — Architectural Drawing 第一版 / Version 1 平面図 Floor Plan This page has real embedded text. It must not be OCR processed. このページには本物のテキストが埋め込まれています。"
     },
     "progressEvents": 0,
-    "wallMs": 647
+    "wallMs": 671
   },
   "scanned-en.pdf": {
     "fixture": "scanned-en.pdf",
@@ -95,7 +95,7 @@
           "imageOps": 1,
           "ocrWords": 15,
           "placed": 15,
-          "ms": 389,
+          "ms": 447,
           "text": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page",
           "meanConfidence": 96
         }
@@ -103,8 +103,8 @@
       "langs": "eng",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 112,
-        "totalMs": 549
+        "ocrInitMs": 150,
+        "totalMs": 619
       },
       "inputBytes": 29190,
       "outputBytes": 1093834
@@ -127,7 +127,7 @@
       "selectedSample": "Architectural Drawing Version 1 Floor Plan Design Office Inc. Saved as a scanned raster page"
     },
     "progressEvents": 2,
-    "wallMs": 955
+    "wallMs": 1070
   },
   "scanned-ja.pdf": {
     "fixture": "scanned-ja.pdf",
@@ -141,7 +141,7 @@
           "imageOps": 1,
           "ocrWords": 27,
           "placed": 27,
-          "ms": 345,
+          "ms": 375,
           "text": "建築図面 第一上 平面図 株式会社 設計事務所 スキャン画像として保存されたページ",
           "meanConfidence": 85
         }
@@ -149,8 +149,8 @@
       "langs": "jpn",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 99,
-        "totalMs": 507
+        "ocrInitMs": 112,
+        "totalMs": 588
       },
       "inputBytes": 29592,
       "outputBytes": 1094439
@@ -173,7 +173,7 @@
       "selectedSample": "建築 図面 第 一上 平面 図 株 式 会社 設計 事務 所 スキ ャ ン 画 像とし て 保存 されたペー ジ"
     },
     "progressEvents": 2,
-    "wallMs": 879
+    "wallMs": 995
   },
   "scanned-ja-en.pdf": {
     "fixture": "scanned-ja-en.pdf",
@@ -187,7 +187,7 @@
           "imageOps": 1,
           "ocrWords": 20,
           "placed": 20,
-          "ms": 375,
+          "ms": 389,
           "text": "建築図面 Architectural Drawing 第一版 Version 1 平面図 Floor Plan 日本語と English の混在",
           "meanConfidence": 92
         }
@@ -195,8 +195,8 @@
       "langs": "jpn+eng",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 98,
-        "totalMs": 533
+        "ocrInitMs": 100,
+        "totalMs": 568
       },
       "inputBytes": 32520,
       "outputBytes": 1097296
@@ -219,7 +219,7 @@
       "selectedSample": "建築 図面 Architectural Drawing 第 一版Version 1 平面図Floor Plan 日 本 語と English の 混在"
     },
     "progressEvents": 2,
-    "wallMs": 943
+    "wallMs": 992
   },
   "scanned-multipage.pdf": {
     "fixture": "scanned-multipage.pdf",
@@ -233,7 +233,7 @@
           "imageOps": 1,
           "ocrWords": 17,
           "placed": 17,
-          "ms": 344,
+          "ms": 359,
           "text": "建築図面 Page 1 第 1 葉 Sheet 1 Floor Plan 平面図 Page 1 of 3",
           "meanConfidence": 92
         },
@@ -245,7 +245,7 @@
           "imageOps": 1,
           "ocrWords": 17,
           "placed": 17,
-          "ms": 172,
+          "ms": 163,
           "text": "建築図面 Page 2 第 2 葉 Sheet 2 Floor Plan 平面図 Page 2 of 3",
           "meanConfidence": 91
         },
@@ -257,7 +257,7 @@
           "imageOps": 1,
           "ocrWords": 17,
           "placed": 17,
-          "ms": 164,
+          "ms": 173,
           "text": "建築図面 Page 3 第 3 葉 Sheet 3 Floor Plan 平面図 Page 3 of 3",
           "meanConfidence": 91
         }
@@ -265,8 +265,8 @@
       "langs": "jpn+eng",
       "cancelled": false,
       "timings": {
-        "ocrInitMs": 98,
-        "totalMs": 857
+        "ocrInitMs": 100,
+        "totalMs": 872
       },
       "inputBytes": 79433,
       "outputBytes": 1145397
@@ -291,7 +291,7 @@
       "selectedSample": "建築 図面 Page 1 第 1 葉 Sheet 1 Floor Plan 平面図 Page1 of3"
     },
     "progressEvents": 4,
-    "wallMs": 1261
+    "wallMs": 1347
   },
   "fontSubset": {
     "identical": false,
@@ -303,10 +303,12 @@
   "cancel": {
     "cancelled": true,
     "pagesProcessed": 1,
-    "ms": 494
+    "ms": 541
   },
-  "__runStartedAt": "2026-09-03T04:01:32.932Z",
-  "__runFinishedAt": "2026-09-03T04:01:40.026Z",
+  "__runStartedAt": "2026-09-03T05:19:10.055Z",
+  "__runFinishedAt": "2026-09-03T05:19:17.663Z",
+  "__runStatus": "completed",
+  "__completed": true,
   "__checks": [
     {
       "name": "text-native PDF uses existing text, no OCR",
@@ -384,5 +386,7 @@
   "__gate": {
     "pass": true,
     "reasons": []
-  }
+  },
+  "__semanticGatePass": true,
+  "__failureReason": null
 }

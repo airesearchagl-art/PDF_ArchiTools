@@ -12,36 +12,58 @@ production `src/` file is touched.
 
 ---
 
-## 1. The harness destroyed its own root cause
+## 1. Historical evidence quality deficiency (NOT a technical root cause)
+
+This section records a defect in the *evidence*, not a diagnosis of the code.
+Nothing here should be cited as the technical cause of the historical failure.
 
 Both runners collapsed a thrown value into `String(error?.stack || error)`.
-
-That is why the only failure ever committed to this repository reads:
+The only failure ever committed to this repository therefore reads, in full:
 
 ```json
 "fatalError": "Error\n    at BaseExceptionClosure (.../pdfjs-dist.js:334:30)\n    at .../pdfjs-dist.js:337:3"
 ```
 
-PDF.js exceptions derive from `BaseException`, which puts the reason on
-`message` and often on `details`. The stack bottoms out in the closure that
-constructs those classes, so the saved string names neither the operation nor
-the reason. **The underlying cause of that particular CI failure is not
-recoverable from the evidence, because the evidence discarded it.**
+PDF.js exceptions derive from `BaseException`, which carries the reason on
+`message` and often on `details`, while the stack bottoms out in the closure
+that constructs those classes. The saved string names neither the failing
+operation nor the reason, and no runtime values were recorded alongside it.
 
-Worth stating plainly: the string `Invalid \`workerSrc\` type` appears **nowhere**
-in this repository's recorded evidence. Every committed version of
-`spike/out/paddleocr-comparison.json` was checked; there is exactly one, and it
-carries the `BaseExceptionClosure` stack above. `@paddleocr/paddleocr-js` was
-also checked and never assigns `GlobalWorkerOptions.workerSrc` at all. That
-error message could not be confirmed against any artifact in the repo, so it is
-not treated as an established fact here.
+**Findings, stated as evidence quality rather than as diagnosis:**
 
-**Fix:** `spike/evidence.js` `describeError()` captures `name`, `message`,
-`details`, `stack`, `stage`, any other own properties, and the `cause` chain.
-Every call site now records a stage, so a failure says where it happened.
+- The historical artifact did **not** preserve a complete error message or any
+  runtime value.
+- The technical root cause of that historical failure is **not recoverable** from
+  the evidence that exists today. It is not determined, and this document does
+  not claim to have determined it.
+- Regarding the reported `Invalid \`workerSrc\` type`: that string appears in
+  **no** committed artifact in this repository. Every committed version of
+  `spike/out/paddleocr-comparison.json` was inspected; there is exactly one, and
+  it carries the stack quoted above. Separately, `@paddleocr/paddleocr-js` was
+  checked and never assigns `GlobalWorkerOptions.workerSrc` anywhere. The report
+  can be neither confirmed nor explained from available evidence, so it is
+  recorded here only as an unverified historical report.
 
-The fix paid for itself immediately: the very next run surfaced a `cause` chain
-naming `ProtocolError: Runtime.callFunctionOn timed out` — see §3.
+**Fresh verification that the current harness does not reproduce it.** With the
+structured capture in place, the searchable-PDF spike and the engine comparison
+were both re-run from scratch. Neither produced any `workerSrc` error, and the
+PDF.js document-load and render path used by the comparison (`renderFixture`)
+completed cleanly on all three fixtures with `fatalError: null`. The condition
+that produced the historical artifact does not occur in the current harness.
+
+**Fix, so this class of deficiency cannot recur:** `spike/evidence.js`
+`describeError()` captures `name`, `message`, `details`, `stack`, `stage`, any
+other own properties, and the `cause` chain. Every call site records a stage, so
+a failure states where it happened.
+
+The fix demonstrated its value immediately: the next run surfaced a `cause`
+chain naming `ProtocolError: Runtime.callFunctionOn timed out`, which the old
+capture would have reduced to an unusable stack.
+
+**This is separate from §3.1.** The Vite worker-asset 404 documented there is a
+*different*, freshly reproduced and freshly confirmed root cause, established
+from a live run and from Vite's own server output. It is not offered as an
+explanation of the historical artifact above, and the two must not be conflated.
 
 ---
 
@@ -79,7 +101,9 @@ result.
 Four separate problems, each hidden behind the previous one. All are Vite/harness
 integration issues; none is a defect in PaddleOCR.js itself.
 
-**3.1 Vite's dependency pre-bundler drops the worker asset.** PaddleOCR.js ships
+**3.1 Vite's dependency pre-bundler drops the worker asset.** *(Freshly
+reproduced and confirmed in this run. Unrelated to the historical artifact in
+§1, which remains undiagnosed.)* PaddleOCR.js ships
 its Web Worker as a sibling file, `dist/assets/worker-entry-C9UNuyOJ.js`. The
 optimizer rewrites the package entry into `node_modules/.vite/deps/` but does not
 carry that asset across, so the worker URL 404s and the library reports only

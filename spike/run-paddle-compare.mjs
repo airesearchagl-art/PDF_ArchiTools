@@ -33,7 +33,9 @@ function writeArtifact(payload) {
 const startedAt = new Date().toISOString();
 writeArtifact({
   runStartedAt: startedAt,
-  status: 'in-progress',
+  runStatus: 'in-progress',
+  completed: false,
+  failureReason: null,
   note: 'Run did not complete. If this is the final content, the driver died before writing results.',
 });
 
@@ -259,7 +261,13 @@ try {
 
   const gate = evaluateGate(payload);
   payload.gate = gate;
+  payload.semanticGatePass = gate.pass;
   payload.runFinishedAt = new Date().toISOString();
+  // Explicit run metadata so a reader can never mistake a leftover artifact for
+  // this run's result: a file without runStatus 'completed' is not evidence.
+  payload.runStatus = 'completed';
+  payload.completed = true;
+  payload.failureReason = gate.pass ? null : gate.reasons;
   writeArtifact(payload);
 
   console.log(JSON.stringify({
