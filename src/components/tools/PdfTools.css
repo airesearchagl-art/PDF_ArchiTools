@@ -171,3 +171,235 @@ input[type="color"] {
     color: white;
     border-radius: 4px;
 }
+/* ---- 図枠一括更新: 代表ページ上での領域選択とプレビュー ---- */
+.tb-updater {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 1rem;
+}
+
+.tb-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tb-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background-color: #333;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.tb-toolbar button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.tb-toolbar .tb-toggle.active {
+    background-color: #2a4a5a;
+    border-color: #61dafb;
+    color: #61dafb;
+}
+
+.tb-page-indicator {
+    font-size: 0.85rem;
+    color: #bbb;
+    min-width: 90px;
+    text-align: center;
+}
+
+.tb-stage {
+    display: flex;
+    justify-content: center;
+    background-color: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 10px;
+    overflow: auto;
+}
+
+.tb-surface {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+    touch-action: none;
+    user-select: none;
+}
+
+/* Keep the whole sheet on screen: a wide A1 drawing is unusable if it is
+   taller than the panel and the title block sits below the fold. */
+.tb-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 46vh;
+    width: auto;
+    height: auto;
+}
+
+.tb-region {
+    position: absolute;
+    border: 2px solid #ff5252;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.tb-region.active {
+    border-color: #61dafb;
+}
+
+.tb-region.live {
+    border-style: dashed;
+    background: rgba(97, 218, 251, 0.15);
+}
+
+.tb-region-number {
+    position: absolute;
+    top: -11px;
+    left: -11px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #ff5252;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+}
+
+.tb-region-text {
+    color: #000;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}
+
+.tb-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 20px;
+}
+
+.tb-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #999;
+    line-height: 1.6;
+}
+
+.tb-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tb-rule {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background-color: #2d2d2d;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.tb-rule.active {
+    border-color: #61dafb;
+}
+
+.tb-rule-number {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    border: none;
+    background: #ff5252;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.tb-rule.active .tb-rule-number {
+    background: #61dafb;
+    color: #10232b;
+}
+
+.tb-rule-text {
+    flex: 1 1 160px;
+    min-width: 0;
+    padding: 6px 8px;
+    background-color: #1e1e1e;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 4px;
+}
+
+.tb-rule-remove {
+    flex: 0 0 auto;
+    background: none;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #bbb;
+    padding: 5px 7px;
+    cursor: pointer;
+}
+
+.tb-rule-state {
+    font-size: 0.75rem;
+    color: #888;
+    flex: 0 0 auto;
+}
+
+.tb-add {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background-color: #333;
+    color: #eee;
+    border: 1px dashed #555;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.tb-add:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.tb-warning {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #ffcc80;
+    line-height: 1.6;
+    background: rgba(255, 204, 128, 0.08);
+    border: 1px solid rgba(255, 204, 128, 0.3);
+    border-radius: 6px;
+    padding: 8px 10px;
+}

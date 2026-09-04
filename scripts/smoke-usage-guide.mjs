@@ -73,7 +73,7 @@ try {
         return out;
     });
     console.log(`  versions : ${JSON.stringify(versions)}`);
-    check('PDF加工 shows v1.2.0', versions['3. PDF加工 (Processor)'] === '1.2.0', JSON.stringify(versions));
+    check('PDF加工 shows v1.3.0', versions['3. PDF加工 (Processor)'] === '1.3.0', JSON.stringify(versions));
     check('PDFテキスト化 shows v1.2.0', versions['5. PDFテキスト化 (Textifier)'] === '1.2.0', JSON.stringify(versions));
 
     // ---- S1: the page-size normalizer is documented ------------------------
@@ -84,9 +84,21 @@ try {
         text.includes('縦横比') && text.includes('中央に配置') && text.includes('切り取り'));
     check('図面サイズ統一 states what is preserved',
         text.includes('ベクター') && text.includes('検索できる文字情報'));
-    check('PDF加工 lists all six functions',
-        ['半透明レイヤ追加', 'モノクロ化', '両方実行', '余白生成', '図面サイズ統一', '最適化']
+    check('PDF加工 lists all seven functions',
+        ['半透明レイヤ追加', 'モノクロ化', '両方実行', '余白生成', '図面サイズ統一', '図枠一括更新', '最適化']
             .every((f) => text.includes(f)));
+
+    // ---- S2: the title-block updater is documented ------------------------
+    check('図枠一括更新 is documented', text.includes('図枠一括更新'));
+    check('図枠一括更新 explains the workflow',
+        text.includes('ドラッグ') && text.includes('最大3か所') && text.includes('全ページ'),
+        'drag / max three / all pages');
+    check('図枠一括更新 tells the user to preview first',
+        text.includes('プレビューで位置と文字を確認'));
+    check('図枠一括更新 says the replacement is visual only',
+        text.includes('表示を上書き') && text.includes('元の文字はPDFの内部に残る'));
+    check('図枠一括更新 warns it is not redaction',
+        text.includes('墨消し') && text.includes('機密情報を消す目的では使用しないでください'));
 
     // ---- M1: unsupported features must read as unsupported -----------------
     const unsupported = await page.evaluate(() => {
@@ -112,9 +124,14 @@ try {
     check('更新履歴 section exists', text.includes('更新履歴'));
     const historyText = await page.evaluate(() =>
         document.querySelector('#release-history')?.innerText ?? '');
-    check('release history: 2026/09/04 PDF加工 entry',
-        historyText.includes('2026/09/04') && historyText.includes('PDF加工')
-        && historyText.includes('図面サイズ統一'), historyText.slice(0, 60).replace(/\n/g, ' | '));
+    check('release history: 2026/09/04 PDF加工 v1.3.0 entry',
+        historyText.includes('2026/09/04') && historyText.includes('図枠一括更新')
+        && historyText.includes('1.3.0'), historyText.slice(0, 60).replace(/\n/g, ' | '));
+    check('release history: the earlier 2026/09/04 v1.2.0 entry survives alongside it',
+        historyText.includes('図面サイズ統一') && historyText.includes('1.2.0'));
+    check('release history: both same-day PDF加工 entries render',
+        (historyText.match(/2026\/09\/04/g) ?? []).length === 2,
+        `${(historyText.match(/2026\/09\/04/g) ?? []).length} entries dated 2026/09/04`);
     check('release history: 2026/09/03 PDFテキスト化 entry',
         historyText.includes('2026/09/03') && historyText.includes('PDFテキスト化')
         && historyText.includes('OCR'));

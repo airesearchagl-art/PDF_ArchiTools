@@ -1,5 +1,5 @@
 import React from 'react';
-import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings, BoxSelect, History, Play } from 'lucide-react';
+import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings, BoxSelect, History, Play, Stamp } from 'lucide-react';
 import { TOOL_VERSIONS } from '../config/versions';
 
 /**
@@ -16,6 +16,18 @@ interface ReleaseNote {
 }
 
 const releaseHistory: ReleaseNote[] = [
+    {
+        date: '2026/09/04',
+        tool: 'PDF加工',
+        version: '1.3.0',
+        changes: [
+            '「図枠一括更新」を追加しました。',
+            '図枠の日付やステータスの文字を、複数ページへ一括で反映できます。',
+            '代表ページで更新したい場所をドラッグして選び、最大3か所まで設定できます。',
+            '用紙に対する相対位置で反映するため、A1とA3が混在していても同じ位置に入ります。',
+            'ページ全体を画像化せずに処理します。',
+        ],
+    },
     {
         date: '2026/09/04',
         tool: 'PDF加工',
@@ -84,7 +96,7 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: '16px 0 0', fontSize: '0.95em', color: '#9fd3ff' }}>
                     <History size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>図面サイズ統一</b>（PDF加工 v1.2.0） / <b>日本語・英語OCR</b>（PDFテキスト化 v1.2.0）
+                    最近の更新: <b>図枠一括更新</b>（PDF加工 v1.3.0） / <b>図面サイズ統一</b>（PDF加工 v1.2.0） / <b>日本語・英語OCR</b>（PDFテキスト化 v1.2.0）
                     — 詳しくはページ下部の<a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>をご覧ください。
                 </p>
             </div>
@@ -238,19 +250,20 @@ export function HowToUse() {
                 <p style={{ marginBottom: '20px' }}>
                     複数のPDFをまとめて加工できるツールです。左のサイドバーから
                     <b>半透明レイヤ追加</b> / <b>モノクロ化</b> / <b>両方実行</b> / <b>余白生成</b> /
-                    <b>図面サイズ統一</b> / <b>最適化</b> の6つの機能を選べます。
+                    <b>図面サイズ統一</b> / <b>図枠一括更新</b> / <b>最適化</b> の7つの機能を選べます。
                     ファイルを1つだけ入れた場合は加工後のPDFがそのまま、複数入れた場合はZIPでまとめてダウンロードされます。
                 </p>
 
                 <ScreenWithBadges
                     src="/screenshots/processor.png"
                     badges={[
-                        // 1. Function Select (Left Sidebar)
-                        { top: '9%', left: '1.2%', width: '13.2%', height: '45%', desc: '加工機能の選択' },
-                        // 2. Drop Zone + File List (Centre)
-                        { top: '10.5%', left: '18%', width: '56.2%', height: '49%', desc: 'ファイル追加・リスト' },
+                        // 1. Function Select (Left Sidebar) - now seven entries
+                        { top: '9%', left: '1.2%', width: '13.2%', height: '51%', desc: '加工機能の選択' },
+                        // 2. Work Area (Centre). Shown here with 図枠一括更新 active,
+                        //    so it carries the representative page and the rule list.
+                        { top: '6.5%', left: '18%', width: '56.2%', height: '69%', desc: 'ファイル追加・作業エリア' },
                         // 3. Settings Panel (Right)
-                        { top: '12%', left: '78.2%', width: '20%', height: '48%', desc: '詳細設定（ターゲット用紙など）' },
+                        { top: '12%', left: '78.2%', width: '20%', height: '75%', desc: '詳細設定' },
                         // 4. Run Button (Right Bottom)
                         { top: '90.5%', left: '78.2%', width: '20%', height: '6%', desc: '実行開始ボタン' }
                     ]}
@@ -266,13 +279,18 @@ export function HowToUse() {
                             <li><b>両方実行:</b> モノクロ化のあとに半透明レイヤ追加を続けて行います。</li>
                             <li><b>余白生成:</b> 内容を縮小して、まわりに余白をつくります。</li>
                             <li><b>図面サイズ統一:</b> 用紙サイズをそろえます（下に詳しい説明があります）。</li>
+                            <li><b>図枠一括更新:</b> 図枠の文字を全ページへ一括反映します（下に詳しい説明があります）。</li>
                             <li><b>最適化:</b> 解像度を下げてファイルサイズを小さくします。</li>
                         </ul>
                     </div>
 
                     <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> ファイル追加</h4>
+                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> ファイル追加・作業エリア</h4>
                         <p>処理したいPDFファイルを中央のエリアに追加します（ドラッグ&ドロップ可）。複数まとめて追加できます。</p>
+                        <p style={noteStyle}>
+                            「図枠一括更新」を選んでいるときは、この場所に代表ページのプレビューと更新領域の一覧が表示されます
+                            （上の画面例）。
+                        </p>
                     </div>
 
                     <div style={cardStyle}>
@@ -283,6 +301,7 @@ export function HowToUse() {
                             <li><b>モノクロ化:</b> コントラストと解像度を調整。</li>
                             <li><b>余白生成:</b> 縮小率と配置を指定。</li>
                             <li><b>図面サイズ統一:</b> ターゲット用紙を選択。</li>
+                            <li><b>図枠一括更新:</b> 中央のプレビューで領域を選び、新しい文字を入力。</li>
                             <li><b>最適化:</b> 圧縮解像度（DPI）を選択。</li>
                         </ul>
                     </div>
@@ -346,6 +365,62 @@ export function HowToUse() {
                     <p style={calloutStyle}>
                         <b>ご注意:</b> 処理が終わると、元の用紙サイズの内訳（例: A1 × 2、A3 × 2）がファイル名の下に表示されます。
                         なお、特殊な注釈が用紙の表示範囲の外にあるPDFは、意図しない注釈の露出を防ぐため処理を中止する場合があります。
+                    </p>
+                </div>
+
+                {/* 3-c. Title block batch updater */}
+                <div style={{ ...cardStyle, marginTop: '24px', borderLeft: '6px solid #4ae290' }}>
+                    <h4 style={{ ...cardHeadStyle, fontSize: '1.15rem' }}>
+                        <Stamp size={20} /> 図枠一括更新
+                        <VersionBadge version={TOOL_VERSIONS.tools.version} />
+                    </h4>
+                    <p>
+                        図枠の中の文字を、<b>全ページまとめて書き換える</b>機能です。
+                        「実施設計図」を「竣工図」に変える、日付や改訂記号を更新する、といった使い方を想定しています。
+                        ページ全体を画像に変換せずに処理するため、図面の線や文字はそのまま残ります。
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '12px' }}>
+                        <div>
+                            <h5 style={subHeadStyle}>基本の手順</h5>
+                            <ol style={listStyle}>
+                                <li>「PDF加工」を開く</li>
+                                <li>「図枠一括更新」を選ぶ</li>
+                                <li>PDFを追加する（代表ページが表示されます）</li>
+                                <li>更新したい場所をドラッグして囲む</li>
+                                <li>新しい文字を入力する</li>
+                                <li>必要なら2か所目・3か所目を追加する</li>
+                                <li>プレビューで位置と文字を確認する</li>
+                                <li>「実行開始」を押してダウンロード</li>
+                            </ol>
+                        </div>
+                        <div>
+                            <h5 style={subHeadStyle}>できること</h5>
+                            <ul style={listStyle}>
+                                <li>更新領域は<b>最大3か所</b>まで</li>
+                                <li>設定した内容を全ページへ一括反映</li>
+                                <li>代表ページは前後のページに切り替え可能</li>
+                                <li>用紙に対する相対位置で反映するので、A1とA3が混在していても同じ場所に入る</li>
+                                <li>選んだ範囲だけ白く塗り、新しい文字を中央に配置</li>
+                                <li>文字の大きさは枠内に収まるよう自動調整</li>
+                                <li>複数ファイルへ同じ設定をまとめて適用（ZIPでダウンロード）</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h5 style={subHeadStyle}>うまくいかないとき</h5>
+                            <ul style={listStyle}>
+                                <li>代表ページと縦横方向が違うページがあると、位置がずれないよう処理を中止します</li>
+                                <li>選んだ範囲に対して文字が長すぎる場合も中止します。範囲を広げるか文字を短くしてください</li>
+                                <li>ページのサイズや枚数、並び順は変わりません</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <p style={{ ...calloutStyle, background: '#fdecea', borderColor: '#f5b7b1' }}>
+                        <b>重要 — 墨消し（redaction）には使えません:</b> この機能は図枠の
+                        <b>表示を上書き</b>するものです。元の文字はPDFの内部に残るため、
+                        文字の検索やコピーで見つかる場合があります。
+                        機密情報を消す目的では使用しないでください。
                     </p>
                 </div>
             </section>
@@ -506,8 +581,9 @@ export function HowToUse() {
                 </p>
 
                 <div style={gridStyle}>
+                    {/* A tool can ship twice on one day, so the version belongs in the key. */}
                     {releaseHistory.map((release) => (
-                        <div key={`${release.date}-${release.tool}`} style={cardStyle}>
+                        <div key={`${release.date}-${release.tool}-${release.version}`} style={cardStyle}>
                             <h4 style={cardHeadStyle}>
                                 <span style={{ color: '#333' }}>{release.date}</span>
                                 <span style={{ color: '#666', fontWeight: 'normal' }}>／ {release.tool}</span>
