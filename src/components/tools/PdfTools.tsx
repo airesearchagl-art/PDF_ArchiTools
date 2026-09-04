@@ -18,6 +18,8 @@ interface ProcessFile {
     progress: number;
     /** Only 図面サイズ統一 produces one: what was detected and what it became. */
     summary?: NormalizeSummary;
+    /** Why the file was refused, shown to the user rather than only logged. */
+    error?: string;
 }
 
 export function PdfTools() {
@@ -62,7 +64,7 @@ export function PdfTools() {
             // Remove check to allow re-processing
             // if (fileObj.status === 'done') continue;
 
-            setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'processing', progress: 10, summary: undefined } : f));
+            setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'processing', progress: 10, summary: undefined, error: undefined } : f));
 
             try {
                 let resultData: Uint8Array;
@@ -109,7 +111,8 @@ export function PdfTools() {
                 processedCount++;
             } catch (error) {
                 console.error('Processing failed', error);
-                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'error' } : f));
+                const message = error instanceof Error ? error.message : String(error);
+                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'error', error: message } : f));
             }
         }
 
@@ -235,6 +238,7 @@ export function PdfTools() {
                                     （元サイズ: {f.summary.sourceCounts.map(s => `${s.label} × ${s.count}`).join(', ')}）
                                 </div>
                             )}
+                            {f.error && <div className="file-error">{f.error}</div>}
                         </div>
                     ))}
                     {files.length === 0 && <div className="empty-state">ファイルが選択されていません</div>}

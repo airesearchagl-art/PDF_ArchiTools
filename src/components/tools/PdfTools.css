@@ -101,6 +101,14 @@
     justify-content: space-between;
 }
 
+/* 処理が拒否された理由。console だけでなくユーザーに見せる。 */
+.file-error {
+    padding: 0 12px;
+    font-size: 0.8rem;
+    color: #ff8a80;
+    line-height: 1.5;
+}
+
 /* 図面サイズ統一の処理結果サマリ */
 .file-summary {
     padding: 0 12px;

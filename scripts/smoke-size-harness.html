@@ -24,11 +24,71 @@ const log = (m) => { document.getElementById('log').textContent = m; };
 
 /** Longest edge of the raster used for the ink measurements. */
 const MAX_PX = 1600;
+/** Anything darker than this counts as ink. */
+const DARK = 200;
 
 const OPS = pdfjsLib.OPS;
 const IMAGE_OPS = ['paintImageXObject', 'paintInlineImageXObject', 'paintJpegXObject', 'paintImageMaskXObject']
     .map((name) => OPS[name])
     .filter((op) => op !== undefined);
+
+const copyOf = (input) => (input instanceof Uint8Array ? input : new Uint8Array(input)).slice();
+
+/** Render one page and hand back the pixels plus the scale that produced them. */
+async function rasterise(page, baseViewport) {
+    const scale = MAX_PX / Math.max(baseViewport.width, baseViewport.height);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, viewport }).promise;
+    return { scale, canvas, data: ctx.getImageData(0, 0, canvas.width, canvas.height).data };
+}
+
+/**
+ * Bounding box of the dark pixels, in PDF points of the displayed page.
+ *
+ * The fixtures put filled markers at a known inset from every corner, so this
+ * box is the whole content extent: if anything were cropped it would shrink,
+ * and if the fit were off-centre the four margins would stop matching. The
+ * centroid comes along because a mirrored or flipped page keeps the same box
+ * while moving its ink.
+ */
+function measureInk({ scale, canvas, data }) {
+    let x0 = canvas.width, y0 = canvas.height, x1 = -1, y1 = -1;
+    let count = 0, sumX = 0, sumY = 0;
+    for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            if ((data[i] + data[i + 1] + data[i + 2]) / 3 >= DARK) continue;
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+            count++; sumX += x; sumY += y;
+        }
+    }
+    if (x1 < 0) return null;
+    const toPt = (v) => v / scale;
+    const w = x1 - x0 + 1;
+    const h = y1 - y0 + 1;
+    return {
+        left: toPt(x0),
+        right: toPt(canvas.width - 1 - x1),
+        top: toPt(y0),
+        bottom: toPt(canvas.height - 1 - y1),
+        width: toPt(w),
+        height: toPt(h),
+        darkPixels: count,
+        // Where the ink sits inside its own box, as a fraction: flip-sensitive.
+        centroid: { fx: (sumX / count - x0) / w, fy: (sumY / count - y0) / h },
+        /** One rendered pixel expressed in points: the floor of any comparison. */
+        pixelPt: toPt(1),
+    };
+}
 
 /**
  * Everything measurable about a document, read back through PDF.js so the
@@ -37,7 +97,7 @@ const IMAGE_OPS = ['paintImageXObject', 'paintInlineImageXObject', 'paintJpegXOb
 async function measure(input) {
     // PDF.js takes ownership of the buffer it is handed and detaches it, so
     // every consumer below gets its own copy.
-    const bytes = (input instanceof Uint8Array ? input : new Uint8Array(input)).slice();
+    const bytes = copyOf(input);
     const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
     const pages = [];
     for (let i = 1; i <= doc.numPages; i++) {
@@ -48,10 +108,12 @@ async function measure(input) {
         let pathOps = 0;
         let imageOps = 0;
         let textOps = 0;
+        let clipOps = 0;
         for (const fn of list.fnArray) {
             if (fn === OPS.constructPath) pathOps++;
             else if (IMAGE_OPS.includes(fn)) imageOps++;
             else if (fn === OPS.showText) textOps++;
+            else if (fn === OPS.clip || fn === OPS.eoClip) clipOps++;
         }
         const annots = (await page.getAnnotations()).map((a) => ({ subtype: a.subtype, rect: a.rect }));
         pages.push({
@@ -66,8 +128,9 @@ async function measure(input) {
             pathOps,
             imageOps,
             textOps,
+            clipOps,
             annots,
-            ink: await inkBox(page, viewport),
+            ink: measureInk(await rasterise(page, viewport)),
         });
     }
     // MediaBox and CropBox come from pdf-lib: PDF.js only exposes the effective view.
@@ -89,51 +152,6 @@ async function measure(input) {
         formFields = { error: String(error?.message ?? error) };
     }
     return { numPages: doc.numPages, pages, formFields };
-}
-
-/**
- * Bounding box of the dark pixels, in PDF points of the displayed page.
- *
- * The fixtures put filled markers at a known inset from every corner, so this
- * box is the whole content extent: if anything were cropped it would shrink,
- * and if the fit were off-centre the four margins would stop matching.
- */
-async function inkBox(page, baseViewport) {
-    const scale = MAX_PX / Math.max(baseViewport.width, baseViewport.height);
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvas, viewport }).promise;
-
-    const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let x0 = canvas.width, y0 = canvas.height, x1 = -1, y1 = -1;
-    for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-            const i = (y * canvas.width + x) * 4;
-            if ((d[i] + d[i + 1] + d[i + 2]) / 3 >= 200) continue;
-            if (x < x0) x0 = x;
-            if (x > x1) x1 = x;
-            if (y < y0) y0 = y;
-            if (y > y1) y1 = y;
-        }
-    }
-    if (x1 < 0) return null;
-    const toPt = (v) => v / scale;
-    return {
-        // Device space, y down. Margins are what the checks compare.
-        left: toPt(x0),
-        right: toPt(canvas.width - 1 - x1),
-        top: toPt(y0),
-        bottom: toPt(canvas.height - 1 - y1),
-        width: toPt(x1 - x0 + 1),
-        height: toPt(y1 - y0 + 1),
-        /** One rendered pixel expressed in points: the floor of any comparison. */
-        pixelPt: toPt(1),
-    };
 }
 
 const fetchFixture = (name) => fetch(`/test-fixtures/${name}`).then((r) => {
@@ -171,6 +189,122 @@ window.__sizeSmoke = {
         const outDoc = await pdfjsLib.getDocument({ data: new Uint8Array(result.data) }).promise;
         const afterClass = await classifyDocument(outDoc);
         return { before: beforeClass, after: afterClass };
+    },
+
+    /**
+     * Count the ink that lands outside the mapped source visible box.
+     *
+     * That padding is exactly where content hidden by the old CropBox would
+     * surface, so "outsideDark === 0" is the whole point of the clip. Written
+     * for upright pages; the rotation comes back so the caller can assert it.
+     */
+    async paddingProbe(name, target) {
+        const input = await fetchFixture(name);
+        const result = await normalizePageSize(input.slice(0), { target });
+        const report = result.summary.pages[0];
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(result.data) }).promise;
+        const page = await doc.getPage(1);
+        const base = page.getViewport({ scale: 1 });
+        const { scale, canvas, data } = await rasterise(page, base);
+
+        const mv = report.mappedVisible;
+        // Page space -> device space for an upright page: y is flipped.
+        const rect = {
+            x0: mv.x * scale - 1,
+            x1: (mv.x + mv.width) * scale + 1,
+            y0: (base.height - (mv.y + mv.height)) * scale - 1,
+            y1: (base.height - mv.y) * scale + 1,
+        };
+        let insideDark = 0;
+        let outsideDark = 0;
+        const outsideSamples = [];
+        for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+                const i = (y * canvas.width + x) * 4;
+                if ((data[i] + data[i + 1] + data[i + 2]) / 3 >= DARK) continue;
+                if (x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1) insideDark++;
+                else {
+                    outsideDark++;
+                    if (outsideSamples.length < 5) outsideSamples.push([x, y]);
+                }
+            }
+        }
+        const annots = (await page.getAnnotations()).map((a) => ({ subtype: a.subtype, rect: a.rect }));
+        const text = (await page.getTextContent()).items.map((it) => it.str ?? '').join('');
+        return {
+            report,
+            text,
+            rotate: page.rotate,
+            pageWidthPt: base.width,
+            pageHeightPt: base.height,
+            canvas: [canvas.width, canvas.height],
+            insideDark,
+            outsideDark,
+            outsideSamples,
+            annots,
+            paddingPt: {
+                left: mv.x,
+                right: base.width - (mv.x + mv.width),
+                bottom: mv.y,
+                top: base.height - (mv.y + mv.height),
+            },
+        };
+    },
+
+    /**
+     * Prove the hidden content is really in the file.
+     *
+     * Renders the fixture as it is, then again with the CropBox widened to the
+     * MediaBox. Ink appearing beyond the old crop edges in the widened render
+     * is the proof that the marks exist and that the CropBox was hiding them.
+     */
+    async hiddenProbe(name) {
+        const input = await fetchFixture(name);
+        const asIsDoc = await pdfjsLib.getDocument({ data: new Uint8Array(input.slice(0)) }).promise;
+        const asIsPage = await asIsDoc.getPage(1);
+        const asIsInk = measureInk(await rasterise(asIsPage, asIsPage.getViewport({ scale: 1 })));
+        const asIsText = (await asIsPage.getTextContent()).items.map((it) => it.str ?? '').join('');
+
+        const lib = await PDFDocument.load(new Uint8Array(input.slice(0)));
+        const p0 = lib.getPages()[0];
+        const media = p0.getMediaBox();
+        const crop = p0.getCropBox();
+        p0.setCropBox(media.x, media.y, media.width, media.height);
+        const widenedBytes = await lib.save();
+
+        const wideDoc = await pdfjsLib.getDocument({ data: new Uint8Array(widenedBytes) }).promise;
+        const widePage = await wideDoc.getPage(1);
+        const wide = await rasterise(widePage, widePage.getViewport({ scale: 1 }));
+
+        // Ink to the left of, and to the right of, where the CropBox used to cut.
+        const leftEdge = (crop.x - media.x) * wide.scale;
+        const rightEdge = (crop.x + crop.width - media.x) * wide.scale;
+        let leftDark = 0;
+        let rightDark = 0;
+        for (let y = 0; y < wide.canvas.height; y++) {
+            for (let x = 0; x < wide.canvas.width; x++) {
+                const i = (y * wide.canvas.width + x) * 4;
+                if ((wide.data[i] + wide.data[i + 1] + wide.data[i + 2]) / 3 >= DARK) continue;
+                if (x < leftEdge) leftDark++;
+                else if (x > rightEdge) rightDark++;
+            }
+        }
+        const widenedText = (await widePage.getTextContent()).items.map((it) => it.str ?? '').join('');
+        return {
+            mediaBox: media, cropBox: crop, asIsInk, asIsText, widenedText,
+            widenedLeftDark: leftDark, widenedRightDark: rightDark,
+        };
+    },
+
+    /** Fail-closed check: the call must reject rather than expose anything. */
+    async errorProbe(name, target) {
+        const input = await fetchFixture(name);
+        try {
+            await normalizePageSize(input.slice(0), { target });
+            return { threw: false, code: null, message: null };
+        } catch (error) {
+            return { threw: true, code: error?.code ?? null, message: String(error?.message ?? error) };
+        }
     },
 
     ready: true,

@@ -22,6 +22,7 @@ const PORT = 5179;
 const ORIGIN = `http://localhost:${PORT}`;
 const FIXTURE = path.join(ROOT, 'test-fixtures', 'size-mixed.pdf');
 const BATCH_SECOND = path.join(ROOT, 'test-fixtures', 'size-a3-landscape.pdf');
+const REFUSED = path.join(ROOT, 'test-fixtures', 'size-cropbox-annot.pdf');
 const DOWNLOADS = fs.mkdtempSync(path.join(os.tmpdir(), 'size-smoke-'));
 
 const mm = (v) => (v * 72) / 25.4;
@@ -169,6 +170,28 @@ try {
             check(`ZIP entry ${name}: every page is A1`, ok, `${doc.getPageCount()} pages`);
         }
     }
+
+    // ---- fail-closed refusal reaches the user, not just the console --------
+    console.log('\n=== refusal is user-visible ===');
+    await page.reload({ waitUntil: 'networkidle0' });
+    await clickButton(page, 'PDF加工');
+    await page.waitForSelector('.tools-sidebar');
+    await clickButton(page, '図面サイズ統一');
+    await page.waitForSelector('.tools-settings select');
+    const refusedInput = await page.$('#file-input');
+    await refusedInput.uploadFile(REFUSED);
+    await page.waitForFunction(() => document.querySelectorAll('.file-item').length === 1);
+    await clickButton(page, '実行開始');
+    await page.waitForFunction(() => document.querySelector('.file-error') !== null, { timeout: 60_000 });
+    const refusalText = await page.evaluate(() => document.querySelector('.file-error').textContent.trim());
+    const refusalStatus = await page.evaluate(() => document.querySelector('.file-status')?.textContent?.trim());
+    console.log(`  message  : ${refusalText}`);
+    check('annotation outside the CropBox is refused in the real UI',
+        refusalStatus === 'error' && refusalText.includes('CropBox') && refusalText.includes('中止'),
+        `status=${refusalStatus}`);
+    check('the refused file produces no download',
+        fs.readdirSync(DOWNLOADS).filter((f) => f.endsWith('.pdf')).length === 0,
+        fs.readdirSync(DOWNLOADS).join(','));
 
     check('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
 

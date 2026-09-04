@@ -15,6 +15,11 @@
  *   size-ocr-layer.pdf      image-only page + invisible text layer (M1 OCR output shape)
  *   size-annotated.pdf      A3 landscape with a square annotation  (annotation transform)
  *   size-form.pdf           A3 landscape with an AcroForm text field (form preservation)
+ *   size-a3-rot180.pdf      A3 landscape MediaBox with /Rotate 180  (rotation case)
+ *   size-a3-rot270.pdf      A3 portrait MediaBox with /Rotate 270   (rotation case)
+ *   size-mediabox-mismatch  MediaBox > CropBox, CropBox == exact A1 (page-box only)
+ *   size-cropbox-hidden.pdf MediaBox > CropBox with marks outside it (hidden content)
+ *   size-cropbox-annot.pdf  same, plus an annotation outside CropBox (must be refused)
  *
  * Every drawing sheet carries four filled corner markers whose outer edges sit
  * exactly INSET_PT from the sheet edge, so the ink bounding box of a rendered
@@ -313,7 +318,82 @@ for (const [name, size, label, rotation] of [
     await write('size-annotated.pdf', pdfDoc);
 }
 
-// 10 - an AcroForm text field, so the smoke can prove forms are not dropped.
+// 10 / 11 - the remaining /Rotate quadrants.
+for (const [name, size, label, rotation] of [
+    ['size-a3-rot180.pdf', SHEET.A3, 'A3 ROTATED 180', 180],
+    ['size-a3-rot270.pdf', [SHEET.A3[1], SHEET.A3[0]], 'A3 ROTATED 270', 270],
+]) {
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    newSheet(pdfDoc, size, font, label, rotation);
+    await write(name, pdfDoc);
+}
+
+// 12 - CropBox is already exactly A1 but the MediaBox is much larger. Only the
+// page boxes need normalising; the content must not be touched at all.
+{
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const [w, h] = SHEET.A1;
+    const page = pdfDoc.addPage([3000, 2000]);
+    page.setCropBox(0, 0, w, h);
+    drawSheet(page, w, h, font, 'MEDIABOX MISMATCH');
+    await write('size-mediabox-mismatch.pdf', pdfDoc);
+}
+
+// 13 / 14 - a CropBox that hides part of the page. The hidden marks sit just
+// outside its left and right edges, and the CropBox aspect ratio (900x700) is
+// far enough from A1 that the fit leaves ~110pt of padding on each side --
+// exactly where those marks would surface without a clip.
+const HIDDEN_MEDIA = [1300, 900];
+const HIDDEN_CROP = { x: 200, y: 100, width: 900, height: 700 };
+const buildHiddenSheet = async (withOutsideAnnot) => {
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const page = pdfDoc.addPage(HIDDEN_MEDIA);
+    page.setCropBox(HIDDEN_CROP.x, HIDDEN_CROP.y, HIDDEN_CROP.width, HIDDEN_CROP.height);
+
+    // Visible sheet, drawn in CropBox coordinates.
+    const ink = rgb(0, 0, 0);
+    const cx = HIDDEN_CROP.x;
+    const cy = HIDDEN_CROP.y;
+    const cw = HIDDEN_CROP.width;
+    const ch = HIDDEN_CROP.height;
+    for (const [mx, my] of [
+        [cx + INSET_PT, cy + INSET_PT],
+        [cx + cw - INSET_PT - MARKER_PT, cy + INSET_PT],
+        [cx + INSET_PT, cy + ch - INSET_PT - MARKER_PT],
+        [cx + cw - INSET_PT - MARKER_PT, cy + ch - INSET_PT - MARKER_PT],
+    ]) {
+        page.drawRectangle({ x: mx, y: my, width: MARKER_PT, height: MARKER_PT, color: ink });
+    }
+    page.drawRectangle({ x: cx + 60, y: cy + 60, width: cw - 120, height: ch - 120, borderColor: ink, borderWidth: 3 });
+    page.drawText('INSIDE CROP', { x: cx + 100, y: cy + 120, size: 26, font, color: ink });
+
+    // Hidden by the CropBox: solid blocks and text hard against its edges.
+    page.drawRectangle({ x: cx - 50, y: cy + 250, width: 45, height: 200, color: ink });
+    page.drawRectangle({ x: cx + cw + 5, y: cy + 250, width: 45, height: 200, color: ink });
+    page.drawText('HIDDENLEFT', { x: cx - 190, y: cy + 480, size: 24, font, color: ink });
+    page.drawText('HIDDENRIGHT', { x: cx + cw + 5, y: cy + 480, size: 24, font, color: ink });
+
+    // An annotation well inside the CropBox always has to keep working.
+    const annots = [pdfDoc.context.register(pdfDoc.context.obj({
+        Type: 'Annot', Subtype: 'Square', F: 4, C: [0, 0, 1],
+        Rect: [cx + 300, cy + 250, cx + 500, cy + 400],
+    }))];
+    if (withOutsideAnnot) {
+        annots.push(pdfDoc.context.register(pdfDoc.context.obj({
+            Type: 'Annot', Subtype: 'Square', F: 4, C: [1, 0, 0],
+            Rect: [cx + cw + 5, cy + 250, cx + cw + 50, cy + 450],
+        })));
+    }
+    page.node.set(PDFName.of('Annots'), pdfDoc.context.obj(annots));
+    return pdfDoc;
+};
+await write('size-cropbox-hidden.pdf', await buildHiddenSheet(false));
+await write('size-cropbox-annot.pdf', await buildHiddenSheet(true));
+
+// 15 - an AcroForm text field, so the smoke can prove forms are not dropped.
 {
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
