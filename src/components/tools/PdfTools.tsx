@@ -1,19 +1,25 @@
 import { useState } from 'react';
 import './PdfTools.css';
-import { Settings, Sliders, Layers, FileText, UploadCloud, Play, X, Check, AlertCircle, Blend, BoxSelect } from 'lucide-react';
+import { Settings, Sliders, Layers, FileText, UploadCloud, Play, X, Check, AlertCircle, Blend, BoxSelect, Ruler } from 'lucide-react';
 import { processLayer, processMonochrome, processOptimize, processMargin } from '../../utils/pdf-processor';
+import { normalizePageSize, PAPER_SIZE_KEYS } from '../../utils/page-size-normalizer';
+import type { NormalizeSummary, NormalizeTarget } from '../../utils/page-size-normalizer';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { VersionFooter } from '../VersionFooter';
 import { TOOL_VERSIONS } from '../../config/versions';
 
-type ToolType = 'layer' | 'monochrome' | 'both' | 'optimize' | 'margin';
+type ToolType = 'layer' | 'monochrome' | 'both' | 'optimize' | 'margin' | 'normalize-size';
 
 interface ProcessFile {
     id: string;
     file: File;
     status: 'idle' | 'processing' | 'done' | 'error';
     progress: number;
+    /** Only 図面サイズ統一 produces one: what was detected and what it became. */
+    summary?: NormalizeSummary;
+    /** Why the file was refused, shown to the user rather than only logged. */
+    error?: string;
 }
 
 export function PdfTools() {
@@ -29,6 +35,7 @@ export function PdfTools() {
     const [optimizeDpi, setOptimizeDpi] = useState(150);
     const [marginScale, setMarginScale] = useState(0.8);
     const [marginPosition, setMarginPosition] = useState<'center' | 'tl' | 'tr' | 'bl' | 'br'>('center');
+    const [normalizeTarget, setNormalizeTarget] = useState<NormalizeTarget>('A1');
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -57,13 +64,19 @@ export function PdfTools() {
             // Remove check to allow re-processing
             // if (fileObj.status === 'done') continue;
 
-            setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'processing', progress: 10 } : f));
+            setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'processing', progress: 10, summary: undefined, error: undefined } : f));
 
             try {
                 let resultData: Uint8Array;
                 let suffix = '';
+                let summary: NormalizeSummary | undefined;
 
-                if (activeTool === 'layer') {
+                if (activeTool === 'normalize-size') {
+                    const normalized = await normalizePageSize(fileObj.file, { target: normalizeTarget });
+                    resultData = normalized.data;
+                    summary = normalized.summary;
+                    suffix = summary.filenameSuffix;
+                } else if (activeTool === 'layer') {
                     resultData = await processLayer(fileObj.file, { color: layerColor, opacity: layerOpacity });
                     suffix = '_overlay';
                 } else if (activeTool === 'monochrome') {
@@ -94,11 +107,12 @@ export function PdfTools() {
                     zip.file(fileName, resultData);
                 }
 
-                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'done', progress: 100 } : f));
+                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'done', progress: 100, summary } : f));
                 processedCount++;
             } catch (error) {
                 console.error('Processing failed', error);
-                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'error' } : f));
+                const message = error instanceof Error ? error.message : String(error);
+                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'error', error: message } : f));
             }
         }
 
@@ -146,6 +160,14 @@ export function PdfTools() {
                     <span>余白生成</span>
                 </button>
                 <button
+                    className={`tool-btn ${activeTool === 'normalize-size' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('normalize-size')}
+                    disabled={isProcessing}
+                >
+                    <Ruler size={20} />
+                    <span>図面サイズ統一</span>
+                </button>
+                <button
                     className={`tool-btn ${activeTool === 'optimize' ? 'active' : ''}`}
                     onClick={() => setActiveTool('optimize')}
                     disabled={isProcessing}
@@ -187,27 +209,36 @@ export function PdfTools() {
 
                 <div className="file-list">
                     {files.map(f => (
-                        <div key={f.id} className="file-item">
-                            <span className="file-name">{f.file.name}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span className={`file-status ${f.status}`}>{f.status}</span>
-                                {f.status === 'done' && <Check size={16} color="#4cd964" />}
-                                {f.status === 'error' && <AlertCircle size={16} color="#ff3b30" />}
-                                <button
-                                    className="remove-btn"
-                                    onClick={() => removeFile(f.id)}
-                                    disabled={isProcessing}
-                                >
-                                    <X size={16} />
-                                </button>
-                            </div>
-                            {f.status === 'processing' && (
-                                <div className="progress-bar-container">
-                                    <div className="progress-bar">
-                                        <div className="progress-fill" style={{ width: `${f.progress}%` }}></div>
+                        <div key={f.id} className="file-row">
+                            <div className="file-item">
+                                <span className="file-name">{f.file.name}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span className={`file-status ${f.status}`}>{f.status}</span>
+                                    {f.status === 'done' && <Check size={16} color="#4cd964" />}
+                                    {f.status === 'error' && <AlertCircle size={16} color="#ff3b30" />}
+                                    <button
+                                        className="remove-btn"
+                                        onClick={() => removeFile(f.id)}
+                                        disabled={isProcessing}
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                                {f.status === 'processing' && (
+                                    <div className="progress-bar-container">
+                                        <div className="progress-bar">
+                                            <div className="progress-fill" style={{ width: `${f.progress}%` }}></div>
+                                        </div>
                                     </div>
+                                )}
+                            </div>
+                            {f.summary && (
+                                <div className="file-summary">
+                                    {f.summary.pageCount}ページ処理 → {f.summary.targetLabel}へ統一
+                                    （元サイズ: {f.summary.sourceCounts.map(s => `${s.label} × ${s.count}`).join(', ')}）
                                 </div>
                             )}
+                            {f.error && <div className="file-error">{f.error}</div>}
                         </div>
                     ))}
                     {files.length === 0 && <div className="empty-state">ファイルが選択されていません</div>}
@@ -328,6 +359,27 @@ export function PdfTools() {
                                 title="右下"
                             />
                         </div>
+                    </div>
+                )}
+
+                {activeTool === 'normalize-size' && (
+                    <div className="settings-group">
+                        <p className="info-text">
+                            用紙サイズが混在したPDFを、全ページ同じ用紙サイズへ統一します。
+                            画像化せずベクターや検索可能テキストを保持したまま、
+                            縦横比を維持して中央に配置します（切り取りなし）。
+                            各ページの見た目の縦横方向はそのまま保たれます。
+                        </p>
+                        <label>ターゲット用紙</label>
+                        <select
+                            value={normalizeTarget}
+                            onChange={e => setNormalizeTarget(e.target.value as NormalizeTarget)}
+                        >
+                            {PAPER_SIZE_KEYS.map(key => (
+                                <option key={key} value={key}>{key}</option>
+                            ))}
+                            <option value="first-page">最初のページに合わせる</option>
+                        </select>
                     </div>
                 )}
 
