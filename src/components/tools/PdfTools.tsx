@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import './PdfTools.css';
 import { Settings, Sliders, Layers, FileText, UploadCloud, Play, X, Check, AlertCircle, Blend, BoxSelect, Ruler, Stamp } from 'lucide-react';
 import { processLayer, processMonochrome, processOptimize, processMargin } from '../../utils/pdf-processor';
@@ -44,14 +44,10 @@ export function PdfTools() {
     const [titleRules, setTitleRules] = useState<UpdateRule[]>([
         { rect: { x: 0, y: 0, width: 0, height: 0 }, text: '' },
     ]);
-    const [templateOrientation, setTemplateOrientation] = useState<PageOrientation | null>(null);
-
-    /**
-     * Anything that can change which file is the representative one invalidates
-     * the measured geometry straight away, so no run can start against a page
-     * that is no longer on screen.
-     */
-    const invalidateTemplate = () => setTemplateOrientation(null);
+    // The measured representative page, tagged with the file it came from.
+    // Deriving readiness from that identity is what keeps adding or removing a
+    // *non*-representative file from invalidating a perfectly good measurement.
+    const [template, setTemplate] = useState<{ fileId: string; orientation: PageOrientation } | null>(null);
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -62,17 +58,23 @@ export function PdfTools() {
             status: 'idle' as const,
             progress: 0
         }));
-        invalidateTemplate();
         setFiles(prev => [...prev, ...newFiles]);
     };
 
     const removeFile = (id: string) => {
-        invalidateTemplate();
         setFiles(prev => prev.filter(f => f.id !== id));
     };
 
+    /** The first file is the one the rules are drawn on. */
+    const representativeId = files[0]?.id ?? null;
+    /** A measurement only counts while it still describes the current representative. */
+    const templateReady = template !== null && representativeId !== null && template.fileId === representativeId;
     /** 図枠一括更新 cannot run until the representative page has been measured. */
-    const titleBlockNotReady = activeTool === 'title-block-update' && templateOrientation === null;
+    const titleBlockNotReady = activeTool === 'title-block-update' && !templateReady;
+
+    const handleTemplateOrientation = useCallback((orientation: PageOrientation | null) => {
+        setTemplate(orientation && representativeId ? { fileId: representativeId, orientation } : null);
+    }, [representativeId]);
 
     const startProcessing = async () => {
         if (files.length === 0 || isProcessing || titleBlockNotReady) return;
@@ -96,7 +98,7 @@ export function PdfTools() {
                 if (activeTool === 'title-block-update') {
                     // Never guess the representative page's orientation: guessing
                     // wrong puts every region on the wrong part of the sheet.
-                    if (!templateOrientation) {
+                    if (!templateReady || !template) {
                         throw new Error(
                             '代表ページの読み込みが完了していません。'
                             + 'プレビューにページが表示されてから実行してください。',
@@ -104,7 +106,7 @@ export function PdfTools() {
                     }
                     const updated = await updateTitleBlocks(fileObj.file, {
                         rules: titleRules,
-                        templateOrientation,
+                        templateOrientation: template.orientation,
                     });
                     resultData = updated.data;
                     titleBlockSummary = updated.summary;
@@ -247,7 +249,6 @@ export function PdfTools() {
                                     status: 'idle' as const,
                                     progress: 0
                                 }));
-                                invalidateTemplate();
                                 setFiles(prev => [...prev, ...newFiles]);
                             }
                         }}
@@ -260,7 +261,7 @@ export function PdfTools() {
                         file={files[0]?.file ?? null}
                         rules={titleRules}
                         onRulesChange={setTitleRules}
-                        onTemplateOrientationChange={setTemplateOrientation}
+                        onTemplateOrientationChange={handleTemplateOrientation}
                         disabled={isProcessing}
                     />
                 )}

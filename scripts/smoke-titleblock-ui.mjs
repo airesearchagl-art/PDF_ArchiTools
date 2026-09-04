@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { preview } from 'vite';
 import puppeteer from 'puppeteer';
 import { PDFDocument } from 'pdf-lib';
+import JSZip from 'jszip';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5187;
@@ -84,11 +85,26 @@ const readiness = () => page.evaluate(() => {
     };
 });
 
-/** Replace whatever is loaded with one fixture, without waiting for it. */
+/** Add one fixture to whatever is already loaded, without waiting for it. */
 const uploadNow = async (name) => {
     const input = await page.$('#file-input');
     await input.uploadFile(path.join(FIXTURES, name));
 };
+
+const clearFiles = () => page.evaluate(() => {
+    document.querySelectorAll('.remove-btn').forEach((b) => b.click());
+});
+
+const fileNames = () => page.evaluate(() =>
+    [...document.querySelectorAll('.file-name')].map((e) => e.textContent.trim()));
+
+/** Remove one file by its displayed name, leaving the others alone. */
+const removeFileNamed = (name) => page.evaluate((n) => {
+    const row = [...document.querySelectorAll('.file-row')]
+        .find((r) => r.querySelector('.file-name')?.textContent.trim() === n);
+    if (!row) throw new Error(`file row not found: ${n}`);
+    row.querySelector('.remove-btn').click();
+}, name);
 
 const waitReady = async () => {
     await page.waitForFunction(() => {
@@ -109,6 +125,21 @@ const drag = (x0, y0, x1, y1) => page.evaluate(async (a, b, c, d) => {
     surface.dispatchEvent(new PointerEvent('pointerup', opts(c, d)));
     await tick();
 }, x0, y0, x1, y1);
+
+/** Rules are a template that outlives a file change, so reset them explicitly. */
+const resetRules = async () => {
+    await page.evaluate(() => {
+        const removes = [...document.querySelectorAll('.tb-rule-remove')];
+        removes.slice(1).forEach((b) => b.click());
+    });
+    await page.waitForFunction(() => document.querySelectorAll('.tb-rule').length === 1);
+    await page.evaluate(() => {
+        const input = document.querySelector('.tb-rule-text');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+};
 
 const typeRule = (index, value) => page.evaluate((i, v) => {
     const input = document.querySelectorAll('.tb-rule-text')[i];
@@ -163,7 +194,7 @@ try {
     await waitReady();
 
     // ---- C. replacing the representative file ------------------------------
-    await page.evaluate(() => document.querySelectorAll('.remove-btn').forEach((b) => b.click()));
+    await clearFiles();
     const afterRemove = await readiness();
     console.log(`  after remove : ${JSON.stringify(afterRemove)}`);
     check('C: removing the representative file closes selection immediately',
@@ -201,7 +232,7 @@ try {
     const client = await page.createCDPSession();
     await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
 
-    await page.evaluate(() => document.querySelectorAll('.remove-btn').forEach((b) => b.click()));
+    await clearFiles();
     await uploadNow('tb-mixed.pdf');
     await waitReady();
     await drag(0.720, 0.828, 0.960, 0.888);
@@ -239,6 +270,93 @@ try {
             && near(sizes[4][0], 2383.94, 0.05), JSON.stringify(sizes));
     }
     fs.rmSync(downloads, { recursive: true, force: true });
+
+    // ---- RF3. adding or removing a NON-representative file must not disturb
+    //           the measurement already taken from the representative one -----
+    console.log('\n=== multi-file readiness ===');
+    await clearFiles();
+    await uploadNow('tb-a1.pdf');
+    await waitReady();
+    const oneFile = await readiness();
+    console.log(`  one file     : ${JSON.stringify(oneFile)} ${JSON.stringify(await fileNames())}`);
+    check('RF3 setup: a single file measures and opens up', oneFile.selectable === true);
+
+    // B. incremental add, keeping the representative in place.
+    await uploadNow('tb-a3.pdf');
+    const justAdded = await readiness();
+    const namesAfterAdd = await fileNames();
+    console.log(`  after add    : ${JSON.stringify(justAdded)} ${JSON.stringify(namesAfterAdd)}`);
+    check('RF3-B: adding a second file keeps the first as representative',
+        namesAfterAdd.length === 2 && namesAfterAdd[0] === 'tb-a1.pdf', JSON.stringify(namesAfterAdd));
+    check('RF3-B: readiness survives the add, immediately',
+        justAdded.selectable === true && justAdded.runDisabled === false
+        && justAdded.pageIndicator === oneFile.pageIndicator, JSON.stringify(justAdded));
+    await new Promise((r) => setTimeout(r, 1200));
+    const settledAfterAdd = await readiness();
+    check('RF3-B: readiness survives the add, once settled',
+        settledAfterAdd.selectable === true && settledAfterAdd.runDisabled === false
+        && settledAfterAdd.pageIndicator === oneFile.pageIndicator, JSON.stringify(settledAfterAdd));
+
+    // C. both files process from the one rule set, and arrive as a ZIP.
+    const batchDir = fs.mkdtempSync(path.join(ROOT, 'test-fixtures', 'ui-batch-'));
+    const batchClient = await page.createCDPSession();
+    await batchClient.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: batchDir });
+
+    await resetRules();
+    await drag(0.720, 0.828, 0.960, 0.888);
+    await typeRule(0, '竣工図');
+    await page.waitForFunction(() => document.querySelectorAll('.tb-region').length === 1);
+    await clickButton('実行開始');
+    await page.waitForFunction(() => document.querySelectorAll('.file-summary').length === 2, { timeout: 120_000 });
+    const batchSummaries = await page.evaluate(() =>
+        [...document.querySelectorAll('.file-summary')].map((e) => e.textContent.trim()));
+    console.log(`  batch        : ${JSON.stringify(batchSummaries)}`);
+    check('RF3-C: both files in the batch were processed', batchSummaries.length === 2
+        && batchSummaries.every((t) => /1ページへ1か所/.test(t)), JSON.stringify(batchSummaries));
+
+    let zipName = null;
+    const zipDeadline = Date.now() + 60_000;
+    while (Date.now() < zipDeadline) {
+        const entries = fs.readdirSync(batchDir);
+        const done = entries.filter((f) => f.endsWith('.zip'));
+        if (done.length && !entries.some((f) => f.endsWith('.crdownload'))) { zipName = done[0]; break; }
+        await new Promise((r) => setTimeout(r, 200));
+    }
+    check('RF3-C: two files download as one ZIP', zipName === 'processed_files.zip', String(zipName));
+    if (zipName) {
+        const zip = await JSZip.loadAsync(fs.readFileSync(path.join(batchDir, zipName)));
+        const names = Object.keys(zip.files).sort();
+        console.log(`  zip          : ${names.join(', ')}`);
+        check('RF3-C: the ZIP holds one updated PDF per input',
+            JSON.stringify(names) === JSON.stringify(['tb-a1_title-updated.pdf', 'tb-a3_title-updated.pdf']),
+            JSON.stringify(names));
+    }
+    fs.rmSync(batchDir, { recursive: true, force: true });
+
+    // D. removing the file that is NOT the representative changes nothing.
+    await removeFileNamed('tb-a3.pdf');
+    const afterNonRepRemoval = await readiness();
+    const namesAfterRemoval = await fileNames();
+    console.log(`  after rm B   : ${JSON.stringify(afterNonRepRemoval)} ${JSON.stringify(namesAfterRemoval)}`);
+    check('RF3-D: removing a non-representative file leaves it ready',
+        namesAfterRemoval.length === 1 && namesAfterRemoval[0] === 'tb-a1.pdf'
+        && afterNonRepRemoval.selectable === true && afterNonRepRemoval.runDisabled === false,
+        JSON.stringify(afterNonRepRemoval));
+
+    // E. removing the representative closes the door until the next one is read.
+    await uploadNow('tb-portrait.pdf');
+    await new Promise((r) => setTimeout(r, 800));
+    await removeFileNamed('tb-a1.pdf');
+    const afterRepRemoval = await readiness();
+    console.log(`  after rm A   : ${JSON.stringify(afterRepRemoval)} ${JSON.stringify(await fileNames())}`);
+    check('RF3-E: removing the representative file closes selection at once',
+        afterRepRemoval.selectable === false && afterRepRemoval.runDisabled === true,
+        JSON.stringify(afterRepRemoval));
+    await waitReady();
+    const afterRepMeasured = await readiness();
+    check('RF3-E: the new representative reopens only after it is measured',
+        afterRepMeasured.selectable === true && afterRepMeasured.runDisabled === false
+        && afterRepMeasured.pageIndicator === '1 / 1 ページ', JSON.stringify(afterRepMeasured));
 
     // ---- RF1: the worker really came from our own origin --------------------
     console.log('\n=== PDF.js worker requests ===');
