@@ -25,9 +25,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '初期リリース'
     },
     tools: {
-        version: '1.1.1',
-        lastUpdate: '2026/01/29',
-        changelog: '初期リリース'
+        version: '1.2.0',
+        lastUpdate: '2026/09/04',
+        changelog: '図面サイズ統一機能を追加'
     },
     textifier: {
         version: '1.1.1',

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page-size normalizer smoke harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Page-size normalizer smoke harness</h1>
+<p>Driven by <code>scripts/smoke-page-size-normalizer.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument } from 'pdf-lib';
+import { normalizePageSize, detectPaperSize, PAPER_SIZES_PT } from '/src/utils/page-size-normalizer.ts';
+import { classifyDocument } from '/src/utils/pdf-textifier/classify.ts';
+
+// The bundled worker that ships in public/, never the unpkg CDN: this smoke
+// must prove the feature works with no network at all.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+/** Longest edge of the raster used for the ink measurements. */
+const MAX_PX = 1600;
+
+const OPS = pdfjsLib.OPS;
+const IMAGE_OPS = ['paintImageXObject', 'paintInlineImageXObject', 'paintJpegXObject', 'paintImageMaskXObject']
+    .map((name) => OPS[name])
+    .filter((op) => op !== undefined);
+
+/**
+ * Everything measurable about a document, read back through PDF.js so the
+ * checks see what a viewer sees rather than what pdf-lib believes it wrote.
+ */
+async function measure(input) {
+    // PDF.js takes ownership of the buffer it is handed and detaches it, so
+    // every consumer below gets its own copy.
+    const bytes = (input instanceof Uint8Array ? input : new Uint8Array(input)).slice();
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const viewport = page.getViewport({ scale: 1 });
+        const text = (await page.getTextContent()).items.map((it) => it.str ?? '').join('');
+        const list = await page.getOperatorList();
+        let pathOps = 0;
+        let imageOps = 0;
+        let textOps = 0;
+        for (const fn of list.fnArray) {
+            if (fn === OPS.constructPath) pathOps++;
+            else if (IMAGE_OPS.includes(fn)) imageOps++;
+            else if (fn === OPS.showText) textOps++;
+        }
+        const annots = (await page.getAnnotations()).map((a) => ({ subtype: a.subtype, rect: a.rect }));
+        pages.push({
+            pageNumber: i,
+            // Rotation-aware: this is the sheet the user sees.
+            widthPt: viewport.width,
+            heightPt: viewport.height,
+            rotate: page.rotate,
+            view: page.view,
+            detected: detectPaperSize(viewport.width, viewport.height),
+            text,
+            pathOps,
+            imageOps,
+            textOps,
+            annots,
+            ink: await inkBox(page, viewport),
+        });
+    }
+    // MediaBox and CropBox come from pdf-lib: PDF.js only exposes the effective view.
+    const lib = await PDFDocument.load(bytes.slice());
+    lib.getPages().forEach((p, idx) => {
+        pages[idx].mediaBox = p.getMediaBox();
+        pages[idx].cropBox = p.getCropBox();
+        pages[idx].hasCropBoxEntry = Boolean(p.node.CropBox());
+    });
+    // AcroForm fields, so the smoke can say whether forms survive rather than
+    // assume it. Duck-typed instead of using constructor names, which minify.
+    let formFields = null;
+    try {
+        formFields = lib.getForm().getFields().map((f) => ({
+            name: f.getName(),
+            value: typeof f.getText === 'function' ? (f.getText() ?? null) : null,
+        }));
+    } catch (error) {
+        formFields = { error: String(error?.message ?? error) };
+    }
+    return { numPages: doc.numPages, pages, formFields };
+}
+
+/**
+ * Bounding box of the dark pixels, in PDF points of the displayed page.
+ *
+ * The fixtures put filled markers at a known inset from every corner, so this
+ * box is the whole content extent: if anything were cropped it would shrink,
+ * and if the fit were off-centre the four margins would stop matching.
+ */
+async function inkBox(page, baseViewport) {
+    const scale = MAX_PX / Math.max(baseViewport.width, baseViewport.height);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, viewport }).promise;
+
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let x0 = canvas.width, y0 = canvas.height, x1 = -1, y1 = -1;
+    for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            if ((d[i] + d[i + 1] + d[i + 2]) / 3 >= 200) continue;
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+        }
+    }
+    if (x1 < 0) return null;
+    const toPt = (v) => v / scale;
+    return {
+        // Device space, y down. Margins are what the checks compare.
+        left: toPt(x0),
+        right: toPt(canvas.width - 1 - x1),
+        top: toPt(y0),
+        bottom: toPt(canvas.height - 1 - y1),
+        width: toPt(x1 - x0 + 1),
+        height: toPt(y1 - y0 + 1),
+        /** One rendered pixel expressed in points: the floor of any comparison. */
+        pixelPt: toPt(1),
+    };
+}
+
+const fetchFixture = (name) => fetch(`/test-fixtures/${name}`).then((r) => {
+    if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+    return r.arrayBuffer();
+});
+
+window.__sizeSmoke = {
+    paperSizesPt: PAPER_SIZES_PT,
+
+    async run(name, target) {
+        log(`running ${name} -> ${target}`);
+        const input = await fetchFixture(name);
+        const before = await measure(input.slice(0));
+        const result = await normalizePageSize(input.slice(0), { target });
+        const after = await measure(result.data);
+        log(`done ${name}`);
+        return {
+            name,
+            target,
+            summary: result.summary,
+            outputBytes: result.data.length,
+            inputBytes: input.byteLength,
+            before,
+            after,
+        };
+    },
+
+    /** The M1 gate: does the normalised document still read as text-native? */
+    async classify(name, target) {
+        const input = await fetchFixture(name);
+        const inDoc = await pdfjsLib.getDocument({ data: new Uint8Array(input.slice(0)) }).promise;
+        const beforeClass = await classifyDocument(inDoc);
+        const result = await normalizePageSize(input.slice(0), { target });
+        const outDoc = await pdfjsLib.getDocument({ data: new Uint8Array(result.data) }).promise;
+        const afterClass = await classifyDocument(outDoc);
+        return { before: beforeClass, after: afterClass };
+    },
+
+    ready: true,
+};
+log('ready');
+</script>
+</body>
+</html>
