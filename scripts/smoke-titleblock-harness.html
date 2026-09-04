@@ -15,9 +15,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import { updateTitleBlocks, displayedSize, orientationOf } from '/src/utils/title-block-updater.ts';
 import { classifyDocument } from '/src/utils/pdf-textifier/classify.ts';
+import { configurePdfWorker, PDF_WORKER_URL } from '/src/utils/pdf-worker-source.ts';
 
 // The worker that ships in public/, never a CDN: this must work with no network.
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+configurePdfWorker();
 
 const log = (m) => { document.getElementById('log').textContent = m; };
 
@@ -195,6 +196,21 @@ window.__tbSmoke = {
         const outDoc = await pdfjsLib.getDocument({ data: copyOf(result.data) }).promise;
         const afterClass = await classifyDocument(outDoc);
         return { before: beforeClass, after: afterClass };
+    },
+
+    /**
+     * Another module in this app assigns the PDF.js worker global to unpkg at
+     * import time. Prove that the point-of-use call takes it back, which is the
+     * only reason S2's worker request stays same-origin regardless of import
+     * order.
+     */
+    workerProbe() {
+        const before = pdfjsLib.GlobalWorkerOptions.workerSrc;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
+        const hijacked = pdfjsLib.GlobalWorkerOptions.workerSrc;
+        configurePdfWorker();
+        const restored = pdfjsLib.GlobalWorkerOptions.workerSrc;
+        return { before, hijacked, restored, expected: PDF_WORKER_URL };
     },
 
     /** Fail-closed check: the call must reject rather than misplace anything. */

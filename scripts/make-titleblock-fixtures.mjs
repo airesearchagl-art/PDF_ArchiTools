@@ -12,6 +12,9 @@
  *   tb-portrait-mix.pdf    landscape page followed by a portrait one (must refuse)
  *   tb-scanned.pdf         image-only page, title block baked into the raster
  *   tb-searchable.pdf      image-only page plus an invisible text layer (M1 shape)
+ *   tb-portrait.pdf        A1 portrait, same relative title block
+ *   tb-rot180.pdf          A1 landscape MediaBox with /Rotate 180
+ *   tb-rot270.pdf          A1 portrait MediaBox with /Rotate 270
  *
  * The title block sits at the same fractions of every sheet, which is what makes
  * one set of rules work across A1 and A3:
@@ -248,6 +251,40 @@ for (const [name, size, label] of [
     drawSheet(page, H, W, fonts, 'ROTATED 90');
     page.pushOperators(popGraphicsState());
     await write('tb-rotated.pdf', pdfDoc);
+}
+
+// 4b / 4c - the other two rotation quadrants, drawn the same way so the smoke
+// can hold all three against the flat sheet.
+//
+//   /Rotate 180 on [0 0 W H]: display (lx, ly) -> user (W - lx, H - ly)
+//   /Rotate 270 on [0 0 W H]: display (lx, ly) -> user (ly, H - lx)
+{
+    const { pdfDoc, fonts } = await newDoc();
+    const [W, H] = A1;
+    const page = pdfDoc.addPage([W, H]);
+    page.setRotation(degrees(180));
+    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(-1, 0, 0, -1, W, H));
+    drawSheet(page, W, H, fonts, 'ROTATED 180');
+    page.pushOperators(popGraphicsState());
+    await write('tb-rot180.pdf', pdfDoc);
+}
+{
+    const { pdfDoc, fonts } = await newDoc();
+    const [W, H] = [A1[1], A1[0]];
+    const page = pdfDoc.addPage([W, H]);
+    page.setRotation(degrees(270));
+    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(0, -1, 1, 0, 0, H));
+    drawSheet(page, H, W, fonts, 'ROTATED 270');
+    page.pushOperators(popGraphicsState());
+    await write('tb-rot270.pdf', pdfDoc);
+}
+
+// 5b - a portrait sheet on its own, so a portrait representative page can be
+// exercised without the landscape fallback that used to paper over it.
+{
+    const { pdfDoc, fonts } = await newDoc();
+    addSheet(pdfDoc, fonts, [A1[1], A1[0]], 'A1 PORTRAIT');
+    await write('tb-portrait.pdf', pdfDoc);
 }
 
 // 5 - a landscape page followed by a portrait one: must be refused.

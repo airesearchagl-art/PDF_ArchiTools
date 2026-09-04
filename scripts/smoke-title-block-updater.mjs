@@ -20,7 +20,7 @@ const PORT = 5184;
 const ORIGIN = `http://localhost:${PORT}`;
 
 // Regenerate the fixtures when they are absent, so the whole gate is one command.
-if (!fs.existsSync(path.join(ROOT, 'test-fixtures', 'tb-searchable.pdf'))) {
+if (!fs.existsSync(path.join(ROOT, 'test-fixtures', 'tb-portrait.pdf'))) {
     execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'make-titleblock-fixtures.mjs')], { stdio: 'inherit' });
 }
 
@@ -112,11 +112,15 @@ try {
     await doRun('scanned', 'tb-scanned.pdf', RULES_BOTH, 'landscape');
     await doRun('searchable', 'tb-searchable.pdf', RULES_BOTH, 'landscape');
     await doRun('dateOnly', 'tb-a1.pdf', RULES_DATE_ONLY, 'landscape');
+    await doRun('rot180', 'tb-rot180.pdf', RULES_BOTH, 'landscape');
+    await doRun('rot270', 'tb-rot270.pdf', RULES_BOTH, 'landscape');
+    await doRun('portrait', 'tb-portrait.pdf', RULES_BOTH, 'portrait');
 
     console.log('\n=== checks ===');
     for (const [key, tag] of [
         ['a1', 'A1'], ['a3', 'A3'], ['mixed', 'mixed'], ['rotated', 'rotated'],
         ['scanned', 'scanned'], ['searchable', 'searchable'], ['dateOnly', 'date-only'],
+        ['rot180', 'rot180'], ['rot270', 'rot270'], ['portrait', 'portrait'],
     ]) {
         assertStructure(runs[key], tag);
     }
@@ -126,6 +130,7 @@ try {
     for (const [key, tag] of [
         ['a1', 'A1'], ['a3', 'A3'], ['rotated', 'rotated'], ['scanned', 'scanned'],
         ['searchable', 'searchable'], ['dateOnly', 'date-only'],
+        ['rot180', 'rot180'], ['rot270', 'rot270'], ['portrait', 'portrait'],
     ]) {
         const d = runs[key].diffs[0];
         check(`${tag}: nothing outside the selected regions changed`, d.outside === 0,
@@ -253,6 +258,49 @@ try {
     check('the ASCII run is not inflated by a font embed',
         asciiOnly.outputBytes < asciiOnly.inputBytes + 50_000,
         `${asciiOnly.inputBytes} -> ${asciiOnly.outputBytes}`);
+
+    // ---- RF1: the PDF.js worker stays same-origin --------------------------------
+    console.log('\n=== PDF.js worker source ===');
+    const worker = await page.evaluate(() => window.__tbSmoke.workerProbe());
+    console.log(`  ${JSON.stringify(worker)}`);
+    check('the app really can have its worker global hijacked to a CDN',
+        worker.hijacked.startsWith('https://unpkg.com/'), worker.hijacked);
+    check('RF1: point-of-use configuration takes it back to same-origin',
+        worker.restored === worker.expected && worker.restored === '/pdf.worker.min.mjs',
+        worker.restored);
+    check('RF1: the import-time default is already same-origin',
+        worker.before === worker.expected, worker.before);
+
+    // ---- RF1 / rotation quadrants -------------------------------------------------
+    console.log('\n=== all rotation quadrants land alike ===');
+    for (const [fixture, label] of [
+        ['tb-rotated.pdf', '/Rotate 90'],
+        ['tb-rot180.pdf', '/Rotate 180'],
+        ['tb-rot270.pdf', '/Rotate 270'],
+    ]) {
+        const cross = await page.evaluate((f, r) => window.__tbSmoke.crossCompare('tb-a1.pdf', f, r, 'landscape'),
+            fixture, RULES_BOTH);
+        console.log(`  ${label}: before ${cross.before.diff}/${cross.before.total}  after ${cross.after.diff}/${cross.after.total}`);
+        check(`${label}: fixture is drawn to look like the flat sheet`,
+            cross.before.sizeMismatch === false && cross.before.diff / cross.before.total < 0.01,
+            `${cross.before.diff}/${cross.before.total}`);
+        check(`${label}: the update lands in the same place as on a flat sheet`,
+            cross.after.sizeMismatch === false && cross.after.diff / cross.after.total < 0.01,
+            `${cross.after.diff}/${cross.after.total}`);
+    }
+
+    // ---- portrait representative --------------------------------------------------
+    console.log('\n=== portrait representative ===');
+    const por = runs.portrait;
+    check('portrait fixture really is portrait',
+        por.before.pages[0].heightPt > por.before.pages[0].widthPt
+        && por.before.pages[0].orientation === 'portrait');
+    check('portrait sheet takes the replacement', por.after.pages[0].text.includes(NEW_STATUS));
+    const wrongOrientation = await page.evaluate((r) => window.__tbSmoke.errorProbe('tb-portrait.pdf', r, 'landscape'), RULES_BOTH);
+    console.log(`  landscape rules on a portrait sheet: ${JSON.stringify(wrongOrientation)}`);
+    check('a portrait sheet is refused when the template was landscape',
+        wrongOrientation.threw === true && wrongOrientation.code === 'orientation-mismatch',
+        JSON.stringify(wrongOrientation));
 
     // ---- environment ------------------------------------------------------------
     console.log('\n=== environment ===');

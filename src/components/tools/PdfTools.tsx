@@ -46,6 +46,13 @@ export function PdfTools() {
     ]);
     const [templateOrientation, setTemplateOrientation] = useState<PageOrientation | null>(null);
 
+    /**
+     * Anything that can change which file is the representative one invalidates
+     * the measured geometry straight away, so no run can start against a page
+     * that is no longer on screen.
+     */
+    const invalidateTemplate = () => setTemplateOrientation(null);
+
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
@@ -55,15 +62,20 @@ export function PdfTools() {
             status: 'idle' as const,
             progress: 0
         }));
+        invalidateTemplate();
         setFiles(prev => [...prev, ...newFiles]);
     };
 
     const removeFile = (id: string) => {
+        invalidateTemplate();
         setFiles(prev => prev.filter(f => f.id !== id));
     };
 
+    /** 図枠一括更新 cannot run until the representative page has been measured. */
+    const titleBlockNotReady = activeTool === 'title-block-update' && templateOrientation === null;
+
     const startProcessing = async () => {
-        if (files.length === 0 || isProcessing) return;
+        if (files.length === 0 || isProcessing || titleBlockNotReady) return;
         setIsProcessing(true);
 
         const zip = new JSZip();
@@ -82,9 +94,17 @@ export function PdfTools() {
                 let titleBlockSummary: TitleBlockSummary | undefined;
 
                 if (activeTool === 'title-block-update') {
+                    // Never guess the representative page's orientation: guessing
+                    // wrong puts every region on the wrong part of the sheet.
+                    if (!templateOrientation) {
+                        throw new Error(
+                            '代表ページの読み込みが完了していません。'
+                            + 'プレビューにページが表示されてから実行してください。',
+                        );
+                    }
                     const updated = await updateTitleBlocks(fileObj.file, {
                         rules: titleRules,
-                        templateOrientation: templateOrientation ?? 'landscape',
+                        templateOrientation,
                     });
                     resultData = updated.data;
                     titleBlockSummary = updated.summary;
@@ -227,6 +247,7 @@ export function PdfTools() {
                                     status: 'idle' as const,
                                     progress: 0
                                 }));
+                                invalidateTemplate();
                                 setFiles(prev => [...prev, ...newFiles]);
                             }
                         }}
@@ -235,6 +256,7 @@ export function PdfTools() {
 
                 {activeTool === 'title-block-update' && (
                     <TitleBlockUpdater
+                        key={files[0]?.id ?? 'no-file'}
                         file={files[0]?.file ?? null}
                         rules={titleRules}
                         onRulesChange={setTitleRules}
@@ -459,7 +481,8 @@ export function PdfTools() {
                 <button
                     className="process-btn"
                     onClick={startProcessing}
-                    disabled={isProcessing || files.length === 0}
+                    disabled={isProcessing || files.length === 0 || titleBlockNotReady}
+                    title={titleBlockNotReady ? '代表ページの読み込みが完了するまで実行できません' : undefined}
                 >
                     {isProcessing ? (
                         <>処理中...</>

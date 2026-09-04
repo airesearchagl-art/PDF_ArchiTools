@@ -3,9 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { ChevronLeft, ChevronRight, Eye, Plus, Trash2 } from 'lucide-react';
 import { MAX_RULES, orientationOf } from '../../utils/title-block-updater';
 import type { PageOrientation, UpdateRule } from '../../utils/title-block-updater';
-
-// The worker that ships in public/, matching what the Textifier uses.
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+import { configurePdfWorker } from '../../utils/pdf-worker-source';
 
 /** Longest edge of the preview raster. Big enough to read a title block. */
 const PREVIEW_MAX_PX = 1100;
@@ -17,6 +15,15 @@ interface Props {
     onRulesChange: (rules: UpdateRule[]) => void;
     onTemplateOrientationChange: (orientation: PageOrientation | null) => void;
     disabled?: boolean;
+}
+
+/** What the surface currently shows, tied to the page it was measured from. */
+interface PageGeometry {
+    pageNumber: number;
+    width: number;
+    height: number;
+    orientation: PageOrientation;
+    error: string | null;
 }
 
 interface DragState {
@@ -47,11 +54,16 @@ export function TitleBlockUpdater({
     const surfaceRef = useRef<HTMLDivElement>(null);
     const [pageNumber, setPageNumber] = useState(1);
     const [numPages, setNumPages] = useState(0);
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [activeRule, setActiveRule] = useState(0);
     const [drag, setDrag] = useState<DragState | null>(null);
     const [showAfter, setShowAfter] = useState(true);
-    const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
+    // Carries the page it was measured from. Anything else means "not ready",
+    // so switching page or file can never leave a stale geometry behind for a
+    // selection to be interpreted against.
+    const [geometry, setGeometry] = useState<PageGeometry | null>(null);
+
+    const ready = geometry !== null && geometry.pageNumber === pageNumber && geometry.error === null;
+    const loadError = geometry?.pageNumber === pageNumber ? geometry.error : null;
 
     // Render whichever page is selected, and report the orientation the rules
     // are being drawn against.
@@ -60,20 +72,29 @@ export function TitleBlockUpdater({
         let doc: pdfjsLib.PDFDocumentProxy | null = null;
 
         (async () => {
+            // Nothing downstream may run against a page we have not measured
+            // yet, so the parent is told "unknown" before anything is loaded.
+            onTemplateOrientationChange(null);
             if (!file) {
                 if (cancelled) return;
                 setNumPages(0);
-                setCanvasSize(null);
-                onTemplateOrientationChange(null);
+                setGeometry(null);
                 return;
             }
             try {
+                configurePdfWorker();
                 const bytes = new Uint8Array(await file.arrayBuffer());
                 doc = await pdfjsLib.getDocument({ data: bytes }).promise;
                 if (cancelled) return;
                 setNumPages(doc.numPages);
-                const target = Math.min(Math.max(1, pageNumber), doc.numPages);
-                const page = await doc.getPage(target);
+                if (pageNumber > doc.numPages) {
+                    // The page this effect was asked for does not exist in this
+                    // document. Clamp the state itself rather than rendering
+                    // something else under a stale "5 / 1 ページ" label.
+                    setPageNumber(doc.numPages);
+                    return;
+                }
+                const page = await doc.getPage(pageNumber);
                 if (cancelled) return;
 
                 const base = page.getViewport({ scale: 1 });
@@ -89,17 +110,29 @@ export function TitleBlockUpdater({
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                 // Selecting a region only needs the page geometry, so open the
-                // surface up as soon as that is known. Waiting for the raster
-                // would leave the tool inert whenever rendering is slow to
-                // finish, and PDF.js only finishes while the tab is visible.
-                setCanvasSize({ width: canvas.width, height: canvas.height });
-                setLoadError(null);
-                onTemplateOrientationChange(orientationOf(base.width, base.height));
+                // surface up as soon as that is known for THIS page. Waiting for
+                // the raster would leave the tool inert whenever rendering is
+                // slow, and PDF.js only finishes while the tab is visible.
+                const orientation = orientationOf(base.width, base.height);
+                setGeometry({
+                    pageNumber,
+                    width: canvas.width,
+                    height: canvas.height,
+                    orientation,
+                    error: null,
+                });
+                onTemplateOrientationChange(orientation);
 
                 await page.render({ canvas, viewport }).promise;
             } catch (error) {
                 if (cancelled) return;
-                setLoadError(error instanceof Error ? error.message : String(error));
+                setGeometry({
+                    pageNumber,
+                    width: 0,
+                    height: 0,
+                    orientation: 'landscape',
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 onTemplateOrientationChange(null);
             }
         })();
@@ -122,7 +155,7 @@ export function TitleBlockUpdater({
     }, []);
 
     const onPointerDown = (event: React.PointerEvent) => {
-        if (disabled || !canvasSize) return;
+        if (disabled || !ready) return;
         const point = pointToFraction(event);
         if (!point) return;
         // Keeps the drag alive if the pointer leaves the canvas. Best effort:
@@ -197,7 +230,7 @@ export function TitleBlockUpdater({
                     <ChevronLeft size={16} /> 前
                 </button>
                 <span className="tb-page-indicator">
-                    {numPages > 0 ? `${pageNumber} / ${numPages} ページ` : 'ページ —'}
+                    {numPages > 0 ? `${Math.min(pageNumber, numPages)} / ${numPages} ページ` : 'ページ —'}
                 </span>
                 <button
                     type="button"
@@ -224,7 +257,7 @@ export function TitleBlockUpdater({
                     onPointerDown={onPointerDown}
                     onPointerMove={onPointerMove}
                     onPointerUp={onPointerUp}
-                    style={{ cursor: disabled || !canvasSize ? 'default' : 'crosshair' }}
+                    style={{ cursor: disabled || !ready ? 'default' : 'crosshair' }}
                 >
                     <canvas ref={canvasRef} className="tb-canvas" />
 
@@ -264,8 +297,10 @@ export function TitleBlockUpdater({
                 </div>
             </div>
 
-            <p className="tb-hint">
-                代表ページの上で、更新したい領域をドラッグして選んでください。選んだ領域は白で覆われ、入力した文字が中央に描かれます。
+            <p className="tb-hint" data-ready={ready ? 'yes' : 'no'}>
+                {ready
+                    ? '代表ページの上で、更新したい領域をドラッグして選んでください。選んだ領域は白で覆われ、入力した文字が中央に描かれます。'
+                    : '代表ページを読み込んでいます。ページの向きと大きさが確定するまで、領域の選択と実行はできません。'}
             </p>
 
             <div className="tb-rules">
