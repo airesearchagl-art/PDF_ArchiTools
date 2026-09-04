@@ -1,6 +1,45 @@
 import React from 'react';
-import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings } from 'lucide-react';
+import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings, BoxSelect, History, Play } from 'lucide-react';
 import { TOOL_VERSIONS } from '../config/versions';
+
+/**
+ * ユーザー向けの更新履歴。
+ *
+ * technical changelog ではなく「使う人から見て何ができるようになったか」を書く。
+ * PR番号・SHA・内部実装の用語はここには入れない。新しいものを先頭に追加する。
+ */
+interface ReleaseNote {
+    date: string;
+    tool: string;
+    version: string;
+    changes: string[];
+}
+
+const releaseHistory: ReleaseNote[] = [
+    {
+        date: '2026/09/04',
+        tool: 'PDF加工',
+        version: '1.2.0',
+        changes: [
+            '「図面サイズ統一」を追加しました。',
+            'A0〜A4への一括統一、または「最初のページに合わせる」を選べます。',
+            'A1とA3などが混在したPDFを、1つの用紙サイズにそろえられます。',
+            '線や文字はベクターのまま、検索できる文字情報も保持したまま処理します。',
+        ],
+    },
+    {
+        date: '2026/09/03',
+        tool: 'PDFテキスト化',
+        version: '1.2.0',
+        changes: [
+            '日本語・英語の文字認識（OCR）に対応しました。',
+            'スキャンしたPDFから、検索・選択できるPDFを作れます。',
+            'ページごとに「文字情報あり」「スキャン画像」を判定します。',
+            '文字情報がないページだけをOCRするため、必要なところだけ処理します。',
+            '文字認識はブラウザ内で実行されます。',
+        ],
+    },
+];
 
 const VersionBadge = ({ version }: { version: string }) => (
     <span style={{
@@ -35,9 +74,18 @@ export function HowToUse() {
                 <p style={{ color: '#ccc', fontSize: '1.1rem' }}>
                     設計業務の効率化を目指して開発された、5つの主要なPDFツール機能の使い方ガイドです。
                 </p>
-                <p style={{ margin: '10px 0 0', fontSize: '0.9em', color: '#ffecb3', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    ※ アップロードされたPDFデータは、すべてお客様のブラウザ内（ローカル環境）でのみ処理されます。<br />
-                    外部サーバーへ送信・保存されることは一切ありませんので、機密情報を含む図面データでも安心してご利用いただけます。
+                <p style={{ color: '#ccc', fontSize: '1rem', margin: '10px 0 0' }}>
+                    <b>PDF加筆</b> ／ <b>PDF比較</b> ／ <b>PDF加工</b> ／ <b>PDF抽出・統合</b> ／ <b>PDFテキスト化</b> の5カテゴリがあります。
+                    画面上部のタブから切り替えてご利用ください。
+                </p>
+                <p style={{ margin: '16px 0 0', fontSize: '0.9em', color: '#ffecb3', lineHeight: 1.7 }}>
+                    ※ 読み込んだPDFファイルは、お使いのブラウザ内で処理されます。
+                    文字認識（OCR）もブラウザ内で実行され、PDFを外部のAI・OCRサービスへ送信することはありません。
+                </p>
+                <p style={{ margin: '16px 0 0', fontSize: '0.95em', color: '#9fd3ff' }}>
+                    <History size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
+                    最近の更新: <b>図面サイズ統一</b>（PDF加工 v1.2.0） / <b>日本語・英語OCR</b>（PDFテキスト化 v1.2.0）
+                    — 詳しくはページ下部の<a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>をご覧ください。
                 </p>
             </div>
 
@@ -188,47 +236,117 @@ export function HowToUse() {
                     <VersionBadge version={TOOL_VERSIONS.tools.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
-                    一括処理ツールです。「半透明レイヤー追加」「モノクロ化」「最適化」などを複数のファイルに対して一度に行えます。
+                    複数のPDFをまとめて加工できるツールです。左のサイドバーから
+                    <b>半透明レイヤ追加</b> / <b>モノクロ化</b> / <b>両方実行</b> / <b>余白生成</b> /
+                    <b>図面サイズ統一</b> / <b>最適化</b> の6つの機能を選べます。
+                    ファイルを1つだけ入れた場合は加工後のPDFがそのまま、複数入れた場合はZIPでまとめてダウンロードされます。
                 </p>
 
                 <ScreenWithBadges
                     src="/screenshots/processor.png"
                     badges={[
                         // 1. Function Select (Left Sidebar)
-                        { top: '15%', left: '1%', width: '25%', height: '70%', desc: '加工機能の選択' },
-                        // 2. File List (Right Top)
-                        { top: '21%', left: '30%', width: '68%', height: '30%', desc: 'ファイル追加・リスト' },
-                        // 3. Settings (Right Middle)
-                        { top: '60%', left: '30%', width: '68%', height: '25%', desc: '詳細設定' },
+                        { top: '9%', left: '1.2%', width: '13.2%', height: '45%', desc: '加工機能の選択' },
+                        // 2. Drop Zone + File List (Centre)
+                        { top: '10.5%', left: '18%', width: '56.2%', height: '49%', desc: 'ファイル追加・リスト' },
+                        // 3. Settings Panel (Right)
+                        { top: '12%', left: '78.2%', width: '20%', height: '48%', desc: '詳細設定（ターゲット用紙など）' },
                         // 4. Run Button (Right Bottom)
-                        { top: '85%', left: '30%', width: '68%', height: '10%', desc: '処理実行ボタン' }
+                        { top: '90.5%', left: '78.2%', width: '20%', height: '6%', desc: '実行開始ボタン' }
                     ]}
                 />
 
                 <div style={gridStyle}>
                     <div style={cardStyle}>
                         <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> 機能選択</h4>
-                        <p>「半透明レイヤー」「モノクロ化」「最適化」など、実行したい処理を選択します。</p>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> ファイル追加</h4>
-                        <p>処理したいPDFファイルを左側のエリアに追加します（ドラッグ&ドロップ可）。</p>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> 詳細設定</h4>
-                        <p>選択した機能に応じて、透明度やDPIなどのパラメータを調整します。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>半透明レイヤー:</b> 色と不透明度を設定。</li>
-                            <li><b>モノクロ化:</b> コントラストと解像度を調整。</li>
+                        <p>左のサイドバーから、実行したい加工を1つ選びます。</p>
+                        <ul style={listStyle}>
+                            <li><b>半透明レイヤ追加:</b> 図面の上に色付きの半透明レイヤを重ねます。</li>
+                            <li><b>モノクロ化:</b> 白黒に変換し、コントラストを調整します。</li>
+                            <li><b>両方実行:</b> モノクロ化のあとに半透明レイヤ追加を続けて行います。</li>
+                            <li><b>余白生成:</b> 内容を縮小して、まわりに余白をつくります。</li>
+                            <li><b>図面サイズ統一:</b> 用紙サイズをそろえます（下に詳しい説明があります）。</li>
+                            <li><b>最適化:</b> 解像度を下げてファイルサイズを小さくします。</li>
                         </ul>
                     </div>
 
                     <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>④</strong> 処理実行</h4>
-                        <p>「Start Processing」ボタンを押すと、すべてのファイルに対して処理が実行され、完了後にダウンロードされます。</p>
+                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> ファイル追加</h4>
+                        <p>処理したいPDFファイルを中央のエリアに追加します（ドラッグ&ドロップ可）。複数まとめて追加できます。</p>
                     </div>
+
+                    <div style={cardStyle}>
+                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> 詳細設定</h4>
+                        <p>選んだ機能に応じて、右側の設定パネルの内容が切り替わります。</p>
+                        <ul style={listStyle}>
+                            <li><b>半透明レイヤ追加:</b> 色と不透明度を設定。</li>
+                            <li><b>モノクロ化:</b> コントラストと解像度を調整。</li>
+                            <li><b>余白生成:</b> 縮小率と配置を指定。</li>
+                            <li><b>図面サイズ統一:</b> ターゲット用紙を選択。</li>
+                            <li><b>最適化:</b> 圧縮解像度（DPI）を選択。</li>
+                        </ul>
+                    </div>
+
+                    <div style={cardStyle}>
+                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>④</strong> <Play size={18} /> 処理実行</h4>
+                        <p>「実行開始」ボタンを押すと、追加したすべてのファイルが処理されます。</p>
+                        <ul style={listStyle}>
+                            <li><b>1ファイル:</b> 加工後のPDFがそのままダウンロードされます。</li>
+                            <li><b>複数ファイル:</b> まとめてZIPでダウンロードされます。</li>
+                        </ul>
+                    </div>
+                </div>
+
+                {/* 3-b. Drawing page size normalizer */}
+                <div style={{ ...cardStyle, marginTop: '24px', borderLeft: '6px solid #4ae290' }}>
+                    <h4 style={{ ...cardHeadStyle, fontSize: '1.15rem' }}>
+                        <BoxSelect size={20} /> 図面サイズ統一
+                        <VersionBadge version={TOOL_VERSIONS.tools.version} />
+                    </h4>
+                    <p>
+                        A1とA3など<b>用紙サイズが混在したPDF</b>を、全ページ同じ用紙サイズにそろえます。
+                        図面を画像に変換せずに処理するため、線や文字はベクターのまま残り、検索できる文字情報も失われません。
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '12px' }}>
+                        <div>
+                            <h5 style={subHeadStyle}>選べるターゲット用紙</h5>
+                            <ul style={listStyle}>
+                                <li>A0 / A1 / A2 / A3 / A4</li>
+                                <li>「最初のページに合わせる」</li>
+                            </ul>
+                            <p style={noteStyle}>初期設定はA1です。</p>
+                        </div>
+                        <div>
+                            <h5 style={subHeadStyle}>処理の内容</h5>
+                            <ul style={listStyle}>
+                                <li>縦横比を保ったまま拡大・縮小</li>
+                                <li>用紙の中央に配置</li>
+                                <li>内容の切り取り（crop）はしない</li>
+                                <li>ページごとの縦向き・横向きはそのまま</li>
+                                <li>線や文字はベクターのまま保持</li>
+                                <li>検索できる文字情報を保持</li>
+                                <li>PDFテキスト化で付けた文字情報も保持</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h5 style={subHeadStyle}>基本の手順</h5>
+                            <ol style={listStyle}>
+                                <li>「PDF加工」を開く</li>
+                                <li>「図面サイズ統一」を選ぶ</li>
+                                <li>PDFを追加する</li>
+                                <li>ターゲット用紙を選ぶ</li>
+                                <li>「実行開始」を押す</li>
+                                <li>できあがったPDFをダウンロード</li>
+                            </ol>
+                            <p style={noteStyle}>複数のPDFを入れた場合はZIPでまとめてダウンロードされます。</p>
+                        </div>
+                    </div>
+
+                    <p style={calloutStyle}>
+                        <b>ご注意:</b> 処理が終わると、元の用紙サイズの内訳（例: A1 × 2、A3 × 2）がファイル名の下に表示されます。
+                        なお、特殊な注釈が用紙の表示範囲の外にあるPDFは、意図しない注釈の露出を防ぐため処理を中止する場合があります。
+                    </p>
                 </div>
             </section>
 
@@ -289,18 +407,20 @@ export function HowToUse() {
                     <VersionBadge version={TOOL_VERSIONS.textifier.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
-                    スキャンデータを解析し、テキスト情報を付与(OCR)したり、Word/Excel形式に変換したりします。
+                    スキャンして画像になってしまったPDFを文字認識（OCR）し、
+                    <b>文字を検索・選択できるPDF</b>を作るツールです。日本語と英語に対応しています。
+                    見た目は元のPDFのまま変わりません（文字情報が裏側に追加されます）。
                 </p>
 
                 <ScreenWithBadges
                     src="/screenshots/textifier.png"
                     badges={[
-                        // 1. Upload (Center)
-                        { top: '20%', left: '25%', width: '50%', height: '30%', desc: 'ファイルアップロードエリア' },
-                        // 2. Settings (Center Middle)
-                        { top: '52%', left: '25%', width: '50%', height: '25%', desc: 'OCR/クリーニング設定' },
-                        // 3. Output (Center Bottom)
-                        { top: '70%', left: '25%', width: '50%', height: '15%', desc: '出力フォーマット設定' }
+                        // 1. Upload (Centre)
+                        { top: '25%', left: '21%', width: '57.7%', height: '30%', desc: 'ファイルアップロードエリア' },
+                        // 2. Settings row (Cleaning / Processing Mode / Output Format)
+                        { top: '58%', left: '21%', width: '57.7%', height: '20%', desc: 'OCR設定・出力形式' },
+                        // 3. Run button
+                        { top: '81%', left: '40%', width: '20%', height: '7%', desc: '実行（Start Textification）' }
                     ]}
                 />
 
@@ -308,22 +428,98 @@ export function HowToUse() {
                     <div style={cardStyle}>
                         <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> <UploadCloud size={18} /> ファイルアップロード</h4>
                         <p>中央の点線エリア内をクリック、またはファイルをドラッグ&ドロップして対象PDFを読み込みます。</p>
+                        <p style={noteStyle}>1回につき1ファイルを処理します。</p>
                     </div>
 
                     <div style={cardStyle}>
                         <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> <Settings size={18} /> 設定 (Settings)</h4>
-                        <p>変換のパラメータを設定します。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>ノイズ除去:</b> スキャン時の汚れ（黒点など）を除去して認識率を高めます。</li>
-                            <li><b>OCR / Text:</b> 画像から文字を読み取るOCRモードか、埋め込みテキストを抽出するモードかを選択します。</li>
+                        <p>現在は <b>OCR</b> ／ 出力形式 <b>PDF (Searchable)</b> の組み合わせでご利用いただけます。</p>
+                        <ul style={listStyle}>
+                            <li><b>Processing Mode:</b> 「OCR」を選びます。</li>
+                            <li>すでに文字情報を持つページは、自動的にOCRを行いません（そのまま残します）。</li>
+                            <li><b>Output Format:</b> 「PDF (Searchable)」を選びます。</li>
                         </ul>
+                        <p style={noteStyle}>
+                            画面上でグレー表示になっている項目は、まだご利用いただけません（下の「未対応の機能」を参照）。
+                        </p>
                     </div>
 
                     <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> <Download size={18} /> 出力・実行</h4>
-                        <p>出力形式 (PDF / Word / Excel) を選択して実行ボタンを押します。</p>
-                        <p style={{ fontSize: '0.85em', color: '#777' }}>※処理には時間がかかる場合があります。完了するとダウンロードボタンが表示されます。</p>
+                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> <Download size={18} /> 実行・ダウンロード</h4>
+                        <p>「Start Textification」を押すと処理が始まります。</p>
+                        <ul style={listStyle}>
+                            <li>進捗がページ単位で表示されます。</li>
+                            <li>途中で「キャンセル」できます（現在のページの認識完了後に反映されます）。</li>
+                            <li>完了後に「Download Result」から検索可能PDFを保存します。</li>
+                        </ul>
+                        <p style={noteStyle}>※ページ数や解像度によっては、処理に時間がかかる場合があります。</p>
                     </div>
+                </div>
+
+                {/* 5-b. What the OCR can and cannot do today */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginTop: '20px' }}>
+                    <div style={{ ...cardStyle, borderLeft: '6px solid #9e4ae2' }}>
+                        <h4 style={cardHeadStyle}><ScanText size={18} /> 現在できること</h4>
+                        <ul style={listStyle}>
+                            <li>PDFの読み込み</li>
+                            <li>ページごとに「文字情報あり」「スキャン画像」を自動判定</li>
+                            <li>スキャン画像のページだけをOCR</li>
+                            <li>日本語・英語の文字認識</li>
+                            <li>検索・選択できるPDFの生成</li>
+                            <li>元の見た目をそのまま保持</li>
+                            <li>文字ページと画像ページが混在したPDFに対応</li>
+                            <li>回転したページに対応</li>
+                            <li>進捗表示とキャンセル</li>
+                            <li>結果のダウンロード</li>
+                            <li>処理はすべてブラウザ内で実行</li>
+                        </ul>
+                    </div>
+
+                    <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0' }}>
+                        <h4 style={cardHeadStyle}><Settings size={18} /> 未対応の機能（今後対応予定）</h4>
+                        <p style={{ margin: '0 0 8px' }}>次の項目は画面に表示されていますが、現在は選択できません。</p>
+                        <ul style={listStyle}>
+                            <li><b>Word (.docx) 出力</b> — 未対応（Coming later）</li>
+                            <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
+                            <li><b>ノイズ除去 (Remove Noise)</b> — 未対応（後続対応）</li>
+                            <li><b>Text Extraction モード</b> — 未対応（文字情報の単独書き出しはできません）</li>
+                        </ul>
+                        <p style={noteStyle}>
+                            現在ご利用いただける出力は「PDF (Searchable)」のみです。
+                        </p>
+                    </div>
+                </div>
+
+                <p style={calloutStyle}>
+                    <b>データの取り扱い:</b> 文字認識はお使いのブラウザ内で実行されます。
+                    PDFを外部のAI・OCRサービスへ送信することはありません。
+                </p>
+            </section>
+
+            {/* 6. RELEASE HISTORY */}
+            <section id="release-history" style={{ marginBottom: '60px', scrollMarginTop: '20px' }}>
+                <h3 style={{ borderBottom: '2px solid #bbb', paddingBottom: '10px', color: '#ddd', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <History size={24} /> 更新履歴
+                </h3>
+                <p style={{ marginBottom: '20px', color: '#ccc' }}>
+                    ユーザーの皆さまから見て何ができるようになったかを、新しい順に記載しています。
+                </p>
+
+                <div style={gridStyle}>
+                    {releaseHistory.map((release) => (
+                        <div key={`${release.date}-${release.tool}`} style={cardStyle}>
+                            <h4 style={cardHeadStyle}>
+                                <span style={{ color: '#333' }}>{release.date}</span>
+                                <span style={{ color: '#666', fontWeight: 'normal' }}>／ {release.tool}</span>
+                                <VersionBadge version={release.version} />
+                            </h4>
+                            <ul style={listStyle}>
+                                {release.changes.map((change) => (
+                                    <li key={change}>{change}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
                 </div>
             </section>
         </div>
@@ -344,7 +540,39 @@ const cardHeadStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    flexWrap: 'wrap',
     color: '#333'
+};
+
+const subHeadStyle: React.CSSProperties = {
+    margin: '0 0 6px',
+    fontSize: '0.95rem',
+    color: '#333'
+};
+
+const listStyle: React.CSSProperties = {
+    paddingLeft: '20px',
+    margin: 0,
+    fontSize: '0.9em',
+    color: '#555',
+    lineHeight: 1.7,
+    overflowWrap: 'anywhere'
+};
+
+const noteStyle: React.CSSProperties = {
+    fontSize: '0.85em',
+    color: '#777',
+    margin: '6px 0 0'
+};
+
+const calloutStyle: React.CSSProperties = {
+    fontSize: '0.9em',
+    color: '#555',
+    background: '#fff8e1',
+    border: '1px solid #ffe0a3',
+    borderRadius: '6px',
+    padding: '10px 12px',
+    marginTop: '16px'
 };
 
 // Helper Component for Screenshot with Badges
