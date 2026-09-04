@@ -87,12 +87,16 @@ export function TitleBlockUpdater({
                 if (!ctx) return;
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                await page.render({ canvas, viewport }).promise;
-                if (cancelled) return;
 
+                // Selecting a region only needs the page geometry, so open the
+                // surface up as soon as that is known. Waiting for the raster
+                // would leave the tool inert whenever rendering is slow to
+                // finish, and PDF.js only finishes while the tab is visible.
                 setCanvasSize({ width: canvas.width, height: canvas.height });
                 setLoadError(null);
                 onTemplateOrientationChange(orientationOf(base.width, base.height));
+
+                await page.render({ canvas, viewport }).promise;
             } catch (error) {
                 if (cancelled) return;
                 setLoadError(error instanceof Error ? error.message : String(error));
