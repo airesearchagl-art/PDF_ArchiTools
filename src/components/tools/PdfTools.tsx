@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import './PdfTools.css';
-import { Settings, Sliders, Layers, FileText, UploadCloud, Play, X, Check, AlertCircle, Blend, BoxSelect, Ruler } from 'lucide-react';
+import { Settings, Sliders, Layers, FileText, UploadCloud, Play, X, Check, AlertCircle, Blend, BoxSelect, Ruler, Stamp } from 'lucide-react';
 import { processLayer, processMonochrome, processOptimize, processMargin } from '../../utils/pdf-processor';
 import { normalizePageSize, PAPER_SIZE_KEYS } from '../../utils/page-size-normalizer';
 import type { NormalizeSummary, NormalizeTarget } from '../../utils/page-size-normalizer';
+import { updateTitleBlocks } from '../../utils/title-block-updater';
+import type { PageOrientation, TitleBlockSummary, UpdateRule } from '../../utils/title-block-updater';
+import { TitleBlockUpdater } from './TitleBlockUpdater';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { VersionFooter } from '../VersionFooter';
 import { TOOL_VERSIONS } from '../../config/versions';
 
-type ToolType = 'layer' | 'monochrome' | 'both' | 'optimize' | 'margin' | 'normalize-size';
+type ToolType = 'layer' | 'monochrome' | 'both' | 'optimize' | 'margin' | 'normalize-size' | 'title-block-update';
 
 interface ProcessFile {
     id: string;
@@ -18,6 +21,8 @@ interface ProcessFile {
     progress: number;
     /** Only 図面サイズ統一 produces one: what was detected and what it became. */
     summary?: NormalizeSummary;
+    /** Only 図枠一括更新 produces one. */
+    titleBlockSummary?: TitleBlockSummary;
     /** Why the file was refused, shown to the user rather than only logged. */
     error?: string;
 }
@@ -36,6 +41,10 @@ export function PdfTools() {
     const [marginScale, setMarginScale] = useState(0.8);
     const [marginPosition, setMarginPosition] = useState<'center' | 'tl' | 'tr' | 'bl' | 'br'>('center');
     const [normalizeTarget, setNormalizeTarget] = useState<NormalizeTarget>('A1');
+    const [titleRules, setTitleRules] = useState<UpdateRule[]>([
+        { rect: { x: 0, y: 0, width: 0, height: 0 }, text: '' },
+    ]);
+    const [templateOrientation, setTemplateOrientation] = useState<PageOrientation | null>(null);
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -64,14 +73,23 @@ export function PdfTools() {
             // Remove check to allow re-processing
             // if (fileObj.status === 'done') continue;
 
-            setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'processing', progress: 10, summary: undefined, error: undefined } : f));
+            setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'processing', progress: 10, summary: undefined, titleBlockSummary: undefined, error: undefined } : f));
 
             try {
                 let resultData: Uint8Array;
                 let suffix = '';
                 let summary: NormalizeSummary | undefined;
+                let titleBlockSummary: TitleBlockSummary | undefined;
 
-                if (activeTool === 'normalize-size') {
+                if (activeTool === 'title-block-update') {
+                    const updated = await updateTitleBlocks(fileObj.file, {
+                        rules: titleRules,
+                        templateOrientation: templateOrientation ?? 'landscape',
+                    });
+                    resultData = updated.data;
+                    titleBlockSummary = updated.summary;
+                    suffix = titleBlockSummary.filenameSuffix;
+                } else if (activeTool === 'normalize-size') {
                     const normalized = await normalizePageSize(fileObj.file, { target: normalizeTarget });
                     resultData = normalized.data;
                     summary = normalized.summary;
@@ -107,7 +125,7 @@ export function PdfTools() {
                     zip.file(fileName, resultData);
                 }
 
-                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'done', progress: 100, summary } : f));
+                setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'done', progress: 100, summary, titleBlockSummary } : f));
                 processedCount++;
             } catch (error) {
                 console.error('Processing failed', error);
@@ -168,6 +186,14 @@ export function PdfTools() {
                     <span>図面サイズ統一</span>
                 </button>
                 <button
+                    className={`tool-btn ${activeTool === 'title-block-update' ? 'active' : ''}`}
+                    onClick={() => setActiveTool('title-block-update')}
+                    disabled={isProcessing}
+                >
+                    <Stamp size={20} />
+                    <span>図枠一括更新</span>
+                </button>
+                <button
                     className={`tool-btn ${activeTool === 'optimize' ? 'active' : ''}`}
                     onClick={() => setActiveTool('optimize')}
                     disabled={isProcessing}
@@ -207,6 +233,16 @@ export function PdfTools() {
                     />
                 </div>
 
+                {activeTool === 'title-block-update' && (
+                    <TitleBlockUpdater
+                        file={files[0]?.file ?? null}
+                        rules={titleRules}
+                        onRulesChange={setTitleRules}
+                        onTemplateOrientationChange={setTemplateOrientation}
+                        disabled={isProcessing}
+                    />
+                )}
+
                 <div className="file-list">
                     {files.map(f => (
                         <div key={f.id} className="file-row">
@@ -236,6 +272,12 @@ export function PdfTools() {
                                 <div className="file-summary">
                                     {f.summary.pageCount}ページ処理 → {f.summary.targetLabel}へ統一
                                     （元サイズ: {f.summary.sourceCounts.map(s => `${s.label} × ${s.count}`).join(', ')}）
+                                </div>
+                            )}
+                            {f.titleBlockSummary && (
+                                <div className="file-summary">
+                                    {f.titleBlockSummary.pageCount}ページへ{f.titleBlockSummary.ruleCount}か所の更新を反映しました
+                                    {f.titleBlockSummary.embeddedJapaneseFont ? '（日本語フォントを埋め込み）' : ''}
                                 </div>
                             )}
                             {f.error && <div className="file-error">{f.error}</div>}
@@ -380,6 +422,23 @@ export function PdfTools() {
                             ))}
                             <option value="first-page">最初のページに合わせる</option>
                         </select>
+                    </div>
+                )}
+
+                {activeTool === 'title-block-update' && (
+                    <div className="settings-group">
+                        <p className="info-text">
+                            図枠の文字を全ページへ一括更新します。中央のプレビューで代表ページの更新したい領域をドラッグして選び、
+                            新しい文字を入力してください。最大3か所まで設定できます。
+                        </p>
+                        <p className="info-text">
+                            領域は用紙に対する相対位置で保存されるため、A1とA3のように用紙サイズが違っても
+                            同じ位置へ反映されます。代表ページと縦横方向が異なるページを含むファイルは処理を中止します。
+                        </p>
+                        <p className="info-text" style={{ color: '#ffcc80' }}>
+                            表示を上書きする機能です。元の文字がPDF内部の検索対象として残る場合があるため、
+                            墨消し（redaction）には使用しないでください。
+                        </p>
                     </div>
                 )}
 
