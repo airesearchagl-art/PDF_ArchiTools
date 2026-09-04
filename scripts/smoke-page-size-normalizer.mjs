@@ -36,7 +36,7 @@ const expectedSheet = (key, orientation) => {
 };
 
 // Regenerate the fixtures when they are absent, so the whole gate is one command.
-if (!fs.existsSync(path.join(ROOT, 'test-fixtures', 'size-cropbox-annot.pdf'))) {
+if (!fs.existsSync(path.join(ROOT, 'test-fixtures', 'size-annot-hidden.pdf'))) {
     execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'make-size-fixtures.mjs')], { stdio: 'inherit' });
 }
 
@@ -336,6 +336,36 @@ try {
     const accepted = await page.evaluate(() => window.__sizeSmoke.errorProbe('size-cropbox-hidden.pdf', 'A1'));
     check('RF2: the same sheet without that annotation is still accepted', accepted.threw === false,
         JSON.stringify(accepted));
+
+    // ---- RF4: only Hidden counts as safely invisible ------------------------
+    console.log('\n=== RF4: annotation /F flags ===');
+    const FLAG = { Hidden: 2, Print: 4, NoView: 32, ToggleNoView: 256 };
+    for (const [fixture, flags, label, mustRefuse] of [
+        ['size-cropbox-annot.pdf', FLAG.Print, 'Print', true],
+        ['size-annot-noview-print.pdf', FLAG.NoView | FLAG.Print, 'NoView|Print', true],
+        ['size-annot-noview-toggle.pdf', FLAG.NoView | FLAG.ToggleNoView, 'NoView|ToggleNoView', true],
+        ['size-annot-hidden.pdf', FLAG.Hidden, 'Hidden', false],
+    ]) {
+        const probe = await page.evaluate((n, t) => window.__sizeSmoke.annotFlagProbe(n, t), fixture, 'A1');
+        const outside = probe.before[1];
+        console.log(`  ${label.padEnd(20)} /F=${outside?.f}  ${probe.error ? `refused(${probe.error.code})` : 'accepted'}`);
+        check(`${label}: the fixture really carries /F = ${flags}`, outside?.f === flags,
+            `got ${outside?.f}`);
+        if (mustRefuse) {
+            check(`${label}: annotation outside the CropBox is refused`,
+                probe.error !== null && probe.error.code === 'annotation-outside-crop',
+                JSON.stringify(probe.error));
+            check(`${label}: nothing is produced when refused`, probe.after === null);
+        } else {
+            check(`${label}: safely invisible everywhere, so it is accepted`, probe.error === null,
+                JSON.stringify(probe.error));
+            check(`${label}: the annotation is kept, still Hidden, and moved with the content`,
+                probe.after !== null && probe.after.length === probe.before.length
+                && probe.after[1].f === FLAG.Hidden
+                && probe.after[1].rect[0] !== probe.before[1].rect[0],
+                `before ${JSON.stringify(probe.before[1])} after ${JSON.stringify(probe.after?.[1])}`);
+        }
+    }
 
     // ---- RF3: every /Rotate quadrant ---------------------------------------
     console.log('\n=== RF3: rotation quadrants ===');

@@ -12,7 +12,7 @@
 
 <script type="module">
 import * as pdfjsLib from 'pdfjs-dist';
-import { PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber } from 'pdf-lib';
 import { normalizePageSize, detectPaperSize, PAPER_SIZES_PT } from '/src/utils/page-size-normalizer.ts';
 import { classifyDocument } from '/src/utils/pdf-textifier/classify.ts';
 
@@ -294,6 +294,48 @@ window.__sizeSmoke = {
             mediaBox: media, cropBox: crop, asIsInk, asIsText, widenedText,
             widenedLeftDark: leftDark, widenedRightDark: rightDark,
         };
+    },
+
+    /**
+     * Read the annotation /F flags straight out of the file, before and after.
+     *
+     * Without this a fail-closed check could pass for the wrong reason: the
+     * point is that an annotation carrying NoView, not Hidden, is the one being
+     * refused, so the flags actually written have to be shown.
+     */
+    async annotFlagProbe(name, target) {
+        const input = await fetchFixture(name);
+        const readFlags = async (bytes) => {
+            const lib = await PDFDocument.load(bytes);
+            const annots = lib.getPages()[0].node.Annots();
+            const out = [];
+            if (!annots) return out;
+            for (let i = 0; i < annots.size(); i++) {
+                const a = annots.lookup(i);
+                if (!(a instanceof PDFDict)) continue;
+                const f = a.lookup(PDFName.of('F'));
+                const rect = a.lookup(PDFName.of('Rect'));
+                const nums = [];
+                if (rect instanceof PDFArray) {
+                    for (let j = 0; j < rect.size(); j++) {
+                        const n = rect.lookup(j);
+                        nums.push(n instanceof PDFNumber ? n.asNumber() : null);
+                    }
+                }
+                out.push({ f: f instanceof PDFNumber ? f.asNumber() : 0, rect: nums });
+            }
+            return out;
+        };
+        const before = await readFlags(new Uint8Array(input.slice(0)));
+        let after = null;
+        let error = null;
+        try {
+            const result = await normalizePageSize(input.slice(0), { target });
+            after = await readFlags(result.data.slice());
+        } catch (e) {
+            error = { code: e?.code ?? null, message: String(e?.message ?? e) };
+        }
+        return { before, after, error };
     },
 
     /** Fail-closed check: the call must reject rather than expose anything. */

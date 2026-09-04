@@ -35,7 +35,8 @@
  * A clipping path does not affect annotations. An annotation that would move
  * from hidden to visible cannot be preserved without changing the document, so
  * such an input is refused with a user-visible error rather than silently
- * exposing it.
+ * exposing it. Only the Hidden flag exempts an annotation from that check;
+ * NoView is a screen-only flag and is checked like any other annotation.
  *
  * The clip governs what is *drawn*. Glyphs that the old CropBox excluded stay
  * in the content stream, so any part of them that now falls inside the sheet
@@ -178,8 +179,18 @@ export interface Box {
 /** Annotation entries holding x/y pairs that must move with the content. */
 const ANNOT_POINT_KEYS = ['Rect', 'QuadPoints', 'Vertices', 'L', 'CL'] as const;
 
-/** /F bits that already make an annotation invisible: Hidden (2), NoView (32). */
-const INVISIBLE_ANNOT_FLAGS = 2 | 32;
+/**
+ * /F bit 2, Hidden: the only flag that makes an annotation invisible everywhere.
+ *
+ * NoView (bit 6) deliberately does NOT qualify. It hides the annotation on
+ * screen only: a NoView annotation carrying Print still comes out of the
+ * printer, and ToggleNoView (bit 9) can bring it back on screen as well. Since
+ * this tool exists to prepare sheets for printing, treating NoView as "can
+ * never be seen" would let such an annotation slip from outside the old CropBox
+ * into the new one unnoticed, so it goes through the exposure check like any
+ * other annotation.
+ */
+const HIDDEN_ANNOT_FLAG = 2;
 
 /**
  * Classify a visible page size against the A series. Compares the short and the
@@ -299,7 +310,7 @@ function assertNoAnnotationExposure(
     for (const annot of annotDicts(page)) {
         const flags = annot.lookup(PDFName.of('F'));
         const f = flags instanceof PDFNumber ? flags.asNumber() : 0;
-        if ((f & INVISIBLE_ANNOT_FLAGS) !== 0) continue;
+        if ((f & HIDDEN_ANNOT_FLAG) !== 0) continue;
 
         const rect = annotRect(annot);
         if (!rect) continue;

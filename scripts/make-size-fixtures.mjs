@@ -20,6 +20,9 @@
  *   size-mediabox-mismatch  MediaBox > CropBox, CropBox == exact A1 (page-box only)
  *   size-cropbox-hidden.pdf MediaBox > CropBox with marks outside it (hidden content)
  *   size-cropbox-annot.pdf  same, plus an annotation outside CropBox (must be refused)
+ *   size-annot-noview-print.pdf   outside annotation, /F = NoView|Print  (must be refused)
+ *   size-annot-noview-toggle.pdf  outside annotation, /F = NoView|ToggleNoView (refused)
+ *   size-annot-hidden.pdf         outside annotation, /F = Hidden        (safely skipped)
  *
  * Every drawing sheet carries four filled corner markers whose outer edges sit
  * exactly INSET_PT from the sheet edge, so the ink bounding box of a rendered
@@ -347,7 +350,14 @@ for (const [name, size, label, rotation] of [
 // exactly where those marks would surface without a clip.
 const HIDDEN_MEDIA = [1300, 900];
 const HIDDEN_CROP = { x: 200, y: 100, width: 900, height: 700 };
-const buildHiddenSheet = async (withOutsideAnnot) => {
+/**
+ * PDF 32000-1 table 165. Only Hidden makes an annotation invisible everywhere;
+ * NoView hides it on screen but still prints when Print is set, and
+ * ToggleNoView can bring it back on screen.
+ */
+const ANNOT_FLAG = { Hidden: 2, Print: 4, NoView: 32, ToggleNoView: 256 };
+
+const buildHiddenSheet = async (outsideAnnotFlags) => {
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const page = pdfDoc.addPage(HIDDEN_MEDIA);
@@ -381,17 +391,21 @@ const buildHiddenSheet = async (withOutsideAnnot) => {
         Type: 'Annot', Subtype: 'Square', F: 4, C: [0, 0, 1],
         Rect: [cx + 300, cy + 250, cx + 500, cy + 400],
     }))];
-    if (withOutsideAnnot) {
+    if (outsideAnnotFlags !== null) {
+        // Sits just outside the CropBox, i.e. inside the padding after the fit.
         annots.push(pdfDoc.context.register(pdfDoc.context.obj({
-            Type: 'Annot', Subtype: 'Square', F: 4, C: [1, 0, 0],
+            Type: 'Annot', Subtype: 'Square', F: outsideAnnotFlags, C: [1, 0, 0],
             Rect: [cx + cw + 5, cy + 250, cx + cw + 50, cy + 450],
         })));
     }
     page.node.set(PDFName.of('Annots'), pdfDoc.context.obj(annots));
     return pdfDoc;
 };
-await write('size-cropbox-hidden.pdf', await buildHiddenSheet(false));
-await write('size-cropbox-annot.pdf', await buildHiddenSheet(true));
+await write('size-cropbox-hidden.pdf', await buildHiddenSheet(null));
+await write('size-cropbox-annot.pdf', await buildHiddenSheet(ANNOT_FLAG.Print));
+await write('size-annot-noview-print.pdf', await buildHiddenSheet(ANNOT_FLAG.NoView | ANNOT_FLAG.Print));
+await write('size-annot-noview-toggle.pdf', await buildHiddenSheet(ANNOT_FLAG.NoView | ANNOT_FLAG.ToggleNoView));
+await write('size-annot-hidden.pdf', await buildHiddenSheet(ANNOT_FLAG.Hidden));
 
 // 15 - an AcroForm text field, so the smoke can prove forms are not dropped.
 {
