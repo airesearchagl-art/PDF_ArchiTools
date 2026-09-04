@@ -5,6 +5,10 @@
  * - PATCH (末尾): 小さな変更・バグ修正 (確認不要)
  * - MINOR (中間): 大きな機能追加・変更 (確認必要)
  * - MAJOR (先頭): 抜本的な見直し・破壊的変更 (確認必要)
+ *
+ * ユーザー向け機能をProductionへ出すPRでは、ここのバージョン/更新日に加えて
+ * src/components/HowToUse.tsx の使い方ガイドと更新履歴 (releaseHistory) の更新も
+ * Definition of Done に含める。実装だけ進んで説明が古いままにならないようにするため。
  */
 
 export interface ToolVersion {
@@ -30,9 +34,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '図面サイズ統一機能を追加'
     },
     textifier: {
-        version: '1.1.1',
-        lastUpdate: '2026/01/29',
-        changelog: '初期リリース'
+        version: '1.2.0',
+        lastUpdate: '2026/09/03',
+        changelog: '日本語・英語OCRによる検索可能PDF生成を追加'
     },
     splitMerge: {
         version: '1.1.1',
