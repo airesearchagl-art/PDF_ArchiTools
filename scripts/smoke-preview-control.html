@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preview control harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Preview control harness</h1>
+<p>Driven by <code>scripts/smoke-textifier-preview.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Same-origin worker, same as the app.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+/**
+ * What is actually on a canvas, in a form two independently rendered canvases
+ * can be compared by.
+ *
+ * A 16x16 occupancy grid rather than a pixel diff: the control and the app draw
+ * the same page through the same renderer but not necessarily at the same
+ * sub-pixel offset, and the question being asked is "is this the same page",
+ * not "are these byte-identical".
+ */
+export function inkStats(ctx, w, h) {
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const grid = new Array(256).fill(false);
+  let ink = 0;
+  let nonWhite = 0;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (d[i + 3] === 0) continue;
+      if (d[i] !== 255 || d[i + 1] !== 255 || d[i + 2] !== 255) nonWhite++;
+      if ((d[i] + d[i + 1] + d[i + 2]) / 3 >= 200) continue;
+      ink++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+      grid[Math.min(15, Math.floor(16 * y / h)) * 16 + Math.min(15, Math.floor(16 * x / w))] = true;
+    }
+  }
+  const total = w * h;
+  return {
+    width: w, height: h, total, ink, nonWhite,
+    inkRatio: +(ink / total).toFixed(5),
+    bbox: x1 < 0 ? null : {
+      x0: +(x0 / w).toFixed(3), y0: +(y0 / h).toFixed(3),
+      x1: +(x1 / w).toFixed(3), y1: +(y1 / h).toFixed(3),
+    },
+    grid,
+  };
+}
+window.__inkStats = inkStats;
+
+window.__control = {
+  /**
+   * Render page 1 the way the Textifier preview means to: fit the page to
+   * `cssWidth` and draw it. Uses the current PDF.js render API directly, so it
+   * is a statement about the document rather than about the app.
+   */
+  async render(name, cssWidth = 300) {
+    log(`rendering ${name}`);
+    const bytes = await fetch(`/test-fixtures/${name}`).then((r) => {
+      if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+      return r.arrayBuffer();
+    });
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+    const page = await doc.getPage(1);
+    const base = page.getViewport({ scale: 1.0 });
+    const viewport = page.getViewport({ scale: cssWidth / base.width });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    // The fixtures draw on a transparent background where they draw nothing, so
+    // paint the sheet first -- otherwise "not white" would count empty paper.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, viewport }).promise;
+
+    log(`done ${name}`);
+    return inkStats(ctx, canvas.width, canvas.height);
+  },
+
+  ready: true,
+};
+log('ready');
+</script>
+</body>
+</html>
