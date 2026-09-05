@@ -4,9 +4,11 @@ import fontkit from '@pdf-lib/fontkit';
 import { classifyDocument } from './classify';
 import { OcrEngine } from './ocr';
 import { configurePdfWorker, loadWithPdfJs, releaseCanvas, renderPageForOcr } from './pdf-source';
+import { preprocessForOcr } from './preprocess';
 import { drawInvisibleWords } from './searchable-pdf';
 import { TextifyError } from './types';
-import type { PageResult, TextifyOptions, TextifyResult } from './types';
+import type { PageResult, PagePreprocessInfo, TextifyOptions, TextifyResult } from './types';
+import type { OcrPreprocessResult } from './preprocess';
 
 const FONT_URL = '/ocr/fonts/MPLUS1p-Regular.ttf';
 const DEFAULT_DPI = 150;
@@ -15,6 +17,20 @@ export * from './types';
 export { classifyPage, classifyDocument } from './classify';
 export { configurePdfWorker } from './pdf-source';
 export { extractTextPdf, PAGE_HEADER_PREFIX, pageHeader } from './extract';
+export { preprocessForOcr } from './preprocess';
+export type { OcrPreprocessOptions, OcrPreprocessResult } from './preprocess';
+
+/** Report only what preprocessing actually did, not the internals of how. */
+export function summarise(prep: OcrPreprocessResult): PagePreprocessInfo {
+    return {
+        deskewApplied: prep.deskewApplied,
+        detectedAngle: prep.detectedAngle,
+        deskewConfidence: prep.deskewConfidence,
+        noiseReductionApplied: prep.noiseReductionApplied,
+        removedSpecks: prep.removedSpecks,
+        processingMs: prep.processingMs,
+    };
+}
 
 /**
  * Turn a PDF into a searchable PDF, entirely in the browser.
@@ -31,9 +47,18 @@ export async function textifyPdf(
     const {
         langs = 'jpn+eng',
         dpi = DEFAULT_DPI,
+        preprocess,
         onProgress = () => { },
         shouldCancel = () => false,
     } = options;
+
+    // Off unless asked for: M1 behaved a certain way before this existed and a
+    // run that was not asked to clean anything must still behave that way.
+    const preprocessOptions = {
+        deskew: preprocess?.deskew === true,
+        noiseReduction: preprocess?.noiseReduction === true,
+    };
+    const preprocessRequested = preprocessOptions.deskew || preprocessOptions.noiseReduction;
 
     configurePdfWorker();
 
@@ -134,14 +159,27 @@ export async function textifyPdf(
 
             const page = await doc.getPage(pageNumber);
             let canvas: HTMLCanvasElement | null = null;
+            let processed: HTMLCanvasElement | null = null;
             try {
                 const rendered = await renderPageForOcr(page, scale);
                 canvas = rendered.canvas;
 
-                const ocr = await engine.recognisePage(canvas);
+                // Cleaned for recognition only. `rendered.canvas` is what the
+                // page actually looks like and stays the reference for placing
+                // the text layer; nothing produced here reaches the document.
+                const prep = preprocessForOcr(canvas, preprocessOptions);
+                if (prep.ownsCanvas) processed = prep.canvas;
+
+                // A boundary of its own. Preprocessing can take a moment on a
+                // large sheet, and recognition cannot be interrupted once it
+                // starts, so this is the last chance to stop cheaply.
+                if (shouldCancel()) { cancelled = true; break; }
+
+                const ocr = await engine.recognisePage(prep.canvas);
                 const fontName = outPages[pageNumber - 1].node.newFontDictionary('OcrFont', font.ref);
                 const placed = drawInvisibleWords(
                     outPages[pageNumber - 1], fontName, font, ocr.words, rendered.viewport,
+                    prep.mapToRenderSpace,
                 );
 
                 pages.push({
@@ -151,6 +189,7 @@ export async function textifyPdf(
                     meanConfidence: ocr.meanConfidence,
                     textSample: ocr.text.replace(/\s+/g, ' ').trim().slice(0, 200),
                     ms: Math.round(performance.now() - pageStart),
+                    ...(preprocessRequested ? { preprocess: summarise(prep) } : {}),
                 });
 
                 onProgress({
@@ -173,6 +212,11 @@ export async function textifyPdf(
                     error: error instanceof Error ? error.message : String(error),
                 });
             } finally {
+                // Both images go at the end of the page. `processed` is set
+                // only when preprocessing made a second canvas; when it did
+                // not, the OCR image is `canvas` itself and there is nothing
+                // extra to free. One page at a time is the whole point.
+                releaseCanvas(processed);
                 releaseCanvas(canvas);
                 page.cleanup();
             }

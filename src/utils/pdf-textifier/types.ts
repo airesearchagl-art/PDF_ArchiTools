@@ -37,6 +37,8 @@ export interface PageResult {
     /** Recognised text, kept short for display. */
     textSample: string;
     ms: number;
+    /** Present only when preprocessing ran for this page. */
+    preprocess?: PagePreprocessInfo;
     /** Set when this page failed but the document as a whole continued. */
     error?: string;
 }
@@ -109,9 +111,25 @@ export interface TextifyOptions {
     langs?: string;
     /** DPI used to rasterise a scanned page for OCR. Defaults to 150. */
     dpi?: number;
+    /**
+     * Clean-up applied to the OCR image only, never to the document produced.
+     * Both flags default to false, so a run says exactly what it did.
+     */
+    preprocess?: { deskew?: boolean; noiseReduction?: boolean };
     onProgress?: (event: ProgressEvent) => void;
     /** Polled at every page boundary. Returning true stops the run. */
     shouldCancel?: () => boolean;
+}
+
+/** What preprocessing did to one page, for the caller to report or assert on. */
+export interface PagePreprocessInfo {
+    deskewApplied: boolean;
+    /** Degrees of skew found. 0 when nothing was applied. */
+    detectedAngle: number;
+    deskewConfidence: number;
+    noiseReductionApplied: boolean;
+    removedSpecks: number;
+    processingMs: number;
 }
 
 /** One page of a Text Extraction run, in the order the PDF has it. */
@@ -126,6 +144,8 @@ export interface ExtractedPage {
     /** Mean OCR confidence, or null when the page was not OCR'd. */
     meanConfidence: number | null;
     ms: number;
+    /** Present only when preprocessing ran for this page. */
+    preprocess?: PagePreprocessInfo;
 }
 
 export interface TextExtractionResult {

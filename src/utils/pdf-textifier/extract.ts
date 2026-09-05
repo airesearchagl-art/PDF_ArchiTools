@@ -3,8 +3,10 @@ import type { PDFPageProxy } from 'pdfjs-dist';
 import { classifyDocument } from './classify';
 import { OcrEngine } from './ocr';
 import { configurePdfWorker, loadWithPdfJs, releaseCanvas, renderPageForOcr } from './pdf-source';
+import { preprocessForOcr } from './preprocess';
 import { TextifyError } from './types';
-import type { ExtractedPage, TextExtractionResult, TextifyOptions } from './types';
+import type { ExtractedPage, PagePreprocessInfo, TextExtractionResult, TextifyOptions } from './types';
+import type { OcrPreprocessResult } from './preprocess';
 
 const DEFAULT_DPI = 150;
 
@@ -90,9 +92,17 @@ export async function extractTextPdf(
     const {
         langs = 'jpn+eng',
         dpi = DEFAULT_DPI,
+        preprocess,
         onProgress = () => { },
         shouldCancel = () => false,
     } = options;
+
+    // Off unless asked for, exactly as in the OCR pipeline.
+    const preprocessOptions = {
+        deskew: preprocess?.deskew === true,
+        noiseReduction: preprocess?.noiseReduction === true,
+    };
+    const preprocessRequested = preprocessOptions.deskew || preprocessOptions.noiseReduction;
 
     configurePdfWorker();
 
@@ -177,13 +187,24 @@ export async function extractTextPdf(
 
             const page = await doc.getPage(pageNumber);
             let canvas: HTMLCanvasElement | null = null;
+            let processed: HTMLCanvasElement | null = null;
             try {
                 const rendered = await renderPageForOcr(page, scale);
                 canvas = rendered.canvas;
 
+                // Text extraction needs no coordinates, so the cleaned image is
+                // simply what gets recognised. Nothing is written back anywhere.
+                const prep = preprocessForOcr(canvas, preprocessOptions);
+                if (prep.ownsCanvas) processed = prep.canvas;
+
+                // A boundary of its own. Preprocessing can take a moment on a
+                // large sheet, and recognition cannot be interrupted once it
+                // starts, so this is the last chance to stop cheaply.
+                if (shouldCancel()) { cancelled = true; break; }
+
                 // Non-null: `engine` is created whenever any page is scanned,
                 // and this branch only runs for a scanned page.
-                const ocr = await engine!.recognisePage(canvas);
+                const ocr = await engine!.recognisePage(prep.canvas);
                 const text = normaliseText(ocr.text ?? '');
                 pages.push({
                     pageNumber, kind, text,
@@ -191,6 +212,7 @@ export async function extractTextPdf(
                     ocrWords: ocr.words.length,
                     meanConfidence: ocr.meanConfidence,
                     ms: Math.round(performance.now() - pageStart),
+                    ...(preprocessRequested ? { preprocess: summarisePreprocess(prep) } : {}),
                 });
 
                 onProgress({
@@ -201,7 +223,8 @@ export async function extractTextPdf(
                     message: `文字認識中... ${pageNumber} / ${totalPages}`,
                 });
             } finally {
-                // One page at a time: the raster goes as soon as it is read.
+                // One page at a time: both rasters go as soon as they are read.
+                releaseCanvas(processed);
                 releaseCanvas(canvas);
                 page.cleanup();
             }
@@ -246,6 +269,17 @@ export async function extractTextPdf(
  * A page that yielded nothing still gets its header: dropping it would silently
  * renumber everything after it, and the reader would have no way to tell.
  */
+function summarisePreprocess(prep: OcrPreprocessResult): PagePreprocessInfo {
+    return {
+        deskewApplied: prep.deskewApplied,
+        detectedAngle: prep.detectedAngle,
+        deskewConfidence: prep.deskewConfidence,
+        noiseReductionApplied: prep.noiseReductionApplied,
+        removedSpecks: prep.removedSpecks,
+        processingMs: prep.processingMs,
+    };
+}
+
 function buildDocumentText(pages: ExtractedPage[]): string {
     return pages
         .map((p) => `${pageHeader(p.pageNumber)}\n${p.text ? `\n${p.text}\n` : '\n'}`)

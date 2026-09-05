@@ -27,6 +27,17 @@ export function drawInvisibleWords(
     font: PDFFont,
     words: OcrWord[],
     viewport: PageViewport,
+    /**
+     * Where a point on the recognised image sits on the page that was rendered.
+     *
+     * Only supplied when the OCR image is not the rendered page itself -- that
+     * is, when preprocessing straightened it first. The words then come back in
+     * the coordinates of a straightened image, and putting them on the page
+     * unchanged would lay the text layer at the wrong angle, beside the glyphs
+     * rather than on them. Absent by default, so the untouched path is exactly
+     * what it was.
+     */
+    mapToRenderSpace?: (x: number, y: number) => { x: number; y: number },
 ): number {
     const operators = [
         pushGraphicsState(),
@@ -40,9 +51,13 @@ export function drawInvisibleWords(
         // of the render transform, so it stays correct when the page carries a
         // /Rotate entry or a MediaBox that does not start at the origin -- both
         // cases where `pageHeight - y` silently misplaces the text.
-        const start = toPoint(viewport, bbox.x0, bbox.y1);
-        const end = toPoint(viewport, bbox.x1, bbox.y1);
-        const up = toPoint(viewport, bbox.x0, bbox.y0);
+        // The three points are carried through the same mapping, so a run keeps
+        // its direction: the text matrix below reads the angle back out of them,
+        // and a straightened page's words therefore land along the skew of the
+        // glyphs they belong to.
+        const start = toPoint(viewport, bbox.x0, bbox.y1, mapToRenderSpace);
+        const end = toPoint(viewport, bbox.x1, bbox.y1, mapToRenderSpace);
+        const up = toPoint(viewport, bbox.x0, bbox.y0, mapToRenderSpace);
 
         const advanceX = end.x - start.x;
         const advanceY = end.y - start.y;
@@ -86,7 +101,13 @@ export function drawInvisibleWords(
     return placed;
 }
 
-function toPoint(viewport: PageViewport, x: number, y: number): { x: number; y: number } {
-    const [px, py] = viewport.convertToPdfPoint(x, y) as [number, number];
+function toPoint(
+    viewport: PageViewport,
+    x: number,
+    y: number,
+    mapToRenderSpace?: (x: number, y: number) => { x: number; y: number },
+): { x: number; y: number } {
+    const p = mapToRenderSpace ? mapToRenderSpace(x, y) : { x, y };
+    const [px, py] = viewport.convertToPdfPoint(p.x, p.y) as [number, number];
     return { x: px, y: py };
 }
