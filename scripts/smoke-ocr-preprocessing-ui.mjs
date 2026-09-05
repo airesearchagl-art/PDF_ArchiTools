@@ -208,6 +208,11 @@ try {
     check('a searchable PDF is offered', done.downloadName === 'scanned-skew-plus-3_searchable.pdf',
         String(done.downloadName));
 
+    // The size notice belongs to pages that were declined. A page that was
+    // actually preprocessed must not be told it was skipped.
+    const noNotice = await page.evaluate(() => document.body.innerText.includes('ページサイズが大きいため'));
+    check('a normally preprocessed page shows no size notice', noNotice === false);
+
     const file = await download(downloads, 'scanned-skew-plus-3_searchable.pdf');
     check('the searchable PDF downloads', file === 'scanned-skew-plus-3_searchable.pdf', String(file));
 

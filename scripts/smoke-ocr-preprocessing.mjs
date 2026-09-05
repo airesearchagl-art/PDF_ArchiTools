@@ -251,8 +251,12 @@ try {
     console.log(`  off tokens ${rotOff.tokenHits}/${rotOff.tokenTotal} contained ${rotOff.placement.containedInInk}` +
         `   on tokens ${rotOn.tokenHits}/${rotOn.tokenTotal} contained ${rotOn.placement.containedInInk}` +
         `   angle ${rotOn.preprocess?.detectedAngle}`);
+    // Stated the way the name reads: a quarter-turn page is not a tilted one,
+    // so the detector should find nothing to correct rather than merely find
+    // something small.
     check('rotated page: /Rotate is not mistaken for skew',
-        Math.abs(rotOn.preprocess?.detectedAngle ?? 0) <= 5, String(rotOn.preprocess?.detectedAngle));
+        rotOn.preprocess?.deskewApplied === false && rotOn.preprocess?.detectedAngle === 0,
+        `applied=${rotOn.preprocess?.deskewApplied} angle=${rotOn.preprocess?.detectedAngle}`);
     check('rotated page: recognition does not regress',
         rotOn.tokenHits >= rotOff.tokenHits, `${rotOff.tokenHits} -> ${rotOn.tokenHits}`);
     check('rotated page: the text layer still lands on the ink',
@@ -356,6 +360,40 @@ try {
         // a different route: nothing was attempted and nothing crashed.
         check('an oversize page cannot be allocated, and nothing crashed', true,
             'canvas allocation refused by the browser');
+    }
+
+    // ---- a skipped page has to reach the screen ----------------------------------
+    //
+    // Declining to preprocess is only safe if the user is told. Otherwise two
+    // ticked boxes and a "Processing Complete" say the page was cleaned when it
+    // was not. A sheet past the budget cannot be built as a fixture, so the
+    // journey is checked where it can be: the summary keeps the reason, and the
+    // panel's notice is derived from it.
+    console.log('\n=== page-too-large reaches the user ===');
+    const notices = await page.evaluate(() => window.__prep.noticeProbe());
+    console.log(`  ${JSON.stringify(notices, null, 0)}`);
+    check('the per-page summary keeps the skip reason',
+        notices.summaryKeepsReason === true && notices.normalSummaryHasNoReason === true,
+        JSON.stringify(notices));
+    check('a run with nothing skipped says nothing',
+        notices.noneSkipped === null && notices.noPreprocessAtAll === null && notices.empty === null,
+        JSON.stringify([notices.noneSkipped, notices.noPreprocessAtAll, notices.empty]));
+    check('one skipped page is reported, with the count and the reassurance',
+        typeof notices.oneSkipped === 'string'
+        && notices.oneSkipped.includes('1 ページ')
+        && notices.oneSkipped.includes('ページサイズが大きいため')
+        && notices.oneSkipped.includes('元PDFは変更されていません'),
+        String(notices.oneSkipped));
+    check('the notice counts the pages it is talking about',
+        typeof notices.threeSkipped === 'string' && notices.threeSkipped.includes('3 ページ'),
+        String(notices.threeSkipped));
+
+    // The pages people actually have must not trip the budget.
+    for (const fixture of ['scanned-a0-clean.pdf', 'scanned-a0-skew-noisy.pdf', 'scanned-a1-clean.pdf']) {
+        const d = await detect(fixture, ON);
+        check(`${fixture}: a real large sheet is preprocessed, not declined`,
+            d.skipped === null && (d.deskewApplied || d.noiseReductionApplied),
+            `skipped=${d.skipped} deskew=${d.deskewApplied} noise=${d.noiseReductionApplied}`);
     }
 
     // ---- the cancel boundary has to be reachable ---------------------------------

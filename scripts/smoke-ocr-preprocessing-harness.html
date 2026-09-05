@@ -22,6 +22,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { TextLayer } from 'pdfjs-dist';
 import {
   textifyPdf, extractTextPdf, preprocessForOcr, TextifyError,
+  summarise, preprocessSkipNotice,
 } from '/src/utils/pdf-textifier/index.ts';
 
 const log = (m) => { document.getElementById('log').textContent = m; };
@@ -346,6 +347,38 @@ window.__prep = {
       canvas.width = 0;
       canvas.height = 0;
     }
+  },
+
+  /**
+   * The path a skipped page takes from the algorithm to the screen.
+   *
+   * A sheet past the size budget cannot be built as a fixture -- it would be a
+   * canvas no browser should be asked to hold -- so the journey is checked in
+   * the two places it can be: that the summary keeps the reason, and that the
+   * notice the panel shows is derived from it correctly.
+   */
+  noticeProbe() {
+    const base = {
+      canvas: null, ownsCanvas: false, modifiedSourceCanvas: false,
+      peakWorkingBytes: 0, bandRows: 0,
+      deskewApplied: false, detectedAngle: 0, deskewConfidence: 0,
+      noiseReductionApplied: false, removedSpecks: 0,
+      analysisWidth: 0, analysisHeight: 0,
+      detectMs: 0, applyMs: 0, noiseMs: 0, processingMs: 0,
+    };
+    const skippedSummary = summarise({ ...base, skipped: 'page-too-large' });
+    const normalSummary = summarise({ ...base, deskewApplied: true, detectedAngle: 3 });
+
+    const page = (skipped) => ({ preprocess: skipped ? { ...skippedSummary } : { ...normalSummary } });
+    return {
+      summaryKeepsReason: skippedSummary.skipped === 'page-too-large',
+      normalSummaryHasNoReason: normalSummary.skipped === undefined,
+      noneSkipped: preprocessSkipNotice([page(false), page(false)]),
+      oneSkipped: preprocessSkipNotice([page(true), page(false)]),
+      threeSkipped: preprocessSkipNotice([page(true), page(true), page(true)]),
+      noPreprocessAtAll: preprocessSkipNotice([{ pageNumber: 1 }, { pageNumber: 2 }]),
+      empty: preprocessSkipNotice([]),
+    };
   },
 
   async cancelProbe(name, options) {
