@@ -18,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { preview } from 'vite';
 import puppeteer from 'puppeteer';
+import { readUsageScreenshotConfig, screenTargets, readPng } from './usage-screenshot-config.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5200;
@@ -37,6 +38,8 @@ if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
 if (!fs.existsSync(path.join(FIXTURES, 'mixed-multipage.pdf'))) {
     execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'make-test-fixtures.mjs')], { stdio: 'inherit' });
 }
+
+const CONFIG = readUsageScreenshotConfig();
 
 const server = await preview({ root: ROOT, preview: { port: PORT, strictPort: true }, logLevel: 'warn' });
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
@@ -87,14 +90,18 @@ const measure = (page, targets) => page.evaluate((names) => {
     return out;
 }, targets);
 
-/** Targets each screen must expose, mirroring usageScreenshotBadges.ts. */
+/**
+ * How to reach each screen, and nothing else.
+ *
+ * The targets a screen has to expose are not written here: they come from the
+ * badge definitions, so there is no second inventory to fall out of step with
+ * the first.
+ */
 const SCREENS = [
     {
         key: 'annotator',
         file: 'annotator.png',
         frame: FRAME,
-        targets: ['annotator-zoom', 'annotator-draw', 'annotator-measure', 'annotator-scale',
-            'annotator-select-actions', 'annotator-color', 'annotator-style', 'annotator-layers', 'annotator-save'],
         async setup(page) {
             await clickNav(page, 'PDF加筆');
             await page.waitForSelector('.upload-section input[type="file"]');
@@ -107,7 +114,6 @@ const SCREENS = [
         key: 'comparator',
         file: 'comparator.png',
         frame: TALL,
-        targets: ['comparator-files', 'comparator-match', 'comparator-report', 'comparator-view', 'comparator-export'],
         async setup(page) {
             await clickNav(page, 'PDF比較');
             await page.waitForSelector('.file-slot input[type="file"]');
@@ -128,7 +134,6 @@ const SCREENS = [
         key: 'processor',
         file: 'processor.png',
         frame: FRAME,
-        targets: ['processor-tools', 'processor-upload', 'processor-settings', 'processor-run'],
         async setup(page) {
             await clickNav(page, 'PDF加工');
             await page.waitForSelector('.tools-sidebar');
@@ -141,7 +146,6 @@ const SCREENS = [
         key: 'split_extract',
         file: 'split_extract.png',
         frame: FRAME,
-        targets: ['split-tabs', 'extract-source', 'extract-pages', 'extract-export'],
         async setup(page) {
             await clickNav(page, 'PDF抽出・統合');
             await page.waitForSelector('[data-usage-target="split-tabs"]');
@@ -159,7 +163,6 @@ const SCREENS = [
         key: 'split_merge',
         file: 'split_merge.png',
         frame: FRAME,
-        targets: ['split-tabs', 'merge-source', 'merge-list', 'merge-export'],
         async setup(page) {
             await clickNav(page, 'PDF抽出・統合');
             await page.waitForSelector('[data-usage-target="split-tabs"]');
@@ -181,7 +184,6 @@ const SCREENS = [
         key: 'textifier',
         file: 'textifier.png',
         frame: TALL,
-        targets: ['textifier-upload', 'textifier-settings', 'textifier-run'],
         async setup(page) {
             await clickNav(page, 'PDFテキスト化');
             await page.waitForFunction(() => document.body.innerText.includes('PDF Textification'));
@@ -237,16 +239,31 @@ try {
             // Let any last transition settle before the shutter.
             await new Promise((r) => setTimeout(r, 500));
 
-            const rects = await measure(page, screen.targets);
-            const missing = screen.targets.filter((t) => !rects[t]);
-            await page.screenshot({ path: path.join(SHOTS, screen.file) });
+            const targets = screenTargets(CONFIG, screen.key);
+            const rects = await measure(page, targets);
+            const missing = targets.filter((t) => !rects[t]);
+
+            const file = path.join(SHOTS, screen.file);
+            await page.screenshot({ path: file });
+            // The digest binds this geometry to this picture. Recapturing one
+            // without the other is then a failure rather than a silence.
+            const png = readPng(file);
 
             geometry[screen.key] = {
                 frame: screen.frame,
+                screenshot: {
+                    file: screen.file,
+                    width: png?.width ?? 0,
+                    height: png?.height ?? 0,
+                    sha256: png?.sha256 ?? '',
+                },
                 targets: rects,
-                capturedAt: null,
             };
-            console.log(`${screen.key.padEnd(16)} ${`${screen.frame.width}x${screen.frame.height}`.padEnd(11)} ${String(screen.targets.length).padStart(7)}  ${missing.length ? missing.join(', ') : '-'}`);
+            console.log(`${screen.key.padEnd(16)} ${`${screen.frame.width}x${screen.frame.height}`.padEnd(11)} ${String(targets.length).padStart(7)}  ${missing.length ? missing.join(', ') : '-'}`);
+            if (png && (png.width !== screen.frame.width || png.height !== screen.frame.height)) {
+                console.log(`  image is ${png.width}x${png.height}, frame is ${screen.frame.width}x${screen.frame.height}`);
+                exitCode = 1;
+            }
             if (missing.length) exitCode = 1;
             if (errors.length) {
                 console.log(`  page errors: ${errors.slice(0, 2).join(' | ')}`);
@@ -261,7 +278,8 @@ try {
     }
 
     // No capture timestamp is stored: it would make the file change on every
-    // run and say nothing about whether the numbers are still right.
+    // run and say nothing about whether the numbers are still right. The digest
+    // above is the identity that matters.
     fs.writeFileSync(GEOMETRY, `${JSON.stringify(geometry, null, 4)}\n`, 'utf8');
     console.log(`\nWrote ${path.relative(ROOT, GEOMETRY)}`);
 } finally {

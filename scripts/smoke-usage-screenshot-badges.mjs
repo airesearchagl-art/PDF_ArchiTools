@@ -16,6 +16,10 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { preview } from 'vite';
 import puppeteer from 'puppeteer';
+import {
+    readUsageScreenshotConfig, screenTargets, readPng,
+    validateArtifacts, compareLiveGeometry, worstDrift,
+} from './usage-screenshot-config.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5202;
@@ -48,43 +52,8 @@ const check = (name, ok, detail = '') => {
     console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  ${detail}` : ''}`);
 };
 
-/** PNG dimensions, straight from the header. No decoder needed. */
-function pngSize(file) {
-    const b = fs.readFileSync(file);
-    if (b.length < 24 || b.readUInt32BE(0) !== 0x89504e47) return null;
-    return { width: b.readUInt32BE(16), height: b.readUInt32BE(20), bytes: b.length };
-}
-
 const geometry = JSON.parse(fs.readFileSync(GEOMETRY, 'utf8'));
-const badgeSource = fs.readFileSync(BADGES, 'utf8');
-
-/**
- * The badge definitions, read out of the TypeScript rather than duplicated.
- *
- * A copy here would be one more thing to keep in step; the gate should fail
- * when the guide changes, not when someone forgets to update the gate.
- */
-function parseBadges() {
-    const out = {};
-    const screenRe = /(\w+):\s*\{\s*src:\s*'([^']+)',\s*state:\s*'[^']*',\s*badges:\s*\[([\s\S]*?)\n {8}\],/g;
-    let m;
-    while ((m = screenRe.exec(badgeSource)) !== null) {
-        const [, key, src, body] = m;
-        const badges = [];
-        const badgeRe = /targets:\s*\[([^\]]*)\][\s\S]*?desc:\s*'([^']*)'/g;
-        let b;
-        while ((b = badgeRe.exec(body)) !== null) {
-            badges.push({
-                targets: b[1].split(',').map((t) => t.trim().replace(/^'|'$/g, '')).filter(Boolean),
-                desc: b[2],
-            });
-        }
-        out[key] = { src, badges };
-    }
-    return out;
-}
-
-const BADGE_CONFIG = parseBadges();
+const BADGE_CONFIG = readUsageScreenshotConfig();
 
 const server = await preview({ root: ROOT, preview: { port: PORT, strictPort: true }, logLevel: 'warn' });
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
@@ -205,57 +174,71 @@ const SETUPS = {
 let exitCode = 1;
 try {
     const keys = Object.keys(BADGE_CONFIG);
-    console.log(`\n=== the six screenshots exist and are real images ===`);
+
+    // ---- the artifacts agree with each other -------------------------------
+    console.log('\n=== artifact contract ===');
     check('the badge config names six screenshots', keys.length === 6, keys.join(', '));
+
+    const problems = validateArtifacts({ config: BADGE_CONFIG, geometry, screenshotDir: SHOTS });
+    for (const p of problems) console.log(`  PROBLEM ${p.kind} ${p.screen ?? ''}: ${p.detail}`);
+    const of = (...kinds) => problems.filter((p) => kinds.includes(p.kind));
+    check('the semantic targets and the measured targets are the same set, per screen',
+        of('target-set', 'screen-set').length === 0, JSON.stringify(of('target-set', 'screen-set')));
+    check('every badge has geometry for all of its targets, not some',
+        of('partial-badge').length === 0, JSON.stringify(of('partial-badge')));
+    check('every committed image matches the digest and size that were recorded',
+        of('png-digest', 'png-record-size', 'png-frame-size', 'missing-png', 'no-screenshot-record').length === 0,
+        JSON.stringify(of('png-digest', 'png-record-size', 'png-frame-size', 'missing-png', 'no-screenshot-record')));
+    check('nothing at all is wrong with the stored artifacts', problems.length === 0,
+        `${problems.length} problems`);
+
     for (const key of keys) {
-        const file = path.join(SHOTS, path.basename(BADGE_CONFIG[key].src));
-        const size = fs.existsSync(file) ? pngSize(file) : null;
-        console.log(`  ${key.padEnd(16)} ${size ? `${size.width}x${size.height}  ${size.bytes} bytes` : 'MISSING'}`);
-        check(`${key}: the screenshot exists with real dimensions`,
-            Boolean(size) && size.width > 0 && size.height > 0, size ? `${size.width}x${size.height}` : 'missing');
+        const record = geometry[key]?.screenshot;
+        const png = record && readPng(path.join(SHOTS, record.file));
+        console.log(`  ${key.padEnd(16)} ${(record?.file ?? '?').padEnd(20)} ${png ? `${png.width}x${png.height}` : 'missing'}  sha ${(record?.sha256 ?? '?').slice(0, 12)}  ${screenTargets(BADGE_CONFIG, key).length} targets`);
     }
 
-    console.log(`\n=== badges are well formed ===`);
+    // ---- badges are well formed ---------------------------------------------
+    console.log('\n=== badges ===');
     for (const key of keys) {
         const badges = BADGE_CONFIG[key].badges;
         check(`${key}: has at least one badge`, badges.length > 0, String(badges.length));
-        check(`${key}: every badge names at least one target and a description`,
+        check(`${key}: every badge names targets and says what it means`,
             badges.every((b) => b.targets.length > 0 && b.desc.length > 0),
             JSON.stringify(badges.map((b) => b.targets.length)));
-        // Numbers are the array index, so uniqueness is really "no duplicate
-        // meanings mapped onto the same number".
         const descs = badges.map((b) => b.desc);
         check(`${key}: no two badges say the same thing`, new Set(descs).size === descs.length,
             JSON.stringify(descs));
-        const stored = geometry[key];
-        check(`${key}: measured geometry exists for it`, Boolean(stored), stored ? 'yes' : 'missing');
     }
 
-    console.log(`\n=== stored boxes stay inside the image ===`);
+    console.log('\n=== stored boxes stay inside the image ===');
     for (const key of keys) {
         const stored = geometry[key];
         if (!stored) continue;
+        // Every target, not the ones that happen to be there: a badge with a
+        // missing target has already failed above and must not be drawn here.
         const rects = BADGE_CONFIG[key].badges.map((badge) => {
-            const parts = badge.targets.map((t) => stored.targets[t]).filter(Boolean);
-            if (!parts.length) return null;
-            const left = Math.min(...parts.map((r) => r.left));
-            const top = Math.min(...parts.map((r) => r.top));
+            const parts = badge.targets.map((t) => stored.targets?.[t]);
+            if (parts.some((r) => !r)) return null;
             return {
-                left, top,
+                left: Math.min(...parts.map((r) => r.left)),
+                top: Math.min(...parts.map((r) => r.top)),
                 right: Math.max(...parts.map((r) => r.left + r.width)),
                 bottom: Math.max(...parts.map((r) => r.top + r.height)),
             };
         });
-        check(`${key}: every badge resolves to a box`, rects.every(Boolean),
+        check(`${key}: every badge resolves to a complete box`, rects.every(Boolean),
             JSON.stringify(rects.map((r) => Boolean(r))));
         check(`${key}: no box falls outside the frame`,
             rects.every((r) => r && r.left >= 0 && r.top >= 0 && r.right <= 100.5 && r.bottom <= 100.5),
             JSON.stringify(rects.map((r) => r && [r.left, r.top, +r.right.toFixed(1), +r.bottom.toFixed(1)])));
     }
 
-    console.log(`\n=== stored geometry still matches the live app ===`);
+    // ---- stored geometry still matches the live app -------------------------
+    console.log('\n=== live app ===');
     let worst = 0;
     let worstWhere = '-';
+    const liveByScreen = {};
     for (const key of keys) {
         const stored = geometry[key];
         const setup = SETUPS[key];
@@ -273,29 +256,18 @@ try {
             await setup(page);
             await new Promise((r) => setTimeout(r, 400));
 
-            const names = Object.keys(stored.targets);
-            const live = await measure(page, names);
-            const drift = [];
-            for (const name of names) {
-                const a = stored.targets[name];
-                const b = live[name];
-                if (!a) continue;
-                if (!b) { drift.push({ name, gone: true }); continue; }
-                const edges = {
-                    left: Math.abs(a.left - b.left),
-                    top: Math.abs(a.top - b.top),
-                    right: Math.abs((a.left + a.width) - (b.left + b.width)),
-                    bottom: Math.abs((a.top + a.height) - (b.top + b.height)),
-                };
-                const max = Math.max(...Object.values(edges));
-                if (max > worst) { worst = max; worstWhere = `${key}/${name}`; }
-                if (max > TOLERANCE) drift.push({ name, edges, max: +max.toFixed(2) });
-            }
-            console.log(`  ${key.padEnd(16)} ${names.length} targets  worst drift so far ${worst.toFixed(2)}pp`);
-            check(`${key}: every target still exists on screen`,
-                names.every((n) => !stored.targets[n] || live[n]),
-                JSON.stringify(names.filter((n) => stored.targets[n] && !live[n])));
-            check(`${key}: stored boxes still sit on the controls (within ${TOLERANCE}pp)`,
+            // Measured from the semantic list, so a target that exists only in
+            // the stored geometry is caught by the comparison below rather than
+            // quietly never being looked for.
+            const live = await measure(page, screenTargets(BADGE_CONFIG, key));
+            liveByScreen[key] = live;
+
+            const drift = compareLiveGeometry({ stored, live, tolerance: TOLERANCE });
+            const w = worstDrift({ stored, live });
+            if (w.worst > worst) { worst = w.worst; worstWhere = `${key}/${w.where}`; }
+            console.log(`  ${key.padEnd(16)} ${Object.keys(stored.targets).length} targets  worst ${w.worst.toFixed(2)}pp  ${drift.length ? JSON.stringify(drift) : 'aligned'}`);
+
+            check(`${key}: every target is still on screen and still where it was (within ${TOLERANCE}pp)`,
                 drift.length === 0, JSON.stringify(drift));
             check(`${key}: no page errors while reaching that state`, pageErrors.length === 0,
                 pageErrors.slice(0, 2).join(' | '));
@@ -307,6 +279,111 @@ try {
     }
     console.log(`\n  worst edge drift across every target: ${worst.toFixed(2)} percentage points (${worstWhere})`);
     check('nothing has drifted past the tolerance', worst <= TOLERANCE, `${worst.toFixed(2)}pp at ${worstWhere}`);
+
+    // ---- the checks above have to be able to fail ---------------------------
+    //
+    // A gate that only ever runs against correct inputs says nothing about what
+    // it would do with wrong ones. Each probe breaks one thing in a copy of the
+    // artifacts and requires the matching check to reject it.
+    console.log('\n=== negative probes ===');
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+    const probeScreen = 'processor';
+
+    // A. a target the badges ask for, missing from the measured set.
+    const missingTarget = clone(geometry);
+    const dropped = screenTargets(BADGE_CONFIG, probeScreen)[0];
+    delete missingTarget[probeScreen].targets[dropped];
+    const aKinds = validateArtifacts({ config: BADGE_CONFIG, geometry: missingTarget, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  A  missing target "${dropped}": ${aKinds.join(', ') || 'none'}`);
+    check('A: a missing semantic target is rejected',
+        aKinds.includes('target-set') && aKinds.includes('partial-badge'), JSON.stringify(aKinds));
+
+    // A2. a measurement nothing asks for.
+    const extraTarget = clone(geometry);
+    extraTarget[probeScreen].targets['not-a-real-target'] = { left: 1, top: 1, width: 1, height: 1 };
+    const a2Kinds = validateArtifacts({ config: BADGE_CONFIG, geometry: extraTarget, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  A2 extra target: ${a2Kinds.join(', ') || 'none'}`);
+    check('A2: an extra measured target is rejected too', a2Kinds.includes('target-set'), JSON.stringify(a2Kinds));
+
+    // A3. a screen in one place and not the other.
+    const missingScreen = clone(geometry);
+    delete missingScreen[probeScreen];
+    const a3Kinds = validateArtifacts({ config: BADGE_CONFIG, geometry: missingScreen, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  A3 missing screen: ${a3Kinds.join(', ') || 'none'}`);
+    check('A3: a screen with no geometry at all is rejected', a3Kinds.includes('screen-set'), JSON.stringify(a3Kinds));
+
+    // B. the committed picture is not the one that was measured.
+    const wrongDigest = clone(geometry);
+    wrongDigest[probeScreen].screenshot.sha256 = '0'.repeat(64);
+    const b1Kinds = validateArtifacts({ config: BADGE_CONFIG, geometry: wrongDigest, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  B1 wrong digest: ${b1Kinds.join(', ') || 'none'}`);
+    check('B1: a screenshot whose bytes do not match the record is rejected',
+        b1Kinds.includes('png-digest'), JSON.stringify(b1Kinds));
+
+    const wrongFrame = clone(geometry);
+    wrongFrame[probeScreen].frame.height += 100;
+    const b2Kinds = validateArtifacts({ config: BADGE_CONFIG, geometry: wrongFrame, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  B2 frame mismatch: ${b2Kinds.join(', ') || 'none'}`);
+    check('B2: a frame size that disagrees with the image is rejected',
+        b2Kinds.includes('png-frame-size'), JSON.stringify(b2Kinds));
+
+    // B3. the bytes themselves change, with the record left alone.
+    const scratch = fs.mkdtempSync(path.join(ROOT, 'test-fixtures', 'badge-probe-'));
+    try {
+        for (const key of keys) {
+            const rec = geometry[key].screenshot;
+            fs.copyFileSync(path.join(SHOTS, rec.file), path.join(scratch, rec.file));
+        }
+        const tampered = path.join(scratch, geometry[probeScreen].screenshot.file);
+        const bytes = fs.readFileSync(tampered);
+        bytes[bytes.length - 1] ^= 0xff;
+        fs.writeFileSync(tampered, bytes);
+        const b3Kinds = validateArtifacts({ config: BADGE_CONFIG, geometry, screenshotDir: scratch })
+            .map((p) => p.kind);
+        console.log(`  B3 tampered bytes: ${b3Kinds.join(', ') || 'none'}`);
+        check('B3: a screenshot edited after capture is rejected',
+            b3Kinds.includes('png-digest'), JSON.stringify(b3Kinds));
+
+        // The same copies, restored: proof the probe detects the edit and not
+        // the copying.
+        fs.copyFileSync(path.join(SHOTS, geometry[probeScreen].screenshot.file), tampered);
+        const cleanKinds = validateArtifacts({ config: BADGE_CONFIG, geometry, screenshotDir: scratch })
+            .map((p) => p.kind);
+        check('B3 control: the same copies pass once restored', cleanKinds.length === 0,
+            JSON.stringify(cleanKinds));
+    } finally {
+        fs.rmSync(scratch, { recursive: true, force: true });
+    }
+
+    // C. geometry that no longer matches the live app.
+    const probeLive = liveByScreen[probeScreen];
+    if (probeLive) {
+        const shifted = clone(geometry[probeScreen]);
+        const first = Object.keys(shifted.targets)[0];
+        shifted.targets[first].top += 5;
+        const cDrift = compareLiveGeometry({ stored: shifted, live: probeLive, tolerance: TOLERANCE });
+        console.log(`  C  5pp shift on ${first}: ${JSON.stringify(cDrift)}`);
+        check('C: a five-point shift is rejected as drift',
+            cDrift.some((d) => d.name === first && d.max >= 5), JSON.stringify(cDrift));
+
+        const cClean = compareLiveGeometry({ stored: geometry[probeScreen], live: probeLive, tolerance: TOLERANCE });
+        check('C control: the real geometry still passes the same comparison',
+            cClean.length === 0, JSON.stringify(cClean));
+
+        // A control that disappeared is drift too, not a silent pass.
+        const withoutLive = { ...probeLive };
+        delete withoutLive[first];
+        check('C2: a target that vanished from the app is rejected',
+            compareLiveGeometry({ stored: geometry[probeScreen], live: withoutLive, tolerance: TOLERANCE })
+                .some((d) => d.name === first), 'vanished target');
+    } else {
+        check('C: the live measurement needed for the drift probe exists', false, 'no live data');
+    }
 
     const failed = checks.filter((c) => !c.ok);
     console.log(`\n  ${checks.length - failed.length}/${checks.length} checks passed`);

@@ -4,6 +4,12 @@
             "width": 1280,
             "height": 900
         },
+        "screenshot": {
+            "file": "annotator.png",
+            "width": 1280,
+            "height": 900,
+            "sha256": "e574dc199af0b013a6e241fb48cd476540d3b0e0d58f7ff991cc7d07c2efa126"
+        },
         "targets": {
             "annotator-zoom": {
                 "left": 5.48,
@@ -59,13 +65,18 @@
                 "width": 2.97,
                 "height": 4.22
             }
-        },
-        "capturedAt": null
+        }
     },
     "comparator": {
         "frame": {
             "width": 1280,
             "height": 1150
+        },
+        "screenshot": {
+            "file": "comparator.png",
+            "width": 1280,
+            "height": 1150,
+            "sha256": "36c54c677506d1945145bfdfb0c2ef9139cb47f3c3b75c632648c4a083c16b55"
         },
         "targets": {
             "comparator-files": {
@@ -98,13 +109,18 @@
                 "width": 13.87,
                 "height": 4.54
             }
-        },
-        "capturedAt": null
+        }
     },
     "processor": {
         "frame": {
             "width": 1280,
             "height": 900
+        },
+        "screenshot": {
+            "file": "processor.png",
+            "width": 1280,
+            "height": 900,
+            "sha256": "abfbc85661c8a8f40cf13a847d195cfabe21193d75c7ce8c176eaa64b19515ba"
         },
         "targets": {
             "processor-tools": {
@@ -131,13 +147,18 @@
                 "width": 19.61,
                 "height": 5.33
             }
-        },
-        "capturedAt": null
+        }
     },
     "split_extract": {
         "frame": {
             "width": 1280,
             "height": 900
+        },
+        "screenshot": {
+            "file": "split_extract.png",
+            "width": 1280,
+            "height": 900,
+            "sha256": "7a67827ed7efe1217f3069caaa6edee7b67078746ddfc56626b707c89e577732"
         },
         "targets": {
             "split-tabs": {
@@ -164,13 +185,18 @@
                 "width": 17.57,
                 "height": 4.56
             }
-        },
-        "capturedAt": null
+        }
     },
     "split_merge": {
         "frame": {
             "width": 1280,
             "height": 900
+        },
+        "screenshot": {
+            "file": "split_merge.png",
+            "width": 1280,
+            "height": 900,
+            "sha256": "f2816ead6857e0d955c7150e95014e1a21a5fd22d916108907e6ff2680bdea5f"
         },
         "targets": {
             "split-tabs": {
@@ -197,13 +223,18 @@
                 "width": 15.69,
                 "height": 4.56
             }
-        },
-        "capturedAt": null
+        }
     },
     "textifier": {
         "frame": {
             "width": 1280,
             "height": 1150
+        },
+        "screenshot": {
+            "file": "textifier.png",
+            "width": 1280,
+            "height": 1150,
+            "sha256": "dc708f59a6c3e1e2dd1eeca191fae589afc45898518ab01fa18bfced8d6050fe"
         },
         "targets": {
             "textifier-upload": {
@@ -224,7 +255,6 @@
                 "width": 19.47,
                 "height": 4.09
             }
-        },
-        "capturedAt": null
+        }
     }
 }

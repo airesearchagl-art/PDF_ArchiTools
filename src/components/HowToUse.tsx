@@ -715,6 +715,7 @@ function BadgeCard({ n, icon, title, children }: {
 interface MeasuredRect { left: number; top: number; width: number; height: number }
 interface MeasuredScreen {
     frame: { width: number; height: number };
+    screenshot: { file: string; width: number; height: number; sha256: string };
     targets: Record<string, MeasuredRect | null>;
 }
 
@@ -734,14 +735,16 @@ function ScreenWithBadges({ screenshot }: { screenshot: string }) {
     if (!config || !measured) return null;
 
     const boxes = config.badges.map((badge) => {
-        const rects = badge.targets
-            .map((t) => measured.targets[t])
-            .filter((r): r is MeasuredRect => Boolean(r));
-        if (rects.length === 0) return null;
-        const left = Math.min(...rects.map((r) => r.left));
-        const top = Math.min(...rects.map((r) => r.top));
-        const right = Math.max(...rects.map((r) => r.left + r.width));
-        const bottom = Math.max(...rects.map((r) => r.top + r.height));
+        const rects = badge.targets.map((t) => measured.targets[t]);
+        // All of a badge's targets or none of them. A box drawn from whichever
+        // half happened to be measured would point somewhere nobody chose, and
+        // would look exactly as authoritative as a correct one. The gate keeps
+        // this from happening; this keeps it from being drawn if it ever does.
+        if (rects.some((r) => !r)) return null;
+        const left = Math.min(...(rects as MeasuredRect[]).map((r) => r.left));
+        const top = Math.min(...(rects as MeasuredRect[]).map((r) => r.top));
+        const right = Math.max(...(rects as MeasuredRect[]).map((r) => r.left + r.width));
+        const bottom = Math.max(...(rects as MeasuredRect[]).map((r) => r.top + r.height));
         return { left, top, width: right - left, height: bottom - top, desc: badge.desc };
     });
 
