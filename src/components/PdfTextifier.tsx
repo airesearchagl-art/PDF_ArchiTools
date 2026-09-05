@@ -325,7 +325,7 @@ export const PdfTextifier: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', padding: '30px', gap: '30px' }}>
 
                     {/* 1. Upload Section */}
-                    <div style={{ border: '2px dashed #ddd', borderRadius: '12px', padding: '40px', textAlign: 'center', backgroundColor: '#fafafa', cursor: isProcessing ? 'not-allowed' : 'pointer', position: 'relative' }}>
+                    <div data-usage-target="textifier-upload" style={{ border: '2px dashed #ddd', borderRadius: '12px', padding: '40px', textAlign: 'center', backgroundColor: '#fafafa', cursor: isProcessing ? 'not-allowed' : 'pointer', position: 'relative' }}>
                         <input
                             type="file"
                             accept="application/pdf"
@@ -353,7 +353,7 @@ export const PdfTextifier: React.FC = () => {
 
                     {/* 2. Settings Section */}
                     {file && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', padding: '20px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' }}>
+                        <div data-usage-target="textifier-settings" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', padding: '20px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <label style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
                                     <Settings size={16} /> OCR前処理
@@ -442,6 +442,7 @@ export const PdfTextifier: React.FC = () => {
                     {file && !result && (
                         <div style={{ textAlign: 'center' }}>
                             <button
+                                data-usage-target="textifier-run"
                                 onClick={handleProcess}
                                 disabled={isProcessing}
                                 style={{
