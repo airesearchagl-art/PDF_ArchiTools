@@ -1,6 +1,13 @@
-import React from 'react';
-import { PenTool, Layers, Ruler, ZoomIn, Download, Sliders, Blend, FileText, UploadCloud, Eye, Combine, ArrowUp, ArrowDown, ScanText, Settings, BoxSelect, History, Play, Stamp } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+    PenTool, Ruler, ZoomIn, Download, Blend, FileText, UploadCloud, Combine,
+    ArrowUp, ArrowDown, ScanText, Settings, History, Play, Stamp, ChevronDown,
+    Layers, Eye, MousePointer2, Scissors,
+} from 'lucide-react';
 import { TOOL_VERSIONS } from '../config/versions';
+import { USAGE_SCREENSHOTS } from './usageScreenshotBadges';
+import measuredGeometry from './usage-screenshot-geometry.json';
+import './HowToUse.css';
 
 /**
  * ユーザー向けの更新履歴。
@@ -97,597 +104,503 @@ const releaseHistory: ReleaseNote[] = [
 
 const VersionBadge = ({ version }: { version: string }) => (
     <span style={{
-        marginLeft: 'auto',
-        fontSize: '0.8rem',
+        fontSize: '0.75rem',
         backgroundColor: '#f0f0f0',
         color: '#666',
         padding: '2px 8px',
         borderRadius: '12px',
         border: '1px solid #ddd',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px'
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
     }}>
         v{version}
     </span>
 );
 
+/** The five tools, in the order the top navigation shows them. */
+const TOOL_IDS = ['annotator', 'comparator', 'processor', 'split-merge', 'textifier'] as const;
+type ToolId = typeof TOOL_IDS[number];
+
+/** The tool a URL hash points at, or null when it points elsewhere. */
+function hashToolId(): ToolId | null {
+    if (typeof window === 'undefined') return null;
+    const id = window.location.hash.replace('#', '');
+    return (TOOL_IDS as readonly string[]).includes(id) ? (id as ToolId) : null;
+}
+
+function scrollToHash(): void {
+    const id = window.location.hash.replace('#', '');
+    if (!id) return;
+    // After the panel has been laid out, or the browser lands where the header
+    // used to be rather than where it is now.
+    requestAnimationFrame(() => {
+        // A tool link points at its section wrapper; anything else -- the
+        // release history -- is an id in its own right.
+        const target = document.getElementById(`usage-section-${id}`) ?? document.getElementById(id);
+        target?.scrollIntoView({ block: 'start' });
+    });
+}
+
 export function HowToUse() {
-    // Responsive grid style
-    const gridStyle: React.CSSProperties = {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '20px',
-        marginTop: '20px'
-    };
+    // Everything starts closed, so opening the guide shows the five tools
+    // rather than the first tool's manual. A link straight to one tool is the
+    // exception, and it is read here rather than in an effect so the very
+    // first render already has the right section open.
+    const [openId, setOpenId] = useState<ToolId | null>(hashToolId);
+
+    useEffect(() => {
+        const onHashChange = () => {
+            const id = hashToolId();
+            if (id) setOpenId(id);
+            scrollToHash();
+        };
+        window.addEventListener('hashchange', onHashChange);
+        // A deep link that was already in the URL still has to be scrolled to.
+        if (window.location.hash) scrollToHash();
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
+
+    const toggle = (id: ToolId) => setOpenId((current) => (current === id ? null : id));
 
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}>
-            <div style={{ textAlign: 'center', marginBottom: '40px', padding: '0 20px' }}>
-                <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)', marginBottom: '10px', color: '#fff' }}>建築設計お役立ちPDFツール集へようこそ</h2>
-                <p style={{ color: '#ccc', fontSize: '1.1rem' }}>
-                    設計業務の効率化を目指して開発された、5つの主要なPDFツール機能の使い方ガイドです。
+            <div style={{ textAlign: 'center', marginBottom: '24px', padding: '0 12px' }}>
+                <h2 style={{ fontSize: 'clamp(1.3rem, 3.2vw, 2rem)', margin: '0 0 8px', color: '#fff' }}>
+                    建築設計お役立ちPDFツール集へようこそ
+                </h2>
+                <p style={{ color: '#ccc', margin: '0 0 8px' }}>
+                    5つのツールの使い方ガイドです。読みたいツールを選ぶと説明が開きます。
                 </p>
-                <p style={{ color: '#ccc', fontSize: '1rem', margin: '10px 0 0' }}>
-                    <b>PDF加筆</b> ／ <b>PDF比較</b> ／ <b>PDF加工</b> ／ <b>PDF抽出・統合</b> ／ <b>PDFテキスト化</b> の5カテゴリがあります。
-                    画面上部のタブから切り替えてご利用ください。
-                </p>
-                <p style={{ margin: '16px 0 0', fontSize: '0.9em', color: '#ffecb3', lineHeight: 1.7 }}>
+                <p style={{ margin: '0 0 8px', fontSize: '0.85em', color: '#ffecb3', lineHeight: 1.6 }}>
                     ※ 読み込んだPDFファイルは、お使いのブラウザ内で処理されます。
                     文字認識（OCR）もブラウザ内で実行され、PDFを外部のAI・OCRサービスへ送信することはありません。
                 </p>
-                <p style={{ margin: '16px 0 0', fontSize: '0.95em', color: '#9fd3ff' }}>
-                    <History size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>Word（.docx）書き出し</b>（PDFテキスト化 v1.5.0） / <b>OCR前処理（傾き補正・ノイズ除去）</b>（PDFテキスト化 v1.4.0） / <b>TXT書き出し</b>（PDFテキスト化 v1.3.0）
-                    — 詳しくはページ下部の<a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>をご覧ください。
+                <p style={{ margin: 0, fontSize: '0.85em', color: '#9fd3ff' }}>
+                    <History size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
+                    最近の更新: <b>Word（.docx）書き出し</b>（PDFテキスト化 v1.5.0）
+                    — <a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>
                 </p>
             </div>
 
-            {/* 1. ANNOTATOR */}
-            <section style={{ marginBottom: '60px' }}>
-                <h3 style={{ borderBottom: '2px solid #4a90e2', paddingBottom: '10px', color: '#4a90e2', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <PenTool size={24} /> 1. PDF加筆 (Annotator)
-                    <VersionBadge version={TOOL_VERSIONS.annotator.version} />
-                </h3>
-                <p style={{ marginBottom: '20px' }}>
-                    PDF図面に手書き感覚で加筆修正を行えるツールです。タブレットやペン入力に最適化されています。
-                </p>
-
-                <ScreenWithBadges
-                    src="/screenshots/annotator.png?v=4"
-                    badges={[
-                        // 1. View & Edit Actions
-                        {
-                            top: '0', left: '0', desc: '基本操作（表示・編集）', rects: [
-                                { top: '4%', left: '0.5%', width: '10%', height: '9%' }, // Zoom/View
-                                { top: '4%', left: '63%', width: '5%', height: '9%' }    // Copy/Trash
-                            ]
-                        },
-                        // 2. Drawing Tools & Settings
-                        {
-                            top: '0', left: '0', desc: '描画・注釈ツール', rects: [
-                                { top: '4%', left: '11%', width: '21%', height: '9%' },  // Pen, Text, Shapes
-                                { top: '4%', left: '69%', width: '16%', height: '9%' }   // Colors, Sliders
-                            ]
-                        },
-                        // 3. Measure
-                        { top: '4%', left: '33%', width: '29%', height: '9%', desc: '計測・キャリブレーション' },
-                        // 4. Layers
-                        { top: '4%', left: '86%', width: '9%', height: '9%', desc: 'レイヤー管理' },
-                        // 5. Download
-                        { top: '4%', left: '95.5%', width: '4%', height: '9%', desc: 'PDF保存' }
-                    ]}
-                />
-
-                <div style={gridStyle}>
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> <ZoomIn size={18} /> 基本操作（表示・編集）</h4>
-                        <p>表示の調整や、選択したオブジェクトの操作を行います。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>左側:</b> ズーム、パン、全体表示などの画面操作。</li>
-                            <li><b>中央右:</b> 選択した注釈のコピーや削除（ゴミ箱）を行います。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> <PenTool size={18} /> 描画・注釈ツール</h4>
-                        <p>ペンや図形などのツール選択と、詳細設定を行います。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>左側:</b> ペン、消しゴム、テキスト、図形ツールを選択します。</li>
-                            <li><b>右側:</b> 色、太さ、透明度などを調整します。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> <Ruler size={18} /> 計測・キャリブレーション</h4>
-                        <p>図面の縮尺合わせや距離計測を行います。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>計測:</b> 定規アイコンでモード切り替え、プリセットで縮尺を設定します。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>④</strong> <Layers size={18} /> レイヤー・<Download size={18} /> 保存</h4>
-                        <p>レイヤー管理とファイルの保存を行います。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>④ レイヤー:</b> レイヤーの追加・表示切替を行います。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>⑤</strong> <Download size={18} /> PDF保存</h4>
-                        <p>作業内容を保存します。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>⑤ 保存:</b> 編集した内容をPDFとしてダウンロードします。</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-
-            {/* 2. COMPARATOR */}
-            <section style={{ marginBottom: '60px' }}>
-                <h3 style={{ borderBottom: '2px solid #e24a4a', paddingBottom: '10px', color: '#e24a4a', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Eye size={24} /> 2. PDF比較 (Comparator)
-                    <VersionBadge version={TOOL_VERSIONS.comparator.version} />
-                </h3>
-                <p style={{ marginBottom: '20px' }}>
-                    修正前後の図面など、最大4つのPDFファイルを重ね合わせて差分を視覚的に確認できます。
-                    ファイルは <b>赤・青・緑・黄</b> の4色に色分けされて表示されます。
-                </p>
-
-                <ScreenWithBadges
-                    src="/screenshots/comparator.png"
-                    badges={[
-                        // 1. File Slots (Top Left)
-                        { top: '11%', left: '0.5%', width: '85%', height: '13%', desc: 'ファイルスロット(赤/青/緑/黄)' },
-                        // 2. Diff Area (Center)
-                        { top: '48%', left: '25%', width: '50%', height: '50%', desc: '比較プレビューエリア' },
-                        // 3. Toolbar (Middle Row)
-                        { top: '28%', left: '0.5%', width: '75%', height: '9%', desc: '表示操作・エクスポート' }
-                    ]}
-                />
-
-                <div style={gridStyle}>
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> <UploadCloud size={18} /> ファイル読み込み</h4>
-                        <p>画面上部の4つのスロットにPDFファイルをドラッグ&ドロップして読み込みます。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li>左から順に優先して表示されます。読み込んだファイル名が表示されます。</li>
-                            <li><Eye size={12} /> アイコンで一時的にそのレイヤー（色）を非表示にできます。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> <Blend size={18} /> 差分確認エリア</h4>
-                        <p>中央のキャンバスに全てのPDFが乗算合成され表示されます。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li>一致する部分は黒（または混色）になり、差分がある部分は各ファイルの色（赤や青）で浮き上がって見えます。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> <Sliders size={18} /> 表示調整・出力</h4>
-                        <p>右上のコントロールバーで表示を調整します。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li><b>Diff Threshold:</b> 微妙な位置ズレやスキャンノイズを無視するため、差分判定の閾値を調整できます。</li>
-                            <li><b>Export PDF:</b> <Settings size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> アイコンから<b>書き出し設定</b>（ページ範囲・解像度）を変更し、結果をPDFとして保存します。
-                                <ul style={{ marginTop: '5px', color: '#666' }}>
-                                    <li><b>Pages:</b> "All" (全ページ), "Current" (表示中のみ), "Range" (例: 1-3, 5) から選択可能。</li>
-                                    <li><b>Quality:</b> 72 DPI (軽量) 〜 1200 DPI (最高画質) まで選択可能。</li>
-                                </ul>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-
-            {/* 3. PROCESSOR */}
-            <section style={{ marginBottom: '60px' }}>
-                <h3 style={{ borderBottom: '2px solid #4ae290', paddingBottom: '10px', color: '#4ae290', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <FileText size={24} /> 3. PDF加工 (Processor)
-                    <VersionBadge version={TOOL_VERSIONS.tools.version} />
-                </h3>
-                <p style={{ marginBottom: '20px' }}>
-                    複数のPDFをまとめて加工できるツールです。左のサイドバーから
-                    <b>半透明レイヤ追加</b> / <b>モノクロ化</b> / <b>両方実行</b> / <b>余白生成</b> /
-                    <b>図面サイズ統一</b> / <b>図枠一括更新</b> / <b>最適化</b> の7つの機能を選べます。
-                    ファイルを1つだけ入れた場合は加工後のPDFがそのまま、複数入れた場合はZIPでまとめてダウンロードされます。
-                </p>
-
-                <ScreenWithBadges
-                    src="/screenshots/processor.png"
-                    badges={[
-                        // 1. Function Select (Left Sidebar) - now seven entries
-                        { top: '9%', left: '1.2%', width: '13.2%', height: '51%', desc: '加工機能の選択' },
-                        // 2. Work Area (Centre). Shown here with 図枠一括更新 active,
-                        //    so it carries the representative page and the rule list.
-                        { top: '6.5%', left: '18%', width: '56.2%', height: '69%', desc: 'ファイル追加・作業エリア' },
-                        // 3. Settings Panel (Right)
-                        { top: '12%', left: '78.2%', width: '20%', height: '75%', desc: '詳細設定' },
-                        // 4. Run Button (Right Bottom)
-                        { top: '90.5%', left: '78.2%', width: '20%', height: '6%', desc: '実行開始ボタン' }
-                    ]}
-                />
-
-                <div style={gridStyle}>
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> 機能選択</h4>
-                        <p>左のサイドバーから、実行したい加工を1つ選びます。</p>
-                        <ul style={listStyle}>
-                            <li><b>半透明レイヤ追加:</b> 図面の上に色付きの半透明レイヤを重ねます。</li>
-                            <li><b>モノクロ化:</b> 白黒に変換し、コントラストを調整します。</li>
-                            <li><b>両方実行:</b> モノクロ化のあとに半透明レイヤ追加を続けて行います。</li>
-                            <li><b>余白生成:</b> 内容を縮小して、まわりに余白をつくります。</li>
-                            <li><b>図面サイズ統一:</b> 用紙サイズをそろえます（下に詳しい説明があります）。</li>
-                            <li><b>図枠一括更新:</b> 図枠の文字を全ページへ一括反映します（下に詳しい説明があります）。</li>
-                            <li><b>最適化:</b> 解像度を下げてファイルサイズを小さくします。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> ファイル追加・作業エリア</h4>
-                        <p>処理したいPDFファイルを中央のエリアに追加します（ドラッグ&ドロップ可）。複数まとめて追加できます。</p>
-                        <p style={noteStyle}>
-                            「図枠一括更新」を選んでいるときは、この場所に代表ページのプレビューと更新領域の一覧が表示されます
-                            （上の画面例）。
-                        </p>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> 詳細設定</h4>
-                        <p>選んだ機能に応じて、右側の設定パネルの内容が切り替わります。</p>
-                        <ul style={listStyle}>
-                            <li><b>半透明レイヤ追加:</b> 色と不透明度を設定。</li>
-                            <li><b>モノクロ化:</b> コントラストと解像度を調整。</li>
-                            <li><b>余白生成:</b> 縮小率と配置を指定。</li>
-                            <li><b>図面サイズ統一:</b> ターゲット用紙を選択。</li>
-                            <li><b>図枠一括更新:</b> 中央のプレビューで領域を選び、新しい文字を入力。</li>
-                            <li><b>最適化:</b> 圧縮解像度（DPI）を選択。</li>
-                        </ul>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>④</strong> <Play size={18} /> 処理実行</h4>
-                        <p>「実行開始」ボタンを押すと、追加したすべてのファイルが処理されます。</p>
-                        <ul style={listStyle}>
-                            <li><b>1ファイル:</b> 加工後のPDFがそのままダウンロードされます。</li>
-                            <li><b>複数ファイル:</b> まとめてZIPでダウンロードされます。</li>
-                        </ul>
-                    </div>
-                </div>
-
-                {/* 3-b. Drawing page size normalizer */}
-                <div style={{ ...cardStyle, marginTop: '24px', borderLeft: '6px solid #4ae290' }}>
-                    <h4 style={{ ...cardHeadStyle, fontSize: '1.15rem' }}>
-                        <BoxSelect size={20} /> 図面サイズ統一
-                        <VersionBadge version={TOOL_VERSIONS.tools.version} />
-                    </h4>
-                    <p>
-                        A1とA3など<b>用紙サイズが混在したPDF</b>を、全ページ同じ用紙サイズにそろえます。
-                        図面を画像に変換せずに処理するため、線や文字はベクターのまま残り、検索できる文字情報も失われません。
+            <div className="usage-accordion">
+                {/* 1. ANNOTATOR */}
+                <ToolSection
+                    id="annotator"
+                    number={1}
+                    accent="#4a90e2"
+                    icon={<PenTool size={22} />}
+                    titleJa="PDF加筆"
+                    titleEn="Annotator"
+                    summary="PDFへ手書き・文字・計測情報を追加"
+                    version={TOOL_VERSIONS.annotator.version}
+                    open={openId === 'annotator'}
+                    onToggle={toggle}
+                >
+                    <p style={{ marginTop: 0 }}>
+                        PDF図面に手書き感覚で加筆できるツールです。タブレットやペン入力に対応し、
+                        距離・面積の計測もできます。
                     </p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '12px' }}>
-                        <div>
-                            <h5 style={subHeadStyle}>選べるターゲット用紙</h5>
+                    <ScreenWithBadges screenshot="annotator" />
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<ZoomIn size={18} />} title="表示・ズーム">
                             <ul style={listStyle}>
-                                <li>A0 / A1 / A2 / A3 / A4</li>
-                                <li>「最初のページに合わせる」</li>
+                                <li>ズームの拡大・縮小、スライダー、等倍に戻すボタン。</li>
+                                <li>Alt キーを押しながらホイールでもズームできます。</li>
                             </ul>
-                            <p style={noteStyle}>初期設定はA1です。</p>
-                        </div>
-                        <div>
-                            <h5 style={subHeadStyle}>処理の内容</h5>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<MousePointer2 size={18} />} title="描画・消去・テキスト・範囲選択">
                             <ul style={listStyle}>
-                                <li>縦横比を保ったまま拡大・縮小</li>
-                                <li>用紙の中央に配置</li>
-                                <li>内容の切り取り（crop）はしない</li>
-                                <li>ページごとの縦向き・横向きはそのまま</li>
-                                <li>線や文字はベクターのまま保持</li>
-                                <li>検索できる文字情報を保持</li>
-                                <li>PDFテキスト化で付けた文字情報も保持</li>
+                                <li><b>ペン:</b> フリーハンドで描きます。</li>
+                                <li><b>消しゴム:</b> ピクセル／線ごと／矩形／投げ縄の4種類。</li>
+                                <li><b>テキスト:</b> クリックした位置に文字を入力します（サイズ・書体を選択可）。</li>
+                                <li><b>選択:</b> クリック選択のほか、矩形・投げ縄で範囲選択できます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<Ruler size={18} />} title="計測・縮尺の設定">
+                            <ul style={listStyle}>
+                                <li><b>計測:</b> 距離（直線）／折れ線／面積の3種類。折れ線と面積はダブルクリックで確定します。</li>
+                                <li><b>縮尺校正:</b> 長さの分かっている箇所をなぞり、実寸を入力します。</li>
+                                <li><b>プリセット:</b> 1:1 〜 1:1000 から選べます。単位は mm / cm / m / km / in / ft。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={4} icon={<Layers size={18} />} title="複製・削除／色・太さ・透明度／レイヤー">
+                            <ul style={listStyle}>
+                                <li>選択した内容の複製・削除。Delete キーでも削除できます。</li>
+                                <li>色は10色のパレットと自由な色指定。太さ・透明度・筆圧のオン／オフ。</li>
+                                <li>レイヤーの追加・表示切替・削除ができます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={5} icon={<Download size={18} />} title="PDFとして保存">
+                            <ul style={listStyle}>
+                                <li>加筆した内容を含めてPDFとしてダウンロードします。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+
+                    <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0', marginTop: '20px' }}>
+                        <h4 style={cardHeadStyle}><Settings size={18} /> 知っておくこと</h4>
+                        <ul style={listStyle}>
+                            <li>
+                                <b>保存されるPDFは、各ページを画像として書き出したものです。</b>
+                                元のPDFが持っていた文字情報やベクターの線は、保存後のファイルには残りません。
+                                元のPDFは変更されないため、原本は別途保管してください。
+                            </li>
+                            <li>四角・円・矢印などの図形を描くツールはありません。ペン・テキスト・計測が対象です。</li>
+                            <li>レイヤーは追加・表示切替・削除のみです（名前の変更・並べ替え・レイヤーごとの透明度はありません）。</li>
+                            <li>計測の線は青色・固定の太さで描かれ、パレットの色や太さの設定は反映されません。</li>
+                        </ul>
+                    </div>
+                </ToolSection>
+
+                {/* 2. COMPARATOR */}
+                <ToolSection
+                    id="comparator"
+                    number={2}
+                    accent="#e24a4a"
+                    icon={<Blend size={22} />}
+                    titleJa="PDF比較"
+                    titleEn="Comparator"
+                    summary="最大4つのPDFを重ねて変更箇所を確認"
+                    version={TOOL_VERSIONS.comparator.version}
+                    open={openId === 'comparator'}
+                    onToggle={toggle}
+                >
+                    <p style={{ marginTop: 0 }}>
+                        複数のPDFを色分けして重ね合わせ、どこが変わったかを目で確認するツールです。
+                        一致している部分と変わっている部分を色で見分けられます。
+                    </p>
+
+                    <ScreenWithBadges screenshot="comparator" />
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<UploadCloud size={18} />} title="PDFの読み込みと表示切替">
+                            <ul style={listStyle}>
+                                <li>最大4つまで読み込めます。<b>Blue (Base)</b> ／ <b>Red</b> ／ <b>Green</b> ／ <b>Yellow</b> の色が割り当てられます。</li>
+                                <li>各枠の目のアイコンで、そのPDFの表示・非表示を切り替えられます。</li>
+                                <li>比較には表示中のPDFが2つ以上必要です。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<Eye size={18} />} title="一致箇所の色と透明度">
+                            <ul style={listStyle}>
+                                <li>すべてのPDFで一致している部分の色と、その透明度を変更できます。</li>
+                                <li>一致箇所を薄くすると、変更箇所が見つけやすくなります。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<FileText size={18} />} title="変更箇所抽出レポート">
+                            <ul style={listStyle}>
+                                <li>変更が見つかったページだけを切り出したPDFを作成します。</li>
+                                <li>表示中のPDFが2つ以上必要です。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={4} icon={<ZoomIn size={18} />} title="ページ移動・ズーム・差分しきい値">
+                            <ul style={listStyle}>
+                                <li>ページの前後移動、ズーム（スライダー／Fit／1:1、Ctrl+ホイール）。</li>
+                                <li><b>Diff Threshold:</b> 0〜5px。わずかなずれを変更として扱わないための設定です。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={5} icon={<Download size={18} />} title="書き出し設定と実行">
+                            <ul style={listStyle}>
+                                <li><b>対象ページ:</b> すべて／現在のページ／範囲指定（例: 1-3, 5）。</li>
+                                <li><b>画質:</b> 72 / 150 / 300 / 450 DPI から選べます。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+
+                    <p style={calloutStyle}>
+                        比較結果は画像として重ね合わせたものです。文字を検索できるPDFにはなりません。
+                        高いDPIを選ぶほど書き出しに時間がかかります。
+                    </p>
+                </ToolSection>
+
+                {/* 3. PROCESSOR */}
+                <ToolSection
+                    id="processor"
+                    number={3}
+                    accent="#7b4ae2"
+                    icon={<Settings size={22} />}
+                    titleJa="PDF加工"
+                    titleEn="Processor"
+                    summary="図面サイズ統一・図枠更新など7種類の加工"
+                    version={TOOL_VERSIONS.tools.version}
+                    open={openId === 'processor'}
+                    onToggle={toggle}
+                >
+                    <p style={{ marginTop: 0 }}>
+                        複数のPDFへ同じ加工をまとめて行うツールです。7種類の加工から1つを選んで実行します。
+                    </p>
+
+                    <ScreenWithBadges screenshot="processor" />
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<Settings size={18} />} title="7種類の加工メニュー">
+                            <ul style={listStyle}>
+                                <li><b>半透明レイヤ追加</b> — 全ページへ半透明の色を重ねます。</li>
+                                <li><b>モノクロ化</b> — グレースケールにします。</li>
+                                <li><b>両方実行</b> — モノクロ化のあとに半透明レイヤを重ねます。</li>
+                                <li><b>余白生成</b> — 指定した向きへ余白を追加します。</li>
+                                <li><b>図面サイズ統一</b> — 用紙サイズをそろえます。</li>
+                                <li><b>図枠一括更新</b> — 図枠の文字を全ページへ反映します。</li>
+                                <li><b>最適化</b> — 圧縮解像度（DPI）を指定して軽くします。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<UploadCloud size={18} />} title="PDFの読み込み">
+                            <ul style={listStyle}>
+                                <li>ドラッグ&amp;ドロップ、またはクリックして選択します。複数まとめて追加できます。</li>
+                                <li>1ファイルならPDFがそのまま、複数ならZIPでダウンロードされます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<Settings size={18} />} title="選んだ加工の設定">
+                            <ul style={listStyle}>
+                                <li>選んだ加工に応じて、色・不透明度・用紙サイズなどの設定が表示されます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={4} icon={<Play size={18} />} title="実行開始">
+                            <ul style={listStyle}>
+                                <li>「実行開始」で処理します。ファイルごとに進捗と結果が表示されます。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+
+                    <div style={gridStyle}>
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #7b4ae2' }}>
+                            <h4 style={cardHeadStyle}><Ruler size={18} /> 図面サイズ統一</h4>
+                            <ul style={listStyle}>
+                                <li>A0 / A1 / A2 / A3 / A4 のいずれか、または「最初のページに合わせる」を選べます（初期値は A1）。</li>
+                                <li>縦横比が違う場合は、内容が切れないように中央に配置します。切り取りは行いません。</li>
+                                <li>線や文字はベクターのまま、検索できる文字情報も保持したまま処理します。</li>
+                            </ul>
+                            <p style={noteStyle}>
+                                表示範囲の外に隠れていた注釈が新しい用紙で見えてしまう可能性がある場合は、
+                                安全のため処理を中止します。
+                            </p>
+                        </div>
+
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #7b4ae2' }}>
+                            <h4 style={cardHeadStyle}><Stamp size={18} /> 図枠一括更新</h4>
+                            <ul style={listStyle}>
+                                <li>代表ページで更新したい場所をドラッグして選び、最大3か所まで設定できます。</li>
+                                <li>入力した文字を全ページの同じ位置へ反映します。</li>
+                                <li>用紙に対する相対位置で反映するため、A1とA3が混在していても同じ位置に入ります。</li>
+                                <li>実行前にプレビューで位置と文字を確認してください。</li>
+                            </ul>
+                            <p style={{ ...calloutStyle, background: '#fdecea', borderColor: '#f5c6cb', color: '#8a2b22', marginTop: '10px' }}>
+                                <b>墨消し（redaction）ではありません。</b>
+                                新しい文字で表示を上書きするだけで、元の文字はPDFの内部に残る可能性があります。
+                                機密情報を消す目的では使用しないでください。
+                            </p>
+                        </div>
+                    </div>
+                </ToolSection>
+
+                {/* 4. EXTRACT & MERGE */}
+                <ToolSection
+                    id="split-merge"
+                    number={4}
+                    accent="#2aa198"
+                    icon={<Combine size={22} />}
+                    titleJa="PDF抽出・統合"
+                    titleEn="Extract / Merge"
+                    summary="ページの抜き出しと複数PDFの結合"
+                    version={TOOL_VERSIONS.splitMerge.version}
+                    open={openId === 'split-merge'}
+                    onToggle={toggle}
+                >
+                    <p style={{ marginTop: 0 }}>
+                        1つのPDFから必要なページだけを抜き出す「PDF抽出」と、複数のPDFを1つにまとめる「PDF統合」があります。
+                        <b>画面上部のタブで切り替えて使います。抽出と統合が同時に表示されることはありません。</b>
+                    </p>
+
+                    <h4 style={subHeadStyle}>PDF抽出 (Extract)</h4>
+                    <ScreenWithBadges screenshot="split_extract" />
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<Scissors size={18} />} title="抽出／統合の切替タブ">
+                            <ul style={listStyle}>
+                                <li>「PDF抽出 (Extract)」と「PDF統合 (Merge)」をここで切り替えます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<UploadCloud size={18} />} title="PDFの読み込みと表示サイズ">
+                            <ul style={listStyle}>
+                                <li>PDFを1つ読み込むと、全ページがサムネイルで並びます。</li>
+                                <li>「表示サイズ」でサムネイルの大きさを変えられます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<FileText size={18} />} title="ページを選択">
+                            <ul style={listStyle}>
+                                <li>サムネイルをクリックすると選択され、青い枠が付きます。もう一度クリックで解除します。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={4} icon={<Download size={18} />} title="選択したページを書き出し">
+                            <ul style={listStyle}>
+                                <li>1ページ以上選ぶとボタンが表示されます。</li>
+                                <li>書き出されるページは、選んだ順ではなく元のページ順に並びます。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+
+                    <h4 style={{ ...subHeadStyle, marginTop: '24px' }}>PDF統合 (Merge)</h4>
+                    <ScreenWithBadges screenshot="split_merge" />
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<Scissors size={18} />} title="抽出／統合の切替タブ">
+                            <ul style={listStyle}>
+                                <li>「PDF統合 (Merge)」を選ぶと、結合の画面に切り替わります。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<UploadCloud size={18} />} title="PDFを追加">
+                            <ul style={listStyle}>
+                                <li>複数のPDFをまとめて追加できます。追加するたびにリストへ積み上がります。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<ArrowUp size={18} />} title="順序の入れ替えと削除">
+                            <ul style={listStyle}>
+                                <li>各行の <ArrowUp size={12} /> <ArrowDown size={12} /> で順番を入れ替えます。</li>
+                                <li>×ボタンでリストから外します。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={4} icon={<Download size={18} />} title="統合PDFを書き出し">
+                            <ul style={listStyle}>
+                                <li>リストの順番どおりに、全ページを1つのPDFへ結合します。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+                </ToolSection>
+
+                {/* 5. TEXTIFIER */}
+                <ToolSection
+                    id="textifier"
+                    number={5}
+                    accent="#9e4ae2"
+                    icon={<ScanText size={22} />}
+                    titleJa="PDFテキスト化"
+                    titleEn="Textifier"
+                    summary="OCR・TXT・Wordへの文字情報変換"
+                    version={TOOL_VERSIONS.textifier.version}
+                    open={openId === 'textifier'}
+                    onToggle={toggle}
+                >
+                    <p style={{ marginTop: 0 }}>
+                        PDFの文字を取り出すツールです。日本語と英語に対応し、2つのモードがあります。
+                    </p>
+                    <ul style={{ ...listStyle, marginBottom: '16px' }}>
+                        <li>
+                            <b>OCR</b> — スキャンして画像になったPDFを文字認識し、
+                            <b>文字を検索・選択できるPDF</b>を作ります。見た目は元のPDFのまま変わりません。
+                        </li>
+                        <li>
+                            <b>Text Extraction</b> — PDFの文字を<b>TXTファイル</b>または
+                            <b>編集可能なWord（.docx）</b>として書き出します。
+                            文字情報を持つページはその文字をそのまま取り出し、スキャンページはOCRを行います。
+                            元のPDFのページ順は維持されます。
+                        </li>
+                    </ul>
+
+                    <ScreenWithBadges screenshot="textifier" />
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<UploadCloud size={18} />} title="PDFの読み込みとプレビュー">
+                            <ul style={listStyle}>
+                                <li>1回につき1ファイルを処理します。1ページ目がプレビュー表示されます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<Settings size={18} />} title="OCR前処理・モード・出力形式">
+                            <ul style={listStyle}>
+                                <li><b>OCR</b> → 出力形式は <b>PDF (Searchable)</b>。</li>
+                                <li><b>Text Extraction</b> → <b>Text (.txt)</b> または <b>Word (.docx)</b>。</li>
+                                <li><b>OCR前処理</b>（傾き補正・ノイズ除去）は初期状態はオフです。</li>
+                                <li>すでに文字情報を持つページには文字認識を行いません。</li>
+                            </ul>
+                            <p style={noteStyle}>
+                                モードや前処理を切り替えると、前の設定で作った結果は破棄されます。
+                                切り替えたあとにもう一度実行してください。
+                            </p>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<Play size={18} />} title="実行開始">
+                            <ul style={listStyle}>
+                                <li>進捗がページ単位で表示され、途中でキャンセルできます（現在のページの認識完了後に反映）。</li>
+                                <li>キャンセルした場合、途中までのファイルは保存されません。</li>
+                                <li>完了後に「Download Result」から保存します（<b>_searchable.pdf</b> ／ <b>_extracted.txt</b> ／ <b>_extracted.docx</b>）。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+
+                    <div style={gridStyle}>
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #9e4ae2' }}>
+                            <h4 style={cardHeadStyle}><ScanText size={18} /> TXT書き出しについて</h4>
+                            <ul style={listStyle}>
+                                <li>TXTにはページの区切り（<code>===== Page 1 =====</code>）が入り、ページ順は元のPDFのままです。</li>
+                                <li>文字のないページも、ページの見出しだけは残ります。</li>
+                                <li>段組みや表が複雑なページでは、文字の順序が見た目どおりにならない場合があります。</li>
+                                <li>表をExcelの表として復元する機能ではありません。</li>
+                                <li>スキャンページの文字の正確さは、元の画像の品質によって変わります。</li>
                             </ul>
                         </div>
-                        <div>
-                            <h5 style={subHeadStyle}>基本の手順</h5>
-                            <ol style={listStyle}>
-                                <li>「PDF加工」を開く</li>
-                                <li>「図面サイズ統一」を選ぶ</li>
-                                <li>PDFを追加する</li>
-                                <li>ターゲット用紙を選ぶ</li>
-                                <li>「実行開始」を押す</li>
-                                <li>できあがったPDFをダウンロード</li>
-                            </ol>
-                            <p style={noteStyle}>複数のPDFを入れた場合はZIPでまとめてダウンロードされます。</p>
+
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #2b579a' }}>
+                            <h4 style={cardHeadStyle}><FileText size={18} /> Word（.docx）書き出しについて</h4>
+                            <ul style={listStyle}>
+                                <li>元のPDFのページ順を保ち、ページの区切りをWordの改ページとして入れます。文字のないページも区切りを残します。</li>
+                                <li><b>PDFの見た目をWordへ再現する機能ではありません。</b></li>
+                                <li>表の構造は復元しません。</li>
+                                <li>画像・図形・線はWordへ移しません。文字だけを書き出します。</li>
+                                <li>フォント・文字サイズ・太字などの体裁は再現しません。</li>
+                                <li>Word側での実際のページ数は、お使いの環境やフォントによって変わることがあります。</li>
+                            </ul>
+                        </div>
+
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #4a90e2' }}>
+                            <h4 style={cardHeadStyle}><Settings size={18} /> OCR前処理について</h4>
+                            <ul style={listStyle}>
+                                <li>補正するのは<b>文字認識用の画像だけ</b>です。元のPDFの見た目・線・文字情報は変更しません。</li>
+                                <li>効果は元のスキャン画像の品質によって変わります。</li>
+                                <li>傾きがほとんどないページや、判断できるだけの文字がないページでは、補正を行わないことがあります。</li>
+                                <li>ノイズ除去は、紙の上に単独で載っている点だけを取り除きます。</li>
+                                <li>ページサイズが非常に大きい場合は、前処理を行わずに文字認識します。その場合は画面にお知らせが出ます。</li>
+                            </ul>
+                        </div>
+
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0' }}>
+                            <h4 style={cardHeadStyle}><Settings size={18} /> 未対応の機能（今後対応予定）</h4>
+                            <ul style={listStyle}>
+                                <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
+                            </ul>
+                            <p style={noteStyle}>
+                                現在ご利用いただける出力は「PDF (Searchable)」「Text (.txt)」「Word (.docx)」です。
+                            </p>
                         </div>
                     </div>
 
                     <p style={calloutStyle}>
-                        <b>ご注意:</b> 処理が終わると、元の用紙サイズの内訳（例: A1 × 2、A3 × 2）がファイル名の下に表示されます。
-                        なお、特殊な注釈が用紙の表示範囲の外にあるPDFは、意図しない注釈の露出を防ぐため処理を中止する場合があります。
+                        <b>データの取り扱い:</b> 文字認識・OCR前処理・TXT／Wordの書き出しは、
+                        いずれもお使いのブラウザ内で実行されます。
+                        PDFを外部のAI・OCRサービスへ送信することはありません。
                     </p>
-                </div>
+                </ToolSection>
+            </div>
 
-                {/* 3-c. Title block batch updater */}
-                <div style={{ ...cardStyle, marginTop: '24px', borderLeft: '6px solid #4ae290' }}>
-                    <h4 style={{ ...cardHeadStyle, fontSize: '1.15rem' }}>
-                        <Stamp size={20} /> 図枠一括更新
-                        <VersionBadge version={TOOL_VERSIONS.tools.version} />
-                    </h4>
-                    <p>
-                        図枠の中の文字を、<b>全ページまとめて書き換える</b>機能です。
-                        「実施設計図」を「竣工図」に変える、日付や改訂記号を更新する、といった使い方を想定しています。
-                        ページ全体を画像に変換せずに処理するため、図面の線や文字はそのまま残ります。
-                    </p>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '12px' }}>
-                        <div>
-                            <h5 style={subHeadStyle}>基本の手順</h5>
-                            <ol style={listStyle}>
-                                <li>「PDF加工」を開く</li>
-                                <li>「図枠一括更新」を選ぶ</li>
-                                <li>PDFを追加する（代表ページが表示されます）</li>
-                                <li>更新したい場所をドラッグして囲む</li>
-                                <li>新しい文字を入力する</li>
-                                <li>必要なら2か所目・3か所目を追加する</li>
-                                <li>プレビューで位置と文字を確認する</li>
-                                <li>「実行開始」を押してダウンロード</li>
-                            </ol>
-                        </div>
-                        <div>
-                            <h5 style={subHeadStyle}>できること</h5>
-                            <ul style={listStyle}>
-                                <li>更新領域は<b>最大3か所</b>まで</li>
-                                <li>設定した内容を全ページへ一括反映</li>
-                                <li>代表ページは前後のページに切り替え可能</li>
-                                <li>用紙に対する相対位置で反映するので、A1とA3が混在していても同じ場所に入る</li>
-                                <li>選んだ範囲だけ白く塗り、新しい文字を中央に配置</li>
-                                <li>文字の大きさは枠内に収まるよう自動調整</li>
-                                <li>複数ファイルへ同じ設定をまとめて適用（ZIPでダウンロード）</li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h5 style={subHeadStyle}>うまくいかないとき</h5>
-                            <ul style={listStyle}>
-                                <li>代表ページと縦横方向が違うページがあると、位置がずれないよう処理を中止します</li>
-                                <li>選んだ範囲に対して文字が長すぎる場合も中止します。範囲を広げるか文字を短くしてください</li>
-                                <li>ページのサイズや枚数、並び順は変わりません</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <p style={{ ...calloutStyle, background: '#fdecea', borderColor: '#f5b7b1' }}>
-                        <b>重要 — 墨消し（redaction）には使えません:</b> この機能は図枠の
-                        <b>表示を上書き</b>するものです。元の文字はPDFの内部に残るため、
-                        文字の検索やコピーで見つかる場合があります。
-                        機密情報を消す目的では使用しないでください。
-                    </p>
-                </div>
-            </section>
-
-
-            {/* 4. EXTRACT & MERGE */}
-            <section style={{ marginBottom: '60px' }}>
-                <h3 style={{ borderBottom: '2px solid #e2a84a', paddingBottom: '10px', color: '#e2a84a', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Blend size={24} /> 4. PDF抽出・統合 (Extract & Merge)
-                    <VersionBadge version={TOOL_VERSIONS.splitMerge.version} />
-                </h3>
-                <p style={{ marginBottom: '20px' }}>
-                    ページ単位の抜き出し（抽出）と、複数ファイルの結合（統合）を行うツールです。
-                </p>
-
-                <ScreenWithBadges
-                    src="/screenshots/split_extract.png"
-                    badges={[
-                        // 1. Tabs (Top)
-                        { top: '10%', left: '1%', width: '30%', height: '8%', desc: 'モード切替タブ' },
-                        // 2. Extract Mode (Left)
-                        { top: '20%', left: '1%', width: '48%', height: '70%', desc: 'PDF抽出 (Extract)' },
-                        // 3. Merge Mode (Right)
-                        { top: '20%', left: '51%', width: '48%', height: '70%', desc: 'PDF統合 (Merge)' }
-                    ]}
-                />
-
-                <div style={gridStyle}>
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> モード切替</h4>
-                        <p>左上のタブで「PDF抽出 (Extract)」と「PDF統合 (Merge)」を切り替えます。</p>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> PDF抽出 (Extract)</h4>
-                        <p>1つのPDFから特定のページだけを抜き出します。</p>
-                        <ol style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li>PDFをアップロードすると、全ページが <strong style={{ color: 'red' }}>③</strong> サムネイルで一覧表示されます。</li>
-                            <li>必要なページをクリックして選択（青枠表示）。</li>
-                            <li>「選択したページを書き出し」ボタンで保存します。</li>
-                        </ol>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> <Combine size={18} /> PDF統合 (Merge)</h4>
-                        <p>「PDF統合」タブでは、複数のPDFを1つにまとめられます。</p>
-                        <ul style={{ paddingLeft: '20px', fontSize: '0.9em', color: '#555' }}>
-                            <li>複数のファイルを追加し、リスト上で順序を <ArrowUp size={12} /><ArrowDown size={12} /> で入れ替えて結合します。</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-
-            {/* 5. TEXTIFIER */}
-            <section style={{ marginBottom: '60px' }}>
-                <h3 style={{ borderBottom: '2px solid #9e4ae2', paddingBottom: '10px', color: '#9e4ae2', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <ScanText size={24} /> 5. PDFテキスト化 (Textifier)
-                    <VersionBadge version={TOOL_VERSIONS.textifier.version} />
-                </h3>
-                <p style={{ marginBottom: '20px' }}>
-                    PDFの文字を取り出すツールです。日本語と英語に対応し、2つのモードがあります。
-                </p>
-                <ul style={{ marginBottom: '20px', paddingLeft: '20px', lineHeight: 1.9 }}>
-                    <li>
-                        <b>OCR</b> — スキャンして画像になってしまったPDFを文字認識し、
-                        <b>文字を検索・選択できるPDF</b>を作ります。見た目は元のPDFのまま変わりません
-                        （文字情報が裏側に追加されます）。
-                    </li>
-                    <li>
-                        <b>Text Extraction</b> — PDFの文字を<b>TXTファイル</b>または
-                        <b>編集可能なWord（.docx）</b>として書き出します。
-                        文字情報を持つページはその文字をそのまま取り出し、スキャンページはOCRを行います。
-                        元のPDFのページ順は維持されます。
-                    </li>
-                </ul>
-
-                <ScreenWithBadges
-                    src="/screenshots/textifier.png"
-                    badges={[
-                        // Measured against the current capture by
-                        // scripts/capture-textifier-screenshot.mjs, which prints
-                        // these percentages when it retakes the image. They moved
-                        // when the preview started drawing the page: an empty box
-                        // is shorter than the sheet it stands in for.
-                        // 1. Upload (Centre)
-                        { top: '19.7%', left: '21.1%', width: '57.8%', height: '44.3%', desc: 'ファイルアップロードエリア' },
-                        // 2. Settings row (Cleaning / Processing Mode / Output Format)
-                        { top: '66.6%', left: '21.1%', width: '57.8%', height: '15.7%', desc: 'OCR前処理・モード・出力形式' },
-                        // 3. Run button
-                        { top: '84.9%', left: '40.3%', width: '19.5%', height: '4.1%', desc: '実行（Start Textification）' }
-                    ]}
-                />
-
-                <div style={gridStyle}>
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>①</strong> <UploadCloud size={18} /> ファイルアップロード</h4>
-                        <p>中央の点線エリア内をクリック、またはファイルをドラッグ&ドロップして対象PDFを読み込みます。</p>
-                        <p style={noteStyle}>1回につき1ファイルを処理します。</p>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> <Settings size={18} /> 設定 (Settings)</h4>
-                        <p><b>Processing Mode</b> で、やりたいことを選びます。出力形式は自動で切り替わります。</p>
-                        <ul style={listStyle}>
-                            <li><b>OCR</b> → 出力形式は <b>PDF (Searchable)</b>。検索できるPDFが保存されます。</li>
-                            <li><b>Text Extraction</b> → 出力形式は <b>Text (.txt)</b> または <b>Word (.docx)</b>。
-                                文字だけのTXT、または編集できるWord文書が保存されます。</li>
-                            <li>どちらのモードでも、すでに文字情報を持つページには文字認識を行いません。</li>
-                        </ul>
-                        <p><b>OCR前処理</b>は、必要なときだけチェックします（初期状態はオフ）。</p>
-                        <ul style={listStyle}>
-                            <li><b>傾き補正:</b> 斜めに読み取られたスキャンページをまっすぐにしてから認識します。</li>
-                            <li><b>ノイズ除去:</b> 点状の細かな汚れを取り除いてから認識します。</li>
-                        </ul>
-                        <p style={noteStyle}>
-                            モードや前処理を切り替えると、前の設定で作った結果は破棄されます。切り替えたあとにもう一度実行してください。
-                            画面上でグレー表示になっている項目は、まだご利用いただけません（下の「未対応の機能」を参照）。
-                        </p>
-                    </div>
-
-                    <div style={cardStyle}>
-                        <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>③</strong> <Download size={18} /> 実行・ダウンロード</h4>
-                        <p>「Start Textification」を押すと処理が始まります。</p>
-                        <ul style={listStyle}>
-                            <li>進捗がページ単位で表示されます。</li>
-                            <li>途中で「キャンセル」できます（現在のページの認識完了後に反映されます）。</li>
-                            <li>キャンセルした場合、途中までのファイルは保存されません。</li>
-                            <li>完了後に「Download Result」から保存します（OCRは <b>_searchable.pdf</b>、Text Extraction は <b>_extracted.txt</b> または <b>_extracted.docx</b>）。</li>
-                        </ul>
-                        <p style={noteStyle}>※ページ数や解像度によっては、処理に時間がかかる場合があります。</p>
-                    </div>
-                </div>
-
-                {/* 5-b. What the OCR can and cannot do today */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginTop: '20px' }}>
-                    <div style={{ ...cardStyle, borderLeft: '6px solid #9e4ae2' }}>
-                        <h4 style={cardHeadStyle}><ScanText size={18} /> 現在できること</h4>
-                        <ul style={listStyle}>
-                            <li>PDFの読み込み</li>
-                            <li>ページごとに「文字情報あり」「スキャン画像」を自動判定</li>
-                            <li>スキャン画像のページだけをOCR</li>
-                            <li>日本語・英語の文字認識</li>
-                            <li><b>OCR前処理（傾き補正・ノイズ除去）</b></li>
-                            <li>検索・選択できるPDFの生成</li>
-                            <li>元の見た目をそのまま保持</li>
-                            <li><b>PDFから文字をTXTとして抽出</b></li>
-                            <li><b>PDFから文字を編集可能なWord（.docx）として書き出し</b></li>
-                            <li>文字情報のあるページは、PDF内の文字をそのまま利用</li>
-                            <li>スキャンページはOCRの結果を利用</li>
-                            <li>文字ページとスキャンページが混在したPDFに対応</li>
-                            <li>元のPDFのページ順を維持して書き出し</li>
-                            <li>回転したページに対応</li>
-                            <li>進捗表示とキャンセル</li>
-                            <li>結果のダウンロード</li>
-                            <li>処理はすべてブラウザ内で実行</li>
-                        </ul>
-                    </div>
-
-                    <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0' }}>
-                        <h4 style={cardHeadStyle}><Settings size={18} /> 未対応の機能（今後対応予定）</h4>
-                        <p style={{ margin: '0 0 8px' }}>次の項目は画面に表示されていますが、現在は選択できません。</p>
-                        <ul style={listStyle}>
-                            <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
-                        </ul>
-                        <p style={noteStyle}>
-                            現在ご利用いただける出力は「PDF (Searchable)」「Text (.txt)」「Word (.docx)」です。
-                        </p>
-                    </div>
-                </div>
-
-                {/* 5-c. What the TXT export is, and is not */}
-                <div style={{ ...cardStyle, borderLeft: '6px solid #d9a441', marginTop: '20px' }}>
-                    <h4 style={cardHeadStyle}><ScanText size={18} /> TXT書き出しについて知っておくこと</h4>
-                    <ul style={listStyle}>
-                        <li>TXTにはページの区切り（<code>===== Page 1 =====</code>）が入り、ページ順は元のPDFのままです。</li>
-                        <li>文字のないページも、ページの見出しだけは残ります。</li>
-                        <li>段組みや表が複雑なページでは、文字の順序が見た目どおりにならない場合があります。</li>
-                        <li>表をExcelの表として復元する機能ではありません。</li>
-                        <li>スキャンページの文字の正確さは、元の画像の品質によって変わります。</li>
-                        <li>キャンセルは現在のページの認識が終わったあとに反映されます。</li>
-                    </ul>
-                </div>
-
-                {/* 5-e. What the Word export is, and what it is not */}
-                <div style={{ ...cardStyle, borderLeft: '6px solid #2b579a', marginTop: '20px' }}>
-                    <h4 style={cardHeadStyle}><FileText size={18} /> Word（.docx）書き出しについて</h4>
-                    <p style={{ margin: '0 0 8px' }}>
-                        PDFの<b>文字</b>を、Wordで編集できる文書として書き出します。
-                        文字情報を持つページはその文字を直接、スキャンページはOCRの結果を使い、
-                        文字ページとスキャンページが混在したPDFにも対応します。OCR前処理も併用できます。
-                        処理はすべてブラウザ内で行われます。
-                    </p>
-                    <ul style={listStyle}>
-                        <li>元のPDFのページ順を保ち、ページの区切りをWordの改ページとして入れます。文字のないページも区切りを残します。</li>
-                        <li><b>PDFの見た目をWordへ再現する機能ではありません。</b></li>
-                        <li>表の構造は復元しません。</li>
-                        <li>段組みや複雑なレイアウトのページでは、文字の順序が見た目どおりにならない場合があります。</li>
-                        <li>画像・図形・線はWordへ移しません。文字だけを書き出します。</li>
-                        <li>フォント・文字サイズ・太字などの体裁は再現しません。</li>
-                        <li>Word側での実際のページ数は、お使いの環境やフォントによって変わることがあります。</li>
-                    </ul>
-                </div>
-
-                {/* 5-d. What preprocessing is, and what it is not */}
-                <div style={{ ...cardStyle, borderLeft: '6px solid #4a90e2', marginTop: '20px' }}>
-                    <h4 style={cardHeadStyle}><Settings size={18} /> OCR前処理について</h4>
-                    <ul style={listStyle}>
-                        <li>補正するのは<b>文字認識用の画像だけ</b>です。元のPDFの見た目・線・文字情報は変更しません。</li>
-                        <li>効果は元のスキャン画像の品質によって変わります。</li>
-                        <li>傾きがほとんどないページや、判断できるだけの文字がないページでは、補正を行わないことがあります。誤って傾けないための動作です。</li>
-                        <li>対象はおおよそ5度までの傾きです。用紙が90度単位で回転しているページは、これとは別に元から扱われます。</li>
-                        <li>ノイズ除去は、紙の上に単独で載っている点だけを取り除きます。細い線や小さな文字を消さないよう控えめに動作します。</li>
-                        <li>文字情報を持つページには前処理を行いません（そもそも文字認識をしないため）。</li>
-                    </ul>
-                </div>
-
-                <p style={calloutStyle}>
-                    <b>データの取り扱い:</b> 文字認識・OCR前処理・TXTの書き出しは、いずれもお使いのブラウザ内で実行されます。
-                    PDFを外部のAI・OCRサービスへ送信することはありません。
-                </p>
-            </section>
-
-            {/* 6. RELEASE HISTORY */}
-            <section id="release-history" style={{ marginBottom: '60px', scrollMarginTop: '20px' }}>
+            {/* RELEASE HISTORY */}
+            <section id="release-history" style={{ margin: '48px 0 60px', scrollMarginTop: '20px' }}>
                 <h3 style={{ borderBottom: '2px solid #bbb', paddingBottom: '10px', color: '#ddd', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <History size={24} /> 更新履歴
                 </h3>
@@ -702,7 +615,7 @@ export function HowToUse() {
                             <h4 style={cardHeadStyle}>
                                 <span style={{ color: '#333' }}>{release.date}</span>
                                 <span style={{ color: '#666', fontWeight: 'normal' }}>／ {release.tool}</span>
-                                <VersionBadge version={release.version} />
+                                <span style={{ marginLeft: 'auto' }}><VersionBadge version={release.version} /></span>
                             </h4>
                             <ul style={listStyle}>
                                 {release.changes.map((change) => (
@@ -717,12 +630,166 @@ export function HowToUse() {
     );
 }
 
+/**
+ * One collapsible tool.
+ *
+ * The header is a real button, so Enter and Space work, focus is visible and
+ * the expanded state is announced without any of it being re-implemented. The
+ * body is only mounted while open, which keeps a screenful of screenshots out
+ * of the first paint and out of reach of anyone reading a collapsed section.
+ */
+function ToolSection({
+    id, number, accent, icon, titleJa, titleEn, summary, version, open, onToggle, children,
+}: {
+    id: ToolId;
+    number: number;
+    accent: string;
+    icon: React.ReactNode;
+    titleJa: string;
+    titleEn: string;
+    summary: string;
+    version: string;
+    open: boolean;
+    onToggle: (id: ToolId) => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <section
+            id={`usage-section-${id}`}
+            style={{ scrollMarginTop: '16px', ['--usage-accent' as string]: accent }}
+        >
+            <h3 style={{ margin: 0 }}>
+                <button
+                    type="button"
+                    className="usage-header"
+                    id={`usage-header-${id}`}
+                    aria-expanded={open}
+                    aria-controls={`usage-panel-${id}`}
+                    onClick={() => onToggle(id)}
+                    data-usage-tool={id}
+                >
+                    <span className="usage-header-icon">{icon}</span>
+                    <span className="usage-header-text">
+                        <span className="usage-header-title">
+                            {number}. {titleJa}
+                            <span className="usage-header-en">{titleEn}</span>
+                        </span>
+                        <span className="usage-header-summary">{summary}</span>
+                    </span>
+                    <VersionBadge version={version} />
+                    <ChevronDown size={20} className="usage-header-chevron" aria-hidden="true" />
+                </button>
+            </h3>
+            <div
+                className="usage-panel"
+                id={`usage-panel-${id}`}
+                role="region"
+                aria-labelledby={`usage-header-${id}`}
+                hidden={!open}
+            >
+                {open ? children : null}
+            </div>
+        </section>
+    );
+}
+
+function BadgeCard({ n, icon, title, children }: {
+    n: number; icon: React.ReactNode; title: string; children: React.ReactNode;
+}) {
+    return (
+        <div style={cardStyle}>
+            <h4 style={cardHeadStyle}>
+                <span style={{
+                    background: 'red', color: '#fff', borderRadius: '50%',
+                    width: '22px', height: '22px', display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', flexShrink: 0,
+                }}>{n}</span>
+                {icon} {title}
+            </h4>
+            {children}
+        </div>
+    );
+}
+
+interface MeasuredRect { left: number; top: number; width: number; height: number }
+interface MeasuredScreen {
+    frame: { width: number; height: number };
+    targets: Record<string, MeasuredRect | null>;
+}
+
+const GEOMETRY = measuredGeometry as unknown as Record<string, MeasuredScreen>;
+
+/**
+ * A screenshot with its numbered boxes.
+ *
+ * Positions come from usage-screenshot-geometry.json, which is measured from
+ * the running app rather than typed by hand -- that is what stops the boxes
+ * drifting away from the controls every time a screen is recaptured. A badge
+ * covering several controls is drawn as the union of them.
+ */
+function ScreenWithBadges({ screenshot }: { screenshot: string }) {
+    const config = USAGE_SCREENSHOTS[screenshot];
+    const measured = GEOMETRY[screenshot];
+    if (!config || !measured) return null;
+
+    const boxes = config.badges.map((badge) => {
+        const rects = badge.targets
+            .map((t) => measured.targets[t])
+            .filter((r): r is MeasuredRect => Boolean(r));
+        if (rects.length === 0) return null;
+        const left = Math.min(...rects.map((r) => r.left));
+        const top = Math.min(...rects.map((r) => r.top));
+        const right = Math.max(...rects.map((r) => r.left + r.width));
+        const bottom = Math.max(...rects.map((r) => r.top + r.height));
+        return { left, top, width: right - left, height: bottom - top, desc: badge.desc };
+    });
+
+    return (
+        <div className="usage-screen" data-usage-screenshot={screenshot}>
+            <img src={config.src} alt={`${screenshot} の画面`} loading="lazy" />
+            {boxes.map((box, i) => box && (
+                <React.Fragment key={i}>
+                    <div
+                        className="usage-screen-box"
+                        data-usage-box={i + 1}
+                        style={{
+                            left: `${box.left}%`, top: `${box.top}%`,
+                            width: `${box.width}%`, height: `${box.height}%`,
+                        }}
+                    />
+                    <div
+                        className="usage-screen-number"
+                        data-usage-number={i + 1}
+                        // Clamped inside the frame: a marker hanging off the top
+                        // left corner of a control at the edge would be cut off.
+                        style={{
+                            left: `max(2px, calc(${box.left}% - 13px))`,
+                            top: `max(2px, calc(${box.top}% - 13px))`,
+                        }}
+                        title={box.desc}
+                    >
+                        {i + 1}
+                    </div>
+                </React.Fragment>
+            ))}
+        </div>
+    );
+}
+
+const gridStyle: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '20px',
+    marginTop: '20px',
+};
+
 const cardStyle: React.CSSProperties = {
     background: 'white',
-    padding: '20px',
+    padding: '16px',
     borderRadius: '8px',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    border: '1px solid #eee'
+    border: '1px solid #eee',
 };
 
 const cardHeadStyle: React.CSSProperties = {
@@ -732,13 +799,14 @@ const cardHeadStyle: React.CSSProperties = {
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
-    color: '#333'
+    color: '#333',
+    fontSize: '0.95rem',
 };
 
 const subHeadStyle: React.CSSProperties = {
-    margin: '0 0 6px',
-    fontSize: '0.95rem',
-    color: '#333'
+    margin: '0 0 8px',
+    fontSize: '1rem',
+    color: '#333',
 };
 
 const listStyle: React.CSSProperties = {
@@ -747,13 +815,13 @@ const listStyle: React.CSSProperties = {
     fontSize: '0.9em',
     color: '#555',
     lineHeight: 1.7,
-    overflowWrap: 'anywhere'
+    overflowWrap: 'anywhere',
 };
 
 const noteStyle: React.CSSProperties = {
     fontSize: '0.85em',
     color: '#777',
-    margin: '6px 0 0'
+    margin: '8px 0 0',
 };
 
 const calloutStyle: React.CSSProperties = {
@@ -763,72 +831,5 @@ const calloutStyle: React.CSSProperties = {
     border: '1px solid #ffe0a3',
     borderRadius: '6px',
     padding: '10px 12px',
-    marginTop: '16px'
+    marginTop: '16px',
 };
-
-// Helper Component for Screenshot with Badges
-interface BadgeRect { top: string; left: string; width: string; height: string; }
-interface BadgeItem { top: string; left: string; width?: string; height?: string; rects?: BadgeRect[]; desc: string; }
-
-const ScreenWithBadges = ({ src, badges }: { src: string, badges: BadgeItem[] }) => (
-    <div style={{ position: 'relative', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-        <img src={src} style={{ width: '100%', display: 'block' }} alt="Tool Screenshot" />
-        {badges.map((b, i) => (
-            <React.Fragment key={i}>
-                {/* Render Multiple Boxes if provided */}
-                {b.rects ? b.rects.map((r, ri) => (
-                    <div key={ri} style={{
-                        position: 'absolute',
-                        top: r.top,
-                        left: r.left,
-                        width: r.width,
-                        height: r.height,
-                        border: '3px solid red',
-                        borderRadius: '4px',
-                        pointerEvents: 'none',
-                        boxShadow: '0 0 4px rgba(255,0,0,0.4)'
-                    }} />
-                )) : (
-                    /* Fallback to single box if width/height provided */
-                    b.width && b.height && (
-                        <div style={{
-                            position: 'absolute',
-                            top: b.top,
-                            left: b.left,
-                            width: b.width,
-                            height: b.height,
-                            border: '3px solid red',
-                            borderRadius: '4px',
-                            pointerEvents: 'none',
-                            boxShadow: '0 0 4px rgba(255,0,0,0.4)'
-                        }} />
-                    )
-                )}
-
-                {/* Render Badge at the specified top/left (usually of the first box) */}
-                <div style={{
-                    position: 'absolute',
-                    top: b.rects ? `calc(${b.rects[0].top} - 14px)` : (b.width ? `calc(${b.top} - 14px)` : b.top),
-                    left: b.rects ? `calc(${b.rects[0].left} - 14px)` : (b.width ? `calc(${b.left} - 14px)` : b.left),
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    background: 'red',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 'bold',
-                    fontSize: '16px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
-                    cursor: 'help',
-                    border: '2px solid white',
-                    zIndex: 10
-                }} title={b.desc}>
-                    {i + 1}
-                </div>
-            </React.Fragment>
-        ))}
-    </div>
-);
-

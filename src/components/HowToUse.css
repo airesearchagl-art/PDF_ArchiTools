@@ -1,0 +1,165 @@
+/* Usage guide: accordion navigation and screenshot annotations. */
+
+.usage-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/*
+ * A real button, not a clickable div.
+ * Keyboard activation, focus and the expanded state all come from the element
+ * itself rather than being re-implemented on top of a div.
+ */
+.usage-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-left: 6px solid var(--usage-accent, #4a90e2);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: #333;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+.usage-header:hover {
+    background: #f7fafd;
+}
+
+/* Visible focus, and not only for the mouse-free path. */
+.usage-header:focus-visible {
+    outline: 3px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.usage-header[aria-expanded='true'] {
+    background: #f2f7fd;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.usage-header-icon {
+    display: flex;
+    align-items: center;
+    color: var(--usage-accent, #4a90e2);
+    flex-shrink: 0;
+}
+
+.usage-header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.usage-header-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.usage-header-en {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: #777;
+}
+
+.usage-header-summary {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+/*
+ * The chevron carries the open/closed state as a shape, so it does not depend
+ * on the reader telling one background colour from another.
+ */
+.usage-header-chevron {
+    flex-shrink: 0;
+    color: #888;
+    transition: transform 0.2s;
+}
+
+.usage-header[aria-expanded='true'] .usage-header-chevron {
+    transform: rotate(180deg);
+}
+
+.usage-panel {
+    border: 1px solid #e2e2e2;
+    border-top: none;
+    border-left: 6px solid var(--usage-accent, #4a90e2);
+    border-radius: 0 0 8px 8px;
+    background: #fafafa;
+    padding: 20px;
+}
+
+.usage-panel[hidden] {
+    display: none;
+}
+
+/* The annotated screenshot. */
+.usage-screen {
+    position: relative;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    background: #fff;
+}
+
+.usage-screen img {
+    width: 100%;
+    display: block;
+}
+
+.usage-screen-box {
+    position: absolute;
+    border: 3px solid red;
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 0 0 4px rgba(255, 0, 0, 0.4);
+}
+
+.usage-screen-number {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: red;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+@media (max-width: 640px) {
+    .usage-header {
+        padding: 12px 14px;
+        gap: 8px;
+    }
+
+    .usage-panel {
+        padding: 14px;
+    }
+
+    .usage-screen-number {
+        width: 20px;
+        height: 20px;
+        font-size: 11px;
+    }
+}
