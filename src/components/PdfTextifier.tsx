@@ -1,6 +1,6 @@
 import './PdfTextifier.css';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 import * as pdfjsLib from 'pdfjs-dist';
 import { Upload, FileText, Check, Download, Loader, Settings, ArrowRight, AlertTriangle, XCircle } from 'lucide-react';
@@ -18,6 +18,9 @@ interface TextifierOptions {
     mode: Mode;
     outputFormat: 'pdf' | 'txt' | 'word' | 'excel';
 }
+
+/** Width the first-page preview thumbnail is fitted to. */
+const PREVIEW_WIDTH = 300;
 
 /** The only format each mode can actually produce today. */
 const FORMAT_FOR_MODE: Record<Mode, TextifierOptions['outputFormat']> = {
@@ -45,6 +48,9 @@ export const PdfTextifier: React.FC = () => {
     const [result, setResult] = useState<CompletedRun | null>(null);
     const [error, setError] = useState<{ title: string; detail?: string } | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    // The opened document, kept so the preview can be drawn once the canvas it
+    // draws onto has been rendered.
+    const [previewPdf, setPreviewPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
 
     // Default options
     const [options, setOptions] = useState<TextifierOptions>({
@@ -83,12 +89,11 @@ export const PdfTextifier: React.FC = () => {
             const loadedPdf = await pdfjsLib.getDocument(arrayBuffer).promise;
 
             setFile(selectedFile);
-
-            // Render preview of first page
-            renderPreview(loadedPdf);
+            setPreviewPdf(loadedPdf);
         } catch (err) {
             console.error("Error loading PDF:", err);
             setFile(null);
+            setPreviewPdf(null);
             setError({
                 title: 'PDFを読み込めませんでした。',
                 detail: err instanceof Error ? err.message : String(err),
@@ -96,28 +101,45 @@ export const PdfTextifier: React.FC = () => {
         }
     };
 
-    const renderPreview = async (loadedPdf: pdfjsLib.PDFDocumentProxy) => {
-        if (!canvasRef.current) return;
+    /**
+     * Draw the first page once the canvas is actually on screen.
+     *
+     * This has to wait for a render, not just for the file to be read. The
+     * preview canvas is only in the tree while a file is selected, so at the
+     * moment the file is opened it does not exist yet and the ref is still
+     * null -- and the preview simply gave up there. The result was a blank
+     * frame for the first PDF of a session, with the second and every one
+     * after it drawing correctly off the canvas the first file had left
+     * behind. An effect runs after React has committed the DOM, so the canvas
+     * is there to draw on.
+     */
+    useEffect(() => {
+        if (!previewPdf) return;
+        let abandoned = false;
 
-        try {
-            const page = await loadedPdf.getPage(1);
-            const viewport = page.getViewport({ scale: 1.0 });
+        (async () => {
+            try {
+                const page = await previewPdf.getPage(1);
+                const viewport = page.getViewport({ scale: 1.0 });
+                const rendered = await renderPageToCanvas(
+                    previewPdf, 1, PREVIEW_WIDTH / viewport.width,
+                );
 
-            // Fit to container width (approx 300px for preview thumbnail)
-            const scale = 300 / viewport.width;
-            const canvas = await renderPageToCanvas(loadedPdf, 1, scale);
-
-            // Draw to our ref canvas
-            const ctx = canvasRef.current.getContext('2d');
-            if (ctx) {
-                canvasRef.current.width = canvas.width;
-                canvasRef.current.height = canvas.height;
-                ctx.drawImage(canvas, 0, 0);
+                // Another file may have been chosen while this was rendering.
+                const target = canvasRef.current;
+                if (abandoned || !target) return;
+                const ctx = target.getContext('2d');
+                if (!ctx) return;
+                target.width = rendered.width;
+                target.height = rendered.height;
+                ctx.drawImage(rendered, 0, 0);
+            } catch (e) {
+                console.error("Preview render error:", e);
             }
-        } catch (e) {
-            console.error("Preview render error:", e);
-        }
-    };
+        })();
+
+        return () => { abandoned = true; };
+    }, [previewPdf]);
 
     /**
      * Switching mode throws away whatever the previous mode produced.
