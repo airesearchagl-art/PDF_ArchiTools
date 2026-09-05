@@ -196,8 +196,10 @@ try {
     check('Text Extraction selects Text (.txt)',
         switched.format === 'txt' && switched.formatLabel === 'Text (.txt)',
         `${switched.format} / ${switched.formatLabel}`);
-    check('Word and Excel stay unavailable',
-        switched.formatOptions.join(',') === 'txt,word(disabled),excel(disabled)',
+    // Word became a real option in M2-3 and has its own gate; what this one
+    // still holds is that Text is the default and Excel is not offered.
+    check('Text is the default, and Excel stays unavailable',
+        switched.formatOptions.join(',') === 'txt,word,excel(disabled)',
         switched.formatOptions.join(','));
 
     // ---- the real run, downloaded for real ----------------------------------

@@ -34,9 +34,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '図枠一括更新機能を追加'
     },
     textifier: {
-        version: '1.4.0',
+        version: '1.5.0',
         lastUpdate: '2026/09/05',
-        changelog: 'OCR用の傾き補正・ノイズ除去を追加'
+        changelog: '編集可能なWord（.docx）書き出しを追加'
     },
     splitMerge: {
         version: '1.1.1',

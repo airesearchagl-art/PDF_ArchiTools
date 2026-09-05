@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Word export smoke harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Word export smoke harness</h1>
+<p>Driven by <code>scripts/smoke-word-export.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import JSZip from 'jszip';
+import { extractTextPdf, buildWordDocument, WORD_MIME, TextifyError } from '/src/utils/pdf-textifier/index.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+const fetchFixture = (name) => fetch(`/test-fixtures/${name}`).then((r) => {
+  if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+  return r.arrayBuffer();
+});
+
+/**
+ * Open the package the way a reader would, and report what is actually in it.
+ *
+ * Everything asserted about a .docx is asserted from here: the entries, the
+ * relationships, the parsed document. "It downloaded" is not evidence that it
+ * opens.
+ */
+async function inspect(bytes) {
+  const zip = await JSZip.loadAsync(bytes);
+  const entries = Object.keys(zip.files).filter((n) => !zip.files[n].dir).sort();
+
+  const read = async (name) => (zip.file(name) ? zip.file(name).async('string') : null);
+  const documentXml = await read('word/document.xml');
+  const relsXml = await read('_rels/.rels');
+  const typesXml = await read('[Content_Types].xml');
+
+  const parse = (xml) => {
+    if (xml === null) return { ok: false, error: 'part missing', doc: null };
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const err = doc.querySelector('parsererror');
+    return { ok: !err, error: err ? err.textContent.replace(/\s+/g, ' ').slice(0, 160) : null, doc };
+  };
+
+  const parsedDocument = parse(documentXml);
+  const parsedRels = parse(relsXml);
+  const parsedTypes = parse(typesXml);
+
+  const relationships = parsedRels.doc
+    ? [...parsedRels.doc.getElementsByTagName('Relationship')].map((r) => ({
+      id: r.getAttribute('Id'),
+      target: r.getAttribute('Target'),
+      type: r.getAttribute('Type'),
+      mode: r.getAttribute('TargetMode') ?? 'Internal',
+    }))
+    : [];
+
+  const overrides = parsedTypes.doc
+    ? [...parsedTypes.doc.getElementsByTagName('Override')].map((o) => ({
+      part: o.getAttribute('PartName'),
+      contentType: o.getAttribute('ContentType'),
+    }))
+    : [];
+
+  // Paragraph text as a reader would see it, i.e. after the XML has been
+  // parsed. Comparing against this rather than against the raw markup is what
+  // makes the escaping check meaningful.
+  const paragraphs = parsedDocument.doc
+    ? [...parsedDocument.doc.getElementsByTagName('w:p')].map((p) => ({
+      text: [...p.getElementsByTagName('w:t')].map((t) => t.textContent).join(''),
+      isPageBreak: [...p.getElementsByTagName('w:br')].some((b) => b.getAttribute('w:type') === 'page'),
+    }))
+    : [];
+
+  const text = paragraphs.filter((p) => !p.isPageBreak).map((p) => p.text).join('\n');
+
+  return {
+    bytes: bytes.length,
+    entries,
+    hasContentTypes: entries.includes('[Content_Types].xml'),
+    hasPackageRels: entries.includes('_rels/.rels'),
+    hasDocument: entries.includes('word/document.xml'),
+    documentParses: parsedDocument.ok,
+    documentError: parsedDocument.error,
+    relsParse: parsedRels.ok,
+    typesParse: parsedTypes.ok,
+    relationships,
+    targetsResolve: relationships.every((r) => entries.includes(r.target.replace(/^\//, ''))),
+    externalRelationships: relationships.filter((r) => r.mode === 'External').length,
+    remoteTargets: relationships.filter((r) => /^https?:|^\\\\/i.test(r.target ?? '')).length,
+    documentTyped: overrides.some((o) => o.part === '/word/document.xml'
+      && o.contentType === `${WORD_MIME}.main+xml`),
+    macros: entries.filter((n) => /vbaProject|\.bin$|\.docm$/i.test(n)),
+    paragraphs: paragraphs.length,
+    pageBreaks: paragraphs.filter((p) => p.isPageBreak).length,
+    text,
+    // Raw markup checks: reserved characters must never have arrived literally.
+    rawUnescapedAmpersand: /&(?!amp;|lt;|gt;|quot;|apos;|#)/.test(documentXml ?? ''),
+    hasPlaceholderJunk: /\[object Object\]|\bundefined\b|\bNaN\b/.test(documentXml ?? ''),
+    xmlDeclared: (documentXml ?? '').startsWith('<?xml version="1.0" encoding="UTF-8"'),
+  };
+}
+
+window.__word = {
+  /** The whole route a user takes: extract, then build. */
+  async run(name, options = {}) {
+    log(`word ${name}`);
+    const input = await fetchFixture(name);
+    const started = performance.now();
+    const extraction = await extractTextPdf(input.slice(0), {
+      preprocess: options.preprocess,
+    });
+    const extractMs = Math.round(performance.now() - started);
+    const buildStarted = performance.now();
+    const word = await buildWordDocument(extraction.pages);
+    const buildMs = Math.round(performance.now() - buildStarted);
+    const report = await inspect(word.bytes);
+    log(`done ${name}`);
+    return {
+      name,
+      pages: extraction.pages.map((p) => ({
+        pageNumber: p.pageNumber, kind: p.kind, ocrWords: p.ocrWords,
+        charCount: p.charCount, preprocess: p.preprocess ?? null,
+      })),
+      ocrUsed: extraction.ocrUsed,
+      extractedText: extraction.text,
+      word: {
+        pageCount: word.pageCount, paragraphCount: word.paragraphCount,
+        characterCount: word.characterCount, pageBreaks: word.pageBreaks,
+        totalMs: word.totalMs, bytes: word.bytes.length,
+      },
+      extractMs, buildMs,
+      report,
+    };
+  },
+
+  /** The builder on its own, over pages we hand it directly. */
+  async build(pages) {
+    const word = await buildWordDocument(pages);
+    const report = await inspect(word.bytes);
+    return {
+      word: {
+        pageCount: word.pageCount, paragraphCount: word.paragraphCount,
+        characterCount: word.characterCount, pageBreaks: word.pageBreaks,
+        bytes: word.bytes.length,
+      },
+      report,
+    };
+  },
+
+  /** Same pages twice: are the bytes the same, and is the payload the same? */
+  async determinism(pages) {
+    const a = await buildWordDocument(pages);
+    const b = await buildWordDocument(pages);
+    let identical = a.bytes.length === b.bytes.length;
+    if (identical) {
+      for (let i = 0; i < a.bytes.length; i++) {
+        if (a.bytes[i] !== b.bytes[i]) { identical = false; break; }
+      }
+    }
+    const readDoc = async (bytes) => {
+      const zip = await JSZip.loadAsync(bytes);
+      return zip.file('word/document.xml').async('string');
+    };
+    const xmlA = await readDoc(a.bytes);
+    const xmlB = await readDoc(b.bytes);
+    return { byteIdentical: identical, payloadIdentical: xmlA === xmlB, bytes: a.bytes.length };
+  },
+
+  /** Cancelling during extraction must leave no document at all. */
+  async cancelDuringExtraction(name) {
+    const input = await fetchFixture(name);
+    let armed = false;
+    try {
+      const extraction = await extractTextPdf(input, {
+        // Armed on the last page whichever way that page is being read: in a
+        // mixed document the final sheet is text-native, so waiting only for
+        // recognition would mean never arming at all.
+        onProgress: (e) => {
+          if ((e.phase === 'ocr-page' || e.phase === 'extracting') && e.page === e.totalPages) armed = true;
+        },
+        shouldCancel: () => armed,
+      });
+      const word = await buildWordDocument(extraction.pages);
+      return { threw: false, builtBytes: word.bytes.length, armed };
+    } catch (error) {
+      return {
+        threw: true,
+        code: error instanceof TextifyError ? error.code : null,
+        armed,
+        builtBytes: null,
+      };
+    }
+  },
+
+  /** Cancelling once extraction is done, before or during the package build. */
+  async cancelDuringBuild(pages) {
+    try {
+      const word = await buildWordDocument(pages, { shouldCancel: () => true });
+      return { threw: false, builtBytes: word.bytes.length };
+    } catch (error) {
+      return {
+        threw: true,
+        code: error instanceof TextifyError ? error.code : null,
+        builtBytes: null,
+      };
+    }
+  },
+
+  mime: WORD_MIME,
+  ready: true,
+};
+log('ready');
+</script>
+</body>
+</html>

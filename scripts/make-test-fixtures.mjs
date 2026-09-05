@@ -34,6 +34,11 @@
  *   scanned-a0-clean.pdf      A0 sheet, straight    -- ~35 megapixels at 150 DPI
  *   scanned-a0-skew-noisy.pdf A0 sheet, +3 and dirty
  *
+ * For Word export (M2-3):
+ *
+ *   text-native-xml-specials.pdf  text a drawing really contains, and XML
+ *                                 reserves: ampersands, angle brackets, quotes
+ *
  * Run:  node scripts/make-test-fixtures.mjs
  */
 import fs from 'node:fs';
@@ -313,6 +318,22 @@ for (const [name, deg, lines, tag] of [
     const doc = await PDFDocument.create();
     await addScanPage(doc, await addSpeckle(browser, skewed, 20260907, 0.0008));
     results.push(['scanned-skew-noisy.pdf', await write(doc, 'scanned-skew-noisy.pdf')]);
+}
+
+// The characters a drawing note is full of and XML cannot take literally.
+// Concatenating any of these into markup is how a document stops opening, so
+// there has to be a page that actually contains them.
+{
+    const doc = await PDFDocument.create();
+    doc.registerFontkit(fontkit);
+    const font = await doc.embedFont(fontBytes, { subset: false });
+    await addTextPage(doc, font, [
+        ['A&B <drawing> "quoted"', 20],
+        ['日本語＆English', 16],
+        ["Rev 3 > Rev 2 & 'final'", 14],
+        ['<NOTE> 5 < 10 & 10 > 5', 14],
+    ]);
+    results.push(['text-native-xml-specials.pdf', await write(doc, 'text-native-xml-specials.pdf')]);
 }
 
 // Large-format sheets. The raster stays the size it already was; what changes

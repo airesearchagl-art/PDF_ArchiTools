@@ -74,7 +74,7 @@ try {
     });
     console.log(`  versions : ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.3.0', versions['3. PDF加工 (Processor)'] === '1.3.0', JSON.stringify(versions));
-    check('PDFテキスト化 shows v1.4.0', versions['5. PDFテキスト化 (Textifier)'] === '1.4.0', JSON.stringify(versions));
+    check('PDFテキスト化 shows v1.5.0', versions['5. PDFテキスト化 (Textifier)'] === '1.5.0', JSON.stringify(versions));
 
     // ---- S1: the page-size normalizer is documented ------------------------
     check('図面サイズ統一 is documented', text.includes('図面サイズ統一'));
@@ -123,7 +123,6 @@ try {
         const items = [...document.querySelectorAll('li')].map((li) => li.textContent || '');
         const find = (needle) => items.find((t) => t.includes(needle)) ?? '';
         return {
-            word: find('Word (.docx)'),
             excel: find('Excel (.xlsx)'),
         };
     });
@@ -150,6 +149,23 @@ try {
         !text.includes('精度を保証') && !text.includes('必ず改善'));
     check('the guide no longer claims Word/Excel conversion is available',
         !text.includes('Word/Excel形式に変換'));
+
+    // ---- M2-3: the Word export is documented, and its limits stated ---------
+    check('Word (.docx) is offered as a Text Extraction output',
+        text.includes('Word (.docx)') && text.includes('_extracted.docx'));
+    check('Word is no longer listed as unavailable',
+        !/Word \(\.docx\)[^\n]*未対応/.test(text));
+    check('the Word export says what it carries',
+        text.includes('編集できる') || text.includes('編集可能'));
+    check('the Word export states the page-order and page-break behaviour',
+        text.includes('ページの区切りをWordの改ページ') && text.includes('文字のないページも区切りを残します'));
+    check('the Word export does not claim to reproduce the PDF',
+        text.includes('PDFの見た目をWordへ再現する機能ではありません')
+        && text.includes('表の構造は復元しません')
+        && text.includes('画像・図形・線はWordへ移しません')
+        && text.includes('フォント・文字サイズ・太字などの体裁は再現しません'));
+    check('the guide never claims Word keeps the PDF layout',
+        !text.includes('レイアウトを保持') && !text.includes('レイアウトを再現します'));
     check('OCR capabilities are described',
         text.includes('日本語') && text.includes('検索') && text.includes('ブラウザ内'));
 
@@ -157,12 +173,15 @@ try {
     check('更新履歴 section exists', text.includes('更新履歴'));
     const historyText = await page.evaluate(() =>
         document.querySelector('#release-history')?.innerText ?? '');
-    check('release history: the v1.4.0 preprocessing entry leads',
-        historyText.indexOf('1.4.0') >= 0
+    check('release history: the v1.5.0 Word entry leads, newest first',
+        historyText.indexOf('1.5.0') >= 0
+        && historyText.indexOf('1.5.0') < historyText.indexOf('1.4.0')
         && historyText.indexOf('1.4.0') < historyText.indexOf('1.3.1')
         && historyText.indexOf('1.3.1') < historyText.indexOf('1.3.0')
-        && historyText.includes('傾き'),
-        historyText.slice(0, 100).replace(/\n/g, ' | '));
+        && historyText.includes('Word'),
+        historyText.slice(0, 110).replace(/\n/g, ' | '));
+    check('release history: the v1.4.0 preprocessing entry survives below it',
+        historyText.includes('1.4.0') && historyText.includes('傾き'));
     check('release history: the v1.3.1 preview fix survives below it',
         historyText.includes('1.3.1') && historyText.includes('プレビュー'));
     check('release history: the 2026/09/05 PDFテキスト化 v1.3.0 entry survives below it',
