@@ -170,7 +170,24 @@ window.__prep = {
     await page.render({ canvas, viewport, intent: 'print' }).promise;
 
     const before = { width: canvas.width, height: canvas.height };
-    const prep = preprocessForOcr(canvas, options);
+    // Ink before and after, so speck removal can be shown not to have eaten
+    // strokes on a page far too large to check by reading it.
+    const inkOf = (c) => {
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      let n = 0;
+      const band = 512;
+      for (let y = 0; y < c.height; y += band) {
+        const h = Math.min(band, c.height - y);
+        const d = cx.getImageData(0, y, c.width, h).data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < 160) n++;
+        }
+      }
+      return n;
+    };
+    const inkBefore = options.noiseReduction ? inkOf(canvas) : undefined;
+    const prep = await preprocessForOcr(canvas, options);
+    const inkAfter = options.noiseReduction && !prep.deskewApplied ? inkOf(prep.canvas) : undefined;
     const out = {
       name,
       source: `${before.width}x${before.height}`,
@@ -187,6 +204,12 @@ window.__prep = {
       noiseMs: prep.noiseMs,
       processingMs: prep.processingMs,
       hasMapping: typeof prep.mapToRenderSpace === 'function',
+      inkBefore,
+      inkAfter,
+      peakWorkingBytes: prep.peakWorkingBytes,
+      bandRows: prep.bandRows,
+      modifiedSourceCanvas: prep.modifiedSourceCanvas,
+      skipped: prep.skipped ?? null,
       // A round trip through the mapping must land back where it started.
       mappingRoundTrip: null,
     };
@@ -255,6 +278,74 @@ window.__prep = {
       })),
       totalMs,
     };
+  },
+
+  /**
+   * Does the event loop get a turn while preprocessing runs?
+   *
+   * A timer that cannot fire is a click that cannot be delivered, and the
+   * cancel button between preprocessing and recognition is only a boundary if
+   * the press reaches it. Counting ticks against elapsed time answers that
+   * directly, without depending on how fast the machine is.
+   */
+  async eventLoopProbe(name, options) {
+    const bytes = await fetchFixture(name);
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 150 / 72 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    canvas.getContext('2d', { willReadFrequently: true });
+    await page.render({ canvas, viewport, intent: 'print' }).promise;
+
+    let ticks = 0;
+    const timer = setInterval(() => { ticks++; }, 20);
+    const started = performance.now();
+    const prep = await preprocessForOcr(canvas, options);
+    const ms = performance.now() - started;
+    clearInterval(timer);
+    if (prep.ownsCanvas) { prep.canvas.width = 0; prep.canvas.height = 0; }
+    canvas.width = 0; canvas.height = 0;
+    return {
+      name, ms: Math.round(ms), ticks,
+      possibleTicks: Math.floor(ms / 20),
+      bandRows: prep.bandRows,
+    };
+  },
+
+  /**
+   * The budget fail-safe, exercised on a bare canvas rather than a document.
+   * The check is about the size of the image, and making one directly costs a
+   * single allocation instead of rendering a sheet nobody has.
+   */
+  async budgetProbe(width, height) {
+    const canvas = document.createElement('canvas');
+    let created = false;
+    try {
+      canvas.width = width;
+      canvas.height = height;
+      created = canvas.width === width && canvas.height === height;
+      if (!created) return { created: false };
+      const prep = await preprocessForOcr(canvas, { deskew: true, noiseReduction: true });
+      const out = {
+        created: true,
+        megapixels: +((width * height) / 1e6).toFixed(1),
+        skipped: prep.skipped ?? null,
+        deskewApplied: prep.deskewApplied,
+        noiseReductionApplied: prep.noiseReductionApplied,
+        modifiedSourceCanvas: prep.modifiedSourceCanvas,
+        sameCanvas: prep.canvas === canvas,
+        ownsCanvas: prep.ownsCanvas,
+      };
+      if (prep.ownsCanvas) { prep.canvas.width = 0; prep.canvas.height = 0; }
+      return out;
+    } catch (error) {
+      return { created, error: String(error?.message ?? error) };
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
   },
 
   async cancelProbe(name, options) {

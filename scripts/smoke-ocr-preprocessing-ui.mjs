@@ -25,6 +25,9 @@ const PORT = 5196;
 const ORIGIN = `http://localhost:${PORT}`;
 const FIXTURES = path.join(ROOT, 'test-fixtures');
 const SKEWED = 'scanned-skew-plus-3.pdf';
+// A1 at 150 DPI is about 17 megapixels, enough that preprocessing takes real
+// time and a cancel press has something to interrupt.
+const LARGE = 'scanned-a1-skew-noisy.pdf';
 
 if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
     console.error('No dist/ found. Run: npm run build');
@@ -271,6 +274,44 @@ try {
     check('changing a preprocessing setting clears the finished result',
         afterToggle.downloadName === null && afterToggle.complete === false,
         JSON.stringify(afterToggle));
+
+    // ---- cancel, as a real click, on a large sheet with preprocessing on -------
+    //
+    // The module gate measures that preprocessing hands the event loop back
+    // while it works. This is the other half: that a press actually made during
+    // a run reaches the boundary and stops it, on the size of sheet where
+    // preprocessing takes long enough to matter.
+    console.log('\n=== cancel during a large-format run ===');
+    await page.goto(ORIGIN, { waitUntil: 'networkidle0' });
+    await clickButton('PDFテキスト化');
+    await page.waitForFunction(() => document.body.innerText.includes('PDF Textification'));
+    const bigInput = await page.$('input[type="file"]');
+    await bigInput.uploadFile(path.join(FIXTURES, LARGE));
+    await page.waitForFunction((n) => document.body.innerText.includes(n), {}, LARGE);
+    await setBox('deskew', true);
+    await setBox('noiseReduction', true);
+
+    await clickButton('Start Textification');
+    // Wait for the run to be genuinely underway before pressing anything.
+    await page.waitForFunction(() => /判定中|抽出中|認識中/.test(document.body.innerText),
+        { timeout: 60_000 });
+    const clickedAt = Date.now();
+    await clickButton('キャンセル');
+    await page.waitForFunction(
+        () => document.body.innerText.includes('処理をキャンセルしました')
+            || document.body.innerText.includes('Processing Complete!'),
+        { timeout: 180_000 });
+    const cancelled = await page.evaluate(() => ({
+        notice: document.body.innerText.includes('処理をキャンセルしました'),
+        complete: document.body.innerText.includes('Processing Complete!'),
+        download: [...document.querySelectorAll('a')].some((a) => a.hasAttribute('download')),
+    }));
+    console.log(`  ${JSON.stringify(cancelled)}  (${Date.now() - clickedAt}ms after the click)`);
+    check('the cancel button works during a preprocessed large-format run',
+        cancelled.notice === true && cancelled.complete === false,
+        JSON.stringify(cancelled));
+    check('a cancelled preprocessed run offers nothing to download',
+        cancelled.download === false, JSON.stringify(cancelled));
 
     // ---- network ---------------------------------------------------------------
     console.log('\n=== network ===');

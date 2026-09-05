@@ -29,6 +29,10 @@
  *   scanned-skew-noisy.pdf    +3 degrees and speckle together
  *   scanned-sparse.pdf        two short words -- too little to judge an angle from
  *   scanned-blank.pdf         an empty sheet
+ *   scanned-a1-clean.pdf      A1 sheet, straight    -- ~17 megapixels at 150 DPI
+ *   scanned-a1-skew-noisy.pdf A1 sheet, +3 and dirty
+ *   scanned-a0-clean.pdf      A0 sheet, straight    -- ~35 megapixels at 150 DPI
+ *   scanned-a0-skew-noisy.pdf A0 sheet, +3 and dirty
  *
  * Run:  node scripts/make-test-fixtures.mjs
  */
@@ -45,6 +49,10 @@ const FONT = path.join(ROOT, 'public', 'ocr', 'fonts', 'MPLUS1p-Regular.ttf');
 
 const A4_W = 595.28;
 const A4_H = 841.89;
+const A1_W = 1683.78;
+const A1_H = 2383.94;
+const A0_W = 2383.94;
+const A0_H = 3370.39;
 const PX_W = 1240;
 const PX_H = 1754;
 
@@ -183,10 +191,10 @@ async function addTextPage(doc, font, lines) {
 }
 
 /** A page whose only content is a raster, exactly what a scanner produces. */
-async function addScanPage(doc, png) {
+async function addScanPage(doc, png, width = A4_W, height = A4_H) {
     const image = await doc.embedPng(png);
-    const page = doc.addPage([A4_W, A4_H]);
-    page.drawImage(image, { x: 0, y: 0, width: A4_W, height: A4_H });
+    const page = doc.addPage([width, height]);
+    page.drawImage(image, { x: 0, y: 0, width, height });
     return page;
 }
 
@@ -305,6 +313,27 @@ for (const [name, deg, lines, tag] of [
     const doc = await PDFDocument.create();
     await addScanPage(doc, await addSpeckle(browser, skewed, 20260907, 0.0008));
     results.push(['scanned-skew-noisy.pdf', await write(doc, 'scanned-skew-noisy.pdf')]);
+}
+
+// Large-format sheets. The raster stays the size it already was; what changes
+// is the page it is drawn on, because what matters here is the canvas the
+// pipeline renders at 150 DPI: A1 comes out around 3508x4967 and A0 around
+// 4967x7022, which is 17 and 35 megapixels of working image. A4 alone could
+// never show whether preprocessing stays within its means on a real drawing.
+{
+    const clean = await raster(browser, MIX, 'lfclean');
+    const skewed = await raster(browser, MIX, 'lfskew', false, 3);
+    const dirty = await addSpeckle(browser, skewed, 20260908, 0.0008);
+    for (const [name, png, w, h] of [
+        ['scanned-a1-clean.pdf', clean, A1_W, A1_H],
+        ['scanned-a1-skew-noisy.pdf', dirty, A1_W, A1_H],
+        ['scanned-a0-clean.pdf', clean, A0_W, A0_H],
+        ['scanned-a0-skew-noisy.pdf', dirty, A0_W, A0_H],
+    ]) {
+        const doc = await PDFDocument.create();
+        await addScanPage(doc, png, w, h);
+        results.push([name, await write(doc, name)]);
+    }
 }
 
 // Too little ink to judge an angle from, and none at all. Both must come back

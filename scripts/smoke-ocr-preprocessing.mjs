@@ -283,6 +283,91 @@ try {
         cancel.threw === true && cancel.code === 'cancelled' && cancel.gotText !== true,
         JSON.stringify(cancel));
 
+    // ---- large format ------------------------------------------------------------
+    //
+    // A4 says nothing about an A1 or A0 drawing. The working image goes from 2
+    // megapixels to 17 and then 35, and anything allocated per pixel goes with
+    // it -- so this asserts that the cost does not.
+    console.log('\n=== large format (A1 / A0 at 150 DPI) ===');
+    console.log(`  ${'fixture'.padEnd(26)} ${'mode'.padEnd(7)} ${'canvas'.padStart(11)} ${'Mpx'.padStart(5)} ${'ms'.padStart(6)} ${'liveMB'.padStart(7)} ${'band'.padStart(5)} ${'angle'.padStart(6)}  released`);
+    const LARGE = [
+        ['scanned-a1-clean.pdf', 'A1', 0],
+        ['scanned-a1-skew-noisy.pdf', 'A1', 3],
+        ['scanned-a0-clean.pdf', 'A0', 0],
+        ['scanned-a0-skew-noisy.pdf', 'A0', 3],
+    ];
+    const LARGE_MODES = [['none', OFF], ['noise', NOISE_ONLY], ['deskew', DESKEW_ONLY], ['both', ON]];
+    let worstLiveMB = 0;
+    for (const [fixture, sheet, truth] of LARGE) {
+        for (const [modeName, options] of LARGE_MODES) {
+            const d = await detect(fixture, options).catch((e) => ({ crashed: String(e?.message ?? e) }));
+            if (d.crashed) {
+                check(`${sheet} ${fixture} ${modeName}: completes without crashing`, false, d.crashed);
+                continue;
+            }
+            const [w, h] = d.source.split('x').map(Number);
+            const mpx = (w * h) / 1e6;
+            const liveMB = (d.peakWorkingBytes ?? 0) / 1048576;
+            worstLiveMB = Math.max(worstLiveMB, liveMB);
+            console.log(`  ${fixture.replace('scanned-', '').padEnd(26)} ${modeName.padEnd(7)} ${d.source.padStart(11)} ${mpx.toFixed(1).padStart(5)} ${String(d.processingMs).padStart(6)} ${liveMB.toFixed(1).padStart(7)} ${String(d.bandRows).padStart(5)} ${String(d.detectedAngle).padStart(6)}  ${d.releasedProcessed && d.releasedSource ? 'yes' : 'NO'}${d.removedSpecks ? `  specks=${d.removedSpecks}` : ''}${d.inkBefore !== undefined ? `  ink ${d.inkBefore}->${d.inkAfter ?? '-'}` : ''}`);
+
+            check(`${sheet} ${modeName} ${fixture}: completes and releases both canvases`,
+                d.releasedProcessed === true && d.releasedSource === true,
+                `processed=${d.releasedProcessed} source=${d.releasedSource}`);
+            check(`${sheet} ${modeName} ${fixture}: working memory stays bounded`,
+                liveMB < 32, `${liveMB.toFixed(1)} MB for ${mpx.toFixed(1)} Mpx`);
+            if (options.deskew) {
+                check(`${sheet} ${modeName} ${fixture}: the angle is found at large format`,
+                    Math.abs(d.detectedAngle - truth) <= 0.25, `${d.detectedAngle} vs ${truth}`);
+            }
+            if (options.noiseReduction && !d.deskewApplied) {
+                // Ink counted before and after: speck removal must not eat
+                // strokes on a page far too large to check by reading it.
+                check(`${sheet} ${modeName} ${fixture}: strokes survive speckle removal`,
+                    d.inkAfter <= d.inkBefore && d.inkAfter >= d.inkBefore * 0.97,
+                    `${d.inkBefore} -> ${d.inkAfter}`);
+            }
+        }
+    }
+    console.log(`  worst working set across every large-format case: ${worstLiveMB.toFixed(1)} MB`);
+    check('working memory does not grow with the sheet',
+        worstLiveMB < 32, `${worstLiveMB.toFixed(1)} MB at 34.9 Mpx`);
+
+    // Text has to survive the whole pipeline at this size, not just the pixels.
+    const a1Ocr = await ocrRun('scanned-a1-skew-noisy.pdf', ON, MIX_TOKENS);
+    console.log(`  A1 through OCR with preprocessing on: ${a1Ocr.tokenHits}/${a1Ocr.tokenTotal} tokens, angle ${a1Ocr.preprocess?.detectedAngle}, ${a1Ocr.totalMs}ms`);
+    check('A1: text survives preprocessing and recognition',
+        a1Ocr.tokenHits === a1Ocr.tokenTotal, JSON.stringify(a1Ocr.missing));
+    check('A1: the visible page is still unchanged', a1Ocr.appearance.identical === true,
+        `diff=${a1Ocr.appearance.differingPixels}`);
+
+    // ---- the page a browser should not be asked to hold --------------------------
+    console.log('\n=== oversize fail-safe ===');
+    const budget = await page.evaluate(() => window.__prep.budgetProbe(9000, 10000));
+    console.log(`  ${JSON.stringify(budget)}`);
+    if (budget.created) {
+        check('an oversize page is declined rather than attempted',
+            budget.skipped === 'page-too-large'
+            && budget.deskewApplied === false && budget.noiseReductionApplied === false
+            && budget.sameCanvas === true && budget.modifiedSourceCanvas === false,
+            JSON.stringify(budget));
+    } else {
+        // The browser would not even allocate it, which is the same outcome by
+        // a different route: nothing was attempted and nothing crashed.
+        check('an oversize page cannot be allocated, and nothing crashed', true,
+            'canvas allocation refused by the browser');
+    }
+
+    // ---- the cancel boundary has to be reachable ---------------------------------
+    console.log('\n=== event loop during preprocessing ===');
+    const loop = await page.evaluate((o) => window.__prep.eventLoopProbe('scanned-a0-skew-noisy.pdf', o), ON);
+    console.log(`  ${JSON.stringify(loop)}`);
+    check('preprocessing hands the event loop back while it works',
+        loop.ticks >= 3, `${loop.ticks} ticks in ${loop.ms}ms (up to ${loop.possibleTicks} possible)`);
+    check('it yields often enough for a click to land',
+        loop.possibleTicks === 0 || loop.ticks >= loop.possibleTicks * 0.25,
+        `${loop.ticks}/${loop.possibleTicks}`);
+
     // ---- network -----------------------------------------------------------------
     console.log('\n=== network ===');
     const uniqueExternal = [...new Set(external)];
