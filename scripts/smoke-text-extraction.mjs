@@ -211,10 +211,29 @@ try {
     // ---- cancellation ---------------------------------------------------------
     console.log('\n=== cancellation ===');
     const cancel = await page.evaluate(() => window.__extract.cancelProbe('mixed-multipage.pdf'));
-    console.log(`  ${JSON.stringify(cancel)}`);
+    console.log(`  pages remaining : ${JSON.stringify(cancel)}`);
     check('cancel rejects instead of returning a partial export',
         cancel.threw === true && cancel.code === 'cancelled', JSON.stringify(cancel));
     check('cancel hands back no text at all', cancel.gotText !== true);
+
+    // Cancelling during the LAST page is the case a per-iteration check cannot
+    // see: the loop simply ends, and without a boundary check after it the run
+    // reports success and hands back the export the user just cancelled. A
+    // single-page scan is the sharpest form of it -- there is no later page.
+    const cancelSingle = await page.evaluate(() => window.__extract.cancelProbe('scanned-ja-en.pdf', 'last-page'));
+    console.log(`  single-page scan: ${JSON.stringify(cancelSingle)}`);
+    check('cancel probe actually fired on the single-page scan', cancelSingle.armed === true,
+        JSON.stringify(cancelSingle));
+    check('cancel during the only page still rejects',
+        cancelSingle.threw === true && cancelSingle.code === 'cancelled', JSON.stringify(cancelSingle));
+    check('cancel during the only page hands back no text', cancelSingle.gotText !== true);
+
+    const cancelLast = await page.evaluate(() => window.__extract.cancelProbe('mixed-multipage.pdf', 'last-page'));
+    console.log(`  last page       : ${JSON.stringify(cancelLast)}`);
+    check('cancel probe actually fired on the last page', cancelLast.armed === true, JSON.stringify(cancelLast));
+    check('cancel during the last page of a multi-page document still rejects',
+        cancelLast.threw === true && cancelLast.code === 'cancelled', JSON.stringify(cancelLast));
+    check('cancel during the last page hands back no text', cancelLast.gotText !== true);
 
     // ---- network ---------------------------------------------------------------
     console.log('\n=== network ===');

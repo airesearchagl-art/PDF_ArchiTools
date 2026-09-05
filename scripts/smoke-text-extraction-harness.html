@@ -64,20 +64,40 @@ window.__extract = {
     };
   },
 
-  async cancelProbe(name) {
+  /**
+   * Cancel mid-run and report what came back.
+   *
+   * `when` decides the moment the flag is raised, because when it is raised is
+   * the whole question. 'first-ocr' is cancelled with pages still to come;
+   * 'last-page' is cancelled during the final page, which for a single-page
+   * scan is also the first -- the case where there is no later page boundary
+   * left to notice the cancel at.
+   */
+  async cancelProbe(name, when = 'first-ocr') {
     const input = await fetchFixture(name);
     let seen = 0;
+    let armed = false;
     try {
       const result = await extractTextPdf(input, {
-        onProgress: (e) => { if (e.phase === 'ocr-page') seen++; },
-        shouldCancel: () => seen >= 1,
+        onProgress: (e) => {
+          if (e.phase === 'ocr-page') seen++;
+          if (when === 'first-ocr' && e.phase === 'ocr-page') armed = true;
+          if (when === 'last-page' && (e.phase === 'ocr-page' || e.phase === 'extracting')
+            && e.page === e.totalPages) armed = true;
+        },
+        shouldCancel: () => armed,
       });
-      return { threw: false, code: null, gotText: typeof result.text === 'string', pagesStarted: seen };
+      return {
+        threw: false, code: null, armed,
+        gotText: typeof result.text === 'string',
+        chars: result.totalChars, pagesStarted: seen,
+      };
     } catch (error) {
       return {
         threw: true,
         code: error instanceof TextifyError ? error.code : null,
         message: error?.message ?? String(error),
+        armed,
         pagesStarted: seen,
       };
     }

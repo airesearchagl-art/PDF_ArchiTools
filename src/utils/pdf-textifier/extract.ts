@@ -206,6 +206,16 @@ export async function extractTextPdf(
                 page.cleanup();
             }
         }
+
+        // The end of the last page is a page boundary too.
+        //
+        // The check at the top of the loop only ever runs before a page, so on
+        // its own it cannot see a cancel that arrived while the final page was
+        // being recognised -- and for a single-page scan there is no "final
+        // page" but the first. Recognition cannot be aborted in flight, so that
+        // page finishes either way; what must not happen is the run then
+        // reporting success and handing back an export the user cancelled.
+        if (!cancelled && shouldCancel()) cancelled = true;
     } finally {
         // Always tear the worker down, including on cancellation: it holds the
         // WASM heap and there is no way to abort a recognition in flight.
