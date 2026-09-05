@@ -23,6 +23,7 @@ export type { OcrPreprocessOptions, OcrPreprocessResult } from './preprocess';
 /** Report only what preprocessing actually did, not the internals of how. */
 export function summarise(prep: OcrPreprocessResult): PagePreprocessInfo {
     return {
+        ...(prep.skipped ? { skipped: prep.skipped } : {}),
         deskewApplied: prep.deskewApplied,
         detectedAngle: prep.detectedAngle,
         deskewConfidence: prep.deskewConfidence,
@@ -30,6 +31,25 @@ export function summarise(prep: OcrPreprocessResult): PagePreprocessInfo {
         removedSpecks: prep.removedSpecks,
         processingMs: prep.processingMs,
     };
+}
+
+/**
+ * Tell the user when preprocessing was asked for and could not be given.
+ *
+ * A page past the size budget is still recognised -- from the image exactly as
+ * rendered -- so the run succeeds and the file is downloadable. What must not
+ * happen is the screen reporting success while quietly having skipped the very
+ * thing the user ticked a box for. Returns null when there is nothing to say.
+ *
+ * Pure, and exported here rather than from the component, so the gate can hold
+ * it to a table of cases without driving a browser.
+ */
+export function preprocessSkipNotice(
+    pages: readonly { preprocess?: PagePreprocessInfo }[],
+): string | null {
+    const skipped = pages.filter((p) => p.preprocess?.skipped === 'page-too-large').length;
+    if (skipped === 0) return null;
+    return `ページサイズが大きいため、${skipped} ページではOCR前処理を行わず文字認識しました。元PDFは変更されていません。`;
 }
 
 /**

@@ -271,6 +271,9 @@ export async function extractTextPdf(
  */
 function summarisePreprocess(prep: OcrPreprocessResult): PagePreprocessInfo {
     return {
+        // Carried, not dropped: a page that was too large to clean has to be
+        // able to say so on the screen at the end of the run.
+        ...(prep.skipped ? { skipped: prep.skipped } : {}),
         deskewApplied: prep.deskewApplied,
         detectedAngle: prep.detectedAngle,
         deskewConfidence: prep.deskewConfidence,

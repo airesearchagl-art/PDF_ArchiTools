@@ -8,8 +8,8 @@ import { renderPageToCanvas } from '../utils/pdfDiff';
 
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
-import { textifyPdf, extractTextPdf, TextifyError, configurePdfWorker } from '../utils/pdf-textifier';
-import type { PageKind, ProgressEvent } from '../utils/pdf-textifier';
+import { textifyPdf, extractTextPdf, TextifyError, configurePdfWorker, preprocessSkipNotice } from '../utils/pdf-textifier';
+import type { PageKind, PagePreprocessInfo, ProgressEvent } from '../utils/pdf-textifier';
 
 type Mode = 'ocr' | 'extract';
 
@@ -19,6 +19,16 @@ interface TextifierOptions {
     noiseReduction: boolean;
     mode: Mode;
     outputFormat: 'pdf' | 'txt' | 'word' | 'excel';
+}
+
+/**
+ * More than one thing can be worth saying about a finished run, and the panel
+ * shows one string. Nothing is dropped just because something else also
+ * applied.
+ */
+function joinNotices(parts: (string | null)[]): string | null {
+    const kept = parts.filter((p): p is string => Boolean(p));
+    return kept.length ? kept.join(' ') : null;
 }
 
 /** Width the first-page preview thumbnail is fitted to. */
@@ -35,7 +45,7 @@ interface CompletedRun {
     mode: Mode;
     blobUrl: string;
     fileName: string;
-    pages: { pageNumber: number; kind: PageKind; ocrWords: number; error?: string }[];
+    pages: { pageNumber: number; kind: PageKind; ocrWords: number; error?: string; preprocess?: PagePreprocessInfo }[];
     outputBytes: number;
     totalMs: number;
     fontEmbedded: boolean;
@@ -193,11 +203,13 @@ export const PdfTextifier: React.FC = () => {
         });
 
         const failed = run.pages.filter((p) => p.error);
+        const notices = [preprocessSkipNotice(run.pages)];
         if (failed.length > 0) {
-            setNotice(`${failed.length} ページで文字認識に失敗しました。該当ページは元のまま出力されています。`);
+            notices.push(`${failed.length} ページで文字認識に失敗しました。該当ページは元のまま出力されています。`);
         } else if (run.pages.every((p) => p.kind === 'text-native')) {
-            setNotice('すべてのページに既にテキストが含まれていたため、OCRは実行していません。');
+            notices.push('すべてのページに既にテキストが含まれていたため、OCRは実行していません。');
         }
+        setNotice(joinNotices(notices));
     };
 
     const runExtract = async (source: File) => {
@@ -223,11 +235,13 @@ export const PdfTextifier: React.FC = () => {
             totalChars: run.totalChars,
         });
 
+        const notices = [preprocessSkipNotice(run.pages)];
         if (run.totalChars === 0) {
-            setNotice('文字が見つかりませんでした。ページ区切りのみのTXTが出力されています。');
+            notices.push('文字が見つかりませんでした。ページ区切りのみのTXTが出力されています。');
         } else if (!run.ocrUsed) {
-            setNotice('すべてのページに文字情報があったため、OCRは実行していません。');
+            notices.push('すべてのページに文字情報があったため、OCRは実行していません。');
         }
+        setNotice(joinNotices(notices));
     };
 
     const handleProcess = async () => {

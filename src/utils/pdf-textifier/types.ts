@@ -123,6 +123,15 @@ export interface TextifyOptions {
 
 /** What preprocessing did to one page, for the caller to report or assert on. */
 export interface PagePreprocessInfo {
+    /**
+     * Set when preprocessing was asked for and declined for this page.
+     *
+     * It has to travel all the way to the screen. A page too large to clean is
+     * still recognised, from the image as rendered, and the run succeeds -- so
+     * without this the user ticks two boxes, sees "Processing Complete", and
+     * has no way to know neither was applied.
+     */
+    skipped?: 'page-too-large';
     deskewApplied: boolean;
     /** Degrees of skew found. 0 when nothing was applied. */
     detectedAngle: number;
