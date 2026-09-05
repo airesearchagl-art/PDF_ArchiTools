@@ -19,6 +19,14 @@ const releaseHistory: ReleaseNote[] = [
     {
         date: '2026/09/05',
         tool: 'PDFテキスト化',
+        version: '1.3.1',
+        changes: [
+            'PDF読み込み時に1ページ目のプレビューが正しく表示されない問題を修正しました。',
+        ],
+    },
+    {
+        date: '2026/09/05',
+        tool: 'PDFテキスト化',
         version: '1.3.0',
         changes: [
             'PDFから文字をTXTファイルとして書き出せるようになりました。',
@@ -512,15 +520,17 @@ export function HowToUse() {
                 <ScreenWithBadges
                     src="/screenshots/textifier.png"
                     badges={[
-                        // Measured against the current 1280x800 capture by
+                        // Measured against the current capture by
                         // scripts/capture-textifier-screenshot.mjs, which prints
-                        // these percentages when it retakes the image.
+                        // these percentages when it retakes the image. They moved
+                        // when the preview started drawing the page: an empty box
+                        // is shorter than the sheet it stands in for.
                         // 1. Upload (Centre)
-                        { top: '28.3%', left: '21.1%', width: '57.8%', height: '29.5%', desc: 'ファイルアップロードエリア' },
+                        { top: '19.7%', left: '21.1%', width: '57.8%', height: '44.3%', desc: 'ファイルアップロードエリア' },
                         // 2. Settings row (Cleaning / Processing Mode / Output Format)
-                        { top: '61.6%', left: '21.1%', width: '57.8%', height: '19%', desc: 'モード・出力形式' },
+                        { top: '66.6%', left: '21.1%', width: '57.8%', height: '13.2%', desc: 'モード・出力形式' },
                         // 3. Run button
-                        { top: '84.3%', left: '40.3%', width: '19.5%', height: '5.9%', desc: '実行（Start Textification）' }
+                        { top: '82.5%', left: '40.3%', width: '19.5%', height: '4.1%', desc: '実行（Start Textification）' }
                     ]}
                 />
 
