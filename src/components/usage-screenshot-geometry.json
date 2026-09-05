@@ -1,0 +1,230 @@
+{
+    "annotator": {
+        "frame": {
+            "width": 1280,
+            "height": 900
+        },
+        "targets": {
+            "annotator-zoom": {
+                "left": 5.48,
+                "top": 7.6,
+                "width": 18.44,
+                "height": 4.22
+            },
+            "annotator-draw": {
+                "left": 25.17,
+                "top": 7.38,
+                "width": 34.29,
+                "height": 4.67
+            },
+            "annotator-measure": {
+                "left": 62.82,
+                "top": 7.6,
+                "width": 15.63,
+                "height": 4.22
+            },
+            "annotator-scale": {
+                "left": 80.09,
+                "top": 8.43,
+                "width": 6.88,
+                "height": 2.56
+            },
+            "annotator-select-actions": {
+                "left": 90.32,
+                "top": 8.36,
+                "width": 4.2,
+                "height": 2.71
+            },
+            "annotator-color": {
+                "left": 2.03,
+                "top": 15.99,
+                "width": 23.13,
+                "height": 2.67
+            },
+            "annotator-style": {
+                "left": 31.72,
+                "top": 13.82,
+                "width": 12.47,
+                "height": 7
+            },
+            "annotator-layers": {
+                "left": 46.06,
+                "top": 14.39,
+                "width": 8.84,
+                "height": 5.86
+            },
+            "annotator-save": {
+                "left": 95.78,
+                "top": 15.21,
+                "width": 2.97,
+                "height": 4.22
+            }
+        },
+        "capturedAt": null
+    },
+    "comparator": {
+        "frame": {
+            "width": 1280,
+            "height": 1150
+        },
+        "targets": {
+            "comparator-files": {
+                "left": 0.78,
+                "top": 5.95,
+                "width": 78.05,
+                "height": 8.02
+            },
+            "comparator-match": {
+                "left": 0.78,
+                "top": 14.4,
+                "width": 98.44,
+                "height": 4.83
+            },
+            "comparator-report": {
+                "left": 0.78,
+                "top": 20.1,
+                "width": 98.44,
+                "height": 3.48
+            },
+            "comparator-view": {
+                "left": 0.78,
+                "top": 24.45,
+                "width": 98.44,
+                "height": 8.59
+            },
+            "comparator-export": {
+                "left": 69.85,
+                "top": 26.47,
+                "width": 13.87,
+                "height": 4.54
+            }
+        },
+        "capturedAt": null
+    },
+    "processor": {
+        "frame": {
+            "width": 1280,
+            "height": 900
+        },
+        "targets": {
+            "processor-tools": {
+                "left": 0,
+                "top": 6.49,
+                "width": 15.63,
+                "height": 93.51
+            },
+            "processor-upload": {
+                "left": 18.13,
+                "top": 10.04,
+                "width": 55.94,
+                "height": 30.5
+            },
+            "processor-settings": {
+                "left": 76.56,
+                "top": 6.49,
+                "width": 23.44,
+                "height": 93.51
+            },
+            "processor-run": {
+                "left": 78.52,
+                "top": 92,
+                "width": 19.61,
+                "height": 5.33
+            }
+        },
+        "capturedAt": null
+    },
+    "split_extract": {
+        "frame": {
+            "width": 1280,
+            "height": 900
+        },
+        "targets": {
+            "split-tabs": {
+                "left": 1.56,
+                "top": 8.71,
+                "width": 96.88,
+                "height": 4.56
+            },
+            "extract-source": {
+                "left": 1.56,
+                "top": 15.49,
+                "width": 96.88,
+                "height": 4.89
+            },
+            "extract-pages": {
+                "left": 3.2,
+                "top": 24.93,
+                "width": 93.59,
+                "height": 29.21
+            },
+            "extract-export": {
+                "left": 80.87,
+                "top": 15.65,
+                "width": 17.57,
+                "height": 4.56
+            }
+        },
+        "capturedAt": null
+    },
+    "split_merge": {
+        "frame": {
+            "width": 1280,
+            "height": 900
+        },
+        "targets": {
+            "split-tabs": {
+                "left": 1.56,
+                "top": 8.71,
+                "width": 96.88,
+                "height": 4.56
+            },
+            "merge-source": {
+                "left": 1.56,
+                "top": 15.49,
+                "width": 96.88,
+                "height": 4.89
+            },
+            "merge-list": {
+                "left": 3.2,
+                "top": 24.93,
+                "width": 93.59,
+                "height": 18.36
+            },
+            "merge-export": {
+                "left": 82.75,
+                "top": 15.65,
+                "width": 15.69,
+                "height": 4.56
+            }
+        },
+        "capturedAt": null
+    },
+    "textifier": {
+        "frame": {
+            "width": 1280,
+            "height": 1150
+        },
+        "targets": {
+            "textifier-upload": {
+                "left": 21.09,
+                "top": 19.69,
+                "width": 57.81,
+                "height": 44.35
+            },
+            "textifier-settings": {
+                "left": 21.09,
+                "top": 66.64,
+                "width": 57.81,
+                "height": 15.65
+            },
+            "textifier-run": {
+                "left": 40.26,
+                "top": 84.9,
+                "width": 19.47,
+                "height": 4.09
+            }
+        },
+        "capturedAt": null
+    }
+}
