@@ -78,6 +78,16 @@ try {
     });
     await page.waitForFunction(() => document.querySelector('select')?.value === 'txt');
 
+    // Word is the newest thing the guide points at, so that is what the picture
+    // should show being chosen.
+    await page.evaluate(() => {
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'word');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForFunction(() => document.querySelector('select')?.value === 'word');
+
     // Show the preprocessing controls in the state the guide describes: both
     // available, and switched on so the screenshot shows what they look like.
     for (const name of ['deskew', 'noiseReduction']) {

@@ -19,6 +19,17 @@ const releaseHistory: ReleaseNote[] = [
     {
         date: '2026/09/05',
         tool: 'PDFテキスト化',
+        version: '1.5.0',
+        changes: [
+            'PDFの文字を編集可能なWord（.docx）へ書き出せるようになりました。',
+            '文字情報を持つページはその文字を、スキャンページはOCRの結果を使います。',
+            '元のPDFのページ順を保ち、ページの区切りをWordの改ページとして入れます。',
+            '元PDFのレイアウト・表・画像を再現する機能ではありません。',
+        ],
+    },
+    {
+        date: '2026/09/05',
+        tool: 'PDFテキスト化',
         version: '1.4.0',
         changes: [
             'スキャンPDFのOCR前に、ページの傾きを補正できるようになりました。',
@@ -127,7 +138,7 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: '16px 0 0', fontSize: '0.95em', color: '#9fd3ff' }}>
                     <History size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>OCR前処理（傾き補正・ノイズ除去）</b>（PDFテキスト化 v1.4.0） / <b>TXT書き出し</b>（PDFテキスト化 v1.3.0） / <b>図枠一括更新</b>（PDF加工 v1.3.0）
+                    最近の更新: <b>Word（.docx）書き出し</b>（PDFテキスト化 v1.5.0） / <b>OCR前処理（傾き補正・ノイズ除去）</b>（PDFテキスト化 v1.4.0） / <b>TXT書き出し</b>（PDFテキスト化 v1.3.0）
                     — 詳しくはページ下部の<a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>をご覧ください。
                 </p>
             </div>
@@ -522,7 +533,8 @@ export function HowToUse() {
                         （文字情報が裏側に追加されます）。
                     </li>
                     <li>
-                        <b>Text Extraction</b> — PDFの文字を<b>TXTファイル</b>として書き出します。
+                        <b>Text Extraction</b> — PDFの文字を<b>TXTファイル</b>または
+                        <b>編集可能なWord（.docx）</b>として書き出します。
                         文字情報を持つページはその文字をそのまま取り出し、スキャンページはOCRを行います。
                         元のPDFのページ順は維持されます。
                     </li>
@@ -557,7 +569,8 @@ export function HowToUse() {
                         <p><b>Processing Mode</b> で、やりたいことを選びます。出力形式は自動で切り替わります。</p>
                         <ul style={listStyle}>
                             <li><b>OCR</b> → 出力形式は <b>PDF (Searchable)</b>。検索できるPDFが保存されます。</li>
-                            <li><b>Text Extraction</b> → 出力形式は <b>Text (.txt)</b>。文字だけのTXTが保存されます。</li>
+                            <li><b>Text Extraction</b> → 出力形式は <b>Text (.txt)</b> または <b>Word (.docx)</b>。
+                                文字だけのTXT、または編集できるWord文書が保存されます。</li>
                             <li>どちらのモードでも、すでに文字情報を持つページには文字認識を行いません。</li>
                         </ul>
                         <p><b>OCR前処理</b>は、必要なときだけチェックします（初期状態はオフ）。</p>
@@ -578,7 +591,7 @@ export function HowToUse() {
                             <li>進捗がページ単位で表示されます。</li>
                             <li>途中で「キャンセル」できます（現在のページの認識完了後に反映されます）。</li>
                             <li>キャンセルした場合、途中までのファイルは保存されません。</li>
-                            <li>完了後に「Download Result」から保存します（OCRは <b>_searchable.pdf</b>、Text Extraction は <b>_extracted.txt</b>）。</li>
+                            <li>完了後に「Download Result」から保存します（OCRは <b>_searchable.pdf</b>、Text Extraction は <b>_extracted.txt</b> または <b>_extracted.docx</b>）。</li>
                         </ul>
                         <p style={noteStyle}>※ページ数や解像度によっては、処理に時間がかかる場合があります。</p>
                     </div>
@@ -597,6 +610,7 @@ export function HowToUse() {
                             <li>検索・選択できるPDFの生成</li>
                             <li>元の見た目をそのまま保持</li>
                             <li><b>PDFから文字をTXTとして抽出</b></li>
+                            <li><b>PDFから文字を編集可能なWord（.docx）として書き出し</b></li>
                             <li>文字情報のあるページは、PDF内の文字をそのまま利用</li>
                             <li>スキャンページはOCRの結果を利用</li>
                             <li>文字ページとスキャンページが混在したPDFに対応</li>
@@ -612,11 +626,10 @@ export function HowToUse() {
                         <h4 style={cardHeadStyle}><Settings size={18} /> 未対応の機能（今後対応予定）</h4>
                         <p style={{ margin: '0 0 8px' }}>次の項目は画面に表示されていますが、現在は選択できません。</p>
                         <ul style={listStyle}>
-                            <li><b>Word (.docx) 出力</b> — 未対応（Coming later）</li>
                             <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
                         </ul>
                         <p style={noteStyle}>
-                            現在ご利用いただける出力は「PDF (Searchable)」と「Text (.txt)」です。
+                            現在ご利用いただける出力は「PDF (Searchable)」「Text (.txt)」「Word (.docx)」です。
                         </p>
                     </div>
                 </div>
@@ -631,6 +644,26 @@ export function HowToUse() {
                         <li>表をExcelの表として復元する機能ではありません。</li>
                         <li>スキャンページの文字の正確さは、元の画像の品質によって変わります。</li>
                         <li>キャンセルは現在のページの認識が終わったあとに反映されます。</li>
+                    </ul>
+                </div>
+
+                {/* 5-e. What the Word export is, and what it is not */}
+                <div style={{ ...cardStyle, borderLeft: '6px solid #2b579a', marginTop: '20px' }}>
+                    <h4 style={cardHeadStyle}><FileText size={18} /> Word（.docx）書き出しについて</h4>
+                    <p style={{ margin: '0 0 8px' }}>
+                        PDFの<b>文字</b>を、Wordで編集できる文書として書き出します。
+                        文字情報を持つページはその文字を直接、スキャンページはOCRの結果を使い、
+                        文字ページとスキャンページが混在したPDFにも対応します。OCR前処理も併用できます。
+                        処理はすべてブラウザ内で行われます。
+                    </p>
+                    <ul style={listStyle}>
+                        <li>元のPDFのページ順を保ち、ページの区切りをWordの改ページとして入れます。文字のないページも区切りを残します。</li>
+                        <li><b>PDFの見た目をWordへ再現する機能ではありません。</b></li>
+                        <li>表の構造は復元しません。</li>
+                        <li>段組みや複雑なレイアウトのページでは、文字の順序が見た目どおりにならない場合があります。</li>
+                        <li>画像・図形・線はWordへ移しません。文字だけを書き出します。</li>
+                        <li>フォント・文字サイズ・太字などの体裁は再現しません。</li>
+                        <li>Word側での実際のページ数は、お使いの環境やフォントによって変わることがあります。</li>
                     </ul>
                 </div>
 
