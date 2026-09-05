@@ -186,6 +186,8 @@ try {
         of('target-set', 'screen-set').length === 0, JSON.stringify(of('target-set', 'screen-set')));
     check('every badge has geometry for all of its targets, not some',
         of('partial-badge').length === 0, JSON.stringify(of('partial-badge')));
+    check('the image the guide asks for is the image that was measured',
+        of('screenshot-identity').length === 0, JSON.stringify(of('screenshot-identity')));
     check('every committed image matches the digest and size that were recorded',
         of('png-digest', 'png-record-size', 'png-frame-size', 'missing-png', 'no-screenshot-record').length === 0,
         JSON.stringify(of('png-digest', 'png-record-size', 'png-frame-size', 'missing-png', 'no-screenshot-record')));
@@ -359,6 +361,25 @@ try {
     } finally {
         fs.rmSync(scratch, { recursive: true, force: true });
     }
+
+    // D. the record names a different picture from the one the guide shows.
+    // A correct digest of the wrong image is still the wrong image.
+    const wrongFile = clone(geometry);
+    wrongFile.annotator.screenshot.file = 'processor.png';
+    const dKinds = validateArtifacts({ config: BADGE_CONFIG, geometry: wrongFile, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  D  record names another screenshot: ${dKinds.join(', ') || 'none'}`);
+    check('D: a record naming a different screenshot is rejected',
+        dKinds.includes('screenshot-identity'), JSON.stringify(dKinds));
+
+    // D2. and the served path itself has to be the one the guide can request.
+    const wrongSrc = clone(BADGE_CONFIG);
+    wrongSrc.annotator.src = '/elsewhere/annotator.png';
+    const d2Kinds = validateArtifacts({ config: wrongSrc, geometry, screenshotDir: SHOTS })
+        .map((p) => p.kind);
+    console.log(`  D2 served path moved: ${d2Kinds.join(', ') || 'none'}`);
+    check('D2: a served path outside /screenshots is rejected',
+        d2Kinds.includes('screenshot-identity'), JSON.stringify(d2Kinds));
 
     // C. geometry that no longer matches the live app.
     const probeLive = liveByScreen[probeScreen];

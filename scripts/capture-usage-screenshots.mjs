@@ -93,14 +93,13 @@ const measure = (page, targets) => page.evaluate((names) => {
 /**
  * How to reach each screen, and nothing else.
  *
- * The targets a screen has to expose are not written here: they come from the
- * badge definitions, so there is no second inventory to fall out of step with
- * the first.
+ * Neither the targets to measure nor the file to write are named here. Both
+ * come from the badge definitions, so there is one inventory and one filename
+ * rather than two of each waiting to disagree.
  */
 const SCREENS = [
     {
         key: 'annotator',
-        file: 'annotator.png',
         frame: FRAME,
         async setup(page) {
             await clickNav(page, 'PDF加筆');
@@ -112,7 +111,6 @@ const SCREENS = [
     },
     {
         key: 'comparator',
-        file: 'comparator.png',
         frame: TALL,
         async setup(page) {
             await clickNav(page, 'PDF比較');
@@ -132,7 +130,6 @@ const SCREENS = [
     },
     {
         key: 'processor',
-        file: 'processor.png',
         frame: FRAME,
         async setup(page) {
             await clickNav(page, 'PDF加工');
@@ -144,7 +141,6 @@ const SCREENS = [
     },
     {
         key: 'split_extract',
-        file: 'split_extract.png',
         frame: FRAME,
         async setup(page) {
             await clickNav(page, 'PDF抽出・統合');
@@ -161,7 +157,6 @@ const SCREENS = [
     },
     {
         key: 'split_merge',
-        file: 'split_merge.png',
         frame: FRAME,
         async setup(page) {
             await clickNav(page, 'PDF抽出・統合');
@@ -182,7 +177,6 @@ const SCREENS = [
     },
     {
         key: 'textifier',
-        file: 'textifier.png',
         frame: TALL,
         async setup(page) {
             await clickNav(page, 'PDFテキスト化');
@@ -243,7 +237,9 @@ try {
             const rects = await measure(page, targets);
             const missing = targets.filter((t) => !rects[t]);
 
-            const file = path.join(SHOTS, screen.file);
+            // The name of the picture is the one the guide will ask for.
+            const fileName = path.basename(CONFIG[screen.key].src);
+            const file = path.join(SHOTS, fileName);
             await page.screenshot({ path: file });
             // The digest binds this geometry to this picture. Recapturing one
             // without the other is then a failure rather than a silence.
@@ -252,7 +248,7 @@ try {
             geometry[screen.key] = {
                 frame: screen.frame,
                 screenshot: {
-                    file: screen.file,
+                    file: fileName,
                     width: png?.width ?? 0,
                     height: png?.height ?? 0,
                     sha256: png?.sha256 ?? '',

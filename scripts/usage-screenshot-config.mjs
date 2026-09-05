@@ -133,6 +133,21 @@ export function validateArtifacts({ config, geometry, screenshotDir = SCREENSHOT
             problems.push({ kind: 'no-screenshot-record', screen: key, detail: JSON.stringify(record ?? null) });
             continue;
         }
+
+        // The picture the guide asks for and the picture that was measured must
+        // be the same file by name, before any question of its contents. A
+        // correct digest of the wrong image is still the wrong image, and the
+        // filename is the only thing that ties the served path to the record.
+        const served = config[key].src;
+        const expected = path.posix.basename(served);
+        if (served !== `/screenshots/${expected}` || record.file !== expected) {
+            problems.push({
+                kind: 'screenshot-identity',
+                screen: key,
+                detail: `config src ${JSON.stringify(served)} vs record file ${JSON.stringify(record.file)}`,
+            });
+            continue;
+        }
         const png = readPng(path.join(screenshotDir, record.file));
         if (!png) {
             problems.push({ kind: 'missing-png', screen: key, detail: record.file });
