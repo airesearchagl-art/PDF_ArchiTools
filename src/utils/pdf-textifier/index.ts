@@ -18,6 +18,8 @@ export { classifyPage, classifyDocument } from './classify';
 export { configurePdfWorker } from './pdf-source';
 export { extractTextPdf, PAGE_HEADER_PREFIX, pageHeader } from './extract';
 export { preprocessForOcr } from './preprocess';
+export { buildWordDocument, escapeXml, WORD_MIME } from './word';
+export type { WordExportOptions, WordExportResult } from './word';
 export type { OcrPreprocessOptions, OcrPreprocessResult } from './preprocess';
 
 /** Report only what preprocessing actually did, not the internals of how. */

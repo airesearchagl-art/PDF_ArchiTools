@@ -88,6 +88,8 @@ export type TextifyErrorCode =
     | 'ocr-page'
     /** A text-native page whose own text could not be read. */
     | 'text-extract'
+    /** The Word package could not be built. Never falls back to another format. */
+    | 'word-output'
     | 'output'
     | 'cancelled';
 
