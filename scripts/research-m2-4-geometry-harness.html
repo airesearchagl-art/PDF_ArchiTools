@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M2-4 geometry probe harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>M2-4 geometry probe harness</h1>
+<p>Driven by <code>scripts/research-m2-4-geometry.mjs</code>. Research only; not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { createWorker, PSM } from 'tesseract.js';
+import { OcrEngine } from '/src/utils/pdf-textifier/ocr.ts';
+import { renderPageForOcr, releaseCanvas, configurePdfWorker } from '/src/utils/pdf-textifier/pdf-source.ts';
+import { preprocessForOcr } from '/src/utils/pdf-textifier/preprocess.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+configurePdfWorker();
+
+const fixture = (name) => fetch(`/test-fixtures/m2-4/${name}.pdf`).then((r) => {
+  if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+  return r.arrayBuffer();
+});
+
+const open = async (name) => pdfjsLib.getDocument({ data: new Uint8Array(await fixture(name)) }).promise;
+
+/**
+ * What a TextItem actually carries, before anything is assumed about it.
+ *
+ * The spike must not describe pdf.js from memory, so this reports the real key
+ * set of the first items on the page along with the operator names that appear
+ * in the page's operator list.
+ */
+window.__m24 = {
+  async inspect(name) {
+    const doc = await open(name);
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const items = content.items.filter((i) => typeof i.str === 'string');
+    const opList = await page.getOperatorList();
+
+    const opNames = {};
+    for (const fn of opList.fnArray) {
+      const key = Object.keys(pdfjsLib.OPS).find((k) => pdfjsLib.OPS[k] === fn) ?? String(fn);
+      opNames[key] = (opNames[key] ?? 0) + 1;
+    }
+
+    // One constructPath, verbatim enough to see its shape.
+    const idx = opList.fnArray.indexOf(pdfjsLib.OPS.constructPath);
+    let pathSample = null;
+    const paintOps = {};
+    if (idx >= 0) {
+      const args = opList.argsArray[idx];
+      pathSample = args.map((a) => ({
+        type: Object.prototype.toString.call(a),
+        length: a?.length,
+        head: Array.isArray(a) || ArrayBuffer.isView(a) ? Array.from(a).slice(0, 16) : a,
+        inner: Array.isArray(a) && a[0] && typeof a[0] === 'object' ? Array.from(a[0]) : undefined,
+      }));
+      // args[0] is a number in pdf.js 5.x; name it rather than guess at it.
+      for (let i = 0; i < opList.fnArray.length; i++) {
+        if (opList.fnArray[i] !== pdfjsLib.OPS.constructPath) continue;
+        const v = opList.argsArray[i][0];
+        const nm = Object.keys(pdfjsLib.OPS).find((k) => pdfjsLib.OPS[k] === v) ?? `#${v}`;
+        paintOps[nm] = (paintOps[nm] ?? 0) + 1;
+      }
+    }
+
+    const viewport = page.getViewport({ scale: 1 });
+    const out = {
+      name,
+      numPages: doc.numPages,
+      rotate: page.rotate,
+      view: page.view,
+      viewport: { width: viewport.width, height: viewport.height, transform: Array.from(viewport.transform), rotation: viewport.rotation },
+      itemCount: items.length,
+      itemKeys: items.length ? Object.keys(items[0]) : [],
+      firstItems: items.slice(0, 4).map((i) => ({ ...i, transform: Array.from(i.transform) })),
+      styles: Object.keys(content.styles ?? {}).slice(0, 4),
+      styleSample: content.styles ? content.styles[Object.keys(content.styles)[0]] : null,
+      opNames,
+      pathSample,
+      paintOps,
+      pathOpNames: Object.keys(pdfjsLib.OPS).filter((k) => /path|rect|line|curve|stroke|fill|move/i.test(k))
+        .map((k) => `${k}=${pdfjsLib.OPS[k]}`),
+    };
+    page.cleanup();
+    await doc.destroy();
+    return out;
+  },
+
+  /**
+   * Native tokens for every page, in display space at scale 1.
+   *
+   * The conversion is pdf.js's own: the item transform composed with the
+   * viewport transform, which is what a renderer does. Doing it by hand from
+   * page height and /Rotate is where a spike quietly gets rotation wrong.
+   */
+  async nativeTokens(name) {
+    const doc = await open(name);
+    const pages = [];
+    const t0 = performance.now();
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const tokens = [];
+      for (const item of content.items) {
+        if (typeof item.str !== 'string') continue;
+        if (item.str === '') continue;
+        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        // tx[3] is the vertical scale of the composed matrix: the glyph height
+        // in display units. tx[4], tx[5] are the baseline origin.
+        const height = Math.hypot(tx[2], tx[3]) || item.height;
+        const width = item.width;
+        const x0 = tx[4];
+        const yBase = tx[5];
+        tokens.push({
+          text: item.str,
+          x0, x1: x0 + width,
+          // Display space runs downwards, so the glyph box sits above the
+          // baseline in page terms and below it in array terms.
+          y0: yBase - height, y1: yBase,
+          width, height,
+          dir: item.dir,
+          fontName: item.fontName,
+          hasEOL: item.hasEOL === true,
+          transform: Array.from(item.transform),
+        });
+      }
+      pages.push({
+        page: n,
+        rotate: page.rotate,
+        width: viewport.width,
+        height: viewport.height,
+        tokens,
+      });
+      page.cleanup();
+    }
+    const ms = Math.round(performance.now() - t0);
+    await doc.destroy();
+    return { name, source: 'native', ms, pages };
+  },
+
+  /**
+   * Axis-aligned ruling-line candidates, read from the page's operator list.
+   *
+   * The question this answers is narrow and worth answering exactly: can the
+   * ruling lines of a table be recovered from the vector content without
+   * rasterising the page. Only rectangles and axis-aligned segments are taken;
+   * anything else is counted and ignored.
+   */
+  async rulingLines(name) {
+    const doc = await open(name);
+    const pages = [];
+    const t0 = performance.now();
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      const list = await page.getOperatorList();
+      const OPS = pdfjsLib.OPS;
+
+      let ctm = Array.from(viewport.transform);
+      const stack = [];
+      const rects = [];
+      let curved = 0;
+      let diagonal = 0;
+      let decoded = 0;
+      let verified = 0;
+      let fellBack = 0;
+
+      const apply = (m, x, y) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
+
+      /**
+       * pdf.js 5.x hands path data as a flat [opcode, ...coords] array, and the
+       * opcode numbering is an internal detail. So the decode is checked
+       * against the minMax the same call carries: if the bounding box of what
+       * was decoded is not the bounding box pdf.js computed, the decode is
+       * wrong and this says so instead of reporting confident nonsense.
+       */
+      const COORDS = { 0: 2, 1: 2, 2: 6, 3: 4, 4: 0, 5: 0 };
+      const decodePath = (data) => {
+        const pts = [];
+        const segs = [];
+        let cx = 0, cy = 0, sx = 0, sy = 0, started = false;
+        for (let c = 0; c < data.length;) {
+          const op = data[c++];
+          const need = COORDS[op];
+          if (need === undefined || c + need > data.length) return null;
+          if (need === 2) {
+            const x = data[c++], y = data[c++];
+            pts.push([x, y]);
+            if (op === 0) { cx = x; cy = y; sx = x; sy = y; started = true; }
+            else { if (started) segs.push([cx, cy, x, y]); cx = x; cy = y; }
+          } else if (need === 6 || need === 4) {
+            for (let k = 0; k < need; k += 2) pts.push([data[c + k], data[c + k + 1]]);
+            c += need;
+            cx = data[c - 2]; cy = data[c - 1];
+            curved++;
+          } else if (started) {
+            segs.push([cx, cy, sx, sy]); cx = sx; cy = sy;
+          }
+        }
+        return { pts, segs };
+      };
+
+      for (let i = 0; i < list.fnArray.length; i++) {
+        const fn = list.fnArray[i];
+        const args = list.argsArray[i];
+        if (fn === OPS.save) { stack.push(Array.from(ctm)); continue; }
+        if (fn === OPS.restore) { ctm = stack.pop() ?? ctm; continue; }
+        if (fn === OPS.transform) { ctm = pdfjsLib.Util.transform(ctm, args); continue; }
+        if (fn !== OPS.constructPath) continue;
+
+        const subpaths = Array.isArray(args[1]) ? args[1] : [args[1]];
+        const minMax = args[2];
+        const segments = [];
+        const all = [];
+        let ok = true;
+        for (const sub of subpaths) {
+          const data = Array.from(sub ?? []);
+          const got = decodePath(data);
+          if (!got) { ok = false; break; }
+          segments.push(...got.segs);
+          all.push(...got.pts);
+        }
+
+        if (ok && all.length && minMax?.length === 4) {
+          const bx0 = Math.min(...all.map((p) => p[0]));
+          const by0 = Math.min(...all.map((p) => p[1]));
+          const bx1 = Math.max(...all.map((p) => p[0]));
+          const by1 = Math.max(...all.map((p) => p[1]));
+          const near = (a, b) => Math.abs(a - b) < 0.01;
+          decoded++;
+          if (near(bx0, minMax[0]) && near(by0, minMax[1]) && near(bx1, minMax[2]) && near(by1, minMax[3])) {
+            verified++;
+          } else {
+            ok = false;
+          }
+        } else if (all.length === 0) {
+          ok = false;
+        }
+
+        // An undecodable or unverified path still has a bounding box, and for a
+        // ruling line that box IS the line. Counted separately so the two are
+        // never confused in the write-up.
+        const source = ok ? segments : (minMax?.length === 4
+            ? [[minMax[0], minMax[1], minMax[2], minMax[1]], [minMax[2], minMax[1], minMax[2], minMax[3]],
+               [minMax[2], minMax[3], minMax[0], minMax[3]], [minMax[0], minMax[3], minMax[0], minMax[1]]]
+            : []);
+        if (!ok) fellBack++;
+
+        for (const [ax, ay, bx, by] of source) {
+          const p = apply(ctm, ax, ay);
+          const q = apply(ctm, bx, by);
+          const dx = Math.abs(p.x - q.x);
+          const dy = Math.abs(p.y - q.y);
+          if (dx < 0.4 && dy < 0.4) continue;
+          if (dx > 0.4 && dy > 0.4) { diagonal++; continue; }
+          rects.push({
+            orientation: dx >= dy ? 'h' : 'v',
+            x0: Math.min(p.x, q.x), x1: Math.max(p.x, q.x),
+            y0: Math.min(p.y, q.y), y1: Math.max(p.y, q.y),
+            length: Math.max(dx, dy),
+            fromBBox: !ok,
+          });
+        }
+      }
+      pages.push({
+        page: n, width: viewport.width, height: viewport.height,
+        segments: rects,
+        decode: { decoded, verified, fellBack, curved, diagonal },
+      });
+      page.cleanup();
+    }
+    const ms = Math.round(performance.now() - t0);
+    await doc.destroy();
+    return { name, source: 'paths', ms, pages };
+  },
+
+  /**
+   * OCR word boxes, through the pipeline the app actually uses today.
+   *
+   * Same render, same preprocessing, same engine. When deskew rotates the
+   * image, boxes are mapped back to the rendered page with the mapping
+   * preprocess.ts already returns, so native and OCR tokens land in one space.
+   */
+  async ocrTokens(name, { dpi = 150, deskew = false, noiseReduction = false } = {}) {
+    const doc = await open(name);
+    const engine = new OcrEngine('jpn+eng');
+    const t0 = performance.now();
+    await engine.start();
+    const initMs = Math.round(performance.now() - t0);
+    const scale = dpi / 72;
+    const pages = [];
+    try {
+      for (let n = 1; n <= doc.numPages; n++) {
+        const page = await doc.getPage(n);
+        const viewport = page.getViewport({ scale: 1 });
+        let canvas = null;
+        let owned = null;
+        const pageStart = performance.now();
+        try {
+          const rendered = await renderPageForOcr(page, scale);
+          canvas = rendered.canvas;
+          const prep = await preprocessForOcr(canvas, { deskew, noiseReduction });
+          if (prep.ownsCanvas) owned = prep.canvas;
+          const ocr = await engine.recognisePage(prep.canvas);
+          const map = prep.mapToRenderSpace;
+          const tokens = ocr.words.map((w) => {
+            // Two corners are enough for an axis-aligned box; a rotation is
+            // undone by the mapping, and the result is re-bounded.
+            const a = map ? map(w.bbox.x0, w.bbox.y0) : { x: w.bbox.x0, y: w.bbox.y0 };
+            const b = map ? map(w.bbox.x1, w.bbox.y1) : { x: w.bbox.x1, y: w.bbox.y1 };
+            const c = map ? map(w.bbox.x1, w.bbox.y0) : { x: w.bbox.x1, y: w.bbox.y0 };
+            const d = map ? map(w.bbox.x0, w.bbox.y1) : { x: w.bbox.x0, y: w.bbox.y1 };
+            const xs = [a.x, b.x, c.x, d.x];
+            const ys = [a.y, b.y, c.y, d.y];
+            // Canvas pixels back to page points: the render scale, undone.
+            return {
+              text: w.text,
+              x0: Math.min(...xs) / scale, x1: Math.max(...xs) / scale,
+              y0: Math.min(...ys) / scale, y1: Math.max(...ys) / scale,
+              confidence: w.confidence,
+            };
+          });
+          pages.push({
+            page: n,
+            width: viewport.width,
+            height: viewport.height,
+            canvas: { width: canvas.width, height: canvas.height },
+            tokens,
+            meanConfidence: ocr.meanConfidence,
+            preprocess: {
+              skipped: prep.skipped ?? null,
+              deskewApplied: prep.deskewApplied,
+              detectedAngle: prep.detectedAngle,
+              deskewConfidence: prep.deskewConfidence,
+              noiseReductionApplied: prep.noiseReductionApplied,
+              removedSpecks: prep.removedSpecks,
+              mapped: Boolean(map),
+            },
+            ms: Math.round(performance.now() - pageStart),
+          });
+        } finally {
+          releaseCanvas(owned);
+          releaseCanvas(canvas);
+          page.cleanup();
+        }
+      }
+    } finally {
+      await engine.terminate();
+    }
+    const ms = Math.round(performance.now() - t0);
+    await doc.destroy();
+    return { name, source: 'ocr', dpi, deskew, noiseReduction, initMs, ms, pages };
+  },
+};
+
+/**
+ * The same OCR pass, with the segmentation mode set explicitly.
+ *
+ * RESEARCH ONLY: it builds its own worker so ocr.ts keeps shipping exactly what
+ * it ships today. It exists because the default segmentation returns nothing
+ * from inside a ruled table, and "what could a reconstructor work with if that
+ * were addressed" is a different question from "what does it get today". Both
+ * numbers belong in the recommendation.
+ */
+window.__m24 = window.__m24 || {};
+window.__m24.ocrTokensPsm = async function ocrTokensPsm(name, { dpi = 150, psm = 'AUTO', deskew = false, noiseReduction = false } = {}) {
+  const doc = await open(name);
+  const scale = dpi / 72;
+  const worker = await createWorker('jpn+eng', 1, {
+    workerPath: '/ocr/tesseract/worker.min.js',
+    corePath: '/ocr/tesseract/',
+    langPath: '/ocr/tessdata',
+    gzip: false,
+    workerBlobURL: false,
+  });
+  const pages = [];
+  const t0 = performance.now();
+  try {
+    await worker.setParameters({ tessedit_pageseg_mode: PSM[psm] });
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      let canvas = null;
+      let owned = null;
+      try {
+        const rendered = await renderPageForOcr(page, scale);
+        canvas = rendered.canvas;
+        const prep = await preprocessForOcr(canvas, { deskew, noiseReduction });
+        if (prep.ownsCanvas) owned = prep.canvas;
+        const { data } = await worker.recognize(prep.canvas.toDataURL('image/png'), {}, { blocks: true, text: true });
+        const map = prep.mapToRenderSpace;
+        const tokens = [];
+        for (const block of data.blocks ?? []) {
+          for (const para of block.paragraphs ?? []) {
+            for (const line of para.lines ?? []) {
+              for (const w of line.words ?? []) {
+                const text = (w.text ?? '').trim();
+                if (!text || !w.bbox) continue;
+                const corners = [[w.bbox.x0, w.bbox.y0], [w.bbox.x1, w.bbox.y1], [w.bbox.x1, w.bbox.y0], [w.bbox.x0, w.bbox.y1]]
+                  .map(([x, y]) => (map ? map(x, y) : { x, y }));
+                tokens.push({
+                  text,
+                  x0: Math.min(...corners.map((p) => p.x)) / scale,
+                  x1: Math.max(...corners.map((p) => p.x)) / scale,
+                  y0: Math.min(...corners.map((p) => p.y)) / scale,
+                  y1: Math.max(...corners.map((p) => p.y)) / scale,
+                  confidence: w.confidence ?? 0,
+                });
+              }
+            }
+          }
+        }
+        pages.push({
+          page: n, width: viewport.width, height: viewport.height,
+          canvas: { width: canvas.width, height: canvas.height },
+          tokens,
+          meanConfidence: tokens.length ? Math.round(tokens.reduce((s, t) => s + t.confidence, 0) / tokens.length) : null,
+          preprocess: { deskewApplied: prep.deskewApplied, detectedAngle: prep.detectedAngle, mapped: Boolean(map) },
+        });
+      } finally {
+        releaseCanvas(owned);
+        releaseCanvas(canvas);
+        page.cleanup();
+      }
+    }
+  } finally {
+    await worker.terminate();
+    await doc.destroy();
+  }
+  return { name, source: 'ocr-psm', psm, dpi, ms: Math.round(performance.now() - t0), pages };
+};
+
+/**
+ * Page-segmentation sweep. RESEARCH ONLY -- this does not touch ocr.ts.
+ *
+ * The shipped engine leaves tesseract on its default segmentation, and the
+ * measurement above says that default returns nothing at all from inside a
+ * ruled table. Whether that is a fixable parameter or a property of the engine
+ * decides most of M2-4, so it is swept here with a worker of its own, built
+ * from the same local assets the app uses.
+ */
+window.__m24.psmSweep = async function psmSweep(name, { dpi = 150, modes } = {}) {
+  const doc = await open(name);
+  const page = await doc.getPage(1);
+  const scale = dpi / 72;
+  const rendered = await renderPageForOcr(page, scale);
+  const image = rendered.canvas.toDataURL('image/png');
+
+  const worker = await createWorker('jpn+eng', 1, {
+    workerPath: '/ocr/tesseract/worker.min.js',
+    corePath: '/ocr/tesseract/',
+    langPath: '/ocr/tessdata',
+    gzip: false,
+    workerBlobURL: false,
+  });
+  const out = [];
+  try {
+    // 'DEFAULT' runs first and sets nothing: it is the configuration the app
+    // ships with, so the sweep is anchored to a measured baseline rather than
+    // to an assumption about what tesseract.js defaults to.
+    for (const mode of modes ?? ['DEFAULT', 'AUTO', 'SINGLE_BLOCK', 'SPARSE_TEXT', 'SPARSE_TEXT_OSD', 'SINGLE_COLUMN']) {
+      const value = mode === 'DEFAULT' ? null : PSM[mode];
+      if (mode !== 'DEFAULT' && value === undefined) { out.push({ mode, error: 'unknown mode' }); continue; }
+      const t0 = performance.now();
+      if (value !== null) await worker.setParameters({ tessedit_pageseg_mode: value });
+      const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
+      const words = [];
+      for (const block of data.blocks ?? []) {
+        for (const para of block.paragraphs ?? []) {
+          for (const line of para.lines ?? []) {
+            for (const w of line.words ?? []) {
+              const text = (w.text ?? '').trim();
+              if (!text || !w.bbox) continue;
+              words.push({
+                text,
+                x0: w.bbox.x0 / scale, x1: w.bbox.x1 / scale,
+                y0: w.bbox.y0 / scale, y1: w.bbox.y1 / scale,
+                confidence: w.confidence ?? 0,
+              });
+            }
+          }
+        }
+      }
+      out.push({
+        mode, psm: value === null ? '(unset)' : value,
+        words: words.length,
+        meanConfidence: words.length ? Math.round(words.reduce((s, w) => s + w.confidence, 0) / words.length) : null,
+        ms: Math.round(performance.now() - t0),
+        tokens: words,
+      });
+    }
+  } finally {
+    await worker.terminate();
+    releaseCanvas(rendered.canvas);
+    page.cleanup();
+    await doc.destroy();
+  }
+  return { name, dpi, runs: out };
+};
+
+log('ready');
+window.__m24Ready = true;
+</script>
+</body>
+</html>
