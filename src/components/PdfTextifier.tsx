@@ -14,7 +14,9 @@ import type { PageKind, ProgressEvent } from '../utils/pdf-textifier';
 type Mode = 'ocr' | 'extract';
 
 interface TextifierOptions {
-    cleanNoise: boolean;
+    /** Applied to the OCR image only. Both off unless the user asks. */
+    deskew: boolean;
+    noiseReduction: boolean;
     mode: Mode;
     outputFormat: 'pdf' | 'txt' | 'word' | 'excel';
 }
@@ -53,8 +55,12 @@ export const PdfTextifier: React.FC = () => {
     const [previewPdf, setPreviewPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
 
     // Default options
+    // Preprocessing starts off. It changes what the OCR engine is shown, and a
+    // page that was already straight and clean has nothing to gain from it, so
+    // the tool behaves as it always did until someone turns it on.
     const [options, setOptions] = useState<TextifierOptions>({
-        cleanNoise: false,
+        deskew: false,
+        noiseReduction: false,
         mode: 'ocr',
         outputFormat: 'pdf'
     });
@@ -154,9 +160,22 @@ export const PdfTextifier: React.FC = () => {
         setOptions({ ...options, mode, outputFormat: FORMAT_FOR_MODE[mode] });
     };
 
+    /**
+     * Changing what the OCR engine is shown invalidates the finished result for
+     * the same reason changing mode does: the file under the Download button
+     * was produced with the old setting, and the screen would no longer describe
+     * it.
+     */
+    const handlePreprocessChange = (key: 'deskew' | 'noiseReduction', value: boolean) => {
+        if (isProcessing || options[key] === value) return;
+        resetRun();
+        setOptions({ ...options, [key]: value });
+    };
+
     const runOcr = async (source: File) => {
         const run = await textifyPdf(source, {
             langs: 'jpn+eng',
+            preprocess: { deskew: options.deskew, noiseReduction: options.noiseReduction },
             onProgress: setProgress,
             shouldCancel: () => cancelRef.current,
         });
@@ -184,6 +203,7 @@ export const PdfTextifier: React.FC = () => {
     const runExtract = async (source: File) => {
         const run = await extractTextPdf(source, {
             langs: 'jpn+eng',
+            preprocess: { deskew: options.deskew, noiseReduction: options.noiseReduction },
             onProgress: setProgress,
             shouldCancel: () => cancelRef.current,
         });
@@ -299,19 +319,33 @@ export const PdfTextifier: React.FC = () => {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', padding: '20px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #eee' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <label style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <Settings size={16} /> Cleaning
+                                    <Settings size={16} /> OCR前処理
                                 </label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'not-allowed', color: '#999' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isProcessing ? 'not-allowed' : 'pointer' }}>
                                     <input
                                         type="checkbox"
-                                        checked={options.cleanNoise}
-                                        disabled
-                                        readOnly
+                                        name="deskew"
+                                        checked={options.deskew}
+                                        onChange={(e) => handlePreprocessChange('deskew', e.target.checked)}
+                                        disabled={isProcessing}
                                         style={{ width: '18px', height: '18px' }}
                                     />
-                                    <span>ノイズ除去を行う (Remove Noise)</span>
+                                    <span>傾き補正 (Deskew)</span>
                                 </label>
-                                <span style={{ fontSize: '0.75rem', color: '#999' }}>後続対応 (not yet implemented)</span>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isProcessing ? 'not-allowed' : 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        name="noiseReduction"
+                                        checked={options.noiseReduction}
+                                        onChange={(e) => handlePreprocessChange('noiseReduction', e.target.checked)}
+                                        disabled={isProcessing}
+                                        style={{ width: '18px', height: '18px' }}
+                                    />
+                                    <span>ノイズ除去 (Remove Noise)</span>
+                                </label>
+                                <span style={{ fontSize: '0.75rem', color: '#666' }}>
+                                    スキャンページの文字認識用画像だけに適用されます。元PDFの見た目は変わりません。
+                                </span>
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
