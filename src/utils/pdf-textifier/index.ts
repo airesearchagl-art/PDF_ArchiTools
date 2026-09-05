@@ -1,44 +1,20 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import type { PDFPageProxy } from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
 import { classifyDocument } from './classify';
 import { OcrEngine } from './ocr';
+import { configurePdfWorker, loadWithPdfJs, releaseCanvas, renderPageForOcr } from './pdf-source';
 import { drawInvisibleWords } from './searchable-pdf';
 import { TextifyError } from './types';
 import type { PageResult, TextifyOptions, TextifyResult } from './types';
-
-/** Worker bundled with the app, never a CDN. */
-const PDF_WORKER_URL = '/pdf.worker.min.mjs';
-
-/**
- * Point PDF.js at our own worker.
- *
- * `GlobalWorkerOptions.workerSrc` is one global, and several components in this
- * app assign it at module scope -- three of them to unpkg. In a production
- * bundle they all evaluate on load and the last one wins, which is how the
- * shipped app ended up fetching its PDF.js worker from a CDN. Setting it at the
- * point of use makes this feature's behaviour independent of import order, and
- * keeps every request same-origin.
- */
-export function configurePdfWorker(): void {
-    if (pdfjsLib.GlobalWorkerOptions.workerSrc !== PDF_WORKER_URL) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
-    }
-}
-
-// Set a sane default the moment this module is imported, so any caller that
-// reaches pdf.js directly (the classifier, a test harness) still gets our
-// worker. The point-of-use call above is what survives another module
-// overwriting the global afterwards.
-configurePdfWorker();
 
 const FONT_URL = '/ocr/fonts/MPLUS1p-Regular.ttf';
 const DEFAULT_DPI = 150;
 
 export * from './types';
 export { classifyPage, classifyDocument } from './classify';
+export { configurePdfWorker } from './pdf-source';
+export { extractTextPdf, PAGE_HEADER_PREFIX, pageHeader } from './extract';
 
 /**
  * Turn a PDF into a searchable PDF, entirely in the browser.
@@ -159,7 +135,7 @@ export async function textifyPdf(
             const page = await doc.getPage(pageNumber);
             let canvas: HTMLCanvasElement | null = null;
             try {
-                const rendered = await renderPage(page, scale);
+                const rendered = await renderPageForOcr(page, scale);
                 canvas = rendered.canvas;
 
                 const ocr = await engine.recognisePage(canvas);
@@ -227,22 +203,6 @@ export async function textifyPdf(
     };
 }
 
-async function loadWithPdfJs(data: ArrayBuffer): Promise<pdfjsLib.PDFDocumentProxy> {
-    try {
-        return await pdfjsLib.getDocument({ data: new Uint8Array(data) }).promise;
-    } catch (error) {
-        const name = error instanceof Error ? error.name : '';
-        if (name === 'PasswordException') {
-            throw new TextifyError('pdf-encrypted', 'このPDFはパスワードで保護されているため処理できません。');
-        }
-        throw new TextifyError(
-            'pdf-load',
-            'PDFを読み込めませんでした。ファイルが破損している可能性があります。',
-            error instanceof Error ? error.message : String(error),
-        );
-    }
-}
-
 async function loadWithPdfLib(data: ArrayBuffer): Promise<PDFDocument> {
     try {
         const doc = await PDFDocument.load(data);
@@ -267,34 +227,6 @@ async function fetchFont(): Promise<ArrayBuffer> {
         );
     }
     return response.arrayBuffer();
-}
-
-async function renderPage(page: PDFPageProxy, scale: number) {
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    // Ask for the read-friendly context first: pdf.js reuses whatever context
-    // the canvas already has, and Tesseract reads the pixels back out.
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) throw new TextifyError('ocr-page', 'ページの描画に失敗しました。');
-    // intent 'print', not the default 'display'.
-    //
-    // pdf.js schedules display rendering with requestAnimationFrame
-    // (`useRequestAnimationFrame: !intentPrint`), and rAF does not fire while a
-    // tab is hidden -- so the render promise simply never settles and the whole
-    // pipeline stalls with no error. This canvas is never shown to anyone; it
-    // exists only to feed the OCR engine, so it must not depend on the page
-    // being visible. Print intent schedules on microtasks instead.
-    await page.render({ canvas, viewport, intent: 'print' }).promise;
-    return { canvas, viewport };
-}
-
-/** Drop the backing store immediately; one page at a time is the whole point. */
-function releaseCanvas(canvas: HTMLCanvasElement | null): void {
-    if (!canvas) return;
-    canvas.width = 0;
-    canvas.height = 0;
 }
 
 async function save(doc: PDFDocument): Promise<Uint8Array> {

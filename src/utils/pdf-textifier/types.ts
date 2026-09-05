@@ -45,6 +45,8 @@ export type ProgressPhase =
     | 'loading'
     | 'classifying'
     | 'ocr-init'
+    /** Reading text a page already carries, in Text Extraction. */
+    | 'extracting'
     | 'ocr-page'
     | 'writing'
     | 'done'
@@ -82,6 +84,8 @@ export type TextifyErrorCode =
     | 'pdf-encrypted'
     | 'ocr-assets'
     | 'ocr-page'
+    /** A text-native page whose own text could not be read. */
+    | 'text-extract'
     | 'output'
     | 'cancelled';
 
@@ -108,4 +112,28 @@ export interface TextifyOptions {
     onProgress?: (event: ProgressEvent) => void;
     /** Polled at every page boundary. Returning true stops the run. */
     shouldCancel?: () => boolean;
+}
+
+/** One page of a Text Extraction run, in the order the PDF has it. */
+export interface ExtractedPage {
+    pageNumber: number;
+    kind: PageKind;
+    /** The page's text. Empty when the page genuinely carries none. */
+    text: string;
+    charCount: number;
+    /** Words recognised on this page. Always 0 for a text-native page. */
+    ocrWords: number;
+    /** Mean OCR confidence, or null when the page was not OCR'd. */
+    meanConfidence: number | null;
+    ms: number;
+}
+
+export interface TextExtractionResult {
+    /** The whole document as UTF-8 plain text, page headers included. */
+    text: string;
+    pages: ExtractedPage[];
+    totalChars: number;
+    totalMs: number;
+    /** True when the OCR engine was actually started for this run. */
+    ocrUsed: boolean;
 }
