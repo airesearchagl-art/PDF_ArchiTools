@@ -250,15 +250,24 @@ try {
     check('D: the mixed A1/A3 run reports every page and both rules',
         /5ページへ2か所/.test(summary), summary);
 
+    // Step E downloaded a file too, and Chrome can still be settling it when the
+    // download directory is switched above -- so it occasionally lands here and
+    // is the first .pdf this loop sees. Wait for this step's own file instead of
+    // for whichever arrives first. A genuinely wrong filename still fails: it
+    // simply fails on the timeout rather than immediately.
+    const EXPECTED_PDF = 'tb-mixed_title-updated.pdf';
     const deadline = Date.now() + 60_000;
     let downloaded = null;
     while (Date.now() < deadline) {
         const entries = fs.readdirSync(downloads);
         const done = entries.filter((f) => f.endsWith('.pdf'));
-        if (done.length && !entries.some((f) => f.endsWith('.crdownload'))) { downloaded = done[0]; break; }
+        if (done.length && !entries.some((f) => f.endsWith('.crdownload'))) {
+            downloaded = done.includes(EXPECTED_PDF) ? EXPECTED_PDF : done[0];
+            if (downloaded === EXPECTED_PDF) break;
+        }
         await new Promise((r) => setTimeout(r, 200));
     }
-    check('D: the updated PDF downloads', downloaded === 'tb-mixed_title-updated.pdf', String(downloaded));
+    check('D: the updated PDF downloads', downloaded === EXPECTED_PDF, String(downloaded));
 
     if (downloaded) {
         const doc = await PDFDocument.load(fs.readFileSync(path.join(downloads, downloaded)));
