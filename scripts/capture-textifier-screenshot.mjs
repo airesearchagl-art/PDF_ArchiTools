@@ -2,9 +2,10 @@
  * Recapture public/screenshots/textifier.png from the PRODUCTION build.
  *
  * The 使い方 guide draws numbered badges over this image at fixed percentages,
- * so it has to keep the same 1280x800 frame as the one it replaces. Shot with a
- * synthetic fixture and with Text Extraction selected, because that is the part
- * of the screen the guide now points at.
+ * so this prints where the three regions actually landed and those numbers go
+ * straight into the guide. Shot with a synthetic fixture, with Text Extraction
+ * selected and the first-page preview painted, because that is what the guide
+ * points at.
  *
  * Run:  npm run build && node scripts/capture-textifier-screenshot.mjs
  */
@@ -23,6 +24,12 @@ const FIXTURES = path.join(ROOT, 'test-fixtures');
 // customer document and no local path ever appears in the image.
 const FIXTURE = 'scanned-ja-en.pdf';
 const OUT = path.join(ROOT, 'public', 'screenshots', 'textifier.png');
+const FRAME_W = 1280;
+// Tall enough for the whole tool. The Textifier scrolls inside its own panel
+// rather than scrolling the page, so a full-page capture would still stop at
+// the viewport -- the frame has to be the right height to begin with. It grew
+// once the preview started painting the page instead of an empty box.
+const FRAME_H = 1150;
 
 if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
     console.error('No dist/ found. Run: npm run build');
@@ -37,7 +44,7 @@ const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', 
 
 try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 800 });
+    await page.setViewport({ width: FRAME_W, height: FRAME_H });
     await page.goto(ORIGIN, { waitUntil: 'networkidle0' });
 
     await page.evaluate(() => {
@@ -50,11 +57,18 @@ try {
     const input = await page.$('input[type="file"]');
     await input.uploadFile(path.join(FIXTURES, FIXTURE));
     await page.waitForFunction((n) => document.body.innerText.includes(n), {}, FIXTURE);
-    // The first-page preview renders onto a canvas after the file is read.
+    // Wait for the preview to be drawn, not merely to exist. An unpainted
+    // canvas still reports 300x150, so waiting on its size is how the previous
+    // capture ended up showing an empty frame. Wait for actual ink.
     await page.waitForFunction(() => {
         const c = document.querySelector('canvas');
-        return c && c.width > 0 && c.height > 0;
-    });
+        if (!c || !c.width || !c.height) return false;
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] !== 0 && (d[i] + d[i + 1] + d[i + 2]) / 3 < 200) return true;
+        }
+        return false;
+    }, { timeout: 30_000 });
 
     await page.evaluate(() => {
         const radio = [...document.querySelectorAll('input[name="mode"]')].find((r) => r.value === 'extract');
@@ -75,14 +89,14 @@ try {
 
     // The guide places its numbered badges over this image by percentage, so
     // report where the three regions actually landed in this frame.
-    const boxes = await page.evaluate(() => {
+    const boxes = await page.evaluate((frameW, frameH) => {
         const rect = (el) => {
             if (!el) return null;
             const r = el.getBoundingClientRect();
             const pc = (v, total) => `${(100 * v / total).toFixed(1)}%`;
             return {
-                top: pc(r.top, 800), left: pc(r.left, 1280),
-                width: pc(r.width, 1280), height: pc(r.height, 800),
+                top: pc(r.top, frameH), left: pc(r.left, frameW),
+                width: pc(r.width, frameW), height: pc(r.height, frameH),
             };
         };
         const upload = document.querySelector('input[type="file"]')?.parentElement;
@@ -90,7 +104,7 @@ try {
         const run = [...document.querySelectorAll('button')]
             .find((b) => (b.textContent || '').includes('Start Textification'));
         return { upload: rect(upload), settings: rect(settings), run: rect(run) };
-    });
+    }, FRAME_W, FRAME_H);
     console.log(`  badges: ${JSON.stringify(boxes, null, 2)}`);
     console.log(`Wrote ${path.relative(ROOT, OUT)}`);
 } finally {

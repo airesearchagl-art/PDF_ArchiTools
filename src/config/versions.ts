@@ -34,9 +34,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '図枠一括更新機能を追加'
     },
     textifier: {
-        version: '1.3.0',
+        version: '1.3.1',
         lastUpdate: '2026/09/05',
-        changelog: 'PDFから文字をTXTとして抽出する機能を追加'
+        changelog: 'PDF読み込み時のプレビュー表示を修正'
     },
     splitMerge: {
         version: '1.1.1',
