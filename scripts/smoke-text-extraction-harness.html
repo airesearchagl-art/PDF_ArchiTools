@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Text Extraction smoke harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Text Extraction smoke harness</h1>
+<p>Driven by <code>scripts/smoke-text-extraction.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { extractTextPdf, TextifyError, PAGE_HEADER_PREFIX, pageHeader } from '/src/utils/pdf-textifier/index.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+const fetchFixture = (name) => fetch(`/test-fixtures/${name}`).then((r) => {
+  if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+  return r.arrayBuffer();
+});
+
+/** Page count straight from the source PDF, to compare the export against. */
+async function sourcePageCount(bytes) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+  return doc.numPages;
+}
+
+window.__extract = {
+  headerPrefix: PAGE_HEADER_PREFIX,
+  header: (n) => pageHeader(n),
+
+  async run(name) {
+    log(`running ${name}`);
+    const input = await fetchFixture(name);
+    const pageCount = await sourcePageCount(input.slice(0));
+
+    const phases = [];
+    const messages = [];
+    const result = await extractTextPdf(input.slice(0), {
+      onProgress: (e) => { phases.push(e.phase); messages.push(e.message); },
+    });
+
+    // Encode and decode exactly as the download does, so the check covers the
+    // real UTF-8 path rather than a string that never left the heap.
+    const blob = new Blob([result.text], { type: 'text/plain;charset=utf-8' });
+    const roundTrip = await blob.text();
+
+    log(`done ${name}`);
+    return {
+      name,
+      pageCount,
+      pages: result.pages,
+      text: result.text,
+      totalChars: result.totalChars,
+      totalMs: result.totalMs,
+      ocrUsed: result.ocrUsed,
+      blobType: blob.type,
+      blobSize: blob.size,
+      roundTripsAsUtf8: roundTrip === result.text,
+      phases: [...new Set(phases)],
+      messages: [...new Set(messages)],
+    };
+  },
+
+  /**
+   * Cancel mid-run and report what came back.
+   *
+   * `when` decides the moment the flag is raised, because when it is raised is
+   * the whole question. 'first-ocr' is cancelled with pages still to come;
+   * 'last-page' is cancelled during the final page, which for a single-page
+   * scan is also the first -- the case where there is no later page boundary
+   * left to notice the cancel at.
+   */
+  async cancelProbe(name, when = 'first-ocr') {
+    const input = await fetchFixture(name);
+    let seen = 0;
+    let armed = false;
+    try {
+      const result = await extractTextPdf(input, {
+        onProgress: (e) => {
+          if (e.phase === 'ocr-page') seen++;
+          if (when === 'first-ocr' && e.phase === 'ocr-page') armed = true;
+          if (when === 'last-page' && (e.phase === 'ocr-page' || e.phase === 'extracting')
+            && e.page === e.totalPages) armed = true;
+        },
+        shouldCancel: () => armed,
+      });
+      return {
+        threw: false, code: null, armed,
+        gotText: typeof result.text === 'string',
+        chars: result.totalChars, pagesStarted: seen,
+      };
+    } catch (error) {
+      return {
+        threw: true,
+        code: error instanceof TextifyError ? error.code : null,
+        message: error?.message ?? String(error),
+        armed,
+        pagesStarted: seen,
+      };
+    }
+  },
+
+  ready: true,
+};
+log('ready');
+</script>
+</body>
+</html>

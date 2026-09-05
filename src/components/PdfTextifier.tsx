@@ -8,22 +8,34 @@ import { renderPageToCanvas } from '../utils/pdfDiff';
 
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
-import { textifyPdf, TextifyError, configurePdfWorker } from '../utils/pdf-textifier';
-import type { PageResult, ProgressEvent } from '../utils/pdf-textifier';
+import { textifyPdf, extractTextPdf, TextifyError, configurePdfWorker } from '../utils/pdf-textifier';
+import type { PageKind, ProgressEvent } from '../utils/pdf-textifier';
+
+type Mode = 'ocr' | 'extract';
 
 interface TextifierOptions {
     cleanNoise: boolean;
-    mode: 'ocr' | 'extract';
-    outputFormat: 'pdf' | 'word' | 'excel';
+    mode: Mode;
+    outputFormat: 'pdf' | 'txt' | 'word' | 'excel';
 }
 
+/** The only format each mode can actually produce today. */
+const FORMAT_FOR_MODE: Record<Mode, TextifierOptions['outputFormat']> = {
+    ocr: 'pdf',
+    extract: 'txt',
+};
+
+/** What the result panel needs, from either pipeline. */
 interface CompletedRun {
+    mode: Mode;
     blobUrl: string;
     fileName: string;
-    pages: PageResult[];
+    pages: { pageNumber: number; kind: PageKind; ocrWords: number; error?: string }[];
     outputBytes: number;
     totalMs: number;
     fontEmbedded: boolean;
+    /** Characters written, for a Text Extraction run. */
+    totalChars: number | null;
 }
 
 export const PdfTextifier: React.FC = () => {
@@ -107,6 +119,75 @@ export const PdfTextifier: React.FC = () => {
         }
     };
 
+    /**
+     * Switching mode throws away whatever the previous mode produced.
+     *
+     * Otherwise the finished OCR run's "Download Result" would still be sitting
+     * there while the screen says Text Extraction, and the file that arrives is
+     * a searchable PDF from the mode the user just left.
+     */
+    const handleModeChange = (mode: Mode) => {
+        if (mode === options.mode || isProcessing) return;
+        resetRun();
+        setOptions({ ...options, mode, outputFormat: FORMAT_FOR_MODE[mode] });
+    };
+
+    const runOcr = async (source: File) => {
+        const run = await textifyPdf(source, {
+            langs: 'jpn+eng',
+            onProgress: setProgress,
+            shouldCancel: () => cancelRef.current,
+        });
+
+        const blob = new Blob([run.bytes as BlobPart], { type: 'application/pdf' });
+        setResult({
+            mode: 'ocr',
+            blobUrl: URL.createObjectURL(blob),
+            fileName: source.name.replace(/\.pdf$/i, '') + '_searchable.pdf',
+            pages: run.pages,
+            outputBytes: run.outputBytes,
+            totalMs: run.totalMs,
+            fontEmbedded: run.fontEmbedded,
+            totalChars: null,
+        });
+
+        const failed = run.pages.filter((p) => p.error);
+        if (failed.length > 0) {
+            setNotice(`${failed.length} ページで文字認識に失敗しました。該当ページは元のまま出力されています。`);
+        } else if (run.pages.every((p) => p.kind === 'text-native')) {
+            setNotice('すべてのページに既にテキストが含まれていたため、OCRは実行していません。');
+        }
+    };
+
+    const runExtract = async (source: File) => {
+        const run = await extractTextPdf(source, {
+            langs: 'jpn+eng',
+            onProgress: setProgress,
+            shouldCancel: () => cancelRef.current,
+        });
+
+        // Plain UTF-8, no BOM: the charset is declared on the blob, and a byte
+        // order mark would put an invisible character ahead of the first page
+        // header for anything that reads the file back.
+        const blob = new Blob([run.text], { type: 'text/plain;charset=utf-8' });
+        setResult({
+            mode: 'extract',
+            blobUrl: URL.createObjectURL(blob),
+            fileName: source.name.replace(/\.pdf$/i, '') + '_extracted.txt',
+            pages: run.pages,
+            outputBytes: blob.size,
+            totalMs: run.totalMs,
+            fontEmbedded: false,
+            totalChars: run.totalChars,
+        });
+
+        if (run.totalChars === 0) {
+            setNotice('文字が見つかりませんでした。ページ区切りのみのTXTが出力されています。');
+        } else if (!run.ocrUsed) {
+            setNotice('すべてのページに文字情報があったため、OCRは実行していません。');
+        }
+    };
+
     const handleProcess = async () => {
         if (!file || isProcessing) return;
 
@@ -115,30 +196,8 @@ export const PdfTextifier: React.FC = () => {
         setIsProcessing(true);
 
         try {
-            const run = await textifyPdf(file, {
-                langs: 'jpn+eng',
-                onProgress: setProgress,
-                shouldCancel: () => cancelRef.current,
-            });
-
-            const blob = new Blob([run.bytes as BlobPart], { type: 'application/pdf' });
-            const outName = file.name.replace(/\.pdf$/i, '') + '_searchable.pdf';
-
-            setResult({
-                blobUrl: URL.createObjectURL(blob),
-                fileName: outName,
-                pages: run.pages,
-                outputBytes: run.outputBytes,
-                totalMs: run.totalMs,
-                fontEmbedded: run.fontEmbedded,
-            });
-
-            const failed = run.pages.filter((p) => p.error);
-            if (failed.length > 0) {
-                setNotice(`${failed.length} ページで文字認識に失敗しました。該当ページは元のまま出力されています。`);
-            } else if (run.pages.every((p) => p.kind === 'text-native')) {
-                setNotice('すべてのページに既にテキストが含まれていたため、OCRは実行していません。');
-            }
+            if (options.mode === 'extract') await runExtract(file);
+            else await runOcr(file);
         } catch (err) {
             if (err instanceof TextifyError) {
                 // Cancellation is a user action, not a failure.
@@ -179,7 +238,7 @@ export const PdfTextifier: React.FC = () => {
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem' }}>PDFテキスト化 (PDF Textification)</h2>
                         <p style={{ margin: '5px 0 0', color: '#666', fontSize: '0.9rem' }}>
-                            スキャンPDFを検索可能PDFへ。処理はすべてブラウザ内で行われ、ファイルは外部へ送信されません。
+                            スキャンPDFを検索可能PDFへ、またはPDFの文字をTXTへ。処理はすべてブラウザ内で行われ、ファイルは外部へ送信されません。
                         </p>
                     </div>
                 </div>
@@ -240,17 +299,27 @@ export const PdfTextifier: React.FC = () => {
                                         <input
                                             type="radio"
                                             name="mode"
+                                            value="ocr"
                                             checked={options.mode === 'ocr'}
-                                            onChange={() => setOptions({ ...options, mode: 'ocr' })}
+                                            onChange={() => handleModeChange('ocr')}
                                             disabled={isProcessing}
                                         /> OCR
                                     </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'not-allowed', color: '#999' }}>
-                                        <input type="radio" name="mode" disabled readOnly checked={false} /> Text Extraction
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                                        <input
+                                            type="radio"
+                                            name="mode"
+                                            value="extract"
+                                            checked={options.mode === 'extract'}
+                                            onChange={() => handleModeChange('extract')}
+                                            disabled={isProcessing}
+                                        /> Text Extraction
                                     </label>
                                 </div>
                                 <span style={{ fontSize: '0.75rem', color: '#666' }}>
-                                    既にテキストを持つページは自動的にOCRを行いません。
+                                    {options.mode === 'ocr'
+                                        ? '既にテキストを持つページは自動的にOCRを行いません。'
+                                        : '文字情報のあるページはその文字を、スキャンページはOCRの結果をTXTへ書き出します。'}
                                 </span>
                             </div>
 
@@ -262,7 +331,11 @@ export const PdfTextifier: React.FC = () => {
                                     disabled={isProcessing}
                                     style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
                                 >
-                                    <option value="pdf">PDF (Searchable)</option>
+                                    {/* Each mode has exactly one real output, so the other one is
+                                        not offered rather than offered and then rejected. */}
+                                    {options.mode === 'ocr'
+                                        ? <option value="pdf">PDF (Searchable)</option>
+                                        : <option value="txt">Text (.txt)</option>}
                                     <option value="word" disabled>Word (.docx) — Coming later</option>
                                     <option value="excel" disabled>Excel (.xlsx) — Coming later</option>
                                 </select>
@@ -366,7 +439,10 @@ export const PdfTextifier: React.FC = () => {
                             </div>
                             <h3 style={{ margin: '0 0 10px', color: '#333' }}>Processing Complete!</h3>
                             <p style={{ color: '#666', marginBottom: '8px' }}>
-                                {result.pages.length} ページ処理 / OCR {ocrPages.length} ページ / 認識 {recognisedWords} 語
+                                {result.pages.length} ページ処理 / OCR {ocrPages.length} ページ
+                                {result.mode === 'extract'
+                                    ? ` / 抽出 ${result.totalChars ?? 0} 文字`
+                                    : ` / 認識 ${recognisedWords} 語`}
                             </p>
                             <p style={{ color: '#999', marginBottom: '20px', fontSize: '0.85rem' }}>
                                 {(result.outputBytes / 1024 / 1024).toFixed(2)} MB ・ {(result.totalMs / 1000).toFixed(1)} 秒

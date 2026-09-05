@@ -11,6 +11,7 @@
  *   scanned-ja-en.pdf       image-only, mixed
  *   mixed-multipage.pdf     text-native, scanned, text-native
  *   scanned-rotated.pdf     image-only page carrying /Rotate 90
+ *   text-with-blank-page.pdf  text-native, entirely blank, text-native
  *
  * Run:  node scripts/make-test-fixtures.mjs
  */
@@ -143,6 +144,19 @@ for (const [name, lines, tag] of [
     await addScanPage(doc, await raster(browser, MIX, 'mixpage'));
     await addTextPage(doc, font, [['最終ページ Final Page', 20], ['This page is text-native too.', 12]]);
     results.push(['mixed-multipage.pdf', await write(doc, 'mixed-multipage.pdf')]);
+}
+
+// A sheet with nothing on it at all, between two text pages. Real drawing sets
+// carry these -- a separator, a page that failed to scan -- and a text export
+// must still show that the page was there rather than quietly renumbering.
+{
+    const doc = await PDFDocument.create();
+    doc.registerFontkit(fontkit);
+    const font = await doc.embedFont(fontBytes, { subset: false });
+    await addTextPage(doc, font, TEXT_LINES);
+    doc.addPage([A4_W, A4_H]);
+    await addTextPage(doc, font, [['最終ページ Final Page', 20], ['This page is text-native too.', 12]]);
+    results.push(['text-with-blank-page.pdf', await write(doc, 'text-with-blank-page.pdf')]);
 }
 
 // rotated scan: the image is laid down turned a quarter turn and the page then

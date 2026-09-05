@@ -74,7 +74,7 @@ try {
     });
     console.log(`  versions : ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.3.0', versions['3. PDF加工 (Processor)'] === '1.3.0', JSON.stringify(versions));
-    check('PDFテキスト化 shows v1.2.0', versions['5. PDFテキスト化 (Textifier)'] === '1.2.0', JSON.stringify(versions));
+    check('PDFテキスト化 shows v1.3.0', versions['5. PDFテキスト化 (Textifier)'] === '1.3.0', JSON.stringify(versions));
 
     // ---- S1: the page-size normalizer is documented ------------------------
     check('図面サイズ統一 is documented', text.includes('図面サイズ統一'));
@@ -100,6 +100,24 @@ try {
     check('図枠一括更新 warns it is not redaction',
         text.includes('墨消し') && text.includes('機密情報を消す目的では使用しないでください'));
 
+    // ---- M2-1: the TXT export is documented as available --------------------
+    check('Text Extraction is described as a mode the user can pick',
+        text.includes('Text Extraction') && text.includes('Text (.txt)'));
+    check('the TXT export explains where the text comes from',
+        text.includes('文字情報を持つページはその文字をそのまま取り出し')
+        && text.includes('スキャンページはOCR'));
+    check('the TXT export states page order is kept',
+        text.includes('ページ順は維持') || text.includes('ページ順を維持'));
+    check('the guide shows the page separator the file actually contains',
+        text.includes('===== Page 1 ====='));
+    check('the guide names both output file endings',
+        text.includes('_searchable.pdf') && text.includes('_extracted.txt'));
+    check('the guide warns that switching mode discards the previous result',
+        text.includes('モードを切り替えると、前のモードの結果は破棄されます'));
+    check('the TXT limitations are stated without overclaiming',
+        text.includes('段組みや表が複雑なページ') && text.includes('Excelの表として復元する機能ではありません')
+        && text.includes('元の画像の品質'));
+
     // ---- M1: unsupported features must read as unsupported -----------------
     const unsupported = await page.evaluate(() => {
         const items = [...document.querySelectorAll('li')].map((li) => li.textContent || '');
@@ -107,14 +125,15 @@ try {
         return {
             word: find('Word (.docx)'),
             excel: find('Excel (.xlsx)'),
-            noise: find('ノイズ除去'),
-            textExtraction: find('Text Extraction'),
+            noise: find('ノイズ除去 (Remove Noise)'),
         };
     });
     console.log(`  unsupported: ${JSON.stringify(unsupported)}`);
     for (const [key, value] of Object.entries(unsupported)) {
         check(`${key} is marked as not yet available`, value.includes('未対応'), value);
     }
+    check('Text Extraction is no longer listed as unavailable',
+        !/Text Extraction[^\n]*未対応/.test(text));
     check('the guide no longer claims Word/Excel conversion is available',
         !text.includes('Word/Excel形式に変換'));
     check('OCR capabilities are described',
@@ -124,6 +143,10 @@ try {
     check('更新履歴 section exists', text.includes('更新履歴'));
     const historyText = await page.evaluate(() =>
         document.querySelector('#release-history')?.innerText ?? '');
+    check('release history: 2026/09/05 PDFテキスト化 v1.3.0 entry is first',
+        historyText.includes('2026/09/05') && /^[\s\S]{0,120}TXT/.test(historyText)
+        && historyText.includes('ページ順を維持'),
+        historyText.slice(0, 80).replace(/\n/g, ' | '));
     check('release history: 2026/09/04 PDF加工 v1.3.0 entry',
         historyText.includes('2026/09/04') && historyText.includes('図枠一括更新')
         && historyText.includes('1.3.0'), historyText.slice(0, 60).replace(/\n/g, ' | '));

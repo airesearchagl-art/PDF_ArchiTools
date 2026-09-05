@@ -17,6 +17,18 @@ interface ReleaseNote {
 
 const releaseHistory: ReleaseNote[] = [
     {
+        date: '2026/09/05',
+        tool: 'PDFテキスト化',
+        version: '1.3.0',
+        changes: [
+            'PDFから文字をTXTファイルとして書き出せるようになりました。',
+            '文字情報を持つページは、その文字を直接取得します。',
+            'スキャンページは日本語・英語のOCRを行います。',
+            '文字ページとスキャンページが混在したPDFにも対応します。',
+            '元のPDFのページ順を維持して書き出します。',
+        ],
+    },
+    {
         date: '2026/09/04',
         tool: 'PDF加工',
         version: '1.3.0',
@@ -96,7 +108,7 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: '16px 0 0', fontSize: '0.95em', color: '#9fd3ff' }}>
                     <History size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>図枠一括更新</b>（PDF加工 v1.3.0） / <b>図面サイズ統一</b>（PDF加工 v1.2.0） / <b>日本語・英語OCR</b>（PDFテキスト化 v1.2.0）
+                    最近の更新: <b>TXT書き出し</b>（PDFテキスト化 v1.3.0） / <b>図枠一括更新</b>（PDF加工 v1.3.0） / <b>図面サイズ統一</b>（PDF加工 v1.2.0）
                     — 詳しくはページ下部の<a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>をご覧ください。
                 </p>
             </div>
@@ -482,20 +494,33 @@ export function HowToUse() {
                     <VersionBadge version={TOOL_VERSIONS.textifier.version} />
                 </h3>
                 <p style={{ marginBottom: '20px' }}>
-                    スキャンして画像になってしまったPDFを文字認識（OCR）し、
-                    <b>文字を検索・選択できるPDF</b>を作るツールです。日本語と英語に対応しています。
-                    見た目は元のPDFのまま変わりません（文字情報が裏側に追加されます）。
+                    PDFの文字を取り出すツールです。日本語と英語に対応し、2つのモードがあります。
                 </p>
+                <ul style={{ marginBottom: '20px', paddingLeft: '20px', lineHeight: 1.9 }}>
+                    <li>
+                        <b>OCR</b> — スキャンして画像になってしまったPDFを文字認識し、
+                        <b>文字を検索・選択できるPDF</b>を作ります。見た目は元のPDFのまま変わりません
+                        （文字情報が裏側に追加されます）。
+                    </li>
+                    <li>
+                        <b>Text Extraction</b> — PDFの文字を<b>TXTファイル</b>として書き出します。
+                        文字情報を持つページはその文字をそのまま取り出し、スキャンページはOCRを行います。
+                        元のPDFのページ順は維持されます。
+                    </li>
+                </ul>
 
                 <ScreenWithBadges
                     src="/screenshots/textifier.png"
                     badges={[
+                        // Measured against the current 1280x800 capture by
+                        // scripts/capture-textifier-screenshot.mjs, which prints
+                        // these percentages when it retakes the image.
                         // 1. Upload (Centre)
-                        { top: '25%', left: '21%', width: '57.7%', height: '30%', desc: 'ファイルアップロードエリア' },
+                        { top: '28.3%', left: '21.1%', width: '57.8%', height: '29.5%', desc: 'ファイルアップロードエリア' },
                         // 2. Settings row (Cleaning / Processing Mode / Output Format)
-                        { top: '58%', left: '21%', width: '57.7%', height: '20%', desc: 'OCR設定・出力形式' },
+                        { top: '61.6%', left: '21.1%', width: '57.8%', height: '19%', desc: 'モード・出力形式' },
                         // 3. Run button
-                        { top: '81%', left: '40%', width: '20%', height: '7%', desc: '実行（Start Textification）' }
+                        { top: '84.3%', left: '40.3%', width: '19.5%', height: '5.9%', desc: '実行（Start Textification）' }
                     ]}
                 />
 
@@ -508,13 +533,14 @@ export function HowToUse() {
 
                     <div style={cardStyle}>
                         <h4 style={cardHeadStyle}><strong style={{ color: 'red' }}>②</strong> <Settings size={18} /> 設定 (Settings)</h4>
-                        <p>現在は <b>OCR</b> ／ 出力形式 <b>PDF (Searchable)</b> の組み合わせでご利用いただけます。</p>
+                        <p><b>Processing Mode</b> で、やりたいことを選びます。出力形式は自動で切り替わります。</p>
                         <ul style={listStyle}>
-                            <li><b>Processing Mode:</b> 「OCR」を選びます。</li>
-                            <li>すでに文字情報を持つページは、自動的にOCRを行いません（そのまま残します）。</li>
-                            <li><b>Output Format:</b> 「PDF (Searchable)」を選びます。</li>
+                            <li><b>OCR</b> → 出力形式は <b>PDF (Searchable)</b>。検索できるPDFが保存されます。</li>
+                            <li><b>Text Extraction</b> → 出力形式は <b>Text (.txt)</b>。文字だけのTXTが保存されます。</li>
+                            <li>どちらのモードでも、すでに文字情報を持つページには文字認識を行いません。</li>
                         </ul>
                         <p style={noteStyle}>
+                            モードを切り替えると、前のモードの結果は破棄されます。切り替えたあとにもう一度実行してください。
                             画面上でグレー表示になっている項目は、まだご利用いただけません（下の「未対応の機能」を参照）。
                         </p>
                     </div>
@@ -525,7 +551,8 @@ export function HowToUse() {
                         <ul style={listStyle}>
                             <li>進捗がページ単位で表示されます。</li>
                             <li>途中で「キャンセル」できます（現在のページの認識完了後に反映されます）。</li>
-                            <li>完了後に「Download Result」から検索可能PDFを保存します。</li>
+                            <li>キャンセルした場合、途中までのファイルは保存されません。</li>
+                            <li>完了後に「Download Result」から保存します（OCRは <b>_searchable.pdf</b>、Text Extraction は <b>_extracted.txt</b>）。</li>
                         </ul>
                         <p style={noteStyle}>※ページ数や解像度によっては、処理に時間がかかる場合があります。</p>
                     </div>
@@ -542,7 +569,11 @@ export function HowToUse() {
                             <li>日本語・英語の文字認識</li>
                             <li>検索・選択できるPDFの生成</li>
                             <li>元の見た目をそのまま保持</li>
-                            <li>文字ページと画像ページが混在したPDFに対応</li>
+                            <li><b>PDFから文字をTXTとして抽出</b></li>
+                            <li>文字情報のあるページは、PDF内の文字をそのまま利用</li>
+                            <li>スキャンページはOCRの結果を利用</li>
+                            <li>文字ページとスキャンページが混在したPDFに対応</li>
+                            <li>元のPDFのページ順を維持して書き出し</li>
                             <li>回転したページに対応</li>
                             <li>進捗表示とキャンセル</li>
                             <li>結果のダウンロード</li>
@@ -557,16 +588,29 @@ export function HowToUse() {
                             <li><b>Word (.docx) 出力</b> — 未対応（Coming later）</li>
                             <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
                             <li><b>ノイズ除去 (Remove Noise)</b> — 未対応（後続対応）</li>
-                            <li><b>Text Extraction モード</b> — 未対応（文字情報の単独書き出しはできません）</li>
                         </ul>
                         <p style={noteStyle}>
-                            現在ご利用いただける出力は「PDF (Searchable)」のみです。
+                            現在ご利用いただける出力は「PDF (Searchable)」と「Text (.txt)」です。
                         </p>
                     </div>
                 </div>
 
+                {/* 5-c. What the TXT export is, and is not */}
+                <div style={{ ...cardStyle, borderLeft: '6px solid #d9a441', marginTop: '20px' }}>
+                    <h4 style={cardHeadStyle}><ScanText size={18} /> TXT書き出しについて知っておくこと</h4>
+                    <ul style={listStyle}>
+                        <li>TXTにはページの区切り（<code>===== Page 1 =====</code>）が入り、ページ順は元のPDFのままです。</li>
+                        <li>文字のないページも、ページの見出しだけは残ります。</li>
+                        <li>段組みや表が複雑なページでは、文字の順序が見た目どおりにならない場合があります。</li>
+                        <li>表をExcelの表として復元する機能ではありません。</li>
+                        <li>スキャンページの文字の正確さは、元の画像の品質によって変わります。</li>
+                        <li>ノイズ除去・傾き補正は行いません。</li>
+                        <li>キャンセルは現在のページの認識が終わったあとに反映されます。</li>
+                    </ul>
+                </div>
+
                 <p style={calloutStyle}>
-                    <b>データの取り扱い:</b> 文字認識はお使いのブラウザ内で実行されます。
+                    <b>データの取り扱い:</b> 文字認識とTXTの書き出しは、どちらもお使いのブラウザ内で実行されます。
                     PDFを外部のAI・OCRサービスへ送信することはありません。
                 </p>
             </section>
