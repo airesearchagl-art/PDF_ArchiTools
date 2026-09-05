@@ -19,6 +19,17 @@ const releaseHistory: ReleaseNote[] = [
     {
         date: '2026/09/05',
         tool: 'PDFテキスト化',
+        version: '1.4.0',
+        changes: [
+            'スキャンPDFのOCR前に、ページの傾きを補正できるようになりました。',
+            '軽微なスキャンノイズを取り除いてから文字認識へ渡せるようになりました。',
+            '前処理は文字認識用の画像だけに適用され、元のPDFの見た目は変わりません。',
+            'どちらも初期状態はオフです。必要なときにチェックしてご利用ください。',
+        ],
+    },
+    {
+        date: '2026/09/05',
+        tool: 'PDFテキスト化',
         version: '1.3.1',
         changes: [
             'PDF読み込み時に1ページ目のプレビューが正しく表示されない問題を修正しました。',
@@ -116,7 +127,7 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: '16px 0 0', fontSize: '0.95em', color: '#9fd3ff' }}>
                     <History size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>TXT書き出し</b>（PDFテキスト化 v1.3.0） / <b>図枠一括更新</b>（PDF加工 v1.3.0） / <b>図面サイズ統一</b>（PDF加工 v1.2.0）
+                    最近の更新: <b>OCR前処理（傾き補正・ノイズ除去）</b>（PDFテキスト化 v1.4.0） / <b>TXT書き出し</b>（PDFテキスト化 v1.3.0） / <b>図枠一括更新</b>（PDF加工 v1.3.0）
                     — 詳しくはページ下部の<a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>をご覧ください。
                 </p>
             </div>
@@ -528,9 +539,9 @@ export function HowToUse() {
                         // 1. Upload (Centre)
                         { top: '19.7%', left: '21.1%', width: '57.8%', height: '44.3%', desc: 'ファイルアップロードエリア' },
                         // 2. Settings row (Cleaning / Processing Mode / Output Format)
-                        { top: '66.6%', left: '21.1%', width: '57.8%', height: '13.2%', desc: 'モード・出力形式' },
+                        { top: '66.6%', left: '21.1%', width: '57.8%', height: '15.7%', desc: 'OCR前処理・モード・出力形式' },
                         // 3. Run button
-                        { top: '82.5%', left: '40.3%', width: '19.5%', height: '4.1%', desc: '実行（Start Textification）' }
+                        { top: '84.9%', left: '40.3%', width: '19.5%', height: '4.1%', desc: '実行（Start Textification）' }
                     ]}
                 />
 
@@ -549,8 +560,13 @@ export function HowToUse() {
                             <li><b>Text Extraction</b> → 出力形式は <b>Text (.txt)</b>。文字だけのTXTが保存されます。</li>
                             <li>どちらのモードでも、すでに文字情報を持つページには文字認識を行いません。</li>
                         </ul>
+                        <p><b>OCR前処理</b>は、必要なときだけチェックします（初期状態はオフ）。</p>
+                        <ul style={listStyle}>
+                            <li><b>傾き補正:</b> 斜めに読み取られたスキャンページをまっすぐにしてから認識します。</li>
+                            <li><b>ノイズ除去:</b> 点状の細かな汚れを取り除いてから認識します。</li>
+                        </ul>
                         <p style={noteStyle}>
-                            モードを切り替えると、前のモードの結果は破棄されます。切り替えたあとにもう一度実行してください。
+                            モードや前処理を切り替えると、前の設定で作った結果は破棄されます。切り替えたあとにもう一度実行してください。
                             画面上でグレー表示になっている項目は、まだご利用いただけません（下の「未対応の機能」を参照）。
                         </p>
                     </div>
@@ -577,6 +593,7 @@ export function HowToUse() {
                             <li>ページごとに「文字情報あり」「スキャン画像」を自動判定</li>
                             <li>スキャン画像のページだけをOCR</li>
                             <li>日本語・英語の文字認識</li>
+                            <li><b>OCR前処理（傾き補正・ノイズ除去）</b></li>
                             <li>検索・選択できるPDFの生成</li>
                             <li>元の見た目をそのまま保持</li>
                             <li><b>PDFから文字をTXTとして抽出</b></li>
@@ -597,7 +614,6 @@ export function HowToUse() {
                         <ul style={listStyle}>
                             <li><b>Word (.docx) 出力</b> — 未対応（Coming later）</li>
                             <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
-                            <li><b>ノイズ除去 (Remove Noise)</b> — 未対応（後続対応）</li>
                         </ul>
                         <p style={noteStyle}>
                             現在ご利用いただける出力は「PDF (Searchable)」と「Text (.txt)」です。
@@ -614,13 +630,25 @@ export function HowToUse() {
                         <li>段組みや表が複雑なページでは、文字の順序が見た目どおりにならない場合があります。</li>
                         <li>表をExcelの表として復元する機能ではありません。</li>
                         <li>スキャンページの文字の正確さは、元の画像の品質によって変わります。</li>
-                        <li>ノイズ除去・傾き補正は行いません。</li>
                         <li>キャンセルは現在のページの認識が終わったあとに反映されます。</li>
                     </ul>
                 </div>
 
+                {/* 5-d. What preprocessing is, and what it is not */}
+                <div style={{ ...cardStyle, borderLeft: '6px solid #4a90e2', marginTop: '20px' }}>
+                    <h4 style={cardHeadStyle}><Settings size={18} /> OCR前処理について</h4>
+                    <ul style={listStyle}>
+                        <li>補正するのは<b>文字認識用の画像だけ</b>です。元のPDFの見た目・線・文字情報は変更しません。</li>
+                        <li>効果は元のスキャン画像の品質によって変わります。</li>
+                        <li>傾きがほとんどないページや、判断できるだけの文字がないページでは、補正を行わないことがあります。誤って傾けないための動作です。</li>
+                        <li>対象はおおよそ5度までの傾きです。用紙が90度単位で回転しているページは、これとは別に元から扱われます。</li>
+                        <li>ノイズ除去は、紙の上に単独で載っている点だけを取り除きます。細い線や小さな文字を消さないよう控えめに動作します。</li>
+                        <li>文字情報を持つページには前処理を行いません（そもそも文字認識をしないため）。</li>
+                    </ul>
+                </div>
+
                 <p style={calloutStyle}>
-                    <b>データの取り扱い:</b> 文字認識とTXTの書き出しは、どちらもお使いのブラウザ内で実行されます。
+                    <b>データの取り扱い:</b> 文字認識・OCR前処理・TXTの書き出しは、いずれもお使いのブラウザ内で実行されます。
                     PDFを外部のAI・OCRサービスへ送信することはありません。
                 </p>
             </section>

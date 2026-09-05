@@ -74,7 +74,7 @@ try {
     });
     console.log(`  versions : ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.3.0', versions['3. PDF加工 (Processor)'] === '1.3.0', JSON.stringify(versions));
-    check('PDFテキスト化 shows v1.3.1', versions['5. PDFテキスト化 (Textifier)'] === '1.3.1', JSON.stringify(versions));
+    check('PDFテキスト化 shows v1.4.0', versions['5. PDFテキスト化 (Textifier)'] === '1.4.0', JSON.stringify(versions));
 
     // ---- S1: the page-size normalizer is documented ------------------------
     check('図面サイズ統一 is documented', text.includes('図面サイズ統一'));
@@ -113,7 +113,7 @@ try {
     check('the guide names both output file endings',
         text.includes('_searchable.pdf') && text.includes('_extracted.txt'));
     check('the guide warns that switching mode discards the previous result',
-        text.includes('モードを切り替えると、前のモードの結果は破棄されます'));
+        text.includes('前の設定で作った結果は破棄されます'));
     check('the TXT limitations are stated without overclaiming',
         text.includes('段組みや表が複雑なページ') && text.includes('Excelの表として復元する機能ではありません')
         && text.includes('元の画像の品質'));
@@ -125,7 +125,6 @@ try {
         return {
             word: find('Word (.docx)'),
             excel: find('Excel (.xlsx)'),
-            noise: find('ノイズ除去 (Remove Noise)'),
         };
     });
     console.log(`  unsupported: ${JSON.stringify(unsupported)}`);
@@ -134,6 +133,21 @@ try {
     }
     check('Text Extraction is no longer listed as unavailable',
         !/Text Extraction[^\n]*未対応/.test(text));
+    check('ノイズ除去 is no longer listed as unavailable',
+        !/ノイズ除去[^\n]*未対応/.test(text));
+
+    // ---- M2-2: preprocessing is documented, and not oversold ---------------
+    check('OCR前処理 is documented',
+        text.includes('OCR前処理') && text.includes('傾き補正') && text.includes('ノイズ除去'));
+    check('the guide says preprocessing touches only the OCR image',
+        text.includes('文字認識用の画像だけ') && text.includes('元のPDFの見た目'));
+    check('the guide says the effect depends on the source scan',
+        text.includes('元のスキャン画像の品質'));
+    check('the guide says a straight page may be left alone',
+        text.includes('補正を行わないことがあります'));
+    check('the guide says preprocessing starts off', text.includes('初期状態はオフ'));
+    check('the guide does not promise OCR accuracy',
+        !text.includes('精度を保証') && !text.includes('必ず改善'));
     check('the guide no longer claims Word/Excel conversion is available',
         !text.includes('Word/Excel形式に変換'));
     check('OCR capabilities are described',
@@ -143,11 +157,14 @@ try {
     check('更新履歴 section exists', text.includes('更新履歴'));
     const historyText = await page.evaluate(() =>
         document.querySelector('#release-history')?.innerText ?? '');
-    check('release history: the v1.3.1 preview fix leads',
-        /^[\s\S]{0,140}プレビュー/.test(historyText)
-        && historyText.indexOf('1.3.1') >= 0
-        && historyText.indexOf('1.3.1') < historyText.indexOf('1.3.0'),
-        historyText.slice(0, 90).replace(/\n/g, ' | '));
+    check('release history: the v1.4.0 preprocessing entry leads',
+        historyText.indexOf('1.4.0') >= 0
+        && historyText.indexOf('1.4.0') < historyText.indexOf('1.3.1')
+        && historyText.indexOf('1.3.1') < historyText.indexOf('1.3.0')
+        && historyText.includes('傾き'),
+        historyText.slice(0, 100).replace(/\n/g, ' | '));
+    check('release history: the v1.3.1 preview fix survives below it',
+        historyText.includes('1.3.1') && historyText.includes('プレビュー'));
     check('release history: the 2026/09/05 PDFテキスト化 v1.3.0 entry survives below it',
         historyText.includes('2026/09/05') && historyText.includes('TXT')
         && historyText.includes('ページ順を維持'));
