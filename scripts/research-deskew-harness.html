@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Deskew detector comparison</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Deskew detector comparison</h1>
+<p>Driven by <code>scripts/research-deskew.mjs</code>. A measurement tool, not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+const DPI = 150;
+/** Longest side of the image the angle is estimated from. */
+const ANALYSIS_MAX = 1000;
+const INK_THRESHOLD = 160;
+
+/** Render page 1 of a fixture the way the OCR pipeline does. */
+async function renderFixture(name) {
+  const bytes = await fetch(`/test-fixtures/${name}`).then((r) => {
+    if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+    return r.arrayBuffer();
+  });
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+  const page = await doc.getPage(1);
+  const viewport = page.getViewport({ scale: DPI / 72 });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  await page.render({ canvas, viewport, intent: 'print' }).promise;
+  return canvas;
+}
+
+/**
+ * The ink of the page, downsampled, as a flat list of coordinates.
+ *
+ * Every candidate works from this same list, so the comparison is between the
+ * scoring functions and not between three different ways of reading a page.
+ */
+function inkPoints(canvas) {
+  const scale = Math.min(1, ANALYSIS_MAX / Math.max(canvas.width, canvas.height));
+  const w = Math.max(1, Math.round(canvas.width * scale));
+  const h = Math.max(1, Math.round(canvas.height * scale));
+  const small = document.createElement('canvas');
+  small.width = w;
+  small.height = h;
+  const sctx = small.getContext('2d', { willReadFrequently: true });
+  sctx.fillStyle = '#fff';
+  sctx.fillRect(0, 0, w, h);
+  sctx.drawImage(canvas, 0, 0, w, h);
+  const d = sctx.getImageData(0, 0, w, h).data;
+
+  const xs = [];
+  const ys = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if ((d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) < INK_THRESHOLD) { xs.push(x); ys.push(y); }
+    }
+  }
+  return { xs: Float32Array.from(xs), ys: Float32Array.from(ys), w, h };
+}
+
+/**
+ * Row histogram of the ink after undoing a rotation of `deg`.
+ *
+ * Undoing a +theta rotation means rotating by -theta, which puts a point at
+ * y' = -dx*sin(theta) + dy*cos(theta). When theta matches the page's skew,
+ * every glyph on a text line lands in the same row and the histogram spikes.
+ */
+function profile(points, deg, bins) {
+  const rad = deg * Math.PI / 180;
+  const sin = Math.sin(rad);
+  const cos = Math.cos(rad);
+  const cx = points.w / 2;
+  const cy = points.h / 2;
+  const hist = new Float64Array(bins);
+  const { xs, ys } = points;
+  for (let i = 0; i < xs.length; i++) {
+    const yr = -(xs[i] - cx) * sin + (ys[i] - cy) * cos + cy;
+    const b = yr | 0;
+    if (b >= 0 && b < bins) hist[b]++;
+  }
+  return hist;
+}
+
+/** A: variance of the row counts. The classic projection-profile score. */
+function scoreVariance(hist) {
+  let sum = 0;
+  for (let i = 0; i < hist.length; i++) sum += hist[i];
+  const mean = sum / hist.length;
+  let v = 0;
+  for (let i = 0; i < hist.length; i++) { const d = hist[i] - mean; v += d * d; }
+  return v / hist.length;
+}
+
+/** B: energy of the row-to-row differences. Rewards sharp edges between
+ *  a text line and the white space above it rather than overall spread. */
+function scoreGradient(hist) {
+  let e = 0;
+  for (let i = 1; i < hist.length; i++) { const d = hist[i] - hist[i - 1]; e += d * d; }
+  return e / hist.length;
+}
+
+function searchAngle(points, scorer) {
+  const bins = points.h;
+  let best = 0;
+  let bestScore = -Infinity;
+  let zeroScore = 0;
+  // Coarse pass over the whole range, then a fine pass around the winner. The
+  // cost is a fixed number of histogram builds regardless of page size.
+  for (let deg = -5; deg <= 5.0001; deg += 0.5) {
+    const s = scorer(profile(points, deg, bins));
+    if (Math.abs(deg) < 1e-9) zeroScore = s;
+    if (s > bestScore) { bestScore = s; best = deg; }
+  }
+  for (let deg = best - 0.5; deg <= best + 0.5001; deg += 0.05) {
+    if (deg < -5 || deg > 5) continue;
+    const s = scorer(profile(points, deg, bins));
+    if (s > bestScore) { bestScore = s; best = deg; }
+  }
+  // Never Infinity: a blank sheet scores zero everywhere, and an unbounded
+  // "confidence" is exactly the arbitrary answer this has to avoid.
+  const margin = zeroScore > 0 ? bestScore / zeroScore : 0;
+  return { angle: +best.toFixed(2), bestScore, zeroScore, margin };
+}
+
+/** C: principal axis of the ink cloud, from its second moments. */
+function momentAngle(points) {
+  const { xs, ys } = points;
+  const n = xs.length;
+  if (n === 0) return { angle: 0, bestScore: 0, zeroScore: 0, margin: 0 };
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+  mx /= n; my /= n;
+  let sxx = 0, syy = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - mx, dy = ys[i] - my;
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+  }
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy) * 180 / Math.PI;
+  return { angle: +angle.toFixed(2), bestScore: 0, zeroScore: 0, margin: 0 };
+}
+
+window.__research = {
+  async measure(name) {
+    log(`measuring ${name}`);
+    const canvas = await renderFixture(name);
+    const t0 = performance.now();
+    const points = inkPoints(canvas);
+    const prepMs = performance.now() - t0;
+
+    const out = { name, full: `${canvas.width}x${canvas.height}`, analysis: `${points.w}x${points.h}`, inkPoints: points.xs.length, prepMs: +prepMs.toFixed(1) };
+
+    for (const [key, fn] of [
+      ['variance', () => searchAngle(points, scoreVariance)],
+      ['gradient', () => searchAngle(points, scoreGradient)],
+      ['moments', () => momentAngle(points)],
+    ]) {
+      const t = performance.now();
+      const r = fn();
+      out[key] = { angle: r.angle, margin: +Number(r.margin).toFixed(3), ms: +(performance.now() - t).toFixed(1) };
+    }
+    canvas.width = 0; canvas.height = 0;
+    log(`done ${name}`);
+    return out;
+  },
+  ready: true,
+};
+log('ready');
+</script>
+</body>
+</html>

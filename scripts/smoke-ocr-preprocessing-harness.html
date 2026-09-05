@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OCR preprocessing smoke harness</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }
+  .stage { position: relative; }
+  .stage canvas { display: block; }
+  .textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; transform-origin: 0 0; }
+  .textLayer span { position: absolute; color: transparent; white-space: pre; transform-origin: 0 0; }
+</style>
+</head>
+<body>
+<h1>OCR preprocessing smoke harness</h1>
+<p>Driven by <code>scripts/smoke-ocr-preprocessing.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+<div id="stage" class="stage"></div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { TextLayer } from 'pdfjs-dist';
+import {
+  textifyPdf, extractTextPdf, preprocessForOcr, TextifyError,
+} from '/src/utils/pdf-textifier/index.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+const fetchFixture = (name) => fetch(`/test-fixtures/${name}`).then((r) => {
+  if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+  return r.arrayBuffer();
+});
+
+async function extractText(bytes) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+  const out = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    out.push(tc.items.map((it) => it.str ?? '').join(''));
+  }
+  return out;
+}
+
+async function renderToCanvas(bytes, pageNo, scale) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+  const page = await doc.getPage(pageNo);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvas, viewport }).promise;
+  return { canvas, ctx, page, viewport };
+}
+
+/** The visible page must be untouched: an invisible layer draws nothing. */
+async function compareAppearance(input, output, pageNo, scale = 1.5) {
+  const a = await renderToCanvas(input, pageNo, scale);
+  const b = await renderToCanvas(output, pageNo, scale);
+  if (a.canvas.width !== b.canvas.width || a.canvas.height !== b.canvas.height) {
+    return { identical: false, reason: 'page size changed' };
+  }
+  const da = a.ctx.getImageData(0, 0, a.canvas.width, a.canvas.height).data;
+  const db = b.ctx.getImageData(0, 0, b.canvas.width, b.canvas.height).data;
+  let diff = 0;
+  for (let i = 0; i < da.length; i += 4) {
+    if (da[i] !== db[i] || da[i + 1] !== db[i + 1] || da[i + 2] !== db[i + 2]) diff++;
+  }
+  a.canvas.width = 0; a.canvas.height = 0;
+  b.canvas.width = 0; b.canvas.height = 0;
+  return { identical: diff === 0, differingPixels: diff, totalPixels: da.length / 4 };
+}
+
+function inkBox(ctx, w, h) {
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if ((d[i] + d[i + 1] + d[i + 2]) / 3 < 128) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+}
+
+/**
+ * Where the invisible text sits relative to the ink it belongs to.
+ *
+ * This is what proves a straightened page's words were mapped back onto the
+ * crooked glyphs. Text placed in the deskewed image's own coordinates would
+ * drift off the ink by exactly the angle that was corrected.
+ */
+async function placement(outputBytes, pageNo, scale = 1.5) {
+  const stage = document.getElementById('stage');
+  stage.innerHTML = '';
+  const { canvas, ctx, page, viewport } = await renderToCanvas(outputBytes, pageNo, scale);
+  stage.appendChild(canvas);
+
+  const container = document.createElement('div');
+  container.className = 'textLayer';
+  container.style.width = canvas.width + 'px';
+  container.style.height = canvas.height + 'px';
+  stage.appendChild(container);
+  const layer = new TextLayer({ textContentSource: await page.getTextContent(), container, viewport });
+  await layer.render();
+
+  const spans = [...container.querySelectorAll('span')].filter((s) => s.textContent.trim());
+  const content = await page.getTextContent();
+  let tb = null;
+  const angles = [];
+  for (const item of content.items) {
+    if (!item.str || !item.str.trim() || !item.transform) continue;
+    const [a, b, , , e, f] = item.transform;
+    const [px, py] = viewport.convertToViewportPoint(e, f);
+    const angle = Math.atan2(b, a);
+    const [qx, qy] = viewport.convertToViewportPoint(
+      e + Math.cos(angle) * (item.width ?? 0),
+      f + Math.sin(angle) * (item.width ?? 0),
+    );
+    const box = {
+      x0: Math.min(px, qx), y0: Math.min(py, qy),
+      x1: Math.max(px, qx), y1: Math.max(py, qy),
+    };
+    tb = tb ? { x0: Math.min(tb.x0, box.x0), y0: Math.min(tb.y0, box.y0), x1: Math.max(tb.x1, box.x1), y1: Math.max(tb.y1, box.y1) } : box;
+    angles.push(angle * 180 / Math.PI);
+  }
+  const ib = inkBox(ctx, canvas.width, canvas.height);
+
+  let contained = 0;
+  if (tb && ib) {
+    const ix0 = Math.max(tb.x0, ib.x0), iy0 = Math.max(tb.y0, ib.y0);
+    const ix1 = Math.min(tb.x1, ib.x1), iy1 = Math.min(tb.y1, ib.y1);
+    const inter = Math.max(0, ix1 - ix0) * Math.max(0, iy1 - iy0);
+    const area = Math.max(1, (tb.x1 - tb.x0) * (tb.y1 - tb.y0));
+    contained = inter / area;
+  }
+  angles.sort((a, b) => a - b);
+  const median = angles.length ? angles[angles.length >> 1] : 0;
+  stage.innerHTML = '';
+  return {
+    spans: spans.length,
+    containedInInk: +contained.toFixed(3),
+    medianRunAngleDeg: +median.toFixed(2),
+    textBox: tb,
+    inkBox: ib,
+  };
+}
+
+/** Count expected tokens found anywhere in the recognised text. */
+function tokenHits(text, tokens) {
+  return tokens.filter((t) => text.includes(t)).length;
+}
+
+window.__prep = {
+  /** Preprocessing alone, with no OCR: the detector's own answer and cost. */
+  async detect(name, options) {
+    const bytes = await fetchFixture(name);
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 150 / 72 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    canvas.getContext('2d', { willReadFrequently: true });
+    await page.render({ canvas, viewport, intent: 'print' }).promise;
+
+    const before = { width: canvas.width, height: canvas.height };
+    const prep = preprocessForOcr(canvas, options);
+    const out = {
+      name,
+      source: `${before.width}x${before.height}`,
+      processed: `${prep.canvas.width}x${prep.canvas.height}`,
+      ownsCanvas: prep.ownsCanvas,
+      deskewApplied: prep.deskewApplied,
+      detectedAngle: prep.detectedAngle,
+      deskewConfidence: prep.deskewConfidence,
+      noiseReductionApplied: prep.noiseReductionApplied,
+      removedSpecks: prep.removedSpecks,
+      analysis: `${prep.analysisWidth}x${prep.analysisHeight}`,
+      detectMs: prep.detectMs,
+      applyMs: prep.applyMs,
+      noiseMs: prep.noiseMs,
+      processingMs: prep.processingMs,
+      hasMapping: typeof prep.mapToRenderSpace === 'function',
+      // A round trip through the mapping must land back where it started.
+      mappingRoundTrip: null,
+    };
+    if (prep.mapToRenderSpace) {
+      const p = prep.mapToRenderSpace(prep.canvas.width / 2, prep.canvas.height / 2);
+      out.mappingRoundTrip = {
+        x: +(p.x - before.width / 2).toFixed(3),
+        y: +(p.y - before.height / 2).toFixed(3),
+      };
+    }
+    // Release exactly as the pipeline does, then confirm both are gone.
+    if (prep.ownsCanvas) { prep.canvas.width = 0; prep.canvas.height = 0; }
+    canvas.width = 0; canvas.height = 0;
+    out.releasedProcessed = prep.ownsCanvas ? (prep.canvas.width === 0 && prep.canvas.height === 0) : true;
+    out.releasedSource = canvas.width === 0 && canvas.height === 0;
+    return out;
+  },
+
+  /** A full OCR run, with and without preprocessing, on the same fixture. */
+  async ocrRun(name, options, tokens, checkPage = 1) {
+    log(`ocr ${name} ${JSON.stringify(options)}`);
+    const input = await fetchFixture(name);
+    const started = performance.now();
+    const result = await textifyPdf(input.slice(0), {
+      preprocess: options,
+    });
+    const totalMs = Math.round(performance.now() - started);
+    const extracted = await extractText(result.bytes);
+    const text = (extracted[checkPage - 1] || '');
+    const appearance = await compareAppearance(input.slice(0), result.bytes, checkPage);
+    const place = await placement(result.bytes, checkPage);
+    log(`done ${name}`);
+    return {
+      name, options,
+      pages: result.pages,
+      text: text.slice(0, 200),
+      tokenHits: tokenHits(text, tokens),
+      tokenTotal: tokens.length,
+      missing: tokens.filter((t) => !text.includes(t)),
+      ocrWords: result.pages.reduce((s, p) => s + p.ocrWords, 0),
+      placed: result.pages.reduce((s, p) => s + p.placed, 0),
+      meanConfidence: result.pages.find((p) => p.kind === 'scanned')?.meanConfidence ?? null,
+      preprocess: result.pages.find((p) => p.kind === 'scanned')?.preprocess ?? null,
+      appearance,
+      placement: place,
+      totalMs,
+    };
+  },
+
+  /** The same, through the text-extraction pipeline. */
+  async extractRun(name, options, tokens) {
+    const input = await fetchFixture(name);
+    const started = performance.now();
+    const result = await extractTextPdf(input.slice(0), { preprocess: options });
+    const totalMs = Math.round(performance.now() - started);
+    const text = result.text;
+    return {
+      name, options,
+      text: text.slice(0, 200),
+      tokenHits: tokenHits(text, tokens),
+      tokenTotal: tokens.length,
+      missing: tokens.filter((t) => !text.includes(t)),
+      pages: result.pages.map((p) => ({
+        pageNumber: p.pageNumber, kind: p.kind, ocrWords: p.ocrWords,
+        preprocess: p.preprocess ?? null,
+      })),
+      totalMs,
+    };
+  },
+
+  async cancelProbe(name, options) {
+    const input = await fetchFixture(name);
+    let armed = false;
+    try {
+      const r = await extractTextPdf(input, {
+        preprocess: options,
+        onProgress: (e) => { if (e.phase === 'ocr-page' && e.page === e.totalPages) armed = true; },
+        shouldCancel: () => armed,
+      });
+      return { threw: false, code: null, gotText: typeof r.text === 'string', armed };
+    } catch (error) {
+      return {
+        threw: true,
+        code: error instanceof TextifyError ? error.code : null,
+        armed,
+      };
+    }
+  },
+
+  ready: true,
+};
+log('ready');
+</script>
+</body>
+</html>
