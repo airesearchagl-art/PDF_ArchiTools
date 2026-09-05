@@ -8,7 +8,7 @@ import { renderPageToCanvas } from '../utils/pdfDiff';
 
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
-import { textifyPdf, extractTextPdf, TextifyError, configurePdfWorker, preprocessSkipNotice } from '../utils/pdf-textifier';
+import { textifyPdf, extractTextPdf, buildWordDocument, WORD_MIME, TextifyError, configurePdfWorker, preprocessSkipNotice } from '../utils/pdf-textifier';
 import type { PageKind, PagePreprocessInfo, ProgressEvent } from '../utils/pdf-textifier';
 
 type Mode = 'ocr' | 'extract';
@@ -182,6 +182,18 @@ export const PdfTextifier: React.FC = () => {
         setOptions({ ...options, [key]: value });
     };
 
+    /**
+     * Changing the output format discards a finished result, as changing mode
+     * or a preprocessing option does. The file under the Download button was
+     * written in the format the user just moved away from, and offering a TXT
+     * on a screen that says Word is the same mistake in a smaller place.
+     */
+    const handleFormatChange = (outputFormat: TextifierOptions['outputFormat']) => {
+        if (isProcessing || outputFormat === options.outputFormat) return;
+        resetRun();
+        setOptions({ ...options, outputFormat });
+    };
+
     const runOcr = async (source: File) => {
         const run = await textifyPdf(source, {
             langs: 'jpn+eng',
@@ -220,14 +232,25 @@ export const PdfTextifier: React.FC = () => {
             shouldCancel: () => cancelRef.current,
         });
 
+        // The Word document is built from the pages, not from the joined text.
+        // Page boundaries and empty pages are the part a text file can only
+        // express by convention, and re-reading the TXT to find them again
+        // would be rebuilding something that is already in hand.
+        const base = source.name.replace(/\.pdf$/i, '');
+        const word = options.outputFormat === 'word'
+            ? await buildWordDocument(run.pages, { shouldCancel: () => cancelRef.current })
+            : null;
+
         // Plain UTF-8, no BOM: the charset is declared on the blob, and a byte
         // order mark would put an invisible character ahead of the first page
         // header for anything that reads the file back.
-        const blob = new Blob([run.text], { type: 'text/plain;charset=utf-8' });
+        const blob = word
+            ? new Blob([word.bytes as BlobPart], { type: WORD_MIME })
+            : new Blob([run.text], { type: 'text/plain;charset=utf-8' });
         setResult({
             mode: 'extract',
             blobUrl: URL.createObjectURL(blob),
-            fileName: source.name.replace(/\.pdf$/i, '') + '_extracted.txt',
+            fileName: base + (word ? '_extracted.docx' : '_extracted.txt'),
             pages: run.pages,
             outputBytes: blob.size,
             totalMs: run.totalMs,
@@ -294,7 +317,7 @@ export const PdfTextifier: React.FC = () => {
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem' }}>PDFテキスト化 (PDF Textification)</h2>
                         <p style={{ margin: '5px 0 0', color: '#666', fontSize: '0.9rem' }}>
-                            スキャンPDFを検索可能PDFへ、またはPDFの文字をTXTへ。処理はすべてブラウザ内で行われ、ファイルは外部へ送信されません。
+                            スキャンPDFを検索可能PDFへ、またはPDFの文字をTXT・Wordへ。処理はすべてブラウザ内で行われ、ファイルは外部へ送信されません。
                         </p>
                     </div>
                 </div>
@@ -397,16 +420,18 @@ export const PdfTextifier: React.FC = () => {
                                 <label style={{ fontWeight: 600 }}>Output Format</label>
                                 <select
                                     value={options.outputFormat}
-                                    onChange={(e) => setOptions({ ...options, outputFormat: e.target.value as TextifierOptions['outputFormat'] })}
+                                    onChange={(e) => handleFormatChange(e.target.value as TextifierOptions['outputFormat'])}
                                     disabled={isProcessing}
                                     style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
                                 >
-                                    {/* Each mode has exactly one real output, so the other one is
-                                        not offered rather than offered and then rejected. */}
+                                    {/* Only formats the selected mode can actually produce are
+                                        offered, rather than offered and then rejected. */}
                                     {options.mode === 'ocr'
                                         ? <option value="pdf">PDF (Searchable)</option>
-                                        : <option value="txt">Text (.txt)</option>}
-                                    <option value="word" disabled>Word (.docx) — Coming later</option>
+                                        : <>
+                                            <option value="txt">Text (.txt)</option>
+                                            <option value="word">Word (.docx)</option>
+                                        </>}
                                     <option value="excel" disabled>Excel (.xlsx) — Coming later</option>
                                 </select>
                             </div>
