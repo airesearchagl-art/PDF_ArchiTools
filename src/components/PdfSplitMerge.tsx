@@ -185,7 +185,7 @@ export const PdfSplitMerge: React.FC = () => {
     return (
         <div style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+            <div data-usage-target="split-tabs" style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                 <button
                     onClick={() => setActiveTab('extract')}
                     style={{
@@ -219,7 +219,7 @@ export const PdfSplitMerge: React.FC = () => {
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {activeTab === 'extract' && (
                     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                        <div data-usage-target="extract-source" style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
                             <label className="button-primary" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', padding: '10px 15px', backgroundColor: '#333', color: 'white', borderRadius: '5px' }}>
                                 <Upload size={18} />
                                 PDFをアップロード
@@ -245,6 +245,7 @@ export const PdfSplitMerge: React.FC = () => {
                             {extractFile && <span>Current: {extractFile.name}</span>}
                             {extractPages.some(p => p.selected) && (
                                 <button
+                                    data-usage-target="extract-export"
                                     onClick={handleExtractExport}
                                     style={{
                                         marginLeft: 'auto',
@@ -269,7 +270,9 @@ export const PdfSplitMerge: React.FC = () => {
 
                         <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #ddd', borderRadius: '5px', padding: '20px' }}>
                             {!extractFile && <div style={{ textAlign: 'center', marginTop: '50px', color: '#999' }}>PDFをアップロードしてください</div>}
-                            <div style={{
+                            <div
+                                data-usage-target="extract-pages"
+                                style={{
                                 display: 'grid',
                                 gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`,
                                 gap: '20px',
@@ -310,7 +313,7 @@ export const PdfSplitMerge: React.FC = () => {
 
                 {activeTab === 'merge' && (
                     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div data-usage-target="merge-source" style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <label className="button-primary" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', padding: '10px 15px', backgroundColor: '#333', color: 'white', borderRadius: '5px' }}>
                                 <Upload size={18} />
                                 追加 PDF アップロード
@@ -318,6 +321,7 @@ export const PdfSplitMerge: React.FC = () => {
                             </label>
                             {mergeFiles.length > 0 && (
                                 <button
+                                    data-usage-target="merge-export"
                                     onClick={handleMergeExport}
                                     style={{
                                         marginLeft: 'auto',
@@ -342,7 +346,7 @@ export const PdfSplitMerge: React.FC = () => {
 
                         <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #ddd', borderRadius: '5px', padding: '20px' }}>
                             {mergeFiles.length === 0 && <div style={{ textAlign: 'center', marginTop: '50px', color: '#999' }}>統合するPDFファイルを追加してください</div>}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div data-usage-target="merge-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {mergeFiles.map((file, index) => (
                                     <div key={file.id} style={{
                                         display: 'flex',

@@ -282,7 +282,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                 <>
                     <div className="viewer-controls">
                         {/* Zoom Controls */}
-                        <div className="zoom-controls" style={{ paddingLeft: 0, borderLeft: 'none' }}>
+                        <div className="zoom-controls" data-usage-target="annotator-zoom" style={{ paddingLeft: 0, borderLeft: 'none' }}>
                             <button onClick={() => changeScale(-0.1)} title="Zoom Out">
                                 <ZoomOut size={20} />
                             </button>
@@ -309,7 +309,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                         </div>
 
                         {/* Drawing Tools */}
-                        <div className="drawing-controls">
+                        <div className="drawing-controls" data-usage-target="annotator-draw">
                             <button
                                 onClick={() => setTool('select')}
                                 className={tool === 'select' ? 'active' : ''}
@@ -411,6 +411,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
 
                         {/* Measurement Tools */}
                         <button
+                            data-usage-target="annotator-measure"
                             onClick={() => setTool('measure-line')}
                             className={tool === 'measure-line' ? 'active' : ''}
                             title="Measure Line"
@@ -418,6 +419,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                             <Ruler size={20} />
                         </button>
                         <button
+                            data-usage-target="annotator-measure"
                             onClick={() => setTool('measure-poly')}
                             className={tool === 'measure-poly' ? 'active' : ''}
                             title="Measure Polyline"
@@ -425,6 +427,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                             <Hexagon size={20} />
                         </button>
                         <button
+                            data-usage-target="annotator-measure"
                             onClick={() => setTool('measure-area')}
                             className={tool === 'measure-area' ? 'active' : ''}
                             title="Measure Area"
@@ -432,13 +435,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                             <Square size={20} />
                         </button>
                         <button
+                            data-usage-target="annotator-measure"
                             onClick={() => setTool('calibrate')}
                             className={tool === 'calibrate' ? 'active' : ''}
                             title="Calibrate Scale"
                         >
                             <Target size={20} />
                         </button>
-                        <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '5px' }}>
+                        <div data-usage-target="annotator-scale" style={{ display: 'flex', flexDirection: 'column', marginLeft: '5px' }}>
                             <select
                                 style={{ fontSize: '0.8em', padding: '2px', maxWidth: '100px' }}
                                 onChange={(e) => {
@@ -473,7 +477,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                         {/* Separator */}
                         <div style={{ width: '1px', height: '20px', background: '#e0e0e0', margin: '0 5px' }}></div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <div data-usage-target="annotator-select-actions" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                             <button onClick={duplicateSelection} title="Duplicate Selection" className="icon-btn small">
                                 <Copy size={16} />
                             </button>
@@ -483,7 +487,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                         </div>
 
                         {/* Color Palette */}
-                        <div className="color-palette">
+                        <div className="color-palette" data-usage-target="annotator-color">
                             {COLORS.map((c) => (
                                 <div
                                     key={c.name}
@@ -504,7 +508,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                         />
 
                         {/* Width Slider & Pressure */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '10px' }}>
+                        <div data-usage-target="annotator-style" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                 <span style={{ fontSize: '0.7rem', color: '#ccc', minWidth: '45px' }}>Size: {lineWidth}</span>
                                 <input
@@ -541,7 +545,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                             </label>
                         </div>
 
-                        <div className="layer-controls-dropdown" style={{ display: 'flex', alignItems: 'center', marginLeft: '0.5rem', gap: '0.5rem', borderLeft: '1px solid #ddd', paddingLeft: '0.5rem' }}>
+                        <div className="layer-controls-dropdown" data-usage-target="annotator-layers" style={{ display: 'flex', alignItems: 'center', marginLeft: '0.5rem', gap: '0.5rem', borderLeft: '1px solid #ddd', paddingLeft: '0.5rem' }}>
                             <div className="layer-list-popover-trigger" title="Manage Layers" onClick={() => setShowLayerMenu(!showLayerMenu)}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', cursor: 'pointer', padding: '0.4rem', borderRadius: '4px', backgroundColor: showLayerMenu ? 'rgba(0,0,0,0.05)' : 'transparent' }}>
                                     <Layers size={20} />
@@ -579,7 +583,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                             </div>
                         </div>
 
-                        <button onClick={handleDownload} title="Download Annotated PDF" style={{ marginLeft: 'auto' }}>
+                        <button onClick={handleDownload} title="Download Annotated PDF" data-usage-target="annotator-save" style={{ marginLeft: 'auto' }}>
                             <Download size={20} />
                         </button>
                     </div>

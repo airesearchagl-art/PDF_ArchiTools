@@ -504,7 +504,7 @@ export const PdfComparator: React.FC = () => {
             }}>
                 <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px' }}>
                     {SLOTS.map((slot, i) => (
-                        <div key={slot.id} className="file-slot" style={{
+                        <div key={slot.id} className="file-slot" data-usage-target="comparator-files" style={{
                             border: `2px solid ${slot.color}`,
                             borderRadius: '6px',
                             padding: '8px',
@@ -558,7 +558,7 @@ export const PdfComparator: React.FC = () => {
                 </div>
 
                 {/* Match Color/Opacity Control */}
-                <div className="match-color-control" style={{
+                <div className="match-color-control" data-usage-target="comparator-match" style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
@@ -595,7 +595,7 @@ export const PdfComparator: React.FC = () => {
                 </div>
 
                 {/* Change Report Button */}
-                <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                <div data-usage-target="comparator-report" style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
                     <button
                         onClick={generateChangeReport}
                         disabled={activeIndices.length < 2}
@@ -621,7 +621,7 @@ export const PdfComparator: React.FC = () => {
                 </div>
 
                 {/* View Controls Line */}
-                <div className="view-controls" style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
+                <div className="view-controls" data-usage-target="comparator-view" style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
 
                     {/* Page Nav */}
                     <div className="page-nav" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -702,7 +702,7 @@ export const PdfComparator: React.FC = () => {
 
 
                     {/* Export Controls */}
-                    <div className="export-controls" style={{
+                    <div className="export-controls" data-usage-target="comparator-export" style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: '5px',

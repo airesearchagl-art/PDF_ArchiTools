@@ -166,7 +166,7 @@ export function PdfTools() {
 
     return (
         <div className="pdf-tools-container">
-            <div className="tools-sidebar">
+            <div className="tools-sidebar" data-usage-target="processor-tools">
                 <button
                     className={`tool-btn ${activeTool === 'layer' ? 'active' : ''}`}
                     onClick={() => setActiveTool('layer')}
@@ -228,6 +228,7 @@ export function PdfTools() {
             <div className="tools-main">
                 <div
                     className="drop-zone"
+                    data-usage-target="processor-upload"
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleDrop}
                     onClick={() => document.getElementById('file-input')?.click()}
@@ -310,7 +311,7 @@ export function PdfTools() {
                 </div>
             </div>
 
-            <div className="tools-settings">
+            <div className="tools-settings" data-usage-target="processor-settings">
                 <h3><Settings size={18} /> 設定</h3>
 
                 {(activeTool === 'layer' || activeTool === 'both') && (
@@ -481,6 +482,7 @@ export function PdfTools() {
 
                 <button
                     className="process-btn"
+                    data-usage-target="processor-run"
                     onClick={startProcessing}
                     disabled={isProcessing || files.length === 0 || titleBlockNotReady}
                     title={titleBlockNotReady ? '代表ページの読み込みが完了するまで実行できません' : undefined}
