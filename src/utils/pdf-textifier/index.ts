@@ -164,10 +164,12 @@ export async function textifyPdf(
                 const rendered = await renderPageForOcr(page, scale);
                 canvas = rendered.canvas;
 
-                // Cleaned for recognition only. `rendered.canvas` is what the
-                // page actually looks like and stays the reference for placing
-                // the text layer; nothing produced here reaches the document.
-                const prep = preprocessForOcr(canvas, preprocessOptions);
+                // Cleaned for recognition only, and nothing produced here
+                // reaches the document. Speckle removal writes onto this canvas
+                // in place rather than copying a whole A0 sheet; that is safe
+                // because the text layer is placed from `rendered.viewport`,
+                // never from these pixels.
+                const prep = await preprocessForOcr(canvas, preprocessOptions);
                 if (prep.ownsCanvas) processed = prep.canvas;
 
                 // A boundary of its own. Preprocessing can take a moment on a

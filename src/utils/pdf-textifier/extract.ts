@@ -194,7 +194,7 @@ export async function extractTextPdf(
 
                 // Text extraction needs no coordinates, so the cleaned image is
                 // simply what gets recognised. Nothing is written back anywhere.
-                const prep = preprocessForOcr(canvas, preprocessOptions);
+                const prep = await preprocessForOcr(canvas, preprocessOptions);
                 if (prep.ownsCanvas) processed = prep.canvas;
 
                 // A boundary of its own. Preprocessing can take a moment on a

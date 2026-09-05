@@ -57,6 +57,30 @@ const MIN_INK_POINTS = 500;
 /** Below this there is nothing worth rotating a whole page for. */
 const MIN_CORRECTION_DEG = 0.3;
 
+/**
+ * Pixels a speckle-removal band aims to hold at once.
+ *
+ * The band's height follows from this and the page's width, so the working set
+ * is the same handful of megabytes for an A0 sheet as for an A4 one. Two
+ * million pixels is about 14 MB across the pixel buffer and the two masks.
+ */
+const BAND_TARGET_PIXELS = 2_000_000;
+
+/**
+ * Above this, preprocessing declines rather than guesses.
+ *
+ * A0 at 150 DPI is 35 megapixels and was measured working comfortably; this is
+ * more than twice that. Beyond it the rotation's destination canvas starts to
+ * approach what a browser will allocate at all, and a page that silently fails
+ * to allocate is worse than one that says it was left alone.
+ */
+const MAX_PREPROCESS_MEGAPIXELS = 80;
+
+/** Hand the event loop back, so a click made during a long pass is delivered. */
+function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 export interface OcrPreprocessOptions {
     deskew: boolean;
     noiseReduction: boolean;
@@ -67,6 +91,27 @@ export interface OcrPreprocessResult {
     canvas: HTMLCanvasElement;
     /** True when `canvas` is a new object the caller must release separately. */
     ownsCanvas: boolean;
+    /**
+     * True when speckle removal wrote onto the canvas it was given.
+     *
+     * Deliberate, and the reason the whole pass fits in a few megabytes: a
+     * second full-page copy of an A0 sheet is 140 MB that buys nothing, because
+     * the rendered canvas has no other reader. Both pipelines use it as the OCR
+     * source and take the page's geometry from the viewport, never from these
+     * pixels. Anything that later wants the page as rendered must render it
+     * again rather than assume this left it alone.
+     */
+    modifiedSourceCanvas: boolean;
+    /**
+     * Set when preprocessing declined. The page is handed back untouched and
+     * the run continues; this says why, so it can be reported rather than
+     * looking like the algorithms simply found nothing.
+     */
+    skipped?: 'page-too-large';
+    /** Peak bytes of working buffers, excluding canvases. Bounded by design. */
+    peakWorkingBytes: number;
+    /** Rows per speckle-removal band, chosen from the page's width. */
+    bandRows: number;
     deskewApplied: boolean;
     /** Degrees the page was found to be rotated by. 0 when nothing was applied. */
     detectedAngle: number;
@@ -93,6 +138,9 @@ function untouched(canvas: HTMLCanvasElement, partial: Partial<OcrPreprocessResu
     return {
         canvas,
         ownsCanvas: false,
+        modifiedSourceCanvas: false,
+        peakWorkingBytes: 0,
+        bandRows: 0,
         deskewApplied: false,
         detectedAngle: 0,
         deskewConfidence: 0,
@@ -252,56 +300,87 @@ function detectSkew(points: InkPoints): Detection {
  *
  * No blur, no dilation, no rethresholding of the page.
  */
-function removeSpecks(ctx: CanvasRenderingContext2D, width: number, height: number): number {
-    const image = ctx.getImageData(0, 0, width, height);
-    const d = image.data;
-    const size = width * height;
-    const ink = new Uint8Array(size);
-    const support = new Uint8Array(size);
-    for (let p = 0, i = 0; p < size; p++, i += 4) {
-        const luma = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-        if (luma < INK_THRESHOLD) ink[p] = 1;
-        if (luma < SUPPORT_THRESHOLD) support[p] = 1;
-    }
+async function removeSpecks(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+): Promise<{ removed: number; bandRows: number; workingBytes: number }> {
+    // One band at a time, with a row of overlap either side.
+    //
+    // The decision for a pixel only ever looks at its eight neighbours, so the
+    // page never has to be resident all at once -- and on a large sheet it must
+    // not be. An A0 drawing at 150 DPI is 35 megapixels: held whole, the pixel
+    // buffer alone is 140 MB and the three per-pixel masks another 105 MB on
+    // top of the page's own canvas. Measured, that peaked at 379 MB of heap for
+    // a single page. A band bounded by area instead of by rows costs the same
+    // few megabytes whether the sheet is A4 or A0.
+    const bandRows = Math.max(8, Math.min(512, Math.floor(BAND_TARGET_PIXELS / Math.max(1, width))));
+    const maxBandPixels = width * (bandRows + 2);
+    const workingBytes = maxBandPixels * 7;
 
-    /** How many of the eight neighbours carry any marking at all. */
-    const around = new Uint8Array(size);
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const p = y * width + x;
-            if (!ink[p]) continue;
-            let n = 0;
-            for (let dy = -1; dy <= 1; dy++) {
-                const yy = y + dy;
-                if (yy < 0 || yy >= height) continue;
-                for (let dx = -1; dx <= 1; dx++) {
-                    if (dx === 0 && dy === 0) continue;
-                    const xx = x + dx;
-                    if (xx < 0 || xx >= width) continue;
-                    if (support[yy * width + xx]) n++;
-                }
-            }
-            around[p] = n;
-        }
-    }
+    // Allocated once and reused. A fresh pair per band would be the same live
+    // footprint but a few hundred megabytes of garbage across an A0 sheet,
+    // which is churn the collector has to chase during the run.
+    const ink = new Uint8Array(maxBandPixels);
+    const support = new Uint8Array(maxBandPixels);
 
     let removed = 0;
-    const erase = (p: number) => {
-        const i = p * 4;
-        d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; d[i + 3] = 255;
-        removed++;
-    };
+    for (let top = 0; top < height; top += bandRows) {
+        const rows = Math.min(bandRows, height - top);
+        // The halo rows are read so the first and last row of the band can see
+        // their neighbours, and written back untouched.
+        const readTop = Math.max(0, top - 1);
+        const readBottom = Math.min(height, top + rows + 1);
+        const readRows = readBottom - readTop;
+        const interiorStart = top - readTop;
 
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const p = y * width + x;
-            if (!ink[p]) continue;
-            if (around[p] === 0) erase(p);
+        const image = ctx.getImageData(0, readTop, width, readRows);
+        const d = image.data;
+        const size = width * readRows;
+        ink.fill(0, 0, size);
+        support.fill(0, 0, size);
+        for (let p = 0, i = 0; p < size; p++, i += 4) {
+            const luma = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+            if (luma < INK_THRESHOLD) ink[p] = 1;
+            if (luma < SUPPORT_THRESHOLD) support[p] = 1;
         }
+
+        let bandRemoved = 0;
+        for (let y = interiorStart; y < interiorStart + rows; y++) {
+            for (let x = 0; x < width; x++) {
+                const p = y * width + x;
+                if (!ink[p]) continue;
+                let marked = false;
+                for (let dy = -1; dy <= 1 && !marked; dy++) {
+                    const yy = y + dy;
+                    if (yy < 0 || yy >= readRows) continue;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const xx = x + dx;
+                        if (xx < 0 || xx >= width) continue;
+                        if (support[yy * width + xx]) { marked = true; break; }
+                    }
+                }
+                if (marked) continue;
+                const i = p * 4;
+                d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; d[i + 3] = 255;
+                bandRemoved++;
+            }
+        }
+
+        if (bandRemoved > 0) {
+            ctx.putImageData(image, 0, readTop, 0, interiorStart, width, rows);
+            removed += bandRemoved;
+        }
+
+        // Back to the event loop between bands. On an A0 sheet this pass is
+        // several hundred milliseconds of straight-line work, and while it runs
+        // nothing the user clicks is delivered -- including the cancel button
+        // whose whole purpose is to be pressed during a long run.
+        await yieldToEventLoop();
     }
 
-    if (removed > 0) ctx.putImageData(image, 0, 0);
-    return removed;
+    return { removed, bandRows, workingBytes };
 }
 
 /**
@@ -360,36 +439,40 @@ function applyDeskew(source: HTMLCanvasElement, angleDeg: number) {
  * rotation resamples and turns a crisp one-pixel speck into a soft grey smudge
  * that no longer looks isolated to anything.
  */
-export function preprocessForOcr(
+export async function preprocessForOcr(
     canvas: HTMLCanvasElement,
     options: OcrPreprocessOptions,
-): OcrPreprocessResult {
+): Promise<OcrPreprocessResult> {
     if (!options.deskew && !options.noiseReduction) return untouched(canvas);
+
+    const megapixels = (canvas.width * canvas.height) / 1e6;
+    if (megapixels > MAX_PREPROCESS_MEGAPIXELS) {
+        // Say so and carry on. Recognition on the page as rendered is a worse
+        // result than a cleaned one, but it is a result; running out of memory
+        // partway through is not.
+        return untouched(canvas, { skipped: 'page-too-large' });
+    }
 
     const startedAt = performance.now();
     let working = canvas;
     let ownsCanvas = false;
+    let modifiedSourceCanvas = false;
     let noiseMs = 0;
     let removedSpecks = 0;
     let noiseReductionApplied = false;
+    let peakWorkingBytes = 0;
+    let bandRows = 0;
 
     if (options.noiseReduction) {
         const t0 = performance.now();
-        // Work on a copy: the rendered canvas belongs to the caller, and the
-        // OCR image must never be the thing anything else might still read.
-        const copy = document.createElement('canvas');
-        copy.width = canvas.width;
-        copy.height = canvas.height;
-        const ctx = copy.getContext('2d', { willReadFrequently: true });
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (ctx) {
-            ctx.drawImage(canvas, 0, 0);
-            removedSpecks = removeSpecks(ctx, copy.width, copy.height);
-            working = copy;
-            ownsCanvas = true;
+            const result = await removeSpecks(ctx, canvas.width, canvas.height);
+            removedSpecks = result.removed;
+            bandRows = result.bandRows;
+            peakWorkingBytes = Math.max(peakWorkingBytes, result.workingBytes);
             noiseReductionApplied = true;
-        } else {
-            copy.width = 0;
-            copy.height = 0;
+            modifiedSourceCanvas = true;
         }
         noiseMs = performance.now() - t0;
     }
@@ -409,6 +492,11 @@ export function preprocessForOcr(
         if (points) {
             analysisWidth = points.width;
             analysisHeight = points.height;
+            // The downsampled copy plus the two coordinate lists it produces.
+            peakWorkingBytes = Math.max(
+                peakWorkingBytes,
+                points.width * points.height * 4 + points.xs.length * 8,
+            );
             const detection = detectSkew(points);
             detectedAngle = detection.angle;
             deskewConfidence = detection.confidence;
@@ -419,10 +507,10 @@ export function preprocessForOcr(
             const t1 = performance.now();
             const rotated = applyDeskew(working, detectedAngle);
             if (rotated) {
-                // The rotation is measured against the page as rendered, so the
-                // mapping has to be too. When noise reduction made a copy first
-                // the two share a coordinate space, so nothing else is needed.
-                if (ownsCanvas) { working.width = 0; working.height = 0; }
+                // `working` is the caller's canvas -- speckle removal writes in
+                // place rather than copying -- so it is not ours to release.
+                // The rotation shares its coordinate space either way, which is
+                // what keeps the mapping below valid.
                 working = rotated.canvas;
                 ownsCanvas = true;
                 deskewApplied = true;
@@ -435,6 +523,9 @@ export function preprocessForOcr(
     return {
         canvas: working,
         ownsCanvas,
+        modifiedSourceCanvas,
+        peakWorkingBytes,
+        bandRows,
         deskewApplied,
         detectedAngle,
         deskewConfidence: Number.isFinite(deskewConfidence) ? Math.round(deskewConfidence * 1000) / 1000 : 0,
