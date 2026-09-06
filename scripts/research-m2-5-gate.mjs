@@ -20,8 +20,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    buildRow, findDuplicates, findGapCandidates, confirmRow, displayValue, FIELDS,
+    buildRow, findDuplicates, findGapCandidates, confirmRow, displayValue,
+    reviewSurface, attentionQueue, REVIEW_REASONS, FIELDS,
 } from '../research/m2-5/prototype/register.mjs';
+import {
+    createAssignment, defineProfile, assignPages, profileFor, unassignedPages,
+} from '../research/m2-5/prototype/template.mjs';
 import { toCsv, parseCsv, isFormulaLead } from '../research/m2-5/prototype/csv.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,7 +55,7 @@ const required = ['geometry.json', 'template-transfer.json', 'native-extraction.
     'render-cost.json', 'ocr-per-field.json', 'mixed-pages.json',
     'end-to-end.json', 'value-policies.json', 'register.json', 'register-after-review.json',
     'gap-sweep.json', 'csv-analysis.json', 'psm-enum.json', 'network.json',
-    'rotated-scanned.json'];
+    'rotated-scanned.json', 'profile-assignment.json'];
 const missing = required.filter((f) => !has(f));
 if (missing.length) {
     console.error(`Missing results: ${missing.join(', ')}`);
@@ -259,6 +263,116 @@ mustFire('the raw text is still there after confirmation',
     && confirmedProv.fields.drawing_number.value === 'A-108');
 check('displayValue is the rule being applied, and it is reversible only via rawText',
     displayValue(raw) === 'A-101' && displayValue('') === '');
+
+console.log('');
+console.log('=== every row reaches a person ===');
+const registerFile = read('register.json');
+const surface = registerFile.reviewSurface;
+const attention = registerFile.attentionQueue;
+check('the review surface holds one entry for every page in',
+    surface.length === geometry.length,
+    `${surface.length} rows on the surface, ${geometry.length} pages in`);
+check('the attention queue is a strict subset of it, not the surface itself',
+    attention.length < surface.length && attention.every((a) => surface.some((r) => r.pageNumber === a.pageNumber)),
+    `${attention.length} flagged of ${surface.length}`);
+check('nothing on the surface is confirmed without a person',
+    surface.every((r) => r.reviewStatus === 'unconfirmed'));
+
+// The row this whole distinction exists for: wrong, and carrying no flag.
+const wrongUnflagged = registerFile.unflaggedButWrong;
+check('the corpus still contains a row that is wrong and unflagged',
+    wrongUnflagged.length > 0, `pages ${wrongUnflagged.join(', ')}`);
+for (const pageNumber of wrongUnflagged) {
+    const entry = surface.find((r) => r.pageNumber === pageNumber);
+    check(`page ${pageNumber} is wrong, unflagged, and still on the review surface`,
+        Boolean(entry) && entry.reasons.length === 0,
+        entry ? `position ${surface.indexOf(entry) + 1} of ${surface.length}` : 'MISSING');
+    mustFire(`filtering the surface by flags would drop page ${pageNumber}`,
+        !attention.some((a) => a.pageNumber === pageNumber),
+        'which is exactly what the old queue did');
+}
+mustFire('an all-clear row is still on the surface',
+    (() => {
+        const clean = [buildRow({
+            pageNumber: 1,
+            fields: Object.fromEntries(FIELDS.map((f) => [f, { rawText: 'x', source: 'native', confidence: 99 }])),
+        })];
+        return reviewSurface(clean).length === 1 && attentionQueue(clean).length === 0;
+    })(), 'surface 1, attention 0');
+
+console.log('');
+console.log('=== a template profile is assigned, never inferred ===');
+const assignmentFile = read('profile-assignment.json');
+const probe = assignmentFile.unassignedProbe;
+check('every assignment records who confirmed it',
+    assignmentFile.assignedPages.every((a) => Boolean(a.confirmedBy)),
+    `${assignmentFile.assignedPages.length} assignments`);
+check('the corpus has two layouts on one sheet size, so size cannot decide it',
+    probe.rows.every((r) => r.size === 'A2') && probe.sameSizeAssigned.length > 0,
+    `unassigned ${probe.unassigned.join(', ')} share A2 with assigned ${probe.sameSizeAssigned.join(', ')}`);
+check('a page nobody assigned has no profile',
+    probe.rows.every((r) => !r.hasConfirmedProfile));
+mustFire('templateFits would have waved those very pages through',
+    probe.rows.every((r) => r.templateFitsAnyway),
+    'which is why it is not the assignment gate');
+mustFire('and auto-continuing on it reads nothing',
+    probe.rows.reduce((n, r) => n + r.fieldsReadIfAutoContinued, 0) === 0,
+    `0/${probe.rows.length * FIELDS.length} fields`);
+const liveAssignment = createAssignment();
+defineProfile(liveAssignment, 'A', { template: { source: {} }, model: 'normalised' });
+assignPages(liveAssignment, [1, 2], 'A', { confirmedBy: 'gate' });
+check('an assigned page resolves to its profile', profileFor(liveAssignment, 1)?.name === 'A');
+mustFire('an unassigned page resolves to null rather than to the only profile there is',
+    profileFor(liveAssignment, 7) === null && unassignedPages(liveAssignment, [1, 7]).join() === '7');
+mustFire('an assignment with nobody behind it is refused',
+    (() => {
+        try {
+            assignPages(liveAssignment, [3], 'A', { confirmedBy: '' });
+            return false;
+        } catch {
+            return true;
+        }
+    })(), 'assignPages throws without confirmedBy');
+const unassignedRow = buildRow({ pageNumber: 7, fields: {}, profileAssigned: false });
+check('an unassigned page still produces a row, with its own reason',
+    unassignedRow.pageNumber === 7
+    && unassignedRow.reviewReasons[0] === REVIEW_REASONS.NO_PROFILE_ASSIGNED
+    && unassignedRow.extractionSource === 'unassigned');
+mustFire('and that reason is not the same as a template that missed',
+    REVIEW_REASONS.NO_PROFILE_ASSIGNED !== REVIEW_REASONS.TEMPLATE_DID_NOT_FIT);
+
+console.log('');
+console.log('=== rawText is what the extraction layer said, unchanged ===');
+const messy = '  \u56f3\u9762\u756a\u53f7 \n  A-101  \n';
+const messyRow = buildRow({
+    pageNumber: 1,
+    fields: { drawing_number: { rawText: messy, source: 'native' } },
+});
+check('leading and trailing whitespace survives into the row',
+    messyRow.fields.drawing_number.rawText === messy,
+    JSON.stringify(messyRow.fields.drawing_number.rawText));
+mustFire('the row did not trim it on the way in',
+    messyRow.fields.drawing_number.rawText !== messy.trim(),
+    'buildRow used to call .trim() here');
+check('the display value is still clean',
+    messyRow.fields.drawing_number.value === 'A-101',
+    JSON.stringify(messyRow.fields.drawing_number.value));
+mustFire('two display rules give two values and one identical raw text',
+    (() => {
+        const verbatim = buildRow({
+            pageNumber: 1,
+            fields: { drawing_number: { rawText: messy, source: 'native' } },
+            deriveValue: (t) => t,
+        });
+        return verbatim.fields.drawing_number.value === messy
+            && verbatim.fields.drawing_number.value !== messyRow.fields.drawing_number.value
+            && verbatim.fields.drawing_number.rawText === messyRow.fields.drawing_number.rawText;
+    })());
+const messyConfirmed = confirmRow(messyRow, { drawing_number: 'A-108' });
+mustFire('and confirmation does not touch it either',
+    messyConfirmed.fields.drawing_number.rawText === messy
+    && messyConfirmed.confirmedFrom.raw.drawing_number === messy
+    && messyConfirmed.fields.drawing_number.value === 'A-108');
 
 console.log('');
 console.log('=== duplicates ===');

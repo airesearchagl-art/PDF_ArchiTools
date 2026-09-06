@@ -23,6 +23,7 @@ export const FIELDS = ['drawing_number', 'drawing_title', 'revision', 'revision_
  * reasons at all is still unconfirmed.
  */
 export const REVIEW_REASONS = {
+    NO_PROFILE_ASSIGNED: 'no confirmed template profile covers this page',
     TEMPLATE_DID_NOT_FIT: 'the template does not fit this page',
     NO_TEXT_IN_FIELD: 'a field came back empty',
     LOW_CONFIDENCE: 'OCR reported low confidence',
@@ -36,7 +37,28 @@ export const REVIEW_REASONS = {
 export const LOW_CONFIDENCE = 70;
 
 /**
- * The display value taken from raw extracted text.
+ * What `rawText` means, precisely, because "raw" is a word that invites
+ * argument.
+ *
+ * `rawText` is **the text the extraction layer produced for this field, before
+ * any display transformation**. It is not the PDF byte stream and it is not
+ * Tesseract's internal structure; both of those are the extraction layer's
+ * business, and the boundary is where a field becomes a string.
+ *
+ * Whitespace normalisation is allowed *at that boundary* and nowhere after it.
+ * The native reader groups tokens into lines and joins them; the OCR readers
+ * group words into lines and join those. Whatever comes out of that step is
+ * the raw text, by definition.
+ *
+ * From the moment it reaches a candidate row it does not change again -- not
+ * trimmed, not re-normalised, not replaced by a corrected value. `displayValue`
+ * derives a presentation value from it; a person's edit replaces the *value*.
+ * The raw text stays put so that "what did the sheet actually say" always has
+ * an answer.
+ */
+
+/**
+ * The display value derived from raw extracted text.
  *
  * A title-block cell holds its label above its value, so the raw text of the
  * drawing-number cell is "figure-number-label\nA-101". Taking the last line is
@@ -91,13 +113,18 @@ export function emptyRow(pageNumber) {
  *   confidence  the reader's own score for its own output, per field. One
  *               number for four values cannot say which value to look at.
  */
-export function buildRow({ pageNumber, fields = {}, templateFitted = true, deriveValue = displayValue }) {
+export function buildRow({
+    pageNumber, fields = {}, templateFitted = true, profileAssigned = true,
+    deriveValue = displayValue,
+}) {
     const row = emptyRow(pageNumber);
     const sources = new Set();
 
     for (const field of FIELDS) {
         const found = fields[field];
-        const rawText = (found?.rawText ?? found?.text ?? '').trim();
+        // rawText is taken exactly as the extraction layer handed it over.
+        // No trim, no normalisation, no repair -- see the contract above.
+        const rawText = found?.rawText ?? found?.text ?? '';
         const value = deriveValue(rawText);
         const entry = row.fields[field];
         entry.rawText = rawText;
@@ -109,7 +136,7 @@ export function buildRow({ pageNumber, fields = {}, templateFitted = true, deriv
         if (found?.source) sources.add(found.source);
         if (typeof found?.confidence === 'number') row.confidence[field] = found.confidence;
 
-        if (!templateFitted) continue;
+        if (!templateFitted || !profileAssigned) continue;
         if (rawText === '') {
             entry.reviewReasons.push(`${REVIEW_REASONS.NO_TEXT_IN_FIELD} (${field})`);
             row.reviewReasons.push(`${REVIEW_REASONS.NO_TEXT_IN_FIELD} (${field})`);
@@ -120,6 +147,15 @@ export function buildRow({ pageNumber, fields = {}, templateFitted = true, deriv
         }
     }
 
+    // A page nobody assigned and a page whose template misses are different
+    // failures and get different reasons. Collapsing them would hide the one
+    // that is a question for a person -- "which template is this sheet?" --
+    // behind one that sounds like a defect in the extraction.
+    if (!profileAssigned) {
+        row.reviewReasons.unshift(REVIEW_REASONS.NO_PROFILE_ASSIGNED);
+        row.extractionSource = 'unassigned';
+        return row;
+    }
     if (!templateFitted) {
         row.reviewReasons.unshift(REVIEW_REASONS.TEMPLATE_DID_NOT_FIT);
         row.extractionSource = 'template-mismatch';
@@ -294,24 +330,43 @@ export function annotateRegister(rows) {
 }
 
 /**
- * What a reviewer sees first.
+ * Every candidate row, in the order a reviewer should walk them.
  *
- * Sorted by how much doubt there is, not by how likely the row is to be wrong:
- * the two are not the same thing, and this ordering only claims the first.
+ * This returns *all* rows, and that is the point rather than an oversight. An
+ * earlier version returned only rows carrying a reason, which quietly turned
+ * "nothing flagged" into "nothing to check" -- and page 25 of the corpus is a
+ * row that is wrong and carries no flag, because OCR misread it confidently.
+ * A queue that cannot show that row cannot be the surface a person confirms
+ * from.
+ *
+ * Flags and confidence decide the *order*. They never decide membership, and
+ * they never stand in for a person having looked.
  */
-export function reviewQueue(rows) {
+export function reviewSurface(rows) {
     return [...rows]
         .map((row) => ({
             pageNumber: row.pageNumber,
             reasons: row.reviewReasons,
+            needsAttention: row.reviewReasons.length > 0,
+            reviewStatus: row.reviewStatus,
             lowestConfidence: Object.values(row.confidence).length
                 ? Math.min(...Object.values(row.confidence))
                 : null,
         }))
-        .filter((r) => r.reasons.length > 0)
         .sort((a, b) => b.reasons.length - a.reasons.length
             || (a.lowestConfidence ?? 101) - (b.lowestConfidence ?? 101)
             || a.pageNumber - b.pageNumber);
+}
+
+/**
+ * The subset worth looking at first.
+ *
+ * A convenience view over `reviewSurface`, for a UI that wants to lead with the
+ * doubtful rows. It is not a work list: finishing it does not finish the
+ * review, and nothing in the model treats an empty attention queue as done.
+ */
+export function attentionQueue(rows) {
+    return reviewSurface(rows).filter((r) => r.needsAttention);
 }
 
 /**

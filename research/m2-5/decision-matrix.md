@@ -21,7 +21,29 @@ part needs changing first) and **DEFER** (do not build it yet).
 reliably, so a detector would inherit that problem *and* add its own. The
 placement is a few seconds; a wrong detection that nobody notices is not.
 
-## 2. Transferring the template to other sheet sizes
+## 2. Deciding which template applies to which page
+
+Two questions get confused here, so they are separated.
+
+**(a) Which profile is this page?**
+
+| option | measured | verdict |
+| --- | --- | --- |
+| key it on sheet size | pages 5, 6, 7 are all A2; page 7 is a different layout | **rejected** |
+| gate it on `templateFits()` | says true for the unassigned pages; auto-continuing reads **0/8** fields | **rejected** |
+| a person assigns pages or ranges to a named profile | §7b | **ADOPT** |
+
+Sheet size does not identify the template — the drawing office's does, and one
+issue carries several. `templateFits()` answers a narrower question (does this
+rectangle still land on this page) and answers it *true* for every A-series
+sheet, so wiring it to assignment auto-continues onto exactly the pages that
+need asking about, silently.
+
+A page nobody has assigned is unassigned, not guessed: it still produces a row,
+carrying `no confirmed template profile covers this page` — deliberately a
+different reason from a template that fitted and missed.
+
+**(b) Given the profile, how does the region transfer to another sheet size?**
 
 | model | block scales with sheet | block of fixed size |
 | --- | --- | --- |
@@ -29,19 +51,14 @@ placement is a few seconds; a wrong detection that nobody notices is not.
 | normalised to page | **7/8** | 1/8 |
 | corner-anchored | 0/8 | **8/8** |
 
-**REVISE.** There is no winner. Both conventions are real, each model handles
-one and fails the other, and `templateFits()` returns true in every case
-because A-series sheets share an aspect ratio — so the mismatch is not even
-detectable from geometry.
+**REVISE.** No winner. Both conventions are real, each model handles one and
+fails the other. The model is therefore recorded *on the profile*, as part of
+what a person confirms, rather than inferred per page. Normalised is the better
+default to propose; it must not be applied unattended.
 
-The revision: apply the template, then show the proposed regions on the first
-page of each new sheet size and ask the user to confirm or redraw. Normalised
-is the better default to *propose* (it matches the more common convention on
-this corpus), but it must not be applied unattended.
-
-Choosing a model silently is the single most dangerous option on this page: it
-produces four empty fields on half a drawing set, and empty fields look like a
-page problem rather than a template problem.
+Everything in §7 is extraction performance **given a correct, confirmed
+assignment**. It is not evidence that (a) can be automated, and it should not be
+quoted as though it were.
 
 ## 3. Rasterising for OCR
 
@@ -148,8 +165,16 @@ by vertical overlap — as the native reader already did — makes both paths th
 same shape.
 
 The condition is not optional: the split is a **view** over the raw text, and
-`rawText` is kept per field and shown in review. The gate builds the same row
-under two display rules and asserts the raw text is identical in both.
+`rawText` is kept per field and shown in review.
+
+`rawText` means the extraction layer's output for that field, before any display
+transformation — not the byte stream, not Tesseract's internals. Whitespace
+normalisation belongs at that boundary (grouping tokens or words into lines) and
+nowhere after it. An earlier version of this document promised "never trimmed"
+while `buildRow()` trimmed on the way in; the contract and the code now agree.
+The gate pushes a value with leading and trailing whitespace through both
+display rules and through confirmation and asserts the stored raw text is
+byte-identical every time.
 
 The 12/100 row is a mechanical trim standing in for "ask the user to draw the
 value area". It measures the crudeness of the proxy, not the idea.
@@ -167,24 +192,43 @@ proves the check can fire by building a row from a page with nothing on it.
 There is no trade-off here to weigh. A register that is missing a sheet is
 wrong in the way nobody checks for.
 
-## 9. What confirms a row
+## 9. What confirms a row, and what a reviewer is shown
 
 | option | verdict |
 | --- | --- |
 | confidence above a threshold | **rejected** |
 | a person confirms it | **ADOPT** |
 
+| review surface | verdict |
+| --- | --- |
+| the flagged rows | **rejected** |
+| every row, ordered by doubt | **ADOPT** |
+
 §9. Rows confirmed without a human: 0, by construction. Confidence orders the
-queue; it never promotes.
+surface; it never promotes.
 
-Review burden on this corpus: 5 of 25 rows flagged, **1 row wrong but
-unflagged**, 3 of 25 rows and 3 of 100 fields actually edited.
+**The surface holds all 25 rows, not the 5 flagged ones.** An earlier version
+returned only rows carrying a reason, which turns "nothing flagged" into
+"nothing to check" — and page 25 is wrong while carrying no flag at all,
+because OCR misread it *confidently*. It would have been unreachable. It now
+sits sixth of twenty-five, first among the unflagged, because its confidence is
+the lowest of them.
 
-That 1 is the honest number and it was 0 before the corpus grew: page 25 is a
-rotated scanned sheet whose value OCR'd wrongly *with high confidence*, so
-nothing fired. Confidence flagging catches an unsure reader; it cannot catch a
-confidently wrong one. That is an argument for the review step existing, not for
-tuning the threshold.
+A flagged subset still exists as an ordering aid for a UI that wants to lead
+with the doubtful rows. It is not a work list, and nothing treats an empty one
+as done.
+
+| | |
+| --- | --- |
+| rows requiring human confirmation | **25 of 25** |
+| of those, carrying a flag | 5 |
+| rows wrong and unflagged | **1** (page 25) |
+| rows actually edited | 3 |
+| fields actually edited | 3 of 100 |
+
+Confidence flagging catches an unsure reader and cannot catch a confidently
+wrong one. That is an argument for the review step existing, not for tuning the
+threshold.
 
 ## 10. Duplicate drawing numbers
 
@@ -256,8 +300,8 @@ were excluded by the brief and no measurement was taken for them.
 
 | | |
 | --- | --- |
-| **ADOPT** | user-placed template; upright page space; region-only rasterising **with `/Rotate` undone**; `SINGLE_BLOCK`; **union OCR with per-field attribution** (per-field kept as a fallback); field-level source recorded per field; **per-field raw text, value, source and confidence kept through confirmation**; last line as a display default over raw text always shown; one row per page; candidate-until-confirmed; exact-match duplicates; XLSX through the existing writer; local OCR |
-| **REVISE** | template transfer between sheet sizes — confirm per size, do not auto-pick |
+| **ADOPT** | user-placed template **and human-confirmed profile assignment** (`templateFits()` barred from deciding it); upright page space; region-only rasterising **with `/Rotate` undone**; `SINGLE_BLOCK`; **union OCR with per-field attribution** (per-field kept as a fallback); field-level source recorded per field; **per-field raw text, value, source and confidence kept through confirmation**; last line as a display default over raw text always shown; one row per page, including unassigned pages; candidate-until-confirmed with **every row on the review surface**; exact-match duplicates; XLSX through the existing writer; local OCR |
+| **REVISE** | how a profile is *proposed* for a page nobody has assigned — propose and ask, never auto-pick |
 | **DEFER** | gap inference; OCR preprocessing; any field beyond the four |
 
 ## What changed after review
@@ -269,3 +313,11 @@ were excluded by the brief and no measurement was taken for them.
 | 7. label/value | REVISE, 64/87 | **ADOPT as a display default**, 96/99 | OCR output was being flattened to one line, so the rule could not apply to it |
 | 3. rasterising | regions only | regions only, **un-rotated** | rotated scanned sheets were never exercised; they read 0/12 until fixed |
 | 9. review burden | 0 wrong-but-unflagged | **1** | the corpus did not previously contain a page that could produce one |
+
+## What changed after the second review
+
+| entry | was | now | why |
+| --- | --- | --- | --- |
+| 9. review surface | the flagged rows | **every row** | the one row that is wrong and unflagged was unreachable |
+| 2. template assignment | keyed on sheet size | **human-confirmed profile**, by page or range | two layouts share A2 in this corpus, and `templateFits()` says yes to both |
+| 7. `rawText` | "never trimmed", while `buildRow()` trimmed | contract stated precisely, implementation matches | the promise and the code disagreed |

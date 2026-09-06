@@ -14,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-    FIELDS, buildRow, annotateRegister, reviewQueue, confirmRow, findGapCandidates, LOW_CONFIDENCE,
+    FIELDS, buildRow, annotateRegister, reviewSurface, attentionQueue, confirmRow, findGapCandidates, LOW_CONFIDENCE,
 } from '../research/m2-5/prototype/register.mjs';
 import { toCsv, parseCsv, analysePolicies, POLICIES, isFormulaLead, COLUMNS } from '../research/m2-5/prototype/csv.mjs';
 
@@ -161,19 +161,35 @@ for (const f of FIELDS) {
 // ---------------------------------------------------------------------------
 
 console.log('\n=== what a person has to do ===');
-const queue = reviewQueue(rows);
+
+// Two different counts, kept apart on purpose.
+//
+//   the review surface   every candidate row. This is what a person has to
+//                        confirm, and it is the whole register: a row is a
+//                        candidate until somebody says otherwise, and nothing
+//                        in the model can shorten this list.
+//   the attention queue  the rows carrying a reason. An ordering aid, and not
+//                        a work list -- emptying it does not finish anything.
+//
+// The distinction is not pedantry. Reporting only the attention queue makes the
+// review look small, and it is exactly the rows *outside* it that a confidence
+// number cannot help with.
+const surface = reviewSurface(rows);
+const attention = attentionQueue(rows);
 const totalFields = rows.length * FIELDS.length;
-const flagged = new Set(queue.map((q) => q.pageNumber));
+const flagged = new Set(attention.map((q) => q.pageNumber));
 console.log(`  ${rows.length} pages x ${FIELDS.length} fields = ${totalFields} values`);
-console.log(`  rows with something to look at: ${queue.length}/${rows.length}`);
-console.log(`  rows with nothing flagged:      ${rows.length - queue.length}`);
-console.log(`  values that are wrong or empty: ${wrong + blank}`);
+console.log(`  rows requiring human confirmation: ${surface.length}/${rows.length}  (every row; confidence never confirms)`);
+console.log(`  of those, rows carrying a flag:     ${attention.length}/${rows.length}`);
+console.log(`  rows with no flag at all:           ${rows.length - attention.length}  (still unconfirmed, still on the surface)`);
+console.log(`  values that are wrong or empty:     ${wrong + blank}`);
 console.log('');
-console.log('  queue, worst first:');
-for (const item of queue.slice(0, 10)) {
-    console.log(`    p${String(item.pageNumber).padStart(2)}  ${item.reasons.length} reason(s)  lowest confidence ${item.lowestConfidence === null ? '-' : Math.round(item.lowestConfidence)}  ${item.reasons[0]}`);
+console.log('  review surface, most doubtful first:');
+for (const item of surface.slice(0, 10)) {
+    const reason = item.reasons[0] ?? '(nothing flagged -- still needs confirming)';
+    console.log(`    p${String(item.pageNumber).padStart(2)}  ${item.reasons.length} reason(s)  lowest confidence ${item.lowestConfidence === null ? '-' : Math.round(item.lowestConfidence)}  ${reason}`);
 }
-if (queue.length > 10) console.log(`    ... and ${queue.length - 10} more`);
+if (surface.length > 10) console.log(`    ... and ${surface.length - 10} more, all unconfirmed`);
 
 // A row nobody flagged can still be wrong. That is the number that matters for
 // whether confidence may ever stand in for a person.
@@ -184,8 +200,13 @@ const unflaggedButWrong = rows.filter((row) => {
 });
 console.log(`\n  rows with nothing flagged that are nevertheless wrong: ${unflaggedButWrong.length}` +
     `${unflaggedButWrong.length ? ` (pages ${unflaggedButWrong.map((r) => r.pageNumber).join(', ')})` : ''}`);
+for (const row of unflaggedButWrong) {
+    const onSurface = surface.some((item) => item.pageNumber === row.pageNumber);
+    console.log(`    p${row.pageNumber} is on the review surface: ${onSurface}` +
+        `${onSurface ? ' -- a person still sees it' : ' -- IT WOULD BE LOST'}`);
+}
 
-write('register.json', { rows, duplicates, gaps, queue, accuracy: { correct, wrong, blank, expectedBlank, perField } });
+write('register.json', { rows, duplicates, gaps, reviewSurface: surface, attentionQueue: attention, unflaggedButWrong: unflaggedButWrong.map((r) => r.pageNumber), accuracy: { correct, wrong, blank, expectedBlank, perField } });
 
 // ---------------------------------------------------------------------------
 // Duplicate and gap

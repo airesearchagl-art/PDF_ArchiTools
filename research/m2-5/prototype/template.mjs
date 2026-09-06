@@ -177,3 +177,77 @@ export function unionRegion(rects, pad = 0) {
         bottom: Math.max(...list.map((r) => r.bottom)) + pad,
     };
 }
+
+
+// ---------------------------------------------------------------------------
+// Which template applies to which page
+// ---------------------------------------------------------------------------
+
+/**
+ * A template profile assignment, confirmed by a person.
+ *
+ * The obvious shortcut is to key templates on sheet size: same size, same
+ * block. This corpus refutes it on its own -- pages 5, 6 and 7 are all A2, and
+ * page 7 is drawn to a different title-block layout entirely. Sheet size is not
+ * the thing that varies; the drawing office's template is, and the same office
+ * issues several.
+ *
+ * So assignment is explicit. A profile is a named template plus the coordinate
+ * model to transfer it by, and a page belongs to a profile because somebody
+ * said so -- by page, or by range. There is no inference step, and a page
+ * nobody has assigned is *unassigned*, not guessed.
+ *
+ * `templateFits()` deliberately plays no part in this. It answers a narrower
+ * question (does this rectangle still land on this page) and it answers it true
+ * for every A-series sheet, so using it to decide assignment would auto-continue
+ * onto exactly the pages this design refuses to guess at.
+ */
+export function createAssignment() {
+    return { profiles: new Map(), pages: new Map() };
+}
+
+/** Register a named profile: a template, and how it transfers. */
+export function defineProfile(assignment, name, { template, model, confirmedBy = null }) {
+    assignment.profiles.set(name, { name, template, model, confirmedBy });
+    return assignment;
+}
+
+/**
+ * Attach pages to a profile.
+ *
+ * `confirmedBy` is required and not decorative: an assignment nobody confirmed
+ * is the thing this whole structure exists to prevent, so it has to be recorded
+ * at the point it is made.
+ */
+export function assignPages(assignment, pageNumbers, profileName, { confirmedBy }) {
+    if (!assignment.profiles.has(profileName)) {
+        throw new Error(`no such profile: ${profileName}`);
+    }
+    if (!confirmedBy) {
+        throw new Error('an assignment must record who confirmed it');
+    }
+    for (const pageNumber of pageNumbers) {
+        assignment.pages.set(pageNumber, { profileName, confirmedBy });
+    }
+    return assignment;
+}
+
+/**
+ * The profile for a page, or null.
+ *
+ * Null is a real answer and callers must handle it. It does not mean "try the
+ * only profile we have" or "use the one that fits"; it means nobody has said
+ * what this page is, and the register has to say so rather than produce four
+ * confident empty fields.
+ */
+export function profileFor(assignment, pageNumber) {
+    const assigned = assignment.pages.get(pageNumber);
+    if (!assigned) return null;
+    const profile = assignment.profiles.get(assigned.profileName);
+    return profile ? { ...profile, confirmedBy: assigned.confirmedBy } : null;
+}
+
+/** Pages with no confirmed profile, which the caller must still produce rows for. */
+export function unassignedPages(assignment, pageNumbers) {
+    return pageNumbers.filter((n) => !assignment.pages.has(n));
+}

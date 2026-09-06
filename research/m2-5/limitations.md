@@ -28,6 +28,22 @@ right call for a spike, but it bounds every result:
 A measurement on 25 pages that says "0 false positives" means the check did not
 fire on 25 synthetic pages. It does not mean the check is safe.
 
+## The template profile assignment is an input, not a result
+
+Every accuracy figure in `measurements.md` §7 is measured under an assignment
+that is taken as already correct — which page uses which office's title block,
+and how that block transfers. In the probe that assignment comes from the
+fixture's own layout and scaling fields.
+
+Nothing here measures whether that assignment can be produced automatically,
+and section 7b is the reason it is not attempted: two layouts share a sheet
+size in this corpus, and the geometric fit check says yes to both. So "96/100"
+means *given a correct, confirmed assignment*, and quoting it without that
+clause overstates what was built.
+
+What the cost of making those assignments actually is — how many profiles a
+real issue needs, how often a set introduces a new one mid-way — is unmeasured.
+
 ## `templateFits()` is not a guard
 
 The prototype's fit check returns true for all 25 pages, including the ones
@@ -38,6 +54,25 @@ is about to produce four empty fields".
 Anything built on this must not use it as a gate. This is why the architecture
 asks the user to confirm placement per sheet size rather than trusting a fit
 score.
+
+## What `rawText` means here
+
+`rawText` is the text the extraction layer produced for a field, before any
+display transformation. It is not the PDF byte stream and it is not Tesseract's
+internal structure — both are the extraction layer's business, and the boundary
+is where a field becomes a string.
+
+Whitespace normalisation happens *at that boundary* and nowhere after it: the
+native reader groups tokens into lines and joins them, the OCR readers group
+words into lines and join those, and whatever comes out of that step is the raw
+text by definition. From the moment it reaches a candidate row it does not
+change again.
+
+That is a narrower claim than "raw", and it is the one the code actually keeps.
+An earlier version of the architecture said "never trimmed or overwritten"
+while `buildRow()` trimmed it on the way in; the contract and the implementation
+now agree, and a gate probe feeds a value with leading and trailing whitespace
+through both display rules and confirmation to prove it.
 
 ## Confidence is not a probability
 
@@ -88,9 +123,11 @@ application opening a file written by the writer already in this repository.
 
 - No title-block detector.
 - No layout classifier.
-- No production UI. The review queue is a sorted list in a script, not a
-  screen, and the cost of reviewing 5 flagged rows out of 25 in a real
-  interface is unmeasured.
+- No production UI. The review surface is a sorted list in a script, not a
+  screen, and the cost of confirming 25 rows in a real interface — as opposed
+  to glancing at the 5 flagged ones — is unmeasured and is the larger number.
+- No measurement of how many template profiles a real drawing issue needs, or
+  of what it costs a person to assign them.
 - No page-range or multi-document handling.
 - No persistence of a template between sessions.
 - No extraction of anything beyond the four fields.

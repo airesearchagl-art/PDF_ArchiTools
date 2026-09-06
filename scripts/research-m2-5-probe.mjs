@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import puppeteer from 'puppeteer';
 
-import { buildTemplate, applyTemplate, templateFits, iou, unionRegion, MODELS } from '../research/m2-5/prototype/template.mjs';
+import { buildTemplate, applyTemplate, templateFits, iou, unionRegion, MODELS, createAssignment, defineProfile, assignPages, profileFor, unassignedPages } from '../research/m2-5/prototype/template.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = path.join(ROOT, 'test-fixtures', 'm2-5');
@@ -432,7 +432,32 @@ try {
             fields: pageTruth(7).regions,
         }),
     };
-    const profileOf = (pageNumber) => (PROFILES.A.pages.includes(pageNumber) ? 'A' : 'B');
+    /**
+     * The assignment a person is taken to have confirmed.
+     *
+     * Everything downstream of this line measures extraction *given a correct
+     * assignment*. It is not evidence that the assignment can be made
+     * automatically, and it is written out here rather than derived inline so
+     * that the distinction is visible instead of implied.
+     *
+     * The values come from the fixture's own layout and scaling fields, which
+     * is exactly what a person would be telling the tool: these pages use that
+     * office's title block, transferred this way.
+     */
+    const assignment = createAssignment();
+    defineProfile(assignment, 'A', { template: templates.A, model: 'normalised' });
+    defineProfile(assignment, 'A-fixed', { template: templates.A, model: 'corner-anchored' });
+    defineProfile(assignment, 'B', { template: templates.B, model: 'normalised' });
+    const assignedBy = 'research fixture, standing in for a human confirmation';
+    assignPages(assignment,
+        truth.pages.filter((p) => p.layout === 'A' && p.blockScaling === 'proportional').map((p) => p.page),
+        'A', { confirmedBy: assignedBy });
+    assignPages(assignment,
+        truth.pages.filter((p) => p.layout === 'A' && p.blockScaling === 'fixed-physical-size').map((p) => p.page),
+        'A-fixed', { confirmedBy: assignedBy });
+    assignPages(assignment,
+        truth.pages.filter((p) => p.layout === 'B').map((p) => p.page),
+        'B', { confirmedBy: assignedBy });
 
     /**
      * The value area of a field, rather than the whole labelled cell.
@@ -487,13 +512,21 @@ try {
         let unplacedWords = 0;
         for (const g of geometry) {
             const t = pageTruth(g.pageNumber);
-            const profile = profileOf(g.pageNumber);
-            // Within a profile, the model that suits how that sheet's block
-            // scales. A production implementation would record this on the
-            // profile; here it is derived from the fixture so the end-to-end
-            // numbers are not dragged down by a question already answered.
-            const model = t.blockScaling === 'fixed-physical-size' ? 'corner-anchored' : 'normalised';
-            const wholeCell = applyTemplate(templates[profile], g, model);
+            const assigned = profileFor(assignment, g.pageNumber);
+            if (!assigned) {
+                // No confirmed profile: the page still gets a row, and it is
+                // not quietly run through whichever template happens to exist.
+                rows.push({
+                    pageNumber: g.pageNumber, profile: null, model: null,
+                    profileAssigned: false,
+                    pageScanned: g.scanned, kind: t.kind, rotate: t.rotate,
+                    fields: {}, expected: t.values,
+                });
+                continue;
+            }
+            const profile = assigned.name;
+            const model = assigned.model;
+            const wholeCell = applyTemplate(assigned.template, g, model);
             const regions = policy.regions === 'value' ? valueOnly(wholeCell) : wholeCell;
 
             const native = await page.evaluate((n, r) => window.__m25.nativeFields(n, r), g.pageNumber, regions);
@@ -549,7 +582,7 @@ try {
             }
 
             rows.push({
-                pageNumber: g.pageNumber, profile, model,
+                pageNumber: g.pageNumber, profile, model, profileAssigned: true,
                 pageScanned: g.scanned, kind: t.kind, rotate: t.rotate,
                 fields, expected: t.values,
             });
@@ -585,6 +618,69 @@ try {
         const sources = FIELDS.map((f) => row.fields[f]?.source ?? 'none');
         console.log(`    ${run.policy.padEnd(38)} ${got}/4 fields   sources: ${sources.join(', ')}`);
     }
+    // ---- what happens when nobody has assigned a profile --------------------
+    //
+    // The corpus has three A2 sheets, and one of them (page 7) is drawn to a
+    // different title block. So sheet size cannot decide the template, and the
+    // question this probe asks is what the pipeline does when a page's profile
+    // has simply not been confirmed.
+    //
+    // It must not fall through to the profile that "fits". `templateFits()`
+    // returns true for these pages -- every A-series sheet shares an aspect
+    // ratio -- so a fit-based gate would auto-continue onto exactly the pages
+    // that need asking about.
+    console.log('');
+    console.log('=== a page whose profile nobody confirmed ===');
+    const partial = createAssignment();
+    defineProfile(partial, 'A', { template: templates.A, model: 'normalised' });
+    const layoutBPages = truth.pages.filter((p) => p.layout === 'B').map((p) => p.page);
+    const sameSizeAsB = truth.pages
+        .filter((p) => p.layout === 'A' && p.size === 'A2' && p.blockScaling === 'proportional')
+        .map((p) => p.page);
+    assignPages(partial, sameSizeAsB, 'A', { confirmedBy: 'research probe' });
+    const missing = unassignedPages(partial, layoutBPages);
+
+    const unassignedRows = [];
+    for (const pageNumber of layoutBPages) {
+        const g = geometry.find((x) => x.pageNumber === pageNumber);
+        const assignedProfile = profileFor(partial, pageNumber);
+        // What a fit-based gate would have concluded, measured rather than
+        // asserted, so the claim that it is useless here has a number behind it.
+        const wouldFit = templateFits(templates.A, g).fits;
+        let readWithWrongProfile = 0;
+        if (wouldFit) {
+            const regions = applyTemplate(templates.A, g, 'normalised');
+            const native = await page.evaluate((n, r) => window.__m25.nativeFields(n, r), pageNumber, regions);
+            const t = pageTruth(pageNumber);
+            readWithWrongProfile = FIELDS.filter((f) => {
+                const want = t.values[f] ?? '';
+                const got = native.fields[f]?.text ?? '';
+                return want !== '' && norm(got).includes(norm(want));
+            }).length;
+        }
+        unassignedRows.push({
+            pageNumber, size: pageTruth(pageNumber).size, layout: pageTruth(pageNumber).layout,
+            hasConfirmedProfile: assignedProfile !== null,
+            templateFitsAnyway: wouldFit,
+            fieldsReadIfAutoContinued: readWithWrongProfile,
+        });
+        console.log(`  p${String(pageNumber).padStart(2)} ${pageTruth(pageNumber).size} layout ${pageTruth(pageNumber).layout}`
+            + `  confirmed profile: ${assignedProfile === null ? 'none' : assignedProfile.name}`
+            + `  templateFits says: ${wouldFit}`
+            + `  fields if auto-continued: ${readWithWrongProfile}/4`);
+    }
+    const sameSize = [...new Set(truth.pages.filter((p) => layoutBPages.includes(p.page)).map((p) => p.size))];
+    console.log('');
+    console.log(`  pages left unassigned: ${missing.join(', ')}`);
+    console.log(`  they share a sheet size (${sameSize.join(', ')}) with assigned pages ${sameSizeAsB.join(', ')}`);
+    console.log(`  templateFits() would have waved them through: ${unassignedRows.every((r) => r.templateFitsAnyway)}`);
+    console.log(`  and doing so reads ${unassignedRows.reduce((n, r) => n + r.fieldsReadIfAutoContinued, 0)}/${unassignedRows.length * FIELDS.length} fields`);
+    write('profile-assignment.json', {
+        assignedBy,
+        assignedPages: [...assignment.pages.entries()].map(([pageNumber, a]) => ({ pageNumber, ...a })),
+        unassignedProbe: { unassigned: missing, sameSizeAssigned: sameSizeAsB, rows: unassignedRows },
+    });
+
     write('end-to-end.json', endToEnd);
 
     // ---- worker lifecycle ------------------------------------------------------

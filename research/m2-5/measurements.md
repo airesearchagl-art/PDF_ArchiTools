@@ -227,8 +227,10 @@ of the idea.
 
 ## 7. End to end, 25 pages
 
-`scripts/research-m2-5-probe.mjs`. Four runs over the whole set. The policies
-differ on two independent axes — how the *source* is chosen, and how OCR is
+`scripts/research-m2-5-probe.mjs`. Four runs over the whole set, **each under a
+template profile assignment taken as already confirmed by a person** — see 7b
+for why that qualification is load-bearing. The policies differ on two
+independent axes — how the *source* is chosen, and how OCR is
 *called* — so they are stated separately:
 
 | policy | source decided | OCR path | fields correct | wall clock | OCR calls | pixels |
@@ -256,6 +258,39 @@ Two of the 100 fields separate the policies in aggregate, and all of the
 argument is on this one page: the page-level switch reads one field, leaves
 three empty, and reports nothing unusual.
 
+## 7b. Which template applies to which page
+
+Every number in section 7 is extraction performance *given a correct template
+profile assignment*. It is not evidence that the assignment can be made
+automatically, and the two are easy to conflate because the assignment in the
+probe is derived from the fixture's own `layout` and `blockScaling` fields —
+which is exactly what a person would be telling the tool.
+
+The obvious shortcut is to key the template on sheet size. This corpus refutes
+it on its own: pages 5, 6 and 7 are all A2, and page 7 is drawn to a different
+title block entirely.
+
+| page | size | layout | assigned? | `templateFits()` | fields read if auto-continued |
+| --- | --- | --- | --- | --- | --- |
+| 5, 6 | A2 | A | yes | true | — |
+| 7 | A2 | B | **no** | **true** | **0/4** |
+| 11 | A2 | B | **no** | **true** | **0/4** |
+
+`templateFits()` says yes to the unassigned pages, because it answers a narrower
+question — does this rectangle still land on this page — and every A-series
+sheet shares an aspect ratio. Using it as the assignment gate would auto-continue
+onto precisely the pages that need asking about, and read **0 of 8 fields** while
+reporting nothing wrong.
+
+So assignment is explicit: a profile is a named template plus the model it
+transfers by, a page belongs to a profile because somebody said so, and a page
+nobody has assigned is *unassigned* rather than guessed. An unassigned page
+still produces a row, carrying `no confirmed template profile covers this page`
+— a different reason from a template that fitted and missed, because it is a
+different question and only one of them is addressed to a person.
+
+The gate refuses an assignment that does not record who confirmed it.
+
 ## 8. One row per page
 
 - Rows produced: **25 of 25 pages**, under every policy.
@@ -266,27 +301,35 @@ The gate proves this can fail rather than merely observing that it did not: it
 builds a row from a page with no fields and a template that did not fit, and
 asserts the row exists, is empty, carries a reason, and is `unconfirmed`.
 
-## 9. Review burden
+## 9. Review burden, and what "burden" counts
 
-100 values across 25 pages:
+Two numbers, kept apart, because collapsing them is how a review surface loses
+the rows that need it most:
 
 | | |
 | --- | --- |
-| rows flagged for review | 5 of 25 |
-| rows that were wrong but **not** flagged | **1** (page 25) |
+| **rows requiring human confirmation** | **25 of 25** |
+| of those, rows carrying a flag | 5 of 25 |
+| rows with no flag at all | 20 — still unconfirmed, still on the surface |
 | rows a reviewer had to edit | 3 of 25 (pages 12, 17, 25) |
 | fields a reviewer had to edit | 3 of 100 |
+| **rows that were wrong and carried no flag** | **1** (page 25) |
 
-The second line is the one that matters, and it is worse than this document
-previously claimed. An earlier version reported zero rows wrong-but-unflagged;
-that was true of a corpus that did not yet contain a page capable of producing
-one. Page 25 is a rotated scanned sheet where OCR returned a wrong value *with
-high confidence*, so no flag fired.
+The first line is the register. Every row is a candidate until a person
+confirms it, so the surface a person works from is the whole thing; the flags
+decide the *order* it is walked in and nothing else.
 
-This is the honest shape of confidence-based flagging: it catches the reader
-being unsure. It cannot catch the reader being confidently wrong, and no
-threshold makes it able to. That is an argument for the review step existing at
-all, not for tuning the threshold.
+An earlier version of this prototype returned only the flagged rows from
+`reviewQueue()`, which quietly turned "nothing flagged" into "nothing to
+check" — and page 25 is a row that is wrong and carries no flag, because OCR
+misread it *confidently*. That row would have been unreachable. It is now sixth
+of twenty-five on the surface, immediately after the flagged rows, because its
+confidence is the lowest among the unflagged; the gate asserts it is present,
+and a negative probe asserts that filtering by flags would drop it.
+
+This is the honest shape of confidence-based flagging: it catches a reader that
+is unsure and cannot catch one that is confidently wrong. No threshold fixes
+that. It is an argument for the review step existing, not for tuning.
 
 ## 10. Duplicates and gaps
 
@@ -378,7 +421,7 @@ External OCR service calls: 0. AI API calls: 0. Cloud conversion: 0.
 
 ## 13. The gate
 
-`scripts/research-m2-5-gate.mjs` re-asserts 72 claims, 25 of them negative
+`scripts/research-m2-5-gate.mjs` re-asserts 94 claims, 35 of them negative
 probes — checks fed input that must make them fire, so that "nothing was
 reported" can be distinguished from "nothing works". It passes at the head of
 this branch.

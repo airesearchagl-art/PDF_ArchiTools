@@ -25,12 +25,15 @@ That shapes every decision below.
 ```
    pick a representative page
              |
-   user draws four field regions on it            <- the template
+   user draws four field regions on it            <- a template
+             |
+   user names it a profile and says which pages
+   it covers                                      <- the assignment
              |
    for each page:
        geometry (upright page space, /Rotate undone)
              |
-       does the template fit this page?  --- no --> row with a reason
+       has a person assigned this page a profile?  -- no --> row with a reason
              |  yes
        per field:
            native text inside the region?
@@ -47,9 +50,10 @@ That shapes every decision below.
              |
    register: N rows for N pages, all unconfirmed
              |
-   duplicate check ------> review queue, ordered by doubt
+   duplicate check ------> review surface: every row,
+                           ordered by how much doubt there is
              |
-   the user edits and confirms rows
+   the user edits and confirms rows -- all of them
              |
    export as XLSX (the writer already in the app)
 ```
@@ -61,13 +65,40 @@ points, `/Rotate` undone. Every region, token box and render rectangle lives in
 it. This is not a new decision, it is the existing one, and reusing it is most
 of why this spike needs no new geometry code.
 
-### The template is placed by a person, not inferred
+### The template is placed by a person, and assigned by a person
 
 The user picks a page, draws four rectangles, and names them. There is no
 detector looking for a title block, and adding one is not proposed. A detector
 would produce a fifth thing to be wrong, and section 1 of `measurements.md`
 shows that even a *correct* region does not transfer between sheet sizes
 reliably enough to be trusted unattended.
+
+**Which pages a template covers is also a person's answer.** The tempting
+shortcut is to key it on sheet size — same size, same block — and this corpus
+refutes that on its own: pages 5, 6 and 7 are all A2, and page 7 is drawn to a
+different title block. Sheet size is not what varies. The drawing office's
+template is, and one issue can carry several.
+
+So a **profile** is an explicit thing: a named template, plus the coordinate
+model it transfers by. A page belongs to a profile because somebody said so —
+by page or by page range — and the assignment records who confirmed it. There
+is no inference step.
+
+A page nobody has assigned is *unassigned*, not guessed. It still produces a
+row, carrying `no confirmed template profile covers this page`, which is
+deliberately a different reason from a template that fitted and missed: one is a
+question for a person, the other is a result.
+
+**`templateFits()` is not the gate for this**, and must not become one. It
+answers a narrower question — does this rectangle still land on this page — and
+it answers *true* for every A-series sheet, including the two the assignment
+deliberately leaves out. Wiring it to assignment would auto-continue onto
+exactly the pages this design refuses to guess at, and read 0 of 8 fields while
+reporting nothing wrong. §7b.
+
+Everything in section 7 of `measurements.md` is therefore extraction
+performance *given a correct, confirmed assignment* — not evidence that the
+assignment can be made automatically.
 
 ### Field regions rasterise alone
 
@@ -154,12 +185,23 @@ on its own: page 12 is `mixed`, and only the fields say *which* value came from
 where. The gate asserts that the mixed page keeps distinct per-field sources
 through to the register.
 
+**What `rawText` means, precisely.** It is the text the extraction layer
+produced for this field, before any display transformation — not the PDF byte
+stream, and not Tesseract's internal structure. Both of those are the extraction
+layer's business, and the boundary is where a field becomes a string.
+
+Whitespace normalisation is allowed *at that boundary* and nowhere after it. The
+native reader groups tokens into lines and joins them; the OCR readers group
+words into lines and join those; whatever that step emits is the raw text, by
+definition. From the moment it reaches a candidate row it does not change again
+— not trimmed, not re-normalised, not replaced.
+
 `rawText` is kept because the value is a guess made from it. When a reviewer
-sees a wrong drawing number, the question is always "what did the sheet
-actually say", and a row that has thrown that away cannot answer. The display
-rule is applied as a *view*: changing it changes `value` and cannot change
-`rawText`, which the gate proves by building the same row under two different
-rules.
+sees a wrong drawing number, the question is always "what did the sheet actually
+say", and a row that has thrown that away cannot answer. The display rule is
+applied as a *view*: changing it changes `value` and cannot change `rawText`,
+which the gate proves by pushing a value with leading and trailing whitespace
+through both display rules and through confirmation.
 
 Confirmation records `raw`, `proposed` and `final` for every field, plus which
 fields a person actually changed. "The human agreed" and "this is what the
@@ -177,9 +219,22 @@ in the way nobody checks for.
 
 ### A row is a candidate until a person confirms it
 
-Confidence never promotes a row. It orders the queue and nothing else. A row
+Confidence never promotes a row. It orders the surface and nothing else. A row
 with four high-confidence native values and no flags at all is still
 `unconfirmed` until somebody says otherwise, and the gate asserts exactly that.
+
+**The review surface holds every row.** Not the flagged ones — all of them. An
+earlier version of this prototype returned only rows carrying a reason, which
+quietly turned "nothing flagged" into "nothing to check", and page 25 of the
+corpus is a row that is wrong and carries no flag because OCR misread it
+*confidently*. That row would have been unreachable from the surface a person
+works from.
+
+An attention queue — the flagged subset — exists as an ordering aid for a UI
+that wants to lead with the doubtful rows. It is not a work list: emptying it
+finishes nothing, and no part of the model treats it as done. The gate asserts
+the surface has one entry per input page, that page 25 is on it, and that
+filtering by flags would drop page 25.
 
 Confirmation records what was extracted alongside what was edited, so a later
 reader can see which values a person actually changed.
@@ -222,8 +277,8 @@ the geometry and workbook code already in the repository.
 
 **ADOPT** the shape above:
 
-- user-placed template, upright page space, region-only rasterising **with
-  `/Rotate` undone**
+- user-placed template **and human-confirmed profile assignment**, upright page
+  space, region-only rasterising **with `/Rotate` undone**
 - per-field source selection, with the source recorded per field
 - OCR over the union of the fields that need it, at `SINGLE_BLOCK`, local, no
   service — with words attributed back to fields, and the per-field path kept
@@ -232,22 +287,26 @@ the geometry and workbook code already in the repository.
   field, and keeps raw text through confirmation
 - the last line of a region as the *display* default, over raw text the
   reviewer always sees in full
-- one row per page with no silent loss
-- candidate-until-confirmed, confidence as a sort key only
+- one row per page with no silent loss, including pages with no assigned profile
+- candidate-until-confirmed, confidence as a sort key only, **every row on the
+  review surface**
 - duplicate detection by exact match
 - XLSX export through the existing writer; no CSV
 
 **REVISE** one piece before implementing it:
 
-**How the template transfers between sheet sizes.** No coordinate model works
-for both conventions in the corpus: normalised reads the sheets whose title
-block scales, corner-anchored reads the sheets whose block is a fixed physical
-size, and each fails the other. `templateFits()` does not detect the mismatch
-because A-series sheets share an aspect ratio. The revision is to stop trying to
-pick automatically: apply the template, show the user the proposed regions on
-the first page of each new sheet size, and have them confirm or redraw. One
-extra confirmation per sheet size, in exchange for not being confidently wrong
-on half a set.
+**How a profile is proposed for a page a person has not yet assigned.** No
+coordinate model works for both scaling conventions in the corpus: normalised
+reads the sheets whose title block scales, corner-anchored reads the sheets
+whose block is a fixed physical size, and each fails the other. Sheet size does
+not identify the profile either — two layouts share A2 here. And
+`templateFits()` cannot detect any of it.
+
+The revision is to stop trying to decide automatically at all: apply the
+assignment a person has made, and for any page outside it, show the proposed
+regions and ask. Normalised is the better default to *propose* on a new sheet
+size, and it must never be applied unattended. One confirmation per profile, in
+exchange for not being confidently wrong on half a set.
 
 **DEFER**:
 
@@ -275,3 +334,19 @@ This spike was reviewed and four findings came back, all of them real:
 4. The candidate model collapsed provenance to the row and kept only the
    transformed value. It now keeps raw text, source and confidence per field,
    through confirmation.
+
+### Second review
+
+Three more findings, all real:
+
+5. `reviewQueue()` returned only flagged rows, so the one row that is wrong
+   *and unflagged* could not be reached from the review surface. The surface
+   now holds every row; the flagged subset is an ordering aid.
+6. Template assignment was keyed on sheet size, which this corpus refutes on
+   its own — two layouts share A2. Assignment is now an explicit,
+   human-confirmed profile, `templateFits()` is barred from deciding it, and
+   the end-to-end numbers are documented as holding *given* a correct
+   assignment.
+7. The architecture said `rawText` was never trimmed while `buildRow()` trimmed
+   it. The contract is now stated precisely — the extraction layer's output,
+   before display transformation — and the implementation matches it.
