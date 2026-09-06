@@ -99,11 +99,29 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
         setBusy(false);
     }, []);
 
+    /**
+     * The workbook URL is owned by a ref, and mirrored into state for rendering.
+     *
+     * Revoking it inside a state updater looked equivalent and was not: React
+     * does not run an updater for a component that is unmounting, so the
+     * revoke in the unmount path never happened and the blob outlived the
+     * screen. Ownership and rendering are separated here so the URL can always
+     * be released, including from a cleanup that must not touch state at all.
+     */
+    const workbookUrlRef = useRef<string | null>(null);
+
     const dropWorkbook = useCallback(() => {
-        setWorkbookUrl((previous) => {
-            if (previous) URL.revokeObjectURL(previous);
-            return null;
-        });
+        const previous = workbookUrlRef.current;
+        workbookUrlRef.current = null;
+        if (previous) URL.revokeObjectURL(previous);
+        setWorkbookUrl(null);
+    }, []);
+
+    const publishWorkbook = useCallback((url: string) => {
+        const previous = workbookUrlRef.current;
+        workbookUrlRef.current = url;
+        if (previous && previous !== url) URL.revokeObjectURL(previous);
+        setWorkbookUrl(url);
     }, []);
 
     /**
@@ -136,7 +154,37 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
         dropWorkbook();
     }, [doc, dropWorkbook]);
 
-    useEffect(() => () => dropWorkbook(), [dropWorkbook]);
+    /**
+     * Leaving the Excel workflow closes everything it started.
+     *
+     * Not a formality. Switching the output format unmounts this component
+     * while a page analysis, a reconstruction or a workbook build can still be
+     * awaiting, and each of those would otherwise run to completion for a
+     * screen that is gone: finishing a zip nobody will download, painting a
+     * canvas that is detached, holding a blob alive.
+     *
+     * So all three generations move, which is the same rule the component uses
+     * everywhere else -- a job whose generation has moved publishes nothing.
+     * The render task is cancelled, and the workbook URL is released directly
+     * rather than through state, because state updates do not run here.
+     */
+    useEffect(() => () => {
+        pageGeneration.current++;
+        selectionGeneration.current++;
+        workbookGeneration.current++;
+        // Nobody owns the flag any more, so a late release finds a mismatch
+        // and does nothing rather than reaching for a screen that is gone.
+        busyOwner.current = null;
+
+        try {
+            renderTaskRef.current?.cancel();
+        } catch { /* a task that has already settled cannot be cancelled */ }
+        renderTaskRef.current = null;
+
+        const url = workbookUrlRef.current;
+        workbookUrlRef.current = null;
+        if (url) URL.revokeObjectURL(url);
+    }, []);
 
     /**
      * Render the page and read its geometry.
@@ -195,6 +243,9 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
                 const message = err instanceof Error ? err.message : String(err);
                 if (!/cancel/i.test(message)) setError(message);
             } finally {
+                // The page proxy is released whichever way this ended, so a
+                // superseded or unmounted analysis does not hold one open. The
+                // document itself belongs to the caller and is left alone.
                 page?.cleanup();
                 // Only the current analysis clears the flag. A superseded one
                 // clearing it would announce that a page it no longer owns has
@@ -202,6 +253,16 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
                 if (pageGeneration.current === id) setAnalysing(false);
             }
         })();
+
+        // Runs before the next page's effect, and on unmount. Cancelling here
+        // means a render for a page being left cannot paint over the one
+        // replacing it, or over a canvas that is no longer on screen.
+        return () => {
+            try {
+                renderTaskRef.current?.cancel();
+            } catch { /* already settled */ }
+            renderTaskRef.current = null;
+        };
     }, [doc, pageNumber]);
 
     const pointIn = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -354,8 +415,7 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
             const built = await buildWorkbook(snapshot, { shouldCancel: stale });
             if (stale()) return;
             const blob = new Blob([built.bytes as BlobPart], { type: XLSX_MIME });
-            dropWorkbook();
-            setWorkbookUrl(URL.createObjectURL(blob));
+            publishWorkbook(URL.createObjectURL(blob));
         } catch (err) {
             if (stale()) return;
             setError(err instanceof Error ? err.message : String(err));
