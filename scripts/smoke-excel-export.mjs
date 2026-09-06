@@ -293,6 +293,43 @@ try {
     check('a native page after a scanned one still reconstructs',
         gridEquals(page3.grid, mixedTruth.pages[2].tables[0].expected), `${page3.rows}x${page3.cols}`);
 
+    // ---- the native/scanned boundary is the classifier's, not a token count --
+    console.log('\n=== classification boundary ===');
+    const marginGeom = await page.evaluate(() => window.__excel.geometry('scanned-margin-text'));
+    const interiorGeom = await page.evaluate(() => window.__excel.geometry('native-interior-text'));
+    console.log(`  scanned-margin-text : scanned=${marginGeom.scanned} allChars=${marginGeom.allChars} interiorChars=${marginGeom.interiorChars} tokens=${marginGeom.tokens}`);
+    console.log(`  native-interior-text: scanned=${interiorGeom.scanned} allChars=${interiorGeom.allChars} interiorChars=${interiorGeom.interiorChars} tokens=${interiorGeom.tokens}`);
+
+    check('a scanned sheet with vector text in the margin still counts as scanned',
+        marginGeom.scanned === true, `scanned=${marginGeom.scanned}`);
+    check('and it really does carry that marginal text, so the case is the hard one',
+        marginGeom.allChars > 0, `${marginGeom.allChars} characters on the page`);
+    check('none of that text is in the content region, which is what decides',
+        marginGeom.interiorChars === 0, `${marginGeom.interiorChars} interior characters`);
+    check('a scanned page hands over no tokens at all, so nothing can be built from a stamp',
+        marginGeom.tokens === 0, `${marginGeom.tokens} tokens`);
+
+    const ocrBeforeMargin = ocrAssets.length;
+    const marginResult = await page.evaluate(() => window.__excel.reconstruct('scanned-margin-text',
+        { left: 40, top: 60, right: 560, bottom: 700 }));
+    check('selecting on it is declined, not half-answered',
+        marginResult.status === 'UNSUPPORTED_LAYOUT' && marginResult.rows === 0, marginResult.status);
+    check('and no OCR is started for it either',
+        ocrAssets.length === ocrBeforeMargin, `${ocrAssets.length - ocrBeforeMargin} OCR requests`);
+
+    // The control: the same marginal furniture, with a real table in the body.
+    const interiorTruth = truthOf('native-interior-text');
+    const interior = await page.evaluate((r) => window.__excel.reconstruct('native-interior-text', r),
+        grow(boxOf(interiorTruth), 4));
+    check('a genuine native table with the same margin furniture is still supported',
+        interiorGeom.scanned === false
+        && gridEquals(interior.grid, interiorTruth.pages[0].tables[0].expected),
+        `${interior.rows}x${interior.cols}`);
+    check('the two fixtures differ only in whether the body has text',
+        marginGeom.allChars > 0 && interiorGeom.allChars > marginGeom.allChars
+        && interiorGeom.interiorChars > 0,
+        `margin ${marginGeom.allChars}/${marginGeom.interiorChars}, interior ${interiorGeom.allChars}/${interiorGeom.interiorChars}`);
+
     // ---- the geometry bound ---------------------------------------------------------
     console.log('\n=== dense selection ===');
     const denseTruth = truthOf('native-dense-borderless');

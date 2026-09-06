@@ -17,6 +17,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 
+import { classifyPage } from './classify';
 import type { PageGeometry, RulingSegment, SelectionRect, TableToken } from './table-types';
 
 /** Shorter than this in both directions and it is not a line, it is a dot. */
@@ -264,7 +265,23 @@ export async function analysePageGeometry(
     try {
         const viewport = page.getViewport({ scale: 1 });
         const rotate = page.rotate ?? 0;
-        const tokens = await readTokens(page, viewport);
+
+        // Whether the page is usable native text is the pipeline's existing
+        // question, and it is answered by the pipeline's existing classifier.
+        //
+        // "Has any text at all" is not the same question and is the wrong one.
+        // A scanned drawing routinely keeps a page number, a header or a
+        // drawing-number stamp as real vector text in the margin; counting
+        // those would call the sheet native and offer to extract a table from
+        // a raster. classifyPage() ignores the outer margin for exactly this
+        // reason, and reusing it keeps one definition rather than two that can
+        // drift apart.
+        const classification = await classifyPage(page);
+        const scanned = classification.kind === 'scanned';
+
+        // Fail closed: a scanned page hands over nothing to reconstruct from,
+        // so marginal text cannot become a one-cell "table".
+        const tokens = scanned ? [] : await readTokens(page, viewport);
         const segments = tokens.length ? await readRulingSegments(page, viewport) : [];
         const quarter = ((rotate % 360) + 360) % 360 % 180 === 90;
         return {
@@ -276,7 +293,9 @@ export async function analysePageGeometry(
             uprightHeight: quarter ? viewport.width : viewport.height,
             tokens,
             segments,
-            scanned: tokens.length === 0,
+            scanned,
+            allChars: classification.allChars,
+            interiorChars: classification.interiorChars,
         };
     } finally {
         page.cleanup();

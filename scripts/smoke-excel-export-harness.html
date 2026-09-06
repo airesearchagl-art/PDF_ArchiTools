@@ -49,6 +49,8 @@ window.__excel = {
       tokens: g.tokens.length,
       segments: g.segments.length,
       scanned: g.scanned,
+      allChars: g.allChars,
+      interiorChars: g.interiorChars,
       firstTokens: g.tokens.slice(0, 3),
       whitespaceTokens: g.tokens.filter((t) => t.text.trim() === '').length,
       zeroHeight: g.tokens.filter((t) => t.height === 0).length,

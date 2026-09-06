@@ -34,6 +34,16 @@ const PX_H = 1754;
 const PX_TO_PT = A4_W / PX_W;
 const EPOCH = new Date(0);
 
+/**
+ * The classifier's margin, not a second one.
+ *
+ * classify.ts ignores this fraction of each edge when deciding whether a page
+ * has usable native text. The margin-text fixture has to place its text inside
+ * that same band, so the constant is stated once here and referenced rather
+ * than a similar-looking number being chosen independently.
+ */
+const MARGIN_RATIO = 0.125;
+
 if (!fs.existsSync(FONT)) {
     console.error(`Missing ${FONT} - run node scripts/setup-ocr-assets.mjs first.`);
     process.exit(1);
@@ -412,6 +422,60 @@ for (const rotate of [0, 90, 180, 270]) {
     await write('scanned-ruled', doc, {
         kind: 'scanned', source: 'scanned',
         pages: [{ page: 1, rotate: 0, tables: [] }],
+    });
+}
+
+// 14b: a scanned sheet that still carries vector text in the margin.
+//
+// The trap the page classifier exists for. A scanned drawing routinely keeps a
+// page number, a header and a drawing-number stamp as real text even though
+// every usable word is raster -- so "does this page have any text" would call
+// it native and offer to extract a table from an image.
+//
+// The margin here is the classifier's own: MARGIN_RATIO = 0.125 of each edge,
+// referenced rather than re-guessed, so the fixture cannot drift away from the
+// rule it is testing.
+{
+    const { doc, font } = await newDoc();
+    const png = await rasterTable(SCAN_HTML);
+    const image = await doc.embedPng(png);
+    const p = page(doc);
+    p.drawImage(image, { x: 0, y: 0, width: A4_W, height: A4_H });
+
+    // Everything below sits strictly inside the outer 12.5% of an edge.
+    const marginX = A4_W * MARGIN_RATIO;
+    const marginY = A4_H * MARGIN_RATIO;
+    const inset = 14;
+    p.drawText('A-201', { x: A4_W - marginX + 8, y: A4_H - inset, size: 8, font, color: rgb(0, 0, 0) });
+    p.drawText('- 3 -', { x: A4_W / 2 - 10, y: inset, size: 8, font, color: rgb(0, 0, 0) });
+    p.drawText('○○ビル新築工事', { x: inset, y: A4_H - inset, size: 8, font, color: rgb(0, 0, 0) });
+    void marginY;
+
+    await write('scanned-margin-text', doc, {
+        kind: 'scanned', source: 'scanned',
+        why: 'raster table in the body, vector text only in the margin: must still be scanned',
+        marginRatio: MARGIN_RATIO,
+        pages: [{ page: 1, rotate: 0, tables: [] }],
+    });
+}
+
+// 14c: the control. Real native text in the page interior.
+{
+    const { doc, font } = await newDoc();
+    const p = page(doc);
+    // The same marginal furniture, so the two fixtures differ only in whether
+    // there is usable text in the body.
+    const inset = 14;
+    const marginX = A4_W * MARGIN_RATIO;
+    p.drawText('A-201', { x: A4_W - marginX + 8, y: A4_H - inset, size: 8, font, color: rgb(0, 0, 0) });
+    p.drawText('- 3 -', { x: A4_W / 2 - 10, y: inset, size: 8, font, color: rgb(0, 0, 0) });
+    drawLines(p, font, 60, 60, ['仕上表 / FINISH SCHEDULE'], 14);
+    const table = drawTable(p, font, { x: 60, yTop: 110, ...SIMPLE });
+    await write('native-interior-text', doc, {
+        kind: 'positive', source: 'native',
+        why: 'the control for scanned-margin-text: same margin furniture, real table in the body',
+        marginRatio: MARGIN_RATIO,
+        pages: [{ page: 1, rotate: 0, tables: [uprightTruth(table, 0)] }],
     });
 }
 

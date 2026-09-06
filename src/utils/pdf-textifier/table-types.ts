@@ -52,8 +52,19 @@ export interface PageGeometry {
     uprightHeight: number;
     tokens: TableToken[];
     segments: RulingSegment[];
-    /** True when the page carries no text of its own and would need OCR. */
+    /**
+     * True when the pipeline's own classifier calls this page scanned.
+     *
+     * Not "no text was found". A scanned sheet often keeps a page number or a
+     * drawing-number stamp as vector text in the margin, and that must not make
+     * the raster drawing a native page. When this is true, `tokens` is empty by
+     * construction, so nothing can be reconstructed from marginal text.
+     */
     scanned: boolean;
+    /** Characters found anywhere on the page, margin included. */
+    allChars: number;
+    /** Characters found inside the content region, which is what decides. */
+    interiorChars: number;
 }
 
 /**

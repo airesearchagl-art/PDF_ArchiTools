@@ -59,16 +59,45 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
     const [error, setError] = useState<string | null>(null);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
+
     /**
-     * Which analysis the screen is currently interested in.
+     * Three separate identities, because three separate jobs can be in flight.
      *
-     * Every asynchronous step captures this and checks it before writing any
-     * state back. A reconstruction that finishes after the user has moved to
-     * another page or drawn another rectangle must not overwrite what is on
-     * screen now -- a late result silently replacing a newer one is the kind of
-     * bug that shows the wrong table under the right heading.
+     * One counter for all of them looks tidier and is wrong: drawing a
+     * rectangle would then invalidate the page analysis that the rectangle
+     * needs, so the analysis would abandon itself, never clear `analysing`, and
+     * leave the reconstruction to run against the previous page's geometry
+     * while the canvas shows the new page.
+     *
+     * So each job owns its own generation and only ever checks its own. A job
+     * that has been superseded publishes nothing at all -- not a result, not an
+     * error, and not a cleared busy flag belonging to whatever replaced it.
      */
-    const runId = useRef(0);
+    const pageGeneration = useRef(0);
+    const selectionGeneration = useRef(0);
+    const workbookGeneration = useRef(0);
+
+    /**
+     * Who owns the busy flag.
+     *
+     * "Only the current operation clears busy" is half a rule, and the missing
+     * half strands the screen: an export that is overtaken must not clear a
+     * newer operation's flag, but if nothing newer took the flag then nobody
+     * clears it and the screen stays busy for good. So the flag is owned. An
+     * operation clears it only while it is still the owner, which is false
+     * exactly when something newer has claimed it.
+     */
+    const busyOwner = useRef<string | null>(null);
+    const claimBusy = useCallback((owner: string) => {
+        busyOwner.current = owner;
+        setBusy(true);
+    }, []);
+    const releaseBusy = useCallback((owner: string) => {
+        if (busyOwner.current !== owner) return;
+        busyOwner.current = null;
+        setBusy(false);
+    }, []);
 
     const dropWorkbook = useCallback(() => {
         setWorkbookUrl((previous) => {
@@ -77,9 +106,15 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
         });
     }, []);
 
-    /** Anything that changes what is being looked at invalidates the proposal. */
+    /**
+     * Drop the current proposal.
+     *
+     * Bumps the selection generation only. The page analysis is a different job
+     * with a different lifetime, and invalidating it here is what used to leave
+     * the screen loading forever.
+     */
     const clearProposal = useCallback(() => {
-        runId.current++;
+        selectionGeneration.current++;
         setSelection(null);
         setCandidate(null);
         setDraft(null);
@@ -88,8 +123,11 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
 
     // A new file means nothing that came before it is still true.
     useEffect(() => {
-        runId.current++;
+        pageGeneration.current++;
+        selectionGeneration.current++;
+        workbookGeneration.current++;
         setPageNumber(1);
+        setGeometry(null);
         setSelection(null);
         setCandidate(null);
         setDraft(null);
@@ -100,10 +138,19 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
 
     useEffect(() => () => dropWorkbook(), [dropWorkbook]);
 
-    // Render the page and read its geometry.
+    /**
+     * Render the page and read its geometry.
+     *
+     * The geometry is cleared before the new page is read, not after. Keeping
+     * the previous page's tokens on screen while the next page paints is how a
+     * rectangle drawn during the transition ends up reconstructing the page the
+     * user just left.
+     */
     useEffect(() => {
-        const id = ++runId.current;
-        let abandoned = false;
+        const id = ++pageGeneration.current;
+        // Whatever was proposed belonged to the page being left.
+        selectionGeneration.current++;
+        setGeometry(null);
         setAnalysing(true);
         setSelection(null);
         setCandidate(null);
@@ -111,32 +158,50 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
         setError(null);
 
         (async () => {
+            let page: pdfjsLib.PDFPageProxy | null = null;
             try {
-                const page = await doc.getPage(pageNumber);
+                page = await doc.getPage(pageNumber);
+                if (pageGeneration.current !== id) return;
                 const base = page.getViewport({ scale: 1 });
                 const renderScale = RENDER_WIDTH / base.width;
                 const viewport = page.getViewport({ scale: renderScale });
                 const canvas = canvasRef.current;
                 if (canvas) {
+                    // A render still running for the previous page would paint
+                    // over this one after it had won. pdf.js can cancel it.
+                    renderTaskRef.current?.cancel();
                     canvas.width = Math.ceil(viewport.width);
                     canvas.height = Math.ceil(viewport.height);
                     const ctx = canvas.getContext('2d');
-                    if (ctx) await page.render({ canvas, viewport, intent: 'print' }).promise;
+                    if (ctx) {
+                        const task = page.render({ canvas, viewport, intent: 'print' });
+                        renderTaskRef.current = task;
+                        try {
+                            await task.promise;
+                        } finally {
+                            if (renderTaskRef.current === task) renderTaskRef.current = null;
+                        }
+                    }
                 }
-                page.cleanup();
+                if (pageGeneration.current !== id) return;
                 const analysed = await analysePageGeometry(doc, pageNumber);
-                if (abandoned || runId.current !== id) return;
+                if (pageGeneration.current !== id) return;
                 setScale(renderScale);
                 setGeometry(analysed);
             } catch (err) {
-                if (abandoned || runId.current !== id) return;
-                setError(err instanceof Error ? err.message : String(err));
+                if (pageGeneration.current !== id) return;
+                // A cancelled render is this effect being superseded, not a
+                // failure worth putting on the screen.
+                const message = err instanceof Error ? err.message : String(err);
+                if (!/cancel/i.test(message)) setError(message);
             } finally {
-                if (!abandoned && runId.current === id) setAnalysing(false);
+                page?.cleanup();
+                // Only the current analysis clears the flag. A superseded one
+                // clearing it would announce that a page it no longer owns has
+                // finished loading.
+                if (pageGeneration.current === id) setAnalysing(false);
             }
         })();
-
-        return () => { abandoned = true; };
     }, [doc, pageNumber]);
 
     const pointIn = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -149,10 +214,29 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
         };
     };
 
+    /**
+     * Whether a rectangle may be started at all.
+     *
+     * The geometry has to exist, be finished loading, describe *this* page, and
+     * be a page Excel supports. Checking only that geometry exists lets a drag
+     * during a page transition reconstruct the previous page against the new
+     * page's picture.
+     */
+    const selectable = Boolean(
+        geometry && !analysing && !busy
+        && geometry.pageNumber === pageNumber
+        && !geometry.scanned,
+    );
+
     const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-        if (!geometry || geometry.scanned) return;
+        if (!selectable || !geometry) return;
         const p = pointIn(event);
-        event.currentTarget.setPointerCapture(event.pointerId);
+        // Capture is a convenience, not a requirement: a pointer that is
+        // already gone makes this throw, and losing the drag is better than
+        // taking the screen down with it.
+        try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+        } catch { /* the pointer is no longer capturable */ }
         clearProposal();
         setDrag({ startX: p.x, startY: p.y, x: p.x, y: p.y });
     };
@@ -164,29 +248,35 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
     };
 
     const handlePointerUp = async (event: React.PointerEvent<HTMLCanvasElement>) => {
-        if (!drag || !geometry) return;
+        if (!drag) return;
         const canvasRect = rectOf(drag);
         setDrag(null);
+        if (!selectable || !geometry) return;
         // A click rather than a drag: nothing was selected.
         if (canvasRect.right - canvasRect.left < 8 || canvasRect.bottom - canvasRect.top < 8) return;
         event.currentTarget.releasePointerCapture?.(event.pointerId);
 
-        const id = ++runId.current;
-        const upright = canvasRectToUpright(canvasRect, scale, geometry);
+        // The geometry this run is about, captured now. If the page changes
+        // underneath, the page generation moves and this run publishes nothing.
+        const target = geometry;
+        const pageAtStart = pageGeneration.current;
+        const id = ++selectionGeneration.current;
+        const stale = () => selectionGeneration.current !== id || pageGeneration.current !== pageAtStart;
+
+        const upright = canvasRectToUpright(canvasRect, scale, target);
+        const owner = `selection:${id}`;
         setSelection(canvasRect);
-        setBusy(true);
+        claimBusy(owner);
         try {
-            const result = await reconstructSelection(geometry, upright, {
-                shouldCancel: () => runId.current !== id,
-            });
-            if (runId.current !== id) return;
+            const result = await reconstructSelection(target, upright, { shouldCancel: stale });
+            if (stale()) return;
             setCandidate(result);
             setDraft(result.grid.length ? result.grid.map((row) => [...row]) : null);
         } catch (err) {
-            if (runId.current !== id) return;
+            if (stale()) return;
             setError(err instanceof Error ? err.message : String(err));
         } finally {
-            if (runId.current === id) setBusy(false);
+            releaseBusy(owner);
         }
     };
 
@@ -205,6 +295,7 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
             return next;
         });
         // The workbook on disk no longer matches what is on screen.
+        workbookGeneration.current++;
         dropWorkbook();
     };
 
@@ -228,27 +319,48 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
         setCandidate(null);
         setDraft(null);
         setSelection(null);
+        // The set the workbook would be built from has changed, so any export
+        // already running is about a set that no longer exists.
+        workbookGeneration.current++;
         dropWorkbook();
     };
 
     const removeTable = (id: string) => {
         setConfirmed((previous) => previous.filter((t) => t.id !== id));
+        workbookGeneration.current++;
         dropWorkbook();
     };
 
+    /**
+     * Build the workbook from the tables confirmed *now*.
+     *
+     * Two things make this safe to run while the user keeps working. The set is
+     * snapshotted before the await, so the file is built from an explicit list
+     * rather than from whatever state happens to hold when it finishes. And the
+     * run carries a generation: adding, removing or editing a confirmed table
+     * moves it, and a run that has been overtaken publishes nothing -- no blob
+     * URL, no error, and not a cleared busy flag belonging to a newer export.
+     */
     const exportWorkbook = async () => {
         if (!confirmed.length) return;
-        setBusy(true);
+        const snapshot = confirmed.map((table) => ({ ...table, grid: table.grid.map((row) => [...row]) }));
+        const id = ++workbookGeneration.current;
+        const stale = () => workbookGeneration.current !== id;
+
+        const owner = `workbook:${id}`;
+        claimBusy(owner);
         setError(null);
         try {
-            const built = await buildWorkbook(confirmed);
+            const built = await buildWorkbook(snapshot, { shouldCancel: stale });
+            if (stale()) return;
             const blob = new Blob([built.bytes as BlobPart], { type: XLSX_MIME });
             dropWorkbook();
             setWorkbookUrl(URL.createObjectURL(blob));
         } catch (err) {
+            if (stale()) return;
             setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setBusy(false);
+            releaseBusy(owner);
         }
     };
 
@@ -286,13 +398,19 @@ export const ExcelTableExporter: React.FC<Props> = ({ file, doc }) => {
                 <canvas
                     ref={canvasRef}
                     data-usage-target="excel-page-canvas"
+                    // Which page the geometry under this canvas describes, and
+                    // whether a rectangle may be drawn on it yet. Both are on
+                    // the element so the state is legible from outside rather
+                    // than only inferable from what happens next.
+                    data-geometry-page={geometry?.pageNumber ?? ''}
+                    data-selectable={selectable ? 'true' : 'false'}
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
                     style={{
                         maxWidth: '100%',
                         touchAction: 'none',
-                        cursor: unsupported ? 'not-allowed' : 'crosshair',
+                        cursor: selectable ? 'crosshair' : 'not-allowed',
                     }}
                 />
                 {(drag || selection) && (

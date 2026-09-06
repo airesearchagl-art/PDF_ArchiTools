@@ -219,7 +219,7 @@ try {
 
     // Page 2 is scanned: it must decline, and never start OCR.
     const ocrBefore = ocrAssets.length;
-    await page.click('[aria-label="次のページ"]');
+    await page.evaluate(() => { document.querySelector('[aria-label="次のページ"]').click(); });
     await wait(1200);
     const scannedNotice = await page.$('[data-usage-target="excel-scanned-notice"]');
     check('a scanned page says so instead of offering an empty table', scannedNotice !== null);
@@ -228,7 +228,7 @@ try {
     check('reaching a scanned page in Excel mode starts no OCR',
         ocrAssets.length === ocrBefore, `${ocrAssets.length - ocrBefore} OCR requests`);
 
-    await page.click('[aria-label="次のページ"]');
+    await page.evaluate(() => { document.querySelector('[aria-label="次のページ"]').click(); });
     await wait(1200);
     await dragOnCanvas(canvasRectFor('mixed-native-scanned', await canvasPixelWidth(), 0, 2));
     const thirdGrid = await previewGrid();
@@ -368,6 +368,240 @@ try {
     check('replacing the file clears every confirmed table',
         afterReplace.includes('確定した表: 0'), afterReplace.replace(/\s+/g, ' ').slice(0, 60));
     check('and leaves no download behind', !(await downloadPresent()));
+
+    // ---- races, provoked deterministically -----------------------------------
+    //
+    // Not "navigate, sleep, hope". Each probe does the two conflicting things
+    // inside one page.evaluate, so the second happens while the first is
+    // provably still in flight: an async page analysis or an awaited zip cannot
+    // complete between two synchronous statements.
+    console.log('\n=== page-transition race ===');
+    await openExcelMode('mixed-native-scanned');
+    const beforeRace = await page.$eval('[data-usage-target="excel-page-canvas"]',
+        (c) => ({ page: c.dataset.geometryPage, selectable: c.dataset.selectable }));
+    console.log(`  settled on page 1: geometry-page=${beforeRace.page} selectable=${beforeRace.selectable}`);
+    check('page 1 settles with geometry that names page 1 and allows selection',
+        beforeRace.page === '1' && beforeRace.selectable === 'true',
+        `page=${beforeRace.page} selectable=${beforeRace.selectable}`);
+
+    // The transition window is short, and polling for it is a race of its own.
+    // So it is *recorded* instead: a MutationObserver watches the canvas's own
+    // state attributes, and the drag is dispatched from inside the observer the
+    // first time the transition state appears. The drag is then guaranteed to
+    // land while the new page is being analysed, rather than probably.
+    await page.evaluate(() => {
+        const canvas = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        window.__race = { states: [], dragged: false, draggedIn: null };
+        const record = () => ({ selectable: canvas.dataset.selectable, page: canvas.dataset.geometryPage });
+        window.__race.states.push(record());
+        const observer = new MutationObserver(() => {
+            const state = record();
+            window.__race.states.push(state);
+            // The two attributes are committed as separate mutations, so the
+            // first record can still carry the old page number. Selection being
+            // refused is the condition that matters, and it is the earliest
+            // moment of the transition -- the strictest place to try a drag.
+            if (!window.__race.dragged && state.selectable === 'false') {
+                window.__race.dragged = true;
+                window.__race.draggedIn = state;
+                // Signalled through the DOM, not a window global: the wait
+                // below runs in a different JS world and would never see one.
+                document.body.dataset.raceDragged = 'true';
+                const box = canvas.getBoundingClientRect();
+                const at = (x, y) => ({
+                    clientX: box.left + x, clientY: box.top + y,
+                    bubbles: true, pointerId: 1, isPrimary: true,
+                });
+                canvas.dispatchEvent(new PointerEvent('pointerdown', at(70, 130)));
+                canvas.dispatchEvent(new PointerEvent('pointermove', at(560, 240)));
+                canvas.dispatchEvent(new PointerEvent('pointerup', at(560, 240)));
+            }
+        });
+        observer.observe(canvas, { attributes: true });
+        window.__race.observer = observer;
+        // The navigation is started here, in the same block that installed the
+        // observer, so nothing can happen between the two.
+        document.querySelector('[aria-label="次のページ"]').click();
+    });
+
+    await page.waitForFunction(() => document.body.dataset.raceDragged === 'true', { timeout: 30_000 });
+    const duringRace = await page.evaluate(() => {
+        window.__race.observer.disconnect();
+        delete document.body.dataset.raceDragged;
+        return { states: window.__race.states, draggedIn: window.__race.draggedIn };
+    });
+    console.log(`  states seen: ${duringRace.states.map((x) => `${x.selectable}/${x.page || '-'}`).join(' -> ')}`);
+    console.log(`  drag fired while: selectable=${duringRace.draggedIn.selectable} geometry-page="${duringRace.draggedIn.page}"`);
+    check('the transition really does pass through a state with no usable geometry',
+        duringRace.states.some((x) => x.selectable === 'false' && x.page === ''),
+        duringRace.states.map((x) => `${x.selectable}/${x.page || '-'}`).join(' '));
+    check('selection is refused in that state',
+        duringRace.draggedIn.selectable === 'false', duringRace.draggedIn.selectable);
+    check('and the transition drops the old page geometry rather than leaving it under the new canvas',
+        duringRace.states.some((x) => x.page === ''),
+        duringRace.states.map((x) => x.page || '-').join(' '));
+    check('a drag made in that state produces no proposal at all',
+        (await previewGrid()) === null);
+
+    // The analysis the drag tried to interrupt still has to finish.
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.geometryPage === '2';
+    }, { timeout: 30_000 });
+    const afterRace = await page.evaluate(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return {
+            geometryPage: c.dataset.geometryPage,
+            selectable: c.dataset.selectable,
+            analysing: document.body.innerText.includes('解析中'),
+            scannedNotice: document.querySelector('[data-usage-target="excel-scanned-notice"]') !== null,
+        };
+    });
+    console.log(`  after: geometry-page=${afterRace.geometryPage} selectable=${afterRace.selectable} analysing=${afterRace.analysing}`);
+    check('the interrupted page analysis still completes',
+        afterRace.geometryPage === '2', afterRace.geometryPage);
+    check('the loading state settles rather than sticking on',
+        afterRace.analysing === false, `analysing=${afterRace.analysing}`);
+    check('page 2 is correctly shown as scanned, from its own geometry',
+        afterRace.scannedNotice === true && afterRace.selectable === 'false');
+    check('still no proposal from the previous page', (await previewGrid()) === null);
+
+    // And the page after it reconstructs normally, with its own table.
+    await page.waitForFunction(() => {
+        const b = document.querySelector('[aria-label="次のページ"]');
+        return b && !b.disabled;
+    }, { timeout: 30_000 });
+    // Clicked in the page: the nav sits above the scrolled-to canvas, and a
+    // hit-tested click from outside does not always land on it.
+    await page.evaluate(() => { document.querySelector('[aria-label="次のページ"]').click(); });
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.geometryPage === '3' && c.dataset.selectable === 'true';
+    }, { timeout: 30_000 });
+    await dragOnCanvas(canvasRectFor('mixed-native-scanned', await canvasPixelWidth(), 0, 2));
+    const page3Grid = await previewGrid();
+    console.log(`  page 3 after the race: ${page3Grid?.length}x${page3Grid?.[0]?.length} first cell ${JSON.stringify(page3Grid?.[0]?.[0])}`);
+    check('a normal drag after the race reconstructs the page actually on screen',
+        page3Grid?.length === 5 && page3Grid?.[0]?.[0] === '部材',
+        `${page3Grid?.length}x${page3Grid?.[0]?.length}`);
+
+    // ---- workbook generation race ---------------------------------------------
+    console.log('\n=== workbook race ===');
+    await openExcelMode('native-ruled-simple');
+    await dragOnCanvas(canvasRectFor('native-ruled-simple', await canvasPixelWidth()));
+    await page.click('[data-usage-target="excel-confirm"]');
+    await wait(300);
+
+    // Export and remove the only confirmed table in the same synchronous block,
+    // so the removal lands while the zip is still being built.
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="excel-export"]').click();
+        const remove = document.querySelector('[data-usage-target="excel-confirmed"] button[aria-label$="を削除"]');
+        remove.click();
+    });
+    await wait(1500);
+    const afterStaleExport = await page.evaluate(() => ({
+        download: document.querySelector('[data-usage-target="excel-download"]') !== null,
+        confirmedText: document.querySelector('[data-usage-target="excel-confirmed"]').innerText.replace(/\s+/g, ' '),
+        error: document.querySelector('[role="alert"]')?.textContent ?? null,
+    }));
+    console.log(`  after the stale export: download=${afterStaleExport.download} error=${JSON.stringify(afterStaleExport.error)}`);
+    check('an export overtaken by a change to the confirmed set publishes no download',
+        afterStaleExport.download === false);
+    check('and it does not report an error as though it were the current operation',
+        afterStaleExport.error === null, afterStaleExport.error ?? '');
+    check('the confirmed set really did change under it',
+        afterStaleExport.confirmedText.includes('確定した表: 0'),
+        afterStaleExport.confirmedText.slice(0, 40));
+
+    // The screen has to be usable again afterwards: an abandoned export must
+    // not leave it busy for good.
+    const idleAfterStale = await page.$eval('[data-usage-target="excel-page-canvas"]',
+        (c) => c.dataset.selectable);
+    check('an abandoned export leaves the screen idle, not busy for ever',
+        idleAfterStale === 'true', `selectable=${idleAfterStale}`);
+
+    // The current set still exports, and what comes out is the current set.
+    await dragOnCanvas(canvasRectFor('native-ruled-simple', await canvasPixelWidth()));
+    await page.click('[data-usage-target="excel-preview"] textarea[data-cell="0,0"]', { clickCount: 3 });
+    await page.keyboard.press('Backspace');
+    await page.type('[data-usage-target="excel-preview"] textarea[data-cell="0,0"]', 'レース後');
+    await page.click('[data-usage-target="excel-confirm"]');
+    await wait(300);
+    await page.click('[data-usage-target="excel-export"]');
+    await page.waitForSelector('[data-usage-target="excel-download"]', { timeout: 30_000 });
+    check('the current confirmed set exports normally afterwards', await downloadPresent());
+
+    await page.click('[data-usage-target="excel-download"]');
+    let raceFile = null;
+    for (let i = 0; i < 60 && !raceFile; i++) {
+        const found = fs.readdirSync(downloads).find((f) => f === 'native-ruled-simple_tables.xlsx');
+        if (found) raceFile = path.join(downloads, found);
+        else await wait(200);
+    }
+    check('and it downloads', raceFile !== null);
+    if (raceFile) {
+        const zip = await JSZip.loadAsync(fs.readFileSync(raceFile));
+        const workbookXml = await zip.file('xl/workbook.xml').async('string');
+        const sheet = await zip.file('xl/worksheets/sheet1.xml').async('string');
+        const sheetCount = (workbookXml.match(/<sheet /g) ?? []).length;
+        console.log(`  downloaded after the race: ${sheetCount} sheet(s), A1 contains レース後 = ${sheet.includes('レース後')}`);
+        check('the downloaded workbook holds only the current confirmed table',
+            sheetCount === 1, String(sheetCount));
+        check('and its contents are the current edit, not the removed table',
+            sheet.includes('レース後') && !sheet.includes('>室名<'),
+            sheet.includes('レース後') ? 'current edit present' : 'current edit missing');
+    }
+
+    // A file replacement during an in-flight export is the same class of race.
+    console.log('\n=== export interrupted by a file replacement ===');
+    await openExcelMode('native-ruled-simple');
+    await dragOnCanvas(canvasRectFor('native-ruled-simple', await canvasPixelWidth()));
+    await page.click('[data-usage-target="excel-confirm"]');
+    await wait(300);
+    await page.evaluate(() => { document.querySelector('[data-usage-target="excel-export"]').click(); });
+    const replaceInput = await page.$('input[type="file"]');
+    await replaceInput.uploadFile(path.join(FIX, 'native-sparse.pdf'));
+    await wait(1800);
+    const afterReplaceRace = await page.evaluate(() => ({
+        download: document.querySelector('[data-usage-target="excel-download"]') !== null,
+        confirmedText: document.querySelector('[data-usage-target="excel-confirmed"]')?.innerText.replace(/\s+/g, ' ') ?? '',
+    }));
+    check('an export interrupted by a new file publishes no download',
+        afterReplaceRace.download === false);
+    check('and the new file starts with nothing confirmed',
+        afterReplaceRace.confirmedText.includes('確定した表: 0'),
+        afterReplaceRace.confirmedText.slice(0, 40));
+
+    // ---- classification boundary, through the UI --------------------------------
+    console.log('\n=== scanned page with margin text, in the UI ===');
+    const ocrBeforeMargin = ocrAssets.length;
+    await openExcelMode('scanned-margin-text');
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.geometryPage === '1';
+    }, { timeout: 30_000 });
+    const marginState = await page.evaluate(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return {
+            selectable: c.dataset.selectable,
+            notice: document.querySelector('[data-usage-target="excel-scanned-notice"]') !== null,
+        };
+    });
+    check('a scanned sheet whose only text is a margin stamp is still refused',
+        marginState.selectable === 'false' && marginState.notice === true,
+        `selectable=${marginState.selectable} notice=${marginState.notice}`);
+    await dragOnCanvas({ left: 60, top: 120, right: 620, bottom: 300 });
+    check('dragging on it produces no proposal', (await previewGrid()) === null);
+    check('and no OCR is started', ocrAssets.length === ocrBeforeMargin,
+        `${ocrAssets.length - ocrBeforeMargin} OCR requests`);
+
+    await openExcelMode('native-interior-text');
+    await dragOnCanvas(canvasRectFor('native-interior-text', await canvasPixelWidth()));
+    const controlGrid = await previewGrid();
+    check('the control with the same margin furniture and a real table still works',
+        controlGrid?.length === 4 && controlGrid?.[0]?.[0] === '室名',
+        `${controlGrid?.length}x${controlGrid?.[0]?.length}`);
 
     // ---- accessibility and privacy --------------------------------------------------
     console.log('\n=== accessibility and network ===');
