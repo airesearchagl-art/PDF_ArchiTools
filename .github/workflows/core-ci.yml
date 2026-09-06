@@ -85,6 +85,24 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Generated explicitly rather than left to each gate to create its own.
+      #
+      # Most of the gates will build what they need if it is missing, and one
+      # -- the textifier -- deliberately will not, so it fails on a clean
+      # checkout. That never showed up locally, where the fixtures already
+      # existed from an earlier run, and is exactly the class of thing a real
+      # CI run exists to find. Generating them once up front also means every
+      # gate below starts from the same inputs.
+      #
+      # Everything here is drawn from assets already in the repository. No
+      # network, no customer document, no secret.
+      - name: Generate synthetic fixtures
+        run: |
+          node scripts/make-test-fixtures.mjs
+          node scripts/make-excel-fixtures.mjs
+          node scripts/make-size-fixtures.mjs
+          node scripts/make-titleblock-fixtures.mjs
+
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
       # Each drives the real modules in a real browser against synthetic
