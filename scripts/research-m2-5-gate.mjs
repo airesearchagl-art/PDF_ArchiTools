@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    buildRow, findDuplicates, findGapCandidates, confirmRow, FIELDS,
+    buildRow, findDuplicates, findGapCandidates, confirmRow, displayValue, FIELDS,
 } from '../research/m2-5/prototype/register.mjs';
 import { toCsv, parseCsv, isFormulaLead } from '../research/m2-5/prototype/csv.mjs';
 
@@ -50,7 +50,8 @@ function mustFire(label, ok, detail = '') {
 const required = ['geometry.json', 'template-transfer.json', 'native-extraction.json',
     'render-cost.json', 'ocr-per-field.json', 'mixed-pages.json',
     'end-to-end.json', 'value-policies.json', 'register.json', 'register-after-review.json',
-    'gap-sweep.json', 'csv-analysis.json', 'psm-enum.json', 'network.json'];
+    'gap-sweep.json', 'csv-analysis.json', 'psm-enum.json', 'network.json',
+    'rotated-scanned.json'];
 const missing = required.filter((f) => !has(f));
 if (missing.length) {
     console.error(`Missing results: ${missing.join(', ')}`);
@@ -60,7 +61,7 @@ if (missing.length) {
 
 console.log('=== corpus ===');
 const geometry = read('geometry.json');
-check('every page in the set was measured', geometry.length === 22, `${geometry.length} pages`);
+check('every page in the set was measured', geometry.length === 25, `${geometry.length} pages`);
 check('all four rotations appear', new Set(geometry.map((g) => g.rotate)).size === 4,
     [...new Set(geometry.map((g) => g.rotate))].sort((a, b) => a - b).join(', '));
 check('all four sheet sizes appear', new Set(geometry.map((g) => g.size)).size === 4,
@@ -103,26 +104,161 @@ mustFire('the full page really would be too large to rasterise',
 console.log('');
 console.log('=== segmentation ===');
 const perField = read('ocr-per-field.json');
-const byMode = (mode) => perField.filter((p) => p.mode === mode).reduce((n, p) => n + p.hits, 0);
-check('SINGLE_BLOCK reads the field regions', byMode('SINGLE_BLOCK') > 0, `${byMode('SINGLE_BLOCK')} hits`);
+const denominator = perField.pages.length * perField.fieldsPerPage;
+const byMode = (mode) => perField.runs.filter((p) => p.mode === mode).reduce((n, p) => n + p.hits, 0);
+check('the segmentation denominator is a stated rule, not a slice',
+    perField.rule.includes('scanned') && perField.rule.includes('layout === A'),
+    `${perField.rule} -> pages ${perField.pages.join(', ')} = ${denominator} fields per mode`);
+check('that rule excludes the layout-B scanned page the template does not address',
+    !perField.pages.includes(11), 'p11 is layout B; the profile-A template does not apply to it');
+check('and it includes every rotation, not only /Rotate 0',
+    [90, 180, 270].every((r) => geometry.some((g) => perField.pages.includes(g.pageNumber) && g.rotate === r)),
+    'the rotated scanned sheets are in the denominator');
+check(`SINGLE_BLOCK reads the field regions`, byMode('SINGLE_BLOCK') > 0,
+    `${byMode('SINGLE_BLOCK')}/${denominator}`);
 mustFire('AUTO reads fewer of them, so the choice is doing work',
-    byMode('AUTO') < byMode('SINGLE_BLOCK'), `AUTO ${byMode('AUTO')} vs SINGLE_BLOCK ${byMode('SINGLE_BLOCK')}`);
+    byMode('AUTO') < byMode('SINGLE_BLOCK'),
+    `AUTO ${byMode('AUTO')}/${denominator} vs SINGLE_BLOCK ${byMode('SINGLE_BLOCK')}/${denominator}`);
 
 console.log('');
 console.log('=== one row per page ===');
 const register = read('register.json');
-check('the register has a row for every page', register.rows.length === 22, `${register.rows.length} rows`);
+check('the register has a row for every page', register.rows.length === 25, `${register.rows.length} rows`);
 check('no page number is missing from it',
     geometry.every((g) => register.rows.some((r) => r.pageNumber === g.pageNumber)));
 const endToEnd = read('end-to-end.json');
 check('every end-to-end policy produced a row for every page',
-    endToEnd.every((e) => e.rows.length === 22), endToEnd.map((e) => `${e.policy} ${e.rows.length}`).join(', '));
+    endToEnd.every((e) => e.rows.length === 25), endToEnd.map((e) => `${e.policy} ${e.rows.length}`).join(', '));
 const dropped = buildRow({ pageNumber: 99, fields: {}, templateFitted: false });
 mustFire('a page that fails entirely still produces a row',
     dropped.pageNumber === 99 && dropped.reviewReasons.length > 0,
     `${dropped.reviewReasons.length} reasons`);
 mustFire('and that row is not silently marked usable',
     dropped.reviewStatus === 'unconfirmed' && FIELDS.every((f) => dropped[f] === ''));
+
+console.log('');
+console.log('=== the page-level policy is actually page-level ===');
+const byPolicy = (name) => endToEnd.find((e) => e.policy === name);
+const pageLevel = byPolicy('page-level');
+const fieldPerField = byPolicy('field-level, per-field OCR');
+const fieldUnion = byPolicy('field-level, union OCR');
+check('the page-level policy exists and decides per page',
+    pageLevel && pageLevel.decide === 'page');
+const mixedPage = 12;
+const sourcesOn = (run) => FIELDS.map((f) => run.rows.find((r) => r.pageNumber === mixedPage).fields[f]?.source);
+check('on a native-classified page it uses native for every field, with no OCR fallback',
+    sourcesOn(pageLevel).every((src) => src === 'native'),
+    sourcesOn(pageLevel).join(', '));
+mustFire('the field-level policy does not, so the two really differ',
+    new Set(sourcesOn(fieldPerField)).size > 1, sourcesOn(fieldPerField).join(', '));
+const hitsOn = (run, pageNumber) => {
+    const row = run.rows.find((r) => r.pageNumber === pageNumber);
+    return FIELDS.filter((f) => {
+        const want = row.expected[f] ?? '';
+        const got = row.fields[f]?.rawText ?? '';
+        return want !== '' && got.replace(/\s+/gu, '').includes(want.replace(/\s+/gu, ''));
+    }).length;
+};
+mustFire('and on the mixed-source page the difference shows up as fields read',
+    hitsOn(fieldPerField, mixedPage) > hitsOn(pageLevel, mixedPage),
+    `page-level ${hitsOn(pageLevel, mixedPage)}/4 vs field-level ${hitsOn(fieldPerField, mixedPage)}/4`);
+check('page-level scores lower overall, which is the cost of the page-level shortcut',
+    pageLevel.exact < fieldPerField.exact,
+    `${pageLevel.exact}/${pageLevel.total} vs ${fieldPerField.exact}/${fieldPerField.total}`);
+
+console.log('');
+console.log('=== the OCR path the architecture proposes, end to end ===');
+check('the proposed per-field pipeline was run over the whole set',
+    fieldPerField.ocr === 'per-field' && fieldPerField.rows.length === 25,
+    `${fieldPerField.ocrCalls} OCR calls, ${(fieldPerField.ocrPixels / 1e6).toFixed(2)} Mpx`);
+check('the union path was run over the same set for comparison',
+    fieldUnion.ocr === 'union' && fieldUnion.rows.length === 25,
+    `${fieldUnion.ocrCalls} OCR calls, ${(fieldUnion.ocrPixels / 1e6).toFixed(2)} Mpx`);
+check('union assigns every recognised word to a field on this corpus',
+    fieldUnion.unplacedWords === 0, `${fieldUnion.unplacedWords} words unplaced`);
+check('union is not worse than per-field, so per-field cannot be adopted for accuracy',
+    fieldUnion.exact >= fieldPerField.exact,
+    `union ${fieldUnion.exact}/${fieldUnion.total} vs per-field ${fieldPerField.exact}/${fieldPerField.total}`);
+check('union uses far fewer calls',
+    fieldUnion.ocrCalls < fieldPerField.ocrCalls / 3,
+    `${fieldUnion.ocrCalls} vs ${fieldPerField.ocrCalls}`);
+check('and more pixels, which is the real trade',
+    fieldUnion.ocrPixels > fieldPerField.ocrPixels,
+    `${(fieldUnion.ocrPixels / 1e6).toFixed(2)} vs ${(fieldPerField.ocrPixels / 1e6).toFixed(2)} Mpx`);
+mustFire('union does produce a per-field confidence, so "it cannot attribute" is false',
+    FIELDS.every((f) => {
+        const row = fieldUnion.rows.find((r) => r.pageNumber === 9);
+        return row.fields[f]?.source !== 'ocr' || typeof row.fields[f].confidence === 'number';
+    }), 'every OCR field on p9 carries its own confidence');
+
+console.log('');
+console.log('=== scanned regions, through every rotation ===');
+const rotated = read('rotated-scanned.json');
+const rotatedOnly = rotated.correct.filter((r) => r.rotate !== 0);
+const correctHits = rotatedOnly.reduce((n, r) => n + r.hits, 0);
+const wrongHits = rotated.wrong.reduce((n, r) => n + r.hits, 0);
+check('the scanned ROI path was exercised at 90, 180 and 270',
+    [90, 180, 270].every((r) => rotatedOnly.some((x) => x.rotate === r)),
+    rotatedOnly.map((r) => `${r.rotate}:${r.hits}/${r.of}`).join('  '));
+check('the same upright rectangles read the fields at every rotation',
+    rotatedOnly.every((r) => r.hits >= 3),
+    `${correctHits}/${rotatedOnly.length * FIELDS.length} fields`);
+mustFire('rendering the same regions through the page rotation reads nothing',
+    wrongHits === 0 && rotated.wrong.length > 0,
+    `${wrongHits}/${rotated.wrong.length * FIELDS.length} fields -- the crop is right and the glyphs are sideways`);
+
+console.log('');
+console.log('=== per-field provenance survives display and confirmation ===');
+const raw = '\u56f3\u9762\u756a\u53f7\nA-101';
+const provRow = buildRow({
+    pageNumber: 1,
+    fields: {
+        drawing_number: { rawText: raw, source: 'native' },
+        drawing_title: { rawText: 'PLAN', source: 'ocr', confidence: 55 },
+    },
+});
+check('the display value is derived from the raw text',
+    provRow.fields.drawing_number.value === 'A-101');
+mustFire('and the raw text is not replaced by it',
+    provRow.fields.drawing_number.rawText === raw,
+    JSON.stringify(provRow.fields.drawing_number.rawText));
+mustFire('a different display policy changes the value and not the raw text',
+    (() => {
+        const verbatim = buildRow({
+            pageNumber: 1,
+            fields: { drawing_number: { rawText: raw, source: 'native' } },
+            deriveValue: (t) => t.trim(),
+        });
+        return verbatim.fields.drawing_number.value === raw
+            && verbatim.fields.drawing_number.rawText === raw
+            && verbatim.fields.drawing_number.value !== provRow.fields.drawing_number.value;
+    })(), 'same raw text, two different values');
+check('each field carries its own source and confidence',
+    provRow.fields.drawing_number.source === 'native'
+    && provRow.fields.drawing_title.source === 'ocr'
+    && provRow.fields.drawing_title.confidence === 55);
+mustFire('a row-level summary alone would lose that',
+    provRow.extractionSource === 'mixed'
+    && provRow.fields.drawing_number.source !== provRow.fields.drawing_title.source,
+    'row says "mixed"; only the fields say which is which');
+const mixedRow = read('register.json').rows.find((r) => r.pageNumber === mixedPage);
+check('the mixed-source page keeps a per-field source in the register',
+    new Set(FIELDS.map((f) => mixedRow.fields[f].source)).size > 1,
+    FIELDS.map((f) => `${f}=${mixedRow.fields[f].source}`).join(' '));
+const confirmedProv = confirmRow(provRow, { drawing_number: 'A-108' });
+check('confirmation keeps the raw text, the proposed value and the final value',
+    confirmedProv.confirmedFrom.raw.drawing_number === raw
+    && confirmedProv.confirmedFrom.proposed.drawing_number === 'A-101'
+    && confirmedProv.confirmedFrom.final.drawing_number === 'A-108');
+mustFire('and says which fields a person actually changed',
+    confirmedProv.confirmedFrom.edited.length === 1
+    && confirmedProv.confirmedFrom.edited[0] === 'drawing_number',
+    confirmedProv.confirmedFrom.edited.join(', '));
+mustFire('the raw text is still there after confirmation',
+    confirmedProv.fields.drawing_number.rawText === raw
+    && confirmedProv.fields.drawing_number.value === 'A-108');
+check('displayValue is the rule being applied, and it is reversible only via rawText',
+    displayValue(raw) === 'A-101' && displayValue('') === '');
 
 console.log('');
 console.log('=== duplicates ===');

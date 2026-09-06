@@ -2,7 +2,7 @@
 
 Every page in this spike is generated. No customer drawing, no real project
 file, and nothing that came off a scanner in an office was used or is described
-here. The generator is `scripts/research-m2-5-fixtures.mjs`; it writes 22 pages
+here. The generator is `scripts/research-m2-5-fixtures.mjs`; it writes 25 pages
 into `test-fixtures/m2-5/drawing-set.pdf` alongside `drawing-set.truth.json`,
 which records what each page is supposed to say.
 
@@ -22,13 +22,13 @@ noise in the corpus.
 | | pages |
 | --- | --- |
 | native text | 15 |
-| scanned (image only) | 5 |
+| scanned (image only) | 8 |
 | raster sheet, drawing number as vector text | 1 |
 | raster sheet with an invisible OCR text layer | 1 |
 
 | sheet size | pages | page size (pt) |
 | --- | --- | --- |
-| A3 | 14 | 841.89 × 1190.55 |
+| A3 | 17 | 841.89 × 1190.55 |
 | A2 | 5 | 1190.55 × 1683.78 |
 | A1 | 2 | 1683.78 × 2383.94 |
 | A0 | 1 | 2383.94 × 3370.39 |
@@ -36,6 +36,14 @@ noise in the corpus.
 Rotations 0, 90, 180 and 270 all appear, set through `/Rotate` rather than by
 rotating the content, because that is how the drawings that reach this app are
 made and because it is the case that broke the M2-4 geometry work.
+
+**Three of the rotated pages are scanned** (23, 24, 25), and they exist because
+of a hole the first version of this corpus had: every rotated page carried
+native text, so the region-render-and-OCR path had only ever run at `/Rotate 0`.
+A wrong rotation would have rendered a correctly-cropped, sideways title block
+and returned rubbish text, which reads in every measurement as "OCR could not
+read this page". Adding them found exactly that bug -- see `measurements.md`
+section 5.
 
 ## The two title-block layouts
 
@@ -82,6 +90,7 @@ true to find:
 | missing number `A-103` in an otherwise regular run | between pages carrying `A-102` and `A-104` |
 | a value that is not `PREFIX-NNN` | the `DETAIL-A` sheet, page 19 |
 | a blank revision | page 6, `S-202` |
+| scanned sheets at `/Rotate` 90, 180, 270 | pages 23, 24, 25 |
 | values a spreadsheet reads as formulas | page 18, `=1+1` / `@ABC 仮設計画` / `+3` / `-1` |
 
 The duplicate and the gap are the only two the checks are supposed to find. Any

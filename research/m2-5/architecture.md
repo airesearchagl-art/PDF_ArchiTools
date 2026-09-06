@@ -11,8 +11,8 @@ Given a PDF of N drawing sheets, produce a register: one row per sheet, holding
 `drawing_number`, `drawing_title`, `revision` and `revision_date`, that a
 person can check and then hand to somebody else as a document list.
 
-The hard part is not reading the text. On the corpus here, 85 of 88 values are
-read correctly by the naive approach. The hard part is that **a register is a
+The hard part is not reading the text. On the corpus here, 96 of 100 values are
+read correctly by a fairly plain pipeline. The hard part is that **a register is a
 document people act on** — they order prints from it, they check an issue
 against it, they bill from it — so a row that is quietly wrong is worse than a
 row that is visibly missing, and a drawing this tool silently drops does not
@@ -35,11 +35,15 @@ That shapes every decision below.
        per field:
            native text inside the region?
              |  yes                       |  no
-           take it                     render just that region, OCR it
+           take it                     collect it for OCR
+             |                              |
+             |                     render the fields that need it,
+             |                     un-rotated, and recognise them
              |                              |
              +--------------+---------------+
                             |
-             one row, with per-field source and confidence
+       one row: per field its raw text, a display value derived
+       from it, its source, and its confidence
              |
    register: N rows for N pages, all unconfirmed
              |
@@ -73,6 +77,14 @@ regions together cost 22.5 MB — 4% of it. PDF.js does this natively through
 than cropped afterwards. Without this the large sheets are not merely slow,
 they are a tab that dies.
 
+**The region is rendered with `/Rotate` undone** — `getViewport({ scale,
+rotation: 0 })` — so the canvas comes out in the same upright page space the
+rectangles are already expressed in. Getting only the rectangle right is not
+enough, and this is not a hypothetical: mapping the rectangle into display
+space crops exactly the right pixels and hands OCR a title block lying on its
+side. Section 5b of `measurements.md` has the numbers (0/12 fields before,
+10/12 after) and the negative probe that keeps it honest.
+
 ### Source is chosen per field, not per page
 
 Page 12 in the corpus is a raster sheet with the drawing number left as vector
@@ -80,8 +92,9 @@ text. It classifies as *not scanned*, so a page-level native/scanned switch
 reads one field, leaves three empty and reports nothing unusual. Choosing per
 field reads the one native value and sends the other three to OCR.
 
-On the aggregate this wins nothing (85/88 either way) — it wins on the page
-that a page-level switch handles silently and wrongly.
+On the aggregate this is worth two fields (95/100 against 93/100). It is worth
+three on page 12 alone, which is where the argument actually lives: a
+page-level switch handles that page silently and wrongly.
 
 Each field records where its value came from: `native`, `ocr`, or a page-level
 `mixed`. That record is not decoration. Page 20 shows why: a sheet carrying
@@ -89,21 +102,68 @@ somebody else's OCR text layer looks exactly like authored text, so "this was
 native" cannot be read as "this is right", and a later check that treats a
 value as authoritative needs to know which it was.
 
-### OCR: one call per field, `SINGLE_BLOCK`, local
+### OCR: one call for the block, `SINGLE_BLOCK`, local
 
-`SINGLE_BLOCK` reads 8/8 of the probed fields where `AUTO` reads 4/8. This is
-the opposite of M2-4's full-page finding and it is not a contradiction: a
-cropped field is a single block of text, which is what the mode is named for.
+`SINGLE_BLOCK` reads 25 of 28 field readings where `AUTO` reads 13. This is the
+opposite of M2-4's full-page finding and it is not a contradiction: a cropped
+field is a single block of text, which is what the mode is named for.
 
-Per-field calls cost the same time as one union call (214 ms vs 204 ms) and the
-same accuracy. They are chosen for a different reason: they yield a confidence
-figure and a failure reason **per field**, which is what the review queue needs
-to order. One number for four values cannot say which of the four to look at.
+**The fields that need OCR are recognised in one pass over their bounding
+region, not one pass each.** This reverses what an earlier version of this
+document proposed, and the reason it was proposed was wrong rather than merely
+outvoted: it claimed a union call "gives one number for four values, so it
+cannot say which of the four to look at". The union path assigns each
+recognised word to the field rectangle its centre falls in, so it produces a
+per-field text, word count and confidence exactly as per-field recognition
+does. With that claim removed, the measurement is one-sided — 96/100 against
+95/100, 9 calls against 35, 1.6 s against 2.1 s.
+
+The cost is pixels: the union region spans the gaps between fields, 14.55 Mpx
+against 10.81 across the set. On the largest sheet that is still far inside
+what a browser can hold.
+
+The real risk in this path is attribution *correctness* rather than attribution
+at all — a word whose centre falls on the wrong side of a boundary is filed
+under the wrong field, silently. It did not happen here (0 words unplaced, and
+per-field values matching), on a corpus whose fields are well separated. An
+implementation should keep the per-field fallback available for blocks whose
+cells nearly touch, and `limitations.md` records that the threshold is
+unmeasured.
 
 Tesseract.js runs from `public/tesseract/` and `public/tessdata/` in this
 repository, in one shared worker. External requests during OCR: 0. There is no
 OCR service, no AI API and no cloud conversion in this design, and the probe
 asserts it rather than asserting it in prose.
+
+### What a row holds
+
+Per field, and not summarised to the row:
+
+| | |
+| --- | --- |
+| `rawText` | exactly what came off the page, never trimmed or overwritten |
+| `value` | the display value derived from it, by default its last line |
+| `source` | `native` or `ocr`, for that field |
+| `confidence` | the reader's own score for that field, or null |
+| `reviewReasons` | why this field needs a look |
+
+Each of these is unreconstructible after the fact, which is why it is kept.
+
+A row-level `extractionSource` still exists as a summary and is not sufficient
+on its own: page 12 is `mixed`, and only the fields say *which* value came from
+where. The gate asserts that the mixed page keeps distinct per-field sources
+through to the register.
+
+`rawText` is kept because the value is a guess made from it. When a reviewer
+sees a wrong drawing number, the question is always "what did the sheet
+actually say", and a row that has thrown that away cannot answer. The display
+rule is applied as a *view*: changing it changes `value` and cannot change
+`rawText`, which the gate proves by building the same row under two different
+rules.
+
+Confirmation records `raw`, `proposed` and `final` for every field, plus which
+fields a person actually changed. "The human agreed" and "this is what the
+sheet said" are different records, and an audit needs both.
 
 ### Every page produces a row
 
@@ -139,8 +199,8 @@ sheets, and guessing costs more than asking.
 
 **Gap inference is not proposed for production.** Section 10 of
 `measurements.md` shows every threshold that finds the planted gap also invents
-at least one false candidate, on a set of 22 pages; the loose default invents
-25. A drawing set is *allowed* to skip numbers. See `decision-matrix.md`.
+at least one false candidate, on a set of 25 pages; the loose default invents
+33. A drawing set is *allowed* to skip numbers. See `decision-matrix.md`.
 
 ### Export
 
@@ -162,32 +222,32 @@ the geometry and workbook code already in the repository.
 
 **ADOPT** the shape above:
 
-- user-placed template, upright page space, region-only rasterising
-- per-field source selection with the source recorded
-- per-field OCR at `SINGLE_BLOCK`, local, no service
+- user-placed template, upright page space, region-only rasterising **with
+  `/Rotate` undone**
+- per-field source selection, with the source recorded per field
+- OCR over the union of the fields that need it, at `SINGLE_BLOCK`, local, no
+  service — with words attributed back to fields, and the per-field path kept
+  as a fallback for tight blocks
+- a candidate row that keeps raw text, display value, source and confidence per
+  field, and keeps raw text through confirmation
+- the last line of a region as the *display* default, over raw text the
+  reviewer always sees in full
 - one row per page with no silent loss
 - candidate-until-confirmed, confidence as a sort key only
 - duplicate detection by exact match
 - XLSX export through the existing writer; no CSV
 
-**REVISE** two pieces before implementing them:
+**REVISE** one piece before implementing it:
 
-1. **How the template transfers between sheet sizes.** No coordinate model
-   works for both conventions in the corpus: normalised reads the sheets whose
-   title block scales, corner-anchored reads the sheets whose block is a fixed
-   physical size, and each fails the other. `templateFits()` does not detect
-   the mismatch because A-series sheets share an aspect ratio. The revision is
-   to stop trying to pick automatically: apply the template, show the user the
-   proposed regions on the first page of each new sheet size, and have them
-   confirm or redraw. One extra confirmation per sheet size, in exchange for
-   not being confidently wrong on half a set.
-
-2. **Label and value in one cell.** Taking the last line of the region is the
-   best simple policy measured (64/87 exact against 5/87 verbatim) and is still
-   wrong 23 times in 87. The trimming policy that looked obviously better made
-   it *worse* (54/88 end to end). The revision is to treat the split as a
-   presentation default that the review UI always shows in full, never as a
-   transformation applied before the user sees the text.
+**How the template transfers between sheet sizes.** No coordinate model works
+for both conventions in the corpus: normalised reads the sheets whose title
+block scales, corner-anchored reads the sheets whose block is a fixed physical
+size, and each fails the other. `templateFits()` does not detect the mismatch
+because A-series sheets share an aspect ratio. The revision is to stop trying to
+pick automatically: apply the template, show the user the proposed regions on
+the first page of each new sheet size, and have them confirm or redraw. One
+extra confirmation per sheet size, in exchange for not being confidently wrong
+on half a set.
 
 **DEFER**:
 
@@ -198,3 +258,20 @@ the geometry and workbook code already in the repository.
   not help. Decide it against real scans.
 - **Anything beyond the four fields.** Scale, discipline, sheet counts and the
   rest are not in this measurement and should not be inferred from it.
+
+## What review changed
+
+This spike was reviewed and four findings came back, all of them real:
+
+1. The "page-level" comparator was quietly doing field-level work, so the two
+   policies were never actually compared. Fixed; they now differ by two fields
+   overall and by three on the page that matters.
+2. The end-to-end run measured the union OCR path while the document proposed
+   the per-field one, and the stated reason for preferring per-field was false.
+   Both paths are now measured end to end, and the recommendation is reversed.
+3. The scanned region-render-and-OCR path had only ever run at `/Rotate 0`.
+   Adding rotated scanned sheets found a real bug: correct crop, sideways
+   glyphs, unreadable output.
+4. The candidate model collapsed provenance to the row and kept only the
+   transformed value. It now keeps raw text, source and confidence per field,
+   through confirmation.

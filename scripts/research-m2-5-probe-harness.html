@@ -63,24 +63,33 @@ async function getWorker() {
  * the sheet is simply never rasterised. If that works, a title block on an A0
  * costs a title block, not an A0.
  */
-async function renderRegion(page, region, dpi, rotate, uprightSize) {
+async function renderRegion(page, region, dpi, uprightSize, { rotation = 0 } = {}) {
   const scale = dpi / 72;
-  // The region is in upright space; the viewport draws in display space, so
-  // the region's corners go the other way through the same rotation.
-  const display = uprightRectToDisplay(region, rotate, uprightSize);
-  const viewport = page.getViewport({
-    scale,
-    offsetX: -display.left * scale,
-    offsetY: -display.top * scale,
-  });
+  // Render with /Rotate undone, so the canvas comes out in upright page space
+  // and the glyphs are the right way up whatever the sheet declares.
+  //
+  // Getting only the *rectangle* right is not enough, and that is the trap this
+  // originally fell into: mapping the region into display space crops exactly
+  // the right pixels and hands OCR a title block lying on its side. The text is
+  // all there, the region is correct, and the recognised value is rubbish --
+  // which reads in every measurement as "OCR could not read this page".
+  //
+  // `rotation` is a knob for one purpose: the negative probe renders the same
+  // region through the page's own /Rotate, reproducing exactly that bug, so the
+  // un-rotation can be shown to be what makes the values come back.
+  const box = rotation === 0 ? region : uprightRectToDisplay(region, rotation, uprightSize);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.ceil((display.right - display.left) * scale));
-  canvas.height = Math.max(1, Math.ceil((display.bottom - display.top) * scale));
+  canvas.width = Math.max(1, Math.ceil((box.right - box.left) * scale));
+  canvas.height = Math.max(1, Math.ceil((box.bottom - box.top) * scale));
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('no 2d context');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvas, viewport, intent: 'print' }).promise;
+  await page.render({
+    canvas,
+    viewport: page.getViewport({ scale, rotation, offsetX: -box.left * scale, offsetY: -box.top * scale }),
+    intent: 'print',
+  }).promise;
   return canvas;
 }
 
@@ -210,7 +219,7 @@ window.__m25 = {
     const fullPixels = Math.ceil(full.width) * Math.ceil(full.height);
 
     const t0 = performance.now();
-    const canvas = await renderRegion(page, region, dpi, g.rotate,
+    const canvas = await renderRegion(page, region, dpi,
       { width: g.uprightWidth, height: g.uprightHeight });
     const ms = performance.now() - t0;
     // Read before releasing: releaseCanvas zeroes the dimensions, and reading
@@ -235,29 +244,36 @@ window.__m25 = {
    *
    * One render and one recognise per field, on a canvas the size of that field.
    */
-  async ocrPerField(pageNumber, regions, psm, { dpi = 300, preprocess = false } = {}) {
+  async ocrPerField(pageNumber, regions, psm, { dpi = 300, preprocess = false, forceRotate = null } = {}) {
     const doc = await openSet();
     const g = await analysePageGeometry(doc, pageNumber);
     const page = await doc.getPage(pageNumber);
     const out = {};
     let totalMs = 0;
     let totalPixels = 0;
+    // `forceRotate` exists for one reason: to render a region through the wrong
+    // rotation on purpose. A rotation map can only be shown to be load-bearing
+    // by breaking it, and a probe that never breaks it proves nothing.
+    const rotation = forceRotate === null ? 0 : forceRotate;
     for (const [key, rect] of Object.entries(regions)) {
-      const canvas = await renderRegion(page, rect, dpi, g.rotate,
-        { width: g.uprightWidth, height: g.uprightHeight });
+      const canvas = await renderRegion(page, rect, dpi,
+        { width: g.uprightWidth, height: g.uprightHeight }, { rotation });
       totalPixels += canvas.width * canvas.height;
       const result = await recognise(canvas, psm, { preprocess });
       releaseCanvas(canvas);
       totalMs += result.ms;
       out[key] = {
-        text: result.text.replace(/\s+/g, ' ').trim(),
+        // Keep the line structure. The label sits on its own line above the
+        // value, and flattening the two into one string destroys the only
+        // signal that tells them apart.
+        text: result.text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join('\n'),
         confidence: result.meanConfidence,
         words: result.words.length,
         ms: result.ms,
       };
     }
     page.cleanup();
-    return { psm, dpi, preprocess, fields: out, totalMs, totalPixels };
+    return { psm, dpi, preprocess, rotation, pageRotate: g.rotate, fields: out, totalMs, totalPixels };
   },
 
   /**
@@ -271,22 +287,23 @@ window.__m25 = {
     const g = await analysePageGeometry(doc, pageNumber);
     const page = await doc.getPage(pageNumber);
     const scale = dpi / 72;
-    const canvas = await renderRegion(page, union, dpi, g.rotate,
+    const canvas = await renderRegion(page, union, dpi,
       { width: g.uprightWidth, height: g.uprightHeight });
     const pixels = canvas.width * canvas.height;
     const result = await recognise(canvas, psm, { preprocess });
     releaseCanvas(canvas);
     page.cleanup();
 
-    // Word boxes are in the region canvas; put them back into upright points.
-    const display = uprightRectToDisplay(union, g.rotate, { width: g.uprightWidth, height: g.uprightHeight });
+    // Word boxes are in the region canvas, and the canvas is upright, so they
+    // become upright points by scaling and shifting -- no rotation involved.
     const assigned = {};
     for (const key of Object.keys(regions)) assigned[key] = [];
     const unplaced = [];
     for (const word of result.words) {
-      const cx = display.left + ((word.bbox.x0 + word.bbox.x1) / 2) / scale;
-      const cy = display.top + ((word.bbox.y0 + word.bbox.y1) / 2) / scale;
-      const up = toUprightPoint(cx, cy, g.rotate, g.displayWidth, g.displayHeight);
+      const up = {
+        x: union.left + ((word.bbox.x0 + word.bbox.x1) / 2) / scale,
+        y: union.top + ((word.bbox.y0 + word.bbox.y1) / 2) / scale,
+      };
       let placed = false;
       for (const [key, rect] of Object.entries(regions)) {
         if (up.x >= rect.left && up.x <= rect.right && up.y >= rect.top && up.y <= rect.bottom) {
@@ -305,8 +322,20 @@ window.__m25 = {
         const by = (b.bbox.y0 + b.bbox.y1) / 2;
         return Math.abs(ay - by) > 6 ? ay - by : a.bbox.x0 - b.bbox.x0;
       });
+      // Same line grouping as the native reader, so a union result and a
+      // native result are the same shape and the label/value rule can be
+      // compared across them rather than only working on one.
+      const wordLines = [];
+      for (const w of ordered) {
+        const line = wordLines[wordLines.length - 1];
+        const last = line?.[line.length - 1];
+        const shared = last ? Math.min(last.bbox.y1, w.bbox.y1) - Math.max(last.bbox.y0, w.bbox.y0) : 0;
+        const smaller = last ? Math.min(last.bbox.y1 - last.bbox.y0, w.bbox.y1 - w.bbox.y0) : 0;
+        if (line && smaller > 0 && shared / smaller >= 0.5) line.push(w);
+        else wordLines.push([w]);
+      }
       fields[key] = {
-        text: ordered.map((w) => w.text).join(' ').replace(/\s+/g, ' ').trim(),
+        text: wordLines.map((l) => l.map((w) => w.text).join(' ').trim()).filter(Boolean).join('\n'),
         confidence: ordered.length ? ordered.reduce((s, w) => s + w.confidence, 0) / ordered.length : null,
         words: ordered.length,
       };

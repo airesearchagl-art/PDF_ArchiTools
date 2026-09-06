@@ -50,44 +50,81 @@ page problem rather than a template problem.
 | full page at 300 dpi | 139.5 Mpx, 558 MB | not viable |
 | the field regions only | 5.63 Mpx, 22.5 MB | 4.03% of the page |
 
-**ADOPT: regions only**, through the PDF.js viewport's `offsetX`/`offsetY`.
-This is not a performance tuning decision; the full-page path does not survive
-A0 in a browser tab. §2.
+**ADOPT: regions only**, through the PDF.js viewport's `offsetX`/`offsetY`,
+**rendered with `/Rotate` undone** (`rotation: 0`). This is not a performance
+tuning decision; the full-page path does not survive A0 in a browser tab. §2.
+
+Rendering the region in display space instead is not a lesser option, it is a
+bug: the crop is correct and the glyphs come out sideways, so OCR returns
+rubbish that is indistinguishable from an unreadable page. Rotated scanned
+sheets read **0/12** fields that way and **10/12** un-rotated. §5b.
 
 ## 4. OCR segmentation mode
 
-| mode | fields read |
-| --- | --- |
-| `SINGLE_BLOCK` | 8/8 |
-| `AUTO` | 4/8 |
+Over a stated denominator — every scanned page the profile-A template actually
+addresses, which is 7 pages × 4 fields = **28 readings per mode**, covering all
+four rotations:
 
-**ADOPT: `SINGLE_BLOCK`.** §3. Note the PSM values are **strings** in the
-installed Tesseract.js; passing a number falls back to the default without
-error. The M2-4 spike found `AUTO` unhelpful on full pages and this spike finds
-`SINGLE_BLOCK` better on crops — both are right, about different inputs.
+| mode | per-field OCR | union OCR |
+| --- | --- | --- |
+| `SINGLE_BLOCK` | **25/28** | **26/28** |
+| `AUTO` | 13/28 | 8/28 |
+| `SPARSE_TEXT` | 11/28 | 13/28 |
+| `SINGLE_LINE` | 10/28 | 0/28 |
+| `SINGLE_WORD` | 6/28 | 0/28 |
+
+**ADOPT: `SINGLE_BLOCK`.** §3. The denominator is a rule in the code, not a
+slice: an earlier version measured "the first three scanned pages", one of which
+was layout B and therefore not a segmentation measurement at all. The gate
+asserts the rule.
+
+Note the PSM values are **strings** in the installed Tesseract.js; passing a
+number falls back to the default without error. The M2-4 spike found `AUTO`
+unhelpful on full pages and this spike finds `SINGLE_BLOCK` better on crops —
+both are right, about different inputs.
 
 ## 5. One OCR call per field, or one for the block
 
-| | calls | pixels | time | accuracy |
-| --- | --- | --- | --- | --- |
-| per field | 4/page | 2.08 Mpx | 214 ms | 8/8 |
-| union region | 1/page | 2.99 Mpx | 204 ms | 8/8 |
+Both run end to end over the whole 25-page set, under the same field-level
+source policy:
 
-**ADOPT: per field.** §4. The measurement is a tie, so the decision is made on
-what each produces rather than what each costs: per-field calls yield a
-confidence and a reason for each value, which is what the review queue sorts
-on. The union call cannot say which of four values to look at.
+| | calls | pixels | wall clock | fields correct | words unplaced |
+| --- | --- | --- | --- | --- | --- |
+| per field | 35 | 10.81 Mpx | 2.1 s | 95/100 | — |
+| **union region** | **9** | 14.55 Mpx | **1.6 s** | **96/100** | **0** |
+
+**ADOPT: the union region.** §4. This reverses the earlier entry in this table,
+and the earlier entry was not merely outvoted — its reasoning was false. It
+claimed a union call "cannot say which of four values to look at". The union
+path assigns each word to the field rectangle its centre falls in and produces a
+per-field text, word count and confidence, exactly as per-field recognition
+does. The gate asserts that every OCR-sourced field from the union path carries
+its own confidence.
+
+With that gone, nothing supports per-field: union is no less accurate, uses a
+quarter of the calls and finishes faster. The trade is pixels — it rasterises
+the gaps between fields.
+
+Keep per-field recognition available as a fallback. The risk union carries is
+attribution *correctness*: a word whose centre lands the wrong side of a
+boundary is filed under the wrong field silently. Zero occurrences here, on a
+corpus whose fields are well separated, and no measurement of how close is too
+close.
 
 ## 6. Native or OCR
 
 | option | aggregate | page 12 (mixed sheet) |
 | --- | --- | --- |
-| page-level switch | 85/88 | 1 of 4 fields, no warning |
-| field-level | 85/88 | 4 of 4 fields |
+| page-level switch | 93/100 | 1 of 4 fields, no warning |
+| field-level | 95/100 | 3 of 4 fields |
 
-**ADOPT: field-level.** §5, §7. The aggregate is a tie because the corpus has
-one mixed page; that page is the entire argument. A page-level switch fails it
-silently, which is the failure mode this design exists to avoid.
+**ADOPT: field-level.** §5, §7. Two fields separate them overall and three on
+page 12, which is where the argument lives: a page-level switch reads one field
+there, leaves three empty and reports nothing unusual.
+
+The comparison is only meaningful because the page-level policy is now really
+page-level. It previously fell back to OCR on an empty field, which is
+field-level behaviour under a page-level name, and made the two indistinguishable.
 
 Record the source per field regardless. Page 20 — a raster sheet carrying
 somebody else's OCR text layer — is indistinguishable from authored text, so
@@ -97,16 +134,25 @@ somebody else's OCR text layer — is indistinguishable from authored text, so
 
 | policy | exact | contains |
 | --- | --- | --- |
-| whole region verbatim | 5/87 | 85/87 |
-| last line | 64/87 | 85/87 |
-| trim the label by matching | 54/88 end to end | — |
+| whole region verbatim | 5/99 | 96/99 |
+| **last line** | **96/99** | 96/99 |
+| trim the top 45% off the rectangle | 12/100 end to end | — |
 
-**REVISE.** §6. Last-line is the best simple rule and is wrong 23 times in 87.
-The clever trim made things worse than doing nothing, because it deletes real
-content whenever the label guess misses.
+**ADOPT, as a display default only.** §6. Last-line now presents every value
+that was read at all.
 
-Ship the split as a *display* default over text the reviewer always sees in
-full. Never store only the trimmed value.
+The earlier figure was 64/87, and the gap was a defect in the measurement rather
+than in the rule: both OCR paths flattened their output to one line, so an
+OCR-sourced field had no last line to take. Grouping recognised words into lines
+by vertical overlap — as the native reader already did — makes both paths the
+same shape.
+
+The condition is not optional: the split is a **view** over the raw text, and
+`rawText` is kept per field and shown in review. The gate builds the same row
+under two display rules and asserts the raw text is identical in both.
+
+The 12/100 row is a mechanical trim standing in for "ask the user to draw the
+value area". It measures the crudeness of the proxy, not the idea.
 
 ## 8. Rows for pages that failed
 
@@ -115,7 +161,7 @@ full. Never store only the trimmed value.
 | drop the page | **rejected** |
 | row with empty values and a reason | **ADOPT** |
 
-§8. 22 rows for 22 pages under every policy; silent page loss 0. The gate
+§8. 25 rows for 25 pages under every policy; silent page loss 0. The gate
 proves the check can fire by building a row from a page with nothing on it.
 
 There is no trade-off here to weigh. A register that is missing a sheet is
@@ -131,10 +177,14 @@ wrong in the way nobody checks for.
 §9. Rows confirmed without a human: 0, by construction. Confidence orders the
 queue; it never promotes.
 
-Review burden on this corpus: 5 of 22 rows flagged, 0 rows wrong but unflagged,
-6 of 22 rows and 23 of 88 fields actually edited. The gap between "5 flagged"
-and "6 edited" is real and is not a bug — one row needed an edit that no flag
-could have predicted.
+Review burden on this corpus: 5 of 25 rows flagged, **1 row wrong but
+unflagged**, 3 of 25 rows and 3 of 100 fields actually edited.
+
+That 1 is the honest number and it was 0 before the corpus grew: page 25 is a
+rotated scanned sheet whose value OCR'd wrongly *with high confidence*, so
+nothing fired. Confidence flagging catches an unsure reader; it cannot catch a
+confidently wrong one. That is an argument for the review step existing, not for
+tuning the threshold.
 
 ## 10. Duplicate drawing numbers
 
@@ -154,10 +204,10 @@ rest.
 | 1 | 0 | 0 | 0 |
 | 2 | 2 | 1 | 1 |
 | 5 | 2 | 1 | 1 |
-| 10 | 26 | 1 | 25 |
+| 10 | 34 | 1 | 33 |
 
 **DEFER.** §10. Every setting that finds the planted gap also invents at least
-one, on 22 pages. There is no threshold that makes this clean, because the
+one, on 25 pages. There is no threshold that makes this clean, because the
 premise is false: drawing sets skip numbers legitimately.
 
 Two rules were built and do work, and they are worth keeping *if* this is ever
@@ -206,6 +256,16 @@ were excluded by the brief and no measurement was taken for them.
 
 | | |
 | --- | --- |
-| **ADOPT** | user-placed template; upright page space; region-only rasterising; `SINGLE_BLOCK`; per-field OCR; field-level source with the source recorded; one row per page; candidate-until-confirmed; exact-match duplicates; XLSX through the existing writer; local OCR |
-| **REVISE** | template transfer between sheet sizes (confirm per size, do not auto-pick); label/value split (display default only) |
+| **ADOPT** | user-placed template; upright page space; region-only rasterising **with `/Rotate` undone**; `SINGLE_BLOCK`; **union OCR with per-field attribution** (per-field kept as a fallback); field-level source recorded per field; **per-field raw text, value, source and confidence kept through confirmation**; last line as a display default over raw text always shown; one row per page; candidate-until-confirmed; exact-match duplicates; XLSX through the existing writer; local OCR |
+| **REVISE** | template transfer between sheet sizes — confirm per size, do not auto-pick |
 | **DEFER** | gap inference; OCR preprocessing; any field beyond the four |
+
+## What changed after review
+
+| entry | was | now | why |
+| --- | --- | --- | --- |
+| 5. OCR call shape | per field | **union region** | the stated reason for per-field was false; union is no less accurate, a quarter of the calls, faster |
+| 6. native or OCR | "a tie, 85/88 either way" | 93/100 vs 95/100 | the page-level comparator was doing field-level work, so the two were never compared |
+| 7. label/value | REVISE, 64/87 | **ADOPT as a display default**, 96/99 | OCR output was being flattened to one line, so the rule could not apply to it |
+| 3. rasterising | regions only | regions only, **un-rotated** | rotated scanned sheets were never exercised; they read 0/12 until fixed |
+| 9. review burden | 0 wrong-but-unflagged | **1** | the corpus did not previously contain a page that could produce one |

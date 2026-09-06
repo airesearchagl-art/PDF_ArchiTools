@@ -28,8 +28,8 @@ Fields read (out of 4 per page), counting only pages that carry native text:
 
 | group | pages | absolute | normalised | corner-anchored |
 | --- | --- | --- | --- | --- |
-| A3, layout A — the template's own group | 14 | 45/45 | 45/45 | 45/45 |
-| A2, layout A, block scales with the sheet | 2 | 0/8 | **7/8** | 0/8 |
+| A3, layout A — the template's own group | 17 | 45/45 | 45/45 | 45/45 |
+| bigger sheet, block scales with it | 6 | 0/8 | **7/8** | 0/8 |
 | A2/A1, layout A, block of fixed physical size | 2 | 0/8 | 1/8 | **8/8** |
 | A2, layout B | 1 | 0/4 | 0/4 | 0/4 |
 
@@ -46,7 +46,7 @@ having layout B in the set: 0/4 is what a template that does not fit should
 score.
 
 **`templateFits()` does not catch it.** The prototype's own fit check returns
-true for all 22 pages, because every A-series sheet shares the same aspect
+true for all 25 pages, because every A-series sheet shares the same aspect
 ratio — the check it performs is real but it is not sufficient, and treating it
 as a guard would be worse than having no guard at all. See `limitations.md`.
 
@@ -74,18 +74,33 @@ installed package rather than remembered, because passing a number silently
 produces the default. `AUTO` is `"3"`; the default when nothing is passed is
 `SINGLE_BLOCK`.
 
-On the two probed field regions (4 fields each):
+**The denominator, stated as a rule rather than a slice.** An earlier version of
+this measurement ran over "the first three scanned pages", one of which was
+drawn to layout B — a page the profile-A template does not address at all, so
+every mode scored zero on it and the comparison absorbed a number that had
+nothing to do with segmentation. The rule is now in the code and asserted by the
+gate:
 
-| mode | fields read |
-| --- | --- |
-| `SINGLE_BLOCK` | 8/8 |
-| `AUTO` | 4/8 |
+> every scanned page the profile-A template actually addresses
+> (`kind === scanned && layout === A && the block scales with the sheet`)
 
-This is the reverse of what M2-4 measured for full-page table work, and the
-reason is the region: a title-block field is one small block of text, which is
-exactly what `SINGLE_BLOCK` is for, whereas `AUTO` spends its page analysis on
-a crop too small to analyse. The M2-4 finding is not wrong; it was about a
-different input.
+which is pages 9, 10, 16, 17, 23, 24 and 25 — **7 pages × 4 fields = 28 field
+readings per mode**, and it covers all four rotations rather than only
+`/Rotate 0`.
+
+| mode | per-field OCR | union OCR |
+| --- | --- | --- |
+| `SINGLE_BLOCK` | **25/28** | **26/28** |
+| `SPARSE_TEXT` | 11/28 | 13/28 |
+| `AUTO` | 13/28 | 8/28 |
+| `SINGLE_LINE` | 10/28 | 0/28 |
+| `SINGLE_WORD` | 6/28 | 0/28 |
+
+`SINGLE_BLOCK` wins on both paths and by a wide margin. This is the reverse of
+what M2-4 measured for full-page table work, and the reason is the region: a
+title-block field is one small block of text, which is exactly what
+`SINGLE_BLOCK` is for, whereas `AUTO` spends its page analysis on a crop too
+small to analyse. The M2-4 finding is not wrong; it was about a different input.
 
 Preprocessing the crop (grayscale, contrast stretch) made **no measurable
 difference** on this corpus — same fields read, same values. That is a null
@@ -94,19 +109,35 @@ evidence that preprocessing is useless on a real scan. See `limitations.md`.
 
 ## 4. One OCR call per field, or one for the whole block
 
-| | calls | pixels | time | fields read |
-| --- | --- | --- | --- | --- |
-| per field | 4 per page | 2.08 Mpx total | 214 ms | 8/8 |
-| union region | 1 per page | 2.99 Mpx total | 204 ms | 8/8 |
+Both paths were run over the whole 25-page set, end to end, under the same
+field-level source policy. The only difference is how the fields that need OCR
+are recognised.
 
-Identical accuracy, and the time difference is inside the noise. The union
-region rasterises *more* pixels because it spans the gaps between fields.
+| | OCR calls | pixels | wall clock | fields correct | words unplaced |
+| --- | --- | --- | --- | --- | --- |
+| per field | 35 | 10.81 Mpx | 2.1 s | 95/100 | — |
+| union region | **9** | 14.55 Mpx | **1.6 s** | **96/100** | **0** |
 
-So this is not a performance decision, and the argument that decides it is a
-review one: per-field calls give a confidence figure and a failure reason
-*per field*, which is what the review queue sorts on. A union call gives one
-number for four values, so a page where three fields are perfect and one is
-unreadable looks the same as a page that is uniformly mediocre.
+**This reverses the earlier conclusion, and the earlier reasoning was wrong on
+its own terms.** The first version of this spike adopted per-field recognition
+on the argument that a union call "gives one number for four values, so it
+cannot say which of the four to look at". That is simply false about the
+implementation: the union path assigns each recognised word to the field
+rectangle its centre falls in, and therefore produces a per-field text, a
+per-field word count and a per-field confidence exactly as the per-field path
+does. The gate asserts it.
+
+With that argument removed, the measurement is one-sided: union is no less
+accurate, uses a quarter of the calls, and finishes faster. The one real cost is
+pixels — it rasterises the gaps between the fields, 14.55 Mpx against 10.81 —
+and on the largest sheet that still lands far inside what a browser can hold
+(section 2).
+
+The genuine risk in the union path is not attribution *confidence* but
+attribution *correctness*: a word whose centre lands on the wrong side of a
+field boundary is silently filed under the wrong field. On this corpus that
+never happened (0 words unplaced, and per-field values matching), but these
+fields are well separated. `limitations.md` records what was not measured.
 
 ## 5. Pages that are neither native nor scanned
 
@@ -127,51 +158,107 @@ looking exactly like authored text. Nothing in the PDF distinguishes the two.
 The register must therefore record where a value came from, and cannot treat
 "native text was present" as "the value is correct".
 
+## 5b. Scanned regions at every rotation
+
+`scripts/research-m2-5-probe.mjs`. This section exists because the first version
+of this spike had a hole in it, and the hole hid a real bug.
+
+Every rotated page in the original corpus carried native text, and native
+extraction reads token coordinates without rendering anything. So the
+region-render-and-OCR path — the one the architecture actually proposes for
+scanned sheets — had only ever been exercised at `/Rotate 0`.
+
+Adding three scanned sheets at 90, 180 and 270 found this immediately:
+
+| | fields read |
+| --- | --- |
+| rotated scanned pages, before the fix | **0/12** |
+| rotated scanned pages, after the fix | **10/12** |
+| the same pages rendered through the page rotation (the old code) | **0/12** |
+
+The bug was not in the rectangle. `renderRegion` mapped the upright field
+rectangle into display space and cropped exactly the right pixels — and then
+handed OCR a title block lying on its side. Page 24 (`/Rotate 180`) returned
+`"TST-V ll"` where the sheet says `A-151`.
+
+That is the worst shape a bug can have here: the region is right, the text is
+present, and the recognised value is rubbish, which is indistinguishable in
+every aggregate from "OCR could not read this page".
+
+The fix is to render with `/Rotate` undone — `getViewport({ scale, rotation: 0 })`
+— so the canvas comes out in the same upright page space the rectangles are
+already expressed in. The rotation map is then not needed for rendering at all,
+which is the outcome you would want from a design that claims one coordinate
+space.
+
+The last row of the table is the negative probe, and it is the reason the other
+rows can be believed: rendering the same regions the old way reads **nothing**,
+on every rotated page.
+
 ## 6. Label and value in the same region
 
 A title-block cell holds its label above its value, so reading the region
-verbatim yields `"図面番号\nA-101"`. Across 87 field readings:
+verbatim yields `"図面番号\nA-101"`. Across 99 field readings that have an
+expected value:
 
 | policy | exact match | contains the expected value |
 | --- | --- | --- |
-| whole region, verbatim | 5/87 | 85/87 |
-| last line of the region | 64/87 | 85/87 |
+| whole region, verbatim | 5/99 | 96/99 |
+| **last line of the region** | **96/99** | 96/99 |
 
-`contains` is identical for both, which says the text is being read correctly
-in 85 cases either way; the difference is entirely in presentation. Taking the
-last line is better as a default and is still wrong 23 times out of 87 — a
-two-line title, a value above its label, an empty value that leaves the label
-as the last line.
+Taking the last line is now as good as the extraction gets: every value that was
+read at all is presented correctly.
 
-A third policy that trimmed the label by string matching scored **54/88** end
-to end, worse than doing nothing. It is recorded here because it looked like an
-obvious improvement and was not: the trim removes real content whenever the
-label guess is wrong, and a wrong value is more expensive than a value with its
-label attached.
+That is a change from the earlier figure of 64/87, and the cause is worth
+recording because it was a defect in the measurement rather than an improvement
+in the rule. Both OCR paths used to flatten their output into a single line
+(`text.replace(/\s+/g, ' ')`), so an OCR-sourced field had no last line to
+take — the rule worked on native fields and did nothing at all on OCR ones.
+Grouping recognised words into lines by vertical overlap, exactly as the native
+reader already did, makes the two paths the same shape and the rule applies to
+both.
 
-## 7. End to end, 22 pages
+The third policy — approximating "ask the user to draw only the value area" by
+trimming the top 45% off each rectangle — scored **12/100**, against 95/100 for
+the same pipeline on whole cells. A mechanical trim is not a stand-in for a
+user-drawn region: it cuts into the value itself whenever the label is shorter
+than the guess. What that measures is the crudeness of the proxy, not the merit
+of the idea.
 
-`scripts/research-m2-5-register.mjs`:
+## 7. End to end, 25 pages
 
-| policy | fields correct | time |
+`scripts/research-m2-5-probe.mjs`. Four runs over the whole set. The policies
+differ on two independent axes — how the *source* is chosen, and how OCR is
+*called* — so they are stated separately:
+
+| policy | source decided | OCR path | fields correct | wall clock | OCR calls | pixels |
+| --- | --- | --- | --- | --- | --- | --- |
+| page-level | per page | per field | 93/100 | 2.1 s | 32 | 10.39 Mpx |
+| field-level | per field | per field | 95/100 | 2.1 s | 35 | 10.81 Mpx |
+| **field-level** | per field | **union** | **96/100** | **1.6 s** | **9** | 14.55 Mpx |
+| field-level, value-only regions | per field | per field | 12/100 | 3.6 s | 88 | 10.97 Mpx |
+
+**The page-level policy is now genuinely page-level.** The first version of this
+comparison called one policy "page-level" and then, on a native-classified page,
+sent any *empty* field to OCR anyway — which is field-level behaviour wearing a
+page-level label, and it made the two policies score identically because they
+largely were the same policy. A page-level policy has concluded the page has a
+text layer; it reads every field from that layer and an empty field stays empty.
+
+With the distinction made properly, the difference appears where it should:
+
+| on page 12 — a raster sheet whose drawing number is vector text | fields read | sources chosen |
 | --- | --- | --- |
-| page-level native/scanned switch | 85/88 | 1444 ms |
-| field-level source selection | 85/88 | 1265 ms |
-| field-level + label trimming | 54/88 | 2267 ms |
+| page-level | 1/4 | native, native, native, native |
+| field-level | 3/4 | native, ocr, ocr, ocr |
 
-Field-level selection does not beat the page-level switch on this corpus, and
-the reason is that only one page in the set (page 12) actually mixes sources.
-It is not faster because it is cleverer; it is marginally faster because it
-skips OCR on fields that already have text.
-
-The case for field-level is page 12, not the aggregate: the page-level switch
-gets 1 of 4 fields there and reports nothing wrong, whereas field-level reads
-the one native field and sends the other three to OCR. On a corpus with one
-such page that difference is invisible in the total.
+Two of the 100 fields separate the policies in aggregate, and all of the
+argument is on this one page: the page-level switch reads one field, leaves
+three empty, and reports nothing unusual.
 
 ## 8. One row per page
 
-- Rows produced: **22 of 22 pages**, under every policy.
+- Rows produced: **25 of 25 pages**, under every policy.
 - Silent page loss: **0**. A page whose template did not fit, whose OCR failed
   or whose fields came back empty still produces a row carrying the reason.
 
@@ -181,23 +268,25 @@ asserts the row exists, is empty, carries a reason, and is `unconfirmed`.
 
 ## 9. Review burden
 
-88 values across 22 pages:
+100 values across 25 pages:
 
 | | |
 | --- | --- |
-| rows flagged for review | 5 of 22 |
-| rows that were wrong but **not** flagged | 0 |
-| rows a reviewer had to edit | 6 of 22 |
-| fields a reviewer had to edit | 23 of 88 |
+| rows flagged for review | 5 of 25 |
+| rows that were wrong but **not** flagged | **1** (page 25) |
+| rows a reviewer had to edit | 3 of 25 (pages 12, 17, 25) |
+| fields a reviewer had to edit | 3 of 100 |
 
-The first and third lines disagree by one row, and that disagreement is the
-honest finding: the flags caught every row that was *wrong*, but one row needed
-an edit that no flag predicted — a value that was read correctly and still was
-not what belonged in the register.
+The second line is the one that matters, and it is worse than this document
+previously claimed. An earlier version reported zero rows wrong-but-unflagged;
+that was true of a corpus that did not yet contain a page capable of producing
+one. Page 25 is a rotated scanned sheet where OCR returned a wrong value *with
+high confidence*, so no flag fired.
 
-"0 unflagged-but-wrong" is a statement about this corpus of 22 synthetic pages.
-It is not a claim about a hit rate on real drawings, and it must not be quoted
-as one.
+This is the honest shape of confidence-based flagging: it catches the reader
+being unsure. It cannot catch the reader being confidently wrong, and no
+threshold makes it able to. That is an argument for the review step existing at
+all, not for tuning the threshold.
 
 ## 10. Duplicates and gaps
 
@@ -209,7 +298,7 @@ Duplicates, exact string match after trimming:
   be two different sheets.
 
 Gaps are worse, and this is the sharpest negative result in the spike. Sweeping
-the maximum jump that still counts as a gap, over the confirmed 22-page
+the maximum jump that still counts as a gap, over the confirmed 25-page
 register:
 
 | max jump | candidates | true | false |
@@ -218,11 +307,11 @@ register:
 | 2 | 2 | 1 | 1 |
 | 3 | 2 | 1 | 1 |
 | 5 | 2 | 1 | 1 |
-| 10 | 26 | 1 | 25 |
+| 10 | 34 | 1 | **33** |
 
 **Every setting that finds the planted gap also invents at least one**, on a set
-of 22 pages. There is no threshold that makes this check clean. A drawing set
-is allowed to skip numbers — a cancelled sheet, a reserved block, a discipline
+of 25 pages. There is no threshold that makes this check clean. A drawing set is
+allowed to skip numbers — a cancelled sheet, a reserved block, a discipline
 boundary — so absence of a number is not evidence of a missing drawing.
 
 Two rules do reduce the damage, and both are proved by negative probes:
@@ -289,7 +378,7 @@ External OCR service calls: 0. AI API calls: 0. Cloud conversion: 0.
 
 ## 13. The gate
 
-`scripts/research-m2-5-gate.mjs` re-asserts 44 claims, 16 of them negative
+`scripts/research-m2-5-gate.mjs` re-asserts 72 claims, 25 of them negative
 probes — checks fed input that must make them fire, so that "nothing was
 reported" can be distinguished from "nothing works". It passes at the head of
 this branch.

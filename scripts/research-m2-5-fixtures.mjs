@@ -277,6 +277,14 @@ const PAGES = [
     { kind: 'ocrlayer', size: 'A3', layout: 'A', rotate: 0, values: { drawing_number: 'A-130', drawing_title: '仕上詳細図', revision: 'A', revision_date: '2026.09.09' }, note: 'raster sheet with an invisible text layer, as our own searchable PDF produces' },
     { kind: 'native', size: 'A2', layout: 'A', rotate: 0, fixedBlock: true, values: { drawing_number: 'A-140', drawing_title: '外構平面図', revision: 'A', revision_date: '2026.09.11' }, note: 'A2 with a title block of the same physical size as the A3 pages' },
     { kind: 'native', size: 'A1', layout: 'A', rotate: 0, fixedBlock: true, values: { drawing_number: 'A-141', drawing_title: '外構詳細図', revision: 'A', revision_date: '2026.09.11' }, note: 'A1 with a title block of the same physical size as the A3 pages' },
+
+    // Scanned sheets that are also rotated. The rotated pages above all carry
+    // native text, so until these existed the region-render-and-OCR path had
+    // only ever run at /Rotate 0 -- a wrong rotation map would have been
+    // invisible in every OCR measurement.
+    { kind: 'scanned', size: 'A3', layout: 'A', rotate: 90, values: { drawing_number: 'A-150', drawing_title: '基礎詳細図', revision: 'A', revision_date: '2026.09.12' }, note: 'scanned and rotated: region OCR at /Rotate 90' },
+    { kind: 'scanned', size: 'A3', layout: 'A', rotate: 180, values: { drawing_number: 'A-151', drawing_title: '柱列表', revision: 'B', revision_date: '2026.09.12' }, note: 'scanned and rotated: region OCR at /Rotate 180' },
+    { kind: 'scanned', size: 'A3', layout: 'A', rotate: 270, values: { drawing_number: 'A-152', drawing_title: '壁量計算図', revision: 'A', revision_date: '2026.09.12' }, note: 'scanned and rotated: region OCR at /Rotate 270' },
 ];
 
 const doc = await PDFDocument.create();

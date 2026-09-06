@@ -35,9 +35,32 @@ export const REVIEW_REASONS = {
 /** Below this, a field is queued for review. Never used to accept anything. */
 export const LOW_CONFIDENCE = 70;
 
+/**
+ * The display value taken from raw extracted text.
+ *
+ * A title-block cell holds its label above its value, so the raw text of the
+ * drawing-number cell is "figure-number-label\nA-101". Taking the last line is
+ * the best simple rule measured, and it is wrong often enough that it must stay
+ * a *view* of the raw text rather than a replacement for it.
+ */
+export function displayValue(rawText) {
+    const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
+    return lines.length ? lines[lines.length - 1] : '';
+}
+
+function emptyField() {
+    return {
+        rawText: '', value: '', source: 'none', confidence: null, reviewReasons: [],
+    };
+}
+
 export function emptyRow(pageNumber) {
     return {
         pageNumber,
+        fields: Object.fromEntries(FIELDS.map((f) => [f, emptyField()])),
+        // A convenience mirror of fields[f].value, so the register-level checks
+        // can read a row without reaching through the provenance. It is derived,
+        // never authoritative: fields[f] is where the truth lives.
         drawing_number: '',
         drawing_title: '',
         revision: '',
@@ -52,26 +75,48 @@ export function emptyRow(pageNumber) {
 /**
  * Build one row from whatever the extraction produced.
  *
- * `fields` maps a field name to `{ text, source, confidence }`. A field that is
- * missing entirely is not an error here; it becomes an empty value and a
+ * `fields` maps a field name to `{ rawText, source, confidence }`. A field that
+ * is missing entirely is not an error here; it becomes an empty value and a
  * reason, which is the whole point.
+ *
+ * Three things are kept per field and none of them can be reconstructed later,
+ * which is why they are kept rather than summarised:
+ *
+ *   rawText     exactly what came out of the page. Never overwritten, never
+ *               trimmed. It is what a reviewer has to be shown when the value
+ *               looks wrong, because the value is a guess made from it.
+ *   source      native or ocr, per field. A row-level summary cannot express a
+ *               page whose drawing number is vector text over a raster sheet,
+ *               and that page is exactly the one that needs saying.
+ *   confidence  the reader's own score for its own output, per field. One
+ *               number for four values cannot say which value to look at.
  */
-export function buildRow({ pageNumber, fields = {}, templateFitted = true }) {
+export function buildRow({ pageNumber, fields = {}, templateFitted = true, deriveValue = displayValue }) {
     const row = emptyRow(pageNumber);
     const sources = new Set();
 
     for (const field of FIELDS) {
         const found = fields[field];
-        const text = (found?.text ?? '').trim();
-        row[field] = text;
+        const rawText = (found?.rawText ?? found?.text ?? '').trim();
+        const value = deriveValue(rawText);
+        const entry = row.fields[field];
+        entry.rawText = rawText;
+        entry.value = value;
+        entry.source = found?.source ?? 'none';
+        entry.confidence = typeof found?.confidence === 'number' ? found.confidence : null;
+
+        row[field] = value;
         if (found?.source) sources.add(found.source);
         if (typeof found?.confidence === 'number') row.confidence[field] = found.confidence;
 
         if (!templateFitted) continue;
-        if (text === '') {
+        if (rawText === '') {
+            entry.reviewReasons.push(`${REVIEW_REASONS.NO_TEXT_IN_FIELD} (${field})`);
             row.reviewReasons.push(`${REVIEW_REASONS.NO_TEXT_IN_FIELD} (${field})`);
-        } else if (typeof found?.confidence === 'number' && found.confidence < LOW_CONFIDENCE) {
-            row.reviewReasons.push(`${REVIEW_REASONS.LOW_CONFIDENCE} (${field}, ${Math.round(found.confidence)})`);
+        } else if (entry.confidence !== null && entry.confidence < LOW_CONFIDENCE) {
+            const reason = `${REVIEW_REASONS.LOW_CONFIDENCE} (${field}, ${Math.round(entry.confidence)})`;
+            entry.reviewReasons.push(reason);
+            row.reviewReasons.push(reason);
         }
     }
 
@@ -277,13 +322,33 @@ export function reviewQueue(rows) {
  * a caller supplying edits.
  */
 export function confirmRow(row, edits = {}) {
+    const fields = {};
+    for (const field of FIELDS) {
+        const entry = row.fields[field];
+        const finalValue = (edits[field] ?? entry.value).trim();
+        fields[field] = {
+            ...entry,
+            // rawText is deliberately carried through untouched. A confirmed
+            // row that no longer knows what was on the page cannot be audited,
+            // and "the human agreed" is not the same record as "this is what
+            // the sheet said".
+            rawText: entry.rawText,
+            proposedValue: entry.value,
+            value: finalValue,
+            editedByHuman: finalValue !== entry.value,
+        };
+    }
     return {
         ...row,
-        ...Object.fromEntries(FIELDS.map((f) => [f, (edits[f] ?? row[f]).trim()])),
+        fields,
+        ...Object.fromEntries(FIELDS.map((f) => [f, fields[f].value])),
         reviewStatus: 'confirmed',
         confirmedFrom: {
-            extracted: Object.fromEntries(FIELDS.map((f) => [f, row[f]])),
-            edited: Object.keys(edits).filter((f) => FIELDS.includes(f) && edits[f] !== row[f]),
+            raw: Object.fromEntries(FIELDS.map((f) => [f, row.fields[f].rawText])),
+            proposed: Object.fromEntries(FIELDS.map((f) => [f, row.fields[f].value])),
+            final: Object.fromEntries(FIELDS.map((f) => [f, fields[f].value])),
+            extracted: Object.fromEntries(FIELDS.map((f) => [f, row.fields[f].value])),
+            edited: FIELDS.filter((f) => fields[f].editedByHuman),
         },
     };
 }

@@ -217,10 +217,25 @@ try {
 
     // ---- segmentation, per field, on the scanned pages ----------------------
     console.log('\n=== segmentation modes, per field, on scanned pages ===');
-    const SCANNED = truth.pages.filter((p) => p.kind === 'scanned').map((p) => p.page);
+    // Which pages the segmentation numbers are computed over, stated as a rule
+    // rather than "the first few scanned ones".
+    //
+    // The template being applied is profile A, so a scanned page drawn to
+    // layout B is not a segmentation measurement at all -- the regions land in
+    // the wrong place and every mode scores zero, which drags the comparison
+    // down without telling us anything about segmentation. The rule is
+    // therefore: every scanned page the profile-A template actually addresses.
+    // It includes the rotated scanned sheets, so the denominator covers all
+    // four rotations rather than only /Rotate 0.
+    const SEGMENTATION_RULE = 'kind === scanned && layout === A && block scales with the sheet';
+    const SEGMENTATION_PAGES = truth.pages
+        .filter((p) => p.kind === 'scanned' && p.layout === 'A' && p.blockScaling === 'proportional')
+        .map((p) => p.page);
     const MODES = ['AUTO', 'SINGLE_BLOCK', 'SINGLE_LINE', 'SPARSE_TEXT', 'SINGLE_WORD'];
+    console.log(`  pages: ${SEGMENTATION_PAGES.join(', ')}  (${SEGMENTATION_RULE})`);
+    console.log(`  denominator: ${SEGMENTATION_PAGES.length} pages x ${FIELDS.length} fields = ${SEGMENTATION_PAGES.length * FIELDS.length} per mode`);
     const perFieldRuns = [];
-    for (const pageNumber of SCANNED.slice(0, 3)) {
+    for (const pageNumber of SEGMENTATION_PAGES) {
         const g = geometry.find((x) => x.pageNumber === pageNumber);
         const t = pageTruth(pageNumber);
         const regions = applyTemplate(template, g, OCR_MODEL);
@@ -242,12 +257,92 @@ try {
             console.log(`  p${String(pageNumber).padStart(2)} ${mode.padEnd(13)} value found in ${hits}/4 fields   ${run.totalMs}ms  ${(run.totalPixels / 1e6).toFixed(2)} Mpx`);
         }
     }
-    write('ocr-per-field.json', perFieldRuns);
+    write('ocr-per-field.json', { rule: SEGMENTATION_RULE, pages: SEGMENTATION_PAGES, fieldsPerPage: FIELDS.length, runs: perFieldRuns });
+
+    // ---- scanned pages that are also rotated --------------------------------
+    //
+    // Every rotated page in the earlier corpus carried native text, so the
+    // region-render-and-OCR path had only ever been exercised at /Rotate 0.
+    // A wrong rotation map would have rendered the wrong part of the sheet and
+    // returned empty text, which is indistinguishable from "OCR found nothing"
+    // -- so it would have been invisible in every OCR number measured.
+    //
+    // The chain under test is the whole one: an upright field rectangle ->
+    // uprightRectToDisplay -> a region-only pdf.js render -> OCR -> a field
+    // value. Nothing here is allowed to know the rotation except the map.
+    console.log('');
+    console.log('=== scanned ROI through each rotation ===');
+    const ROTATED_SCANNED = truth.pages
+        .filter((p) => p.kind === 'scanned' && p.layout === 'A' && p.blockScaling === 'proportional')
+        .map((p) => p.page);
+    const rotationRuns = [];
+    for (const pageNumber of ROTATED_SCANNED) {
+        const g = geometry.find((x) => x.pageNumber === pageNumber);
+        const t = pageTruth(pageNumber);
+        // The same upright template, applied the same way, for every rotation.
+        // If the field values come back regardless of /Rotate, then upright
+        // page space really is rotation-independent for this path.
+        const regions = applyTemplate(template, g, OCR_MODEL);
+        const run = await page.evaluate((n, r, m) => window.__m25.ocrPerField(n, r, m),
+            pageNumber, regions, 'SINGLE_BLOCK');
+        const scored = {};
+        for (const f of FIELDS) {
+            const want = t.values[f] ?? '';
+            const got = run.fields[f]?.text ?? '';
+            scored[f] = {
+                expected: want, actual: got,
+                containsExpected: want !== '' && norm(got).includes(norm(want)),
+                confidence: run.fields[f]?.confidence ?? null,
+            };
+        }
+        const hits = FIELDS.filter((f) => scored[f].containsExpected).length;
+        rotationRuns.push({
+            pageNumber, rotate: t.rotate, mode: 'correct', forcedRotate: null,
+            hits, of: FIELDS.length, fields: scored,
+            uprightRegions: regions,
+        });
+        console.log(`  p${String(pageNumber).padStart(2)} /Rotate ${String(t.rotate).padStart(3)}  correct map     ${hits}/4 fields`);
+    }
+
+    // The negative probe: render the same regions the way this harness did
+    // before the fix -- through the page's own /Rotate, into display space.
+    // That crops exactly the right pixels and hands OCR a title block lying on
+    // its side, so the values must stop coming back. If they still come back,
+    // the un-rotation is not what is making this work.
+    //
+    // Only the rotated pages can show it. On a /Rotate 0 page the wrong render
+    // and the right one are the same render, so including those would dilute
+    // the probe with cases that cannot fail.
+    const wrongRuns = [];
+    for (const pageNumber of ROTATED_SCANNED.filter((p) => pageTruth(p).rotate !== 0)) {
+        const t = pageTruth(pageNumber);
+        const g = geometry.find((x) => x.pageNumber === pageNumber);
+        const regions = applyTemplate(template, g, OCR_MODEL);
+        const wrong = t.rotate;
+        const run = await page.evaluate((n, r, m, o) => window.__m25.ocrPerField(n, r, m, o),
+            pageNumber, regions, 'SINGLE_BLOCK', { forceRotate: wrong });
+        const hits = FIELDS.filter((f) => {
+            const want = t.values[f] ?? '';
+            const got = run.fields[f]?.text ?? '';
+            return want !== '' && norm(got).includes(norm(want));
+        }).length;
+        wrongRuns.push({ pageNumber, rotate: t.rotate, mode: 'wrong', forcedRotate: wrong, hits, of: FIELDS.length });
+        console.log(`  p${String(pageNumber).padStart(2)} /Rotate ${String(t.rotate).padStart(3)}  rendered rotated (the old bug)  ${hits}/4 fields`);
+    }
+
+    const rotatedOnly = rotationRuns.filter((r) => r.rotate !== 0);
+    const correctHits = rotatedOnly.reduce((n, r) => n + r.hits, 0);
+    const wrongHits = wrongRuns.reduce((n, r) => n + r.hits, 0);
+    console.log('');
+    console.log(`  rotated scanned pages read with the correct map: ${correctHits}/${rotatedOnly.length * FIELDS.length} fields`);
+    console.log(`  the same pages read through a wrong rotation:    ${wrongHits}/${wrongRuns.length * FIELDS.length} fields`);
+    console.log(`  every rotation read at least three of its four fields: ${rotatedOnly.every((r) => r.hits >= 3)}`);
+    write('rotated-scanned.json', { correct: rotationRuns, wrong: wrongRuns });
 
     // ---- one region for the whole title block -------------------------------
     console.log('\n=== the whole title block in one pass ===');
     const unionRuns = [];
-    for (const pageNumber of SCANNED.slice(0, 3)) {
+    for (const pageNumber of SEGMENTATION_PAGES) {
         const g = geometry.find((x) => x.pageNumber === pageNumber);
         const t = pageTruth(pageNumber);
         const regions = applyTemplate(template, g, OCR_MODEL);
@@ -270,12 +365,12 @@ try {
             console.log(`  p${String(pageNumber).padStart(2)} ${mode.padEnd(13)} value found in ${hits}/4 fields   ${run.totalMs}ms  ${(run.totalPixels / 1e6).toFixed(2)} Mpx  ${run.unplaced.length} words outside any field`);
         }
     }
-    write('ocr-union.json', unionRuns);
+    write('ocr-union.json', { rule: SEGMENTATION_RULE, pages: SEGMENTATION_PAGES, runs: unionRuns });
 
     // ---- preprocessing, on the same regions ----------------------------------
     console.log('\n=== ROI preprocessing, on and off ===');
     const prepRuns = [];
-    for (const pageNumber of SCANNED.slice(0, 2)) {
+    for (const pageNumber of SEGMENTATION_PAGES.slice(0, 2)) {
         const g = geometry.find((x) => x.pageNumber === pageNumber);
         const t = pageTruth(pageNumber);
         const regions = applyTemplate(template, g, OCR_MODEL);
@@ -354,10 +449,42 @@ try {
         ...r, top: r.top + (r.bottom - r.top) * VALUE_ONLY_TOP,
     }]));
 
+    /**
+     * The policies, as they are actually defined rather than as they were named.
+     *
+     * The first version of this comparison called one policy "page-level" and
+     * then, on a native page, sent any *empty* field to OCR anyway. That is
+     * field-level behaviour wearing a page-level label, and it made the two
+     * policies score the same because they largely were the same. The
+     * distinction below is the real one:
+     *
+     *   page-level   the page classifier decides for the whole page. A native
+     *                page is read entirely from its text layer and an empty
+     *                field stays empty -- there is no OCR fallback, because a
+     *                page-level policy has already concluded the page has text.
+     *                A scanned page goes to OCR in full.
+     *   field-level  each field is decided on its own: its native text if it
+     *                has any, OCR if it does not.
+     *
+     * The OCR path is a separate axis, because the proposed architecture calls
+     * for per-field recognition and the earlier end-to-end run measured the
+     * union path instead.
+     */
+    const POLICIES = [
+        { name: 'page-level', decide: 'page', ocr: 'per-field', regions: 'cell' },
+        { name: 'field-level, per-field OCR', decide: 'field', ocr: 'per-field', regions: 'cell' },
+        { name: 'field-level, union OCR', decide: 'field', ocr: 'union', regions: 'cell' },
+        { name: 'field-level, per-field OCR, value-only', decide: 'field', ocr: 'per-field', regions: 'value' },
+    ];
+
     const endToEnd = [];
-    for (const policy of ['page-level', 'field-level', 'field-level+value-only']) {
+    for (const policy of POLICIES) {
         const started = Date.now();
         const rows = [];
+        let ocrCalls = 0;
+        let ocrPixels = 0;
+        let ocrMs = 0;
+        let unplacedWords = 0;
         for (const g of geometry) {
             const t = pageTruth(g.pageNumber);
             const profile = profileOf(g.pageNumber);
@@ -367,45 +494,96 @@ try {
             // numbers are not dragged down by a question already answered.
             const model = t.blockScaling === 'fixed-physical-size' ? 'corner-anchored' : 'normalised';
             const wholeCell = applyTemplate(templates[profile], g, model);
-            const regions = policy === 'field-level+value-only' ? valueOnly(wholeCell) : wholeCell;
+            const regions = policy.regions === 'value' ? valueOnly(wholeCell) : wholeCell;
 
             const native = await page.evaluate((n, r) => window.__m25.nativeFields(n, r), g.pageNumber, regions);
             const fields = {};
-            let ocrNeeded = {};
+            const ocrNeeded = {};
 
             for (const f of FIELDS) {
                 const nativeText = (native.fields[f]?.text ?? '').trim();
-                const hasNative = nativeText !== '';
-                const useNative = policy.startsWith('field-level') ? hasNative : !g.scanned && hasNative;
-                if (useNative) fields[f] = { text: nativeText, source: 'native' };
-                else ocrNeeded[f] = regions[f];
-            }
-
-            if (Object.keys(ocrNeeded).length) {
-                const union = unionRegion(ocrNeeded, 6);
-                const run = await page.evaluate((n, r, u, m) => window.__m25.ocrUnionRegion(n, r, u, m),
-                    g.pageNumber, ocrNeeded, union, 'SINGLE_BLOCK');
-                for (const f of Object.keys(ocrNeeded)) {
-                    fields[f] = {
-                        text: run.fields[f]?.text ?? '',
-                        source: 'ocr',
-                        confidence: run.fields[f]?.confidence ?? null,
-                    };
+                if (policy.decide === 'page') {
+                    // The page classifier has spoken for every field on it.
+                    if (!g.scanned) {
+                        fields[f] = { rawText: nativeText, source: 'native', confidence: null };
+                    } else {
+                        ocrNeeded[f] = regions[f];
+                    }
+                } else if (nativeText !== '') {
+                    fields[f] = { rawText: nativeText, source: 'native', confidence: null };
+                } else {
+                    ocrNeeded[f] = regions[f];
                 }
             }
 
-            rows.push({ pageNumber: g.pageNumber, profile, model, fields, expected: t.values });
+            if (Object.keys(ocrNeeded).length) {
+                if (policy.ocr === 'union') {
+                    const union = unionRegion(ocrNeeded, 6);
+                    const run = await page.evaluate((n, r, u, m) => window.__m25.ocrUnionRegion(n, r, u, m),
+                        g.pageNumber, ocrNeeded, union, 'SINGLE_BLOCK');
+                    ocrCalls += 1;
+                    ocrPixels += run.totalPixels;
+                    ocrMs += run.totalMs;
+                    unplacedWords += run.unplaced.length;
+                    for (const f of Object.keys(ocrNeeded)) {
+                        fields[f] = {
+                            rawText: run.fields[f]?.text ?? '',
+                            source: 'ocr',
+                            confidence: run.fields[f]?.confidence ?? null,
+                        };
+                    }
+                } else {
+                    const run = await page.evaluate((n, r, m) => window.__m25.ocrPerField(n, r, m),
+                        g.pageNumber, ocrNeeded, 'SINGLE_BLOCK');
+                    ocrCalls += Object.keys(ocrNeeded).length;
+                    ocrPixels += run.totalPixels;
+                    ocrMs += run.totalMs;
+                    for (const f of Object.keys(ocrNeeded)) {
+                        fields[f] = {
+                            rawText: run.fields[f]?.text ?? '',
+                            source: 'ocr',
+                            confidence: run.fields[f]?.confidence ?? null,
+                        };
+                    }
+                }
+            }
+
+            rows.push({
+                pageNumber: g.pageNumber, profile, model,
+                pageScanned: g.scanned, kind: t.kind, rotate: t.rotate,
+                fields, expected: t.values,
+            });
         }
         const ms = Date.now() - started;
-        endToEnd.push({ policy, ms, rows });
 
-        const exact = rows.reduce((n, r) => n + FIELDS.filter((f) => {
+        const hit = (r, f) => {
             const want = r.expected[f] ?? '';
-            const got = r.fields[f]?.text ?? '';
+            const got = r.fields[f]?.rawText ?? '';
             return want !== '' && norm(got).includes(norm(want));
-        }).length, 0);
+        };
+        const exact = rows.reduce((n, r) => n + FIELDS.filter((f) => hit(r, f)).length, 0);
         const total = rows.length * FIELDS.length;
-        console.log(`  ${policy.padEnd(12)} ${exact}/${total} fields carry the expected value   ${(ms / 1000).toFixed(1)}s for ${rows.length} pages`);
+        endToEnd.push({
+            policy: policy.name, decide: policy.decide, ocr: policy.ocr, regions: policy.regions,
+            ms, ocrCalls, ocrPixels, ocrMs, unplacedWords, exact, total, rows,
+        });
+        console.log(`  ${policy.name.padEnd(38)} ${String(exact).padStart(3)}/${total} fields   ${(ms / 1000).toFixed(1)}s   ${String(ocrCalls).padStart(3)} OCR calls  ${(ocrPixels / 1e6).toFixed(2)} Mpx${policy.ocr === 'union' ? `  ${unplacedWords} words unplaced` : ''}`);
+    }
+
+    // The one page that mixes a raster sheet with vector text is the entire
+    // argument for deciding per field, so it is reported on its own rather
+    // than left to disappear into a 100-field total.
+    const MIXED_PAGE = truth.pages.find((p) => p.kind === 'stamp').page;
+    console.log('');
+    console.log(`  on the mixed-source page (p${MIXED_PAGE}), field by field:`);
+    for (const run of endToEnd) {
+        const row = run.rows.find((r) => r.pageNumber === MIXED_PAGE);
+        const got = FIELDS.filter((f) => {
+            const want = row.expected[f] ?? '';
+            return want !== '' && norm(row.fields[f]?.rawText ?? '').includes(norm(want));
+        }).length;
+        const sources = FIELDS.map((f) => row.fields[f]?.source ?? 'none');
+        console.log(`    ${run.policy.padEnd(38)} ${got}/4 fields   sources: ${sources.join(', ')}`);
     }
     write('end-to-end.json', endToEnd);
 

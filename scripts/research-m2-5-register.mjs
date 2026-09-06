@@ -32,7 +32,7 @@ const endToEnd = JSON.parse(fs.readFileSync(path.join(OUT, 'end-to-end.json'), '
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), `${JSON.stringify(data, null, 1)}\n`);
 const norm = (s) => String(s ?? '').replace(/\s+/gu, '').trim();
 
-const run = endToEnd.find((r) => r.policy === 'field-level') ?? endToEnd[0];
+const run = endToEnd.find((r) => r.policy === 'field-level, union OCR') ?? endToEnd[0];
 
 /**
  * A field region holds its label as well as its value.
@@ -64,18 +64,20 @@ const VALUE_POLICIES = {
     },
 };
 
+// The policy chooses how the *value* is derived; the raw text goes in
+// untouched either way, and the row keeps it. That is the whole point of the
+// split -- a display rule must never be able to destroy what was on the page.
 const buildRows = (policy) => run.rows.map((r) => buildRow({
     pageNumber: r.pageNumber,
-    fields: Object.fromEntries(Object.entries(r.fields).map(([f, v]) => [f, {
-        ...v, text: VALUE_POLICIES[policy](v.text ?? ''),
-    }])),
+    fields: r.fields,
+    deriveValue: VALUE_POLICIES[policy],
 }));
 
 console.log('\n=== label and value inside one field region ===');
 const sample = run.rows.find((r) => r.pageNumber === 1);
-console.log(`  page 1, drawing_number as extracted: ${JSON.stringify(sample.fields.drawing_number.text)}`);
+console.log(`  page 1, drawing_number as extracted: ${JSON.stringify(sample.fields.drawing_number.rawText)}`);
 for (const policy of Object.keys(VALUE_POLICIES)) {
-    console.log(`    ${policy.padEnd(13)} -> ${JSON.stringify(VALUE_POLICIES[policy](sample.fields.drawing_number.text))}`);
+    console.log(`    ${policy.padEnd(13)} -> ${JSON.stringify(VALUE_POLICIES[policy](sample.fields.drawing_number.rawText))}`);
 }
 
 const byPolicy = {};
@@ -274,7 +276,7 @@ for (const maxRunGap of [1, 2, 3, 5, 10]) {
 const best = sweep.filter((r) => r.truePositives > 0).sort((a, b) => a.falsePositives - b.falsePositives)[0];
 console.log('');
 console.log(`  the planted gap is still found at maxRunGap=${best.maxRunGap}, with ${best.falsePositives} false candidate(s) alongside it`);
-console.log('  every setting that finds it also invents at least one, on a set of only 22 pages.');
+console.log(`  every setting that finds it also invents at least one, on a set of only ${confirmed.length} pages.`);
 write('gap-sweep.json', { sweep, expectedGap });
 
 // ---------------------------------------------------------------------------
