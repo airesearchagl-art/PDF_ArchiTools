@@ -1,0 +1,113 @@
+# Core CI: verify the exact commit a pull request is asking us to review.
+#
+# The point of this workflow is narrow and worth stating plainly. GitHub's
+# default `pull_request` checkout is a *merge* commit -- the PR's head merged
+# into the base -- which is a commit nobody wrote and nobody reviews. A green
+# tick from that run says the merge would work, not that the code under review
+# works. So this checks out `pull_request.head.sha` explicitly and then proves
+# it did, by comparing what git says it is standing on against what the event
+# said to fetch. A mismatch fails the run rather than quietly testing the wrong
+# thing.
+#
+# Deliberately bounded. This is not every local gate: it is a backbone that
+# runs on every push to a PR, quickly enough to be worth waiting for. Gates left
+# out are listed in the pull request that added this file, with the reason.
+name: Core CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Read-only. This workflow runs code from the pull request, so it is never
+# given a token that can write to the repository, and `pull_request_target`
+# -- which would run it in a privileged context with secrets -- is not used.
+permissions:
+  contents: read
+
+# One run per pull request. A new push makes the previous run irrelevant, so it
+# is cancelled rather than left to finish and spend minutes on a commit nobody
+# is looking at any more.
+concurrency:
+  group: core-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: build and core gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the exact commit under review
+        uses: actions/checkout@v4
+        with:
+          # The head of the pull request, not the merge commit GitHub builds
+          # for it. For a manual run there is no pull request, so this is the
+          # ref that was dispatched.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Prove the checkout is that exact commit
+        run: |
+          EXPECTED="${{ github.event.pull_request.head.sha || github.sha }}"
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "Expected head: ${EXPECTED}"
+          echo "Actual checked-out head: ${ACTUAL}"
+          {
+            echo "### Exact-head contract"
+            echo ""
+            echo "| | commit |"
+            echo "|---|---|"
+            echo "| Expected head | \`${EXPECTED}\` |"
+            echo "| Actual checked-out head | \`${ACTUAL}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${EXPECTED}" != "${ACTUAL}" ]; then
+            echo "::error::Checked-out commit is not the commit under review."
+            echo "" >> "${GITHUB_STEP_SUMMARY}"
+            echo "**FAILED: the checkout is not the commit under review.**" >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Verified: this run tested the commit above." >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches the Node the gates are developed and run against locally.
+          # The repository declares no `engines`, so this is the version that
+          # is actually known to work rather than one inferred from a range.
+          node-version: '24'
+          cache: npm
+
+      - name: Install exactly what the lockfile says
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The gates below are run as separate steps rather than one script, so a
+      # failure names itself in the job view instead of being buried in a log.
+      # Each drives the real modules in a real browser against synthetic
+      # fixtures the repository generates for itself; none of them needs the
+      # network, a customer document, or a secret.
+
+      - name: Textifier (OCR pipeline)
+        run: node scripts/smoke-textifier.mjs
+
+      - name: Text extraction
+        run: node scripts/smoke-text-extraction.mjs
+
+      - name: Word export
+        run: node scripts/smoke-word-export.mjs
+
+      - name: Excel export
+        run: node scripts/smoke-excel-export.mjs
+
+      - name: Page size normalisation
+        run: node scripts/smoke-page-size-normalizer.mjs
+
+      - name: Title-block updater
+        run: node scripts/smoke-title-block-updater.mjs
+
+      - name: Usage guide
+        run: node scripts/smoke-usage-guide.mjs
