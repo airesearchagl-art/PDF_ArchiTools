@@ -169,6 +169,50 @@ const SETUPS = {
         });
         await page.waitForFunction(() => document.querySelector('select')?.value === 'word');
     },
+
+    async textifier_excel(page) {
+        await clickNav(page, 'PDFテキスト化');
+        await page.waitForFunction(() => document.body.innerText.includes('PDF Textification'));
+        const excelInput = await page.$('input[type="file"]');
+        await excelInput.uploadFile(path.join(FIXTURES, 'excel', 'native-ruled-simple.pdf'));
+        await page.waitForFunction(() => document.querySelector('input[name="mode"][value="extract"]') !== null);
+        await page.evaluate(() => {
+            [...document.querySelectorAll('input[name="mode"]')].find((r) => r.value === 'extract')?.click();
+        });
+        await page.evaluate(() => {
+            const select = document.querySelector('select');
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+            setter.call(select, 'excel');
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await page.waitForSelector('[data-usage-target="excel-page-canvas"]');
+        await page.waitForFunction(() => {
+            const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+            return c && c.width > 0 && c.height > 0;
+        }, { timeout: 30_000 });
+        await new Promise((r) => setTimeout(r, 900));
+        await page.evaluate(() => {
+            document.querySelector('[data-usage-target="excel-page-canvas"]').scrollIntoView({ block: 'start' });
+        });
+        await new Promise((r) => setTimeout(r, 250));
+
+        // The preview only exists once a range has been selected, so the state
+        // is reached the way a user reaches it rather than by forcing it.
+        const box = await page.$eval('[data-usage-target="excel-page-canvas"]', (canvas) => {
+            const r = canvas.getBoundingClientRect();
+            return { x: r.x, y: r.y, width: r.width, pixelWidth: canvas.width };
+        });
+        const scale = box.width / 595.28;
+        await page.mouse.move(box.x + 54 * scale, box.y + 104 * scale);
+        await page.mouse.down();
+        await page.mouse.move(box.x + 486 * scale, box.y + 198 * scale, { steps: 8 });
+        await page.mouse.up();
+        await page.waitForSelector('[data-usage-target="excel-preview"]', { timeout: 30_000 });
+        await new Promise((r) => setTimeout(r, 400));
+        await page.evaluate(() => {
+            document.querySelector('[data-usage-target="excel-page-canvas"]').scrollIntoView({ block: 'start' });
+        });
+    },
 };
 
 let exitCode = 1;
@@ -177,7 +221,10 @@ try {
 
     // ---- the artifacts agree with each other -------------------------------
     console.log('\n=== artifact contract ===');
-    check('the badge config names six screenshots', keys.length === 6, keys.join(', '));
+    // One per documented screen. Named rather than counted loosely: a screen
+    // that quietly disappears from the config would otherwise take its badges
+    // and its drift check with it.
+    check('the badge config names every documented screen', keys.length === 7, keys.join(', '));
 
     const problems = validateArtifacts({ config: BADGE_CONFIG, geometry, screenshotDir: SHOTS });
     for (const p of problems) console.log(`  PROBLEM ${p.kind} ${p.screen ?? ''}: ${p.detail}`);

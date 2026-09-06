@@ -6,6 +6,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { Upload, FileText, Check, Download, Loader, Settings, ArrowRight, AlertTriangle, XCircle } from 'lucide-react';
 import { renderPageToCanvas } from '../utils/pdfDiff';
 
+import { ExcelTableExporter } from './ExcelTableExporter';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
 import { textifyPdf, extractTextPdf, buildWordDocument, WORD_MIME, TextifyError, configurePdfWorker, preprocessSkipNotice } from '../utils/pdf-textifier';
@@ -302,6 +303,18 @@ export const PdfTextifier: React.FC = () => {
         cancelRef.current = true;
     };
 
+    /**
+     * Excel is a workflow, not another output of the same run.
+     *
+     * It never calls extractTextPdf(), never starts the OCR engine and never
+     * touches the Word path: a table needs the geometry that extractTextPdf()
+     * has already discarded by the time it returns a string. So the whole
+     * "press the button, wait, download" section is replaced rather than
+     * reused, which also keeps its "Processing Complete" wording away from a
+     * screen where nothing has been produced yet.
+     */
+    const isExcel = options.mode === 'extract' && options.outputFormat === 'excel';
+
     const ocrPages = result?.pages.filter((p) => p.kind === 'scanned') ?? [];
     const recognisedWords = ocrPages.reduce((sum, p) => sum + p.ocrWords, 0);
 
@@ -317,7 +330,7 @@ export const PdfTextifier: React.FC = () => {
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem' }}>PDFテキスト化 (PDF Textification)</h2>
                         <p style={{ margin: '5px 0 0', color: '#666', fontSize: '0.9rem' }}>
-                            スキャンPDFを検索可能PDFへ、またはPDFの文字をTXT・Wordへ。処理はすべてブラウザ内で行われ、ファイルは外部へ送信されません。
+                            スキャンPDFを検索可能PDFへ、PDFの文字をTXT・Wordへ。文字情報を持つPDFの表は、範囲を指定して内容を確認したうえでExcelへ書き出せます。処理はすべてブラウザ内で行われ、ファイルは外部へ送信されません。
                         </p>
                     </div>
                 </div>
@@ -431,15 +444,23 @@ export const PdfTextifier: React.FC = () => {
                                         : <>
                                             <option value="txt">Text (.txt)</option>
                                             <option value="word">Word (.docx)</option>
+                                            {/* Excel is a different workflow, not another
+                                                output of the same run, so it is offered only
+                                                where it can actually be produced. */}
+                                            <option value="excel">Excel (.xlsx)</option>
                                         </>}
-                                    <option value="excel" disabled>Excel (.xlsx) — Coming later</option>
                                 </select>
                             </div>
                         </div>
                     )}
 
+                    {/* 3a. Excel: select, confirm, export. Its own workflow. */}
+                    {file && previewPdf && isExcel && (
+                        <ExcelTableExporter file={file} doc={previewPdf} />
+                    )}
+
                     {/* 3. Action Section */}
-                    {file && !result && (
+                    {file && !result && !isExcel && (
                         <div style={{ textAlign: 'center' }}>
                             <button
                                 data-usage-target="textifier-run"
@@ -528,7 +549,7 @@ export const PdfTextifier: React.FC = () => {
                     )}
 
                     {/* 4. Result Section */}
-                    {result && (
+                    {result && !isExcel && (
                         <div style={{ textAlign: 'center', animation: 'fadeIn 0.5s ease' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '60px', height: '60px', borderRadius: '50%', background: '#dffff0', color: '#00c853', marginBottom: '15px' }}>
                                 <Check size={32} />

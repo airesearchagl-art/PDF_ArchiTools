@@ -22,6 +22,19 @@ export { buildWordDocument, escapeXml, WORD_MIME } from './word';
 export type { WordExportOptions, WordExportResult } from './word';
 export type { OcrPreprocessOptions, OcrPreprocessResult } from './preprocess';
 
+// Native table -> Excel. A path of its own: it starts from page geometry, not
+// from the text extractTextPdf() produces, because the coordinates that make a
+// table a table are already gone by the time that string exists.
+export { analysePageGeometry, canvasRectToUpright, toUprightPoint, toUprightRect, runQuad, tokensInRect, segmentsInRect, rectOverlap } from './table-geometry';
+export { findRuledGrids, findGeometryGrid, snapToRuledGrid, groupRows, MAX_GEOMETRY_TOKENS, SNAP_OVERLAP, AMBIGUITY_MARGIN } from './table-detect';
+export { reconstructSelection, sheetNameFor, STATUS_LABEL } from './table-reconstruct';
+export { buildWorkbook, buildWorkbookParts, workbookFileName, columnName, XLSX_MIME } from './excel';
+export type { WorkbookOptions, WorkbookResult } from './excel';
+export type {
+    ConfirmedTable, PageGeometry, RulingSegment, SelectionRect, TableCandidate,
+    TableReconstructOptions, TableSource, TableStatus, TableToken,
+} from './table-types';
+
 /** Report only what preprocessing actually did, not the internals of how. */
 export function summarise(prep: OcrPreprocessResult): PagePreprocessInfo {
     return {

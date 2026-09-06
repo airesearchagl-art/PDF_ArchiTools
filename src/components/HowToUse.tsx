@@ -3,6 +3,7 @@ import {
     PenTool, Ruler, ZoomIn, Download, Blend, FileText, UploadCloud, Combine,
     ArrowUp, ArrowDown, ScanText, Settings, History, Play, Stamp, ChevronDown,
     Layers, Eye, MousePointer2, Scissors,
+    FileSpreadsheet,
 } from 'lucide-react';
 import { TOOL_VERSIONS } from '../config/versions';
 import { USAGE_SCREENSHOTS } from './usageScreenshotBadges';
@@ -23,6 +24,18 @@ interface ReleaseNote {
 }
 
 const releaseHistory: ReleaseNote[] = [
+    {
+        date: '2026/09/06',
+        tool: 'PDFテキスト化',
+        version: '1.6.0',
+        changes: [
+            '文字情報を持つPDFの表を、範囲を指定してExcel（.xlsx）へ書き出せるようになりました。',
+            'ページ上で範囲をドラッグすると、罫線のある表は罫線に合わせて調整されます。',
+            '復元した表は画面で確認・編集でき、確定するまでExcelは作成されません。',
+            'すべての値はテキストとして書き出します。空白セルは空白のまま保持します。',
+            '結合セルの復元、書式・数式の再現、画像PDF（スキャン）の表抽出には対応していません。',
+        ],
+    },
     {
         date: '2026/09/05',
         tool: 'PDFテキスト化',
@@ -580,21 +593,46 @@ export function HowToUse() {
                             </ul>
                         </div>
 
-                        <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0' }}>
-                            <h4 style={cardHeadStyle}><Settings size={18} /> 未対応の機能（今後対応予定）</h4>
-                            <ul style={listStyle}>
-                                <li><b>Excel (.xlsx) 出力</b> — 未対応（Coming later）</li>
-                            </ul>
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #27ae60' }}>
+                            <h4 style={cardHeadStyle}><FileSpreadsheet size={18} /> Excel (.xlsx) 出力 — 表を範囲指定して書き出す</h4>
+                            <ScreenWithBadges screenshot="textifier_excel" />
                             <p style={noteStyle}>
-                                現在ご利用いただける出力は「PDF (Searchable)」「Text (.txt)」「Word (.docx)」です。
+                                Output Format で「Excel (.xlsx)」を選ぶと、ページ上で表の範囲を指定して
+                                Excelへ書き出せます。PDF全体から表を自動で探す機能ではありません。
                             </p>
+                            <ul style={listStyle}>
+                                <li><b>文字情報を持つPDFのみ</b>対応します。画像PDF（スキャン）のページは対象外です。</li>
+                                <li>ページを選び、表の範囲を<b>ドラッグで指定</b>します。</li>
+                                <li>罫線のある表は、範囲が多少ずれていても<b>罫線に合わせて調整</b>されます。</li>
+                                <li>罫線のない表は、指定した範囲の中の文字位置から復元します。</li>
+                                <li>復元結果は<b>編集できる表として画面に表示</b>されます。内容を確認し、必要なら修正できます。</li>
+                                <li><b>「内容を確認してこの表を確定」</b>を押すまでExcelは作成されません。</li>
+                                <li>複数の表を確定でき、確定した表ごとに1シートを作成します。</li>
+                                <li>ページの回転（90/180/270度）にも対応しています。</li>
+                            </ul>
+                            <p style={{ ...noteStyle, fontWeight: 600 }}>
+                                内容の意味は自動判定していません。図枠・凡例など表の形をした部分を指定した場合も
+                                表として復元されます。書き出す前に必ず内容をご確認ください。
+                            </p>
+                        </div>
+
+                        <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0' }}>
+                            <h4 style={cardHeadStyle}><Settings size={18} /> Excel出力で対応していないこと</h4>
+                            <ul style={listStyle}>
+                                <li><b>すべての値はテキストとして書き出します。</b>「001」「1:100」「D13@200」などをそのまま保つためで、「12」もテキストになります。</li>
+                                <li><b>空白セルは空白のまま</b>保持します。詰めたり繰り上げたりしません。</li>
+                                <li><b>結合セルは復元しません。</b>元が結合されていても、通常のセルとして書き出します。</li>
+                                <li>書式・列幅・数式・スタイルは再現しません。</li>
+                                <li>PDF全体からの自動抽出、ページをまたぐ表には対応していません。</li>
+                                <li><b>画像PDF（スキャン）の表抽出は未対応です。</b>該当ページでは画面にお知らせが出ます。</li>
+                            </ul>
                         </div>
                     </div>
 
                     <p style={calloutStyle}>
-                        <b>データの取り扱い:</b> 文字認識・OCR前処理・TXT／Wordの書き出しは、
+                        <b>データの取り扱い:</b> 文字認識・OCR前処理・TXT／Word／Excelの書き出しは、
                         いずれもお使いのブラウザ内で実行されます。
-                        PDFを外部のAI・OCRサービスへ送信することはありません。
+                        PDFを外部のAI・OCR・表認識サービスへ送信することはありません。
                     </p>
                 </ToolSection>
             </div>

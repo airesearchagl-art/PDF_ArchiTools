@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Excel export smoke harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Excel export smoke harness</h1>
+<p>Driven by <code>scripts/smoke-excel-export.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import JSZip from 'jszip';
+import {
+  analysePageGeometry, reconstructSelection, canvasRectToUpright, toUprightRect,
+  buildWorkbook, buildWorkbookParts, workbookFileName, sheetNameFor, columnName,
+  snapToRuledGrid, groupRows, findRuledGrids, findGeometryGrid, runQuad,
+  MAX_GEOMETRY_TOKENS, XLSX_MIME, configurePdfWorker,
+} from '/src/utils/pdf-textifier/index.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+configurePdfWorker();
+
+const fixture = (name) => fetch(`/test-fixtures/excel/${name}.pdf`).then((r) => {
+  if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+  return r.arrayBuffer();
+});
+const open = async (name) => pdfjsLib.getDocument({ data: new Uint8Array(await fixture(name)) }).promise;
+
+/** Count every call the OCR engine would make, so "no OCR" can be proved. */
+window.__ocrCalls = 0;
+
+window.__excel = {
+  ready: true,
+  MAX_GEOMETRY_TOKENS,
+  XLSX_MIME,
+
+  /** Page geometry, reported rather than summarised. */
+  async geometry(name, pageNumber = 1) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, pageNumber);
+    await doc.destroy();
+    return {
+      pageNumber: g.pageNumber, rotate: g.rotate,
+      displayWidth: g.displayWidth, displayHeight: g.displayHeight,
+      uprightWidth: g.uprightWidth, uprightHeight: g.uprightHeight,
+      tokens: g.tokens.length,
+      segments: g.segments.length,
+      scanned: g.scanned,
+      allChars: g.allChars,
+      interiorChars: g.interiorChars,
+      firstTokens: g.tokens.slice(0, 3),
+      whitespaceTokens: g.tokens.filter((t) => t.text.trim() === '').length,
+      zeroHeight: g.tokens.filter((t) => t.height === 0).length,
+    };
+  },
+
+  /**
+   * Reconstruct a selection. The rectangle is given in upright points, which is
+   * what the answer keys are written in.
+   */
+  async reconstruct(name, rect, { pageNumber = 1, maxGeometryTokens } = {}) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, pageNumber);
+    const result = await reconstructSelection(g, rect, { maxGeometryTokens });
+    await doc.destroy();
+    return result;
+  },
+
+  /** The same, through the canvas-pixel path a real drag produces. */
+  async reconstructFromCanvas(name, canvasRect, scale, { pageNumber = 1 } = {}) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, pageNumber);
+    const upright = canvasRectToUpright(canvasRect, scale, g);
+    const result = await reconstructSelection(g, upright, {});
+    await doc.destroy();
+    return { upright, result };
+  },
+
+  /** Which grids a selection could mean, and what the snap rule decides. */
+  async snap(name, rect, pageNumber = 1) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, pageNumber);
+    const grids = findRuledGrids(g.tokens, g.segments);
+    const outcome = snapToRuledGrid(g, rect);
+    await doc.destroy();
+    return {
+      gridsOnPage: grids.map((x) => ({ bbox: x.bbox, rows: x.rowBounds.length - 1, cols: x.colBounds.length - 1 })),
+      snapped: outcome.grid ? { bbox: outcome.grid.bbox } : null,
+      ambiguous: outcome.ambiguous,
+      candidates: outcome.candidates,
+    };
+  },
+
+  /**
+   * A late reconstruction must never replace a newer one.
+   *
+   * Two runs are started against the same page; the first is told to cancel as
+   * soon as the second exists. What comes back proves the newer selection wins.
+   */
+  async staleRun(name) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, 1);
+    // The module's own contract: a run told it has been superseded abandons
+    // its work rather than returning a grid the caller no longer wants. The
+    // borderless fixture goes down the geometry route, which is the one with
+    // yield points to abandon at.
+    const abandoned = await reconstructSelection(g, { left: 40, top: 60, right: 570, bottom: 800 }, {
+      maxGeometryTokens: 100000,
+      shouldCancel: () => true,
+    });
+    const kept = await reconstructSelection(g, { left: 55, top: 105, right: 490, bottom: 200 }, {});
+    await doc.destroy();
+    return { abandoned: abandoned.status, abandonedRows: abandoned.rows, kept: kept.status, keptRows: kept.rows };
+  },
+
+  /** Build a workbook from confirmed snapshots and read it straight back. */
+  async workbook(tables, sourceName = 'sample.pdf') {
+    const confirmed = tables.map((t, i) => ({
+      id: `t${i}`,
+      pageNumber: t.pageNumber ?? 1,
+      sheetName: t.sheetName ?? sheetNameFor(t.pageNumber ?? 1, i, tables.slice(0, i).map((x) => x.sheetName).filter(Boolean)),
+      rows: t.grid.length,
+      cols: t.grid[0]?.length ?? 0,
+      grid: t.grid,
+      source: t.source ?? 'ruling',
+      status: t.status ?? 'GRID_CONFIDENT',
+      structureScore: t.structureScore ?? 90,
+    }));
+    const built = await buildWorkbook(confirmed);
+    const again = await buildWorkbook(confirmed);
+
+    const blob = new Blob([built.bytes], { type: XLSX_MIME });
+    const zip = await JSZip.loadAsync(built.bytes);
+    const parts = Object.keys(zip.files).sort();
+    const contents = {};
+    for (const part of parts) contents[part] = await zip.file(part).async('string');
+
+    const identical = built.bytes.length === again.bytes.length
+      && built.bytes.every((b, i) => b === again.bytes[i]);
+
+    return {
+      sheetCount: built.sheetCount,
+      cellCount: built.cellCount,
+      blankCount: built.blankCount,
+      bytes: built.bytes.length,
+      deterministic: identical,
+      parts,
+      contents,
+      blobType: blob.type,
+      fileName: workbookFileName(sourceName),
+      sheetNames: confirmed.map((c) => c.sheetName),
+    };
+  },
+
+  /**
+   * The workbook the spreadsheet-application check opens.
+   *
+   * Deliberately full of the things that are easy to lose on the way into a
+   * real spreadsheet: Japanese, XML-reserved characters, a leading-zero
+   * identifier, a plain integer, a newline inside a cell, and a blank.
+   */
+  async verificationWorkbook() {
+    const grids = [
+      { pageNumber: 1, grid: [
+        ['室名', '仕上', ''],
+        ['事務室', 'タイルカーペット', '120.5'],
+        ['', '<未定> & 予備', '001'],
+        ['注記', '床仕上げは施工前に\n監理者の承認を得ること', '12'],
+      ] },
+      { pageNumber: 3, grid: [['部材', '数量'], ['H形鋼', '1:100'], ['アンカー', 'D13@200']] },
+    ];
+    const confirmed = grids.map((t, i) => ({
+      id: `v${i}`, pageNumber: t.pageNumber,
+      sheetName: sheetNameFor(t.pageNumber, i, []),
+      rows: t.grid.length, cols: t.grid[0].length, grid: t.grid,
+      source: 'ruling', status: 'GRID_CONFIDENT', structureScore: 90,
+    }));
+    const built = await buildWorkbook(confirmed);
+    let binary = '';
+    for (const b of built.bytes) binary += String.fromCharCode(b);
+    return btoa(binary);
+  },
+
+  /** Helpers the gate asserts on directly. */
+  sheetName: (page, index, taken) => sheetNameFor(page, index, taken),
+  column: (i) => columnName(i),
+  rowsFrom: (tokens) => groupRows(tokens).length,
+  quad: (transform, w, h, vt) => runQuad(transform, w, h, vt),
+  upright: (rect, rotate, w, h) => toUprightRect(rect, rotate, w, h),
+
+  /** Bounded geometry, timed, with its yields counted. */
+  async denseProbe(name, rect, maxGeometryTokens) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, 1);
+    const t0 = performance.now();
+    const result = await reconstructSelection(g, rect, { maxGeometryTokens });
+    const ms = performance.now() - t0;
+    await doc.destroy();
+    return { status: result.status, stats: result.stats, ms: Math.round(ms), message: result.message };
+  },
+
+  /**
+   * Does the geometry route actually hand control back?
+   *
+   * A self-rescheduling macrotask, not an interval: an interval with a delay
+   * cannot fire inside a run shorter than its period, so it would measure the
+   * clock rather than the yielding. A setTimeout(0) chain runs once per turn of
+   * the event loop, so a tick during the run is a turn the reconstruction gave
+   * back.
+   */
+  async yieldProbe(name, rect) {
+    const doc = await open(name);
+    const g = await analysePageGeometry(doc, 1);
+    let ticks = 0;
+    let running = true;
+    const tick = () => { if (!running) return; ticks++; setTimeout(tick, 0); };
+    setTimeout(tick, 0);
+    const result = await reconstructSelection(g, rect, { maxGeometryTokens: 100000 });
+    running = false;
+    await doc.destroy();
+    return { status: result.status, yields: result.stats.yields, ticks, ms: result.stats.ms };
+  },
+};
+
+log('ready');
+window.__excelReady = true;
+</script>
+</body>
+</html>

@@ -194,7 +194,7 @@ try {
     });
     console.log(`  ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.3.0', versions.processor === '1.3.0', JSON.stringify(versions));
-    check('PDFテキスト化 shows v1.5.0', versions.textifier === '1.5.0', JSON.stringify(versions));
+    check('PDFテキスト化 shows v1.6.0', versions.textifier === '1.6.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
     // ---- content, read from the panel it belongs to ---------------------------
@@ -294,8 +294,23 @@ try {
         t.includes('文字認識用の画像だけ') && t.includes('元のPDFの見た目'), 'scope');
     check('textifier: the page-too-large notice is documented',
         t.includes('前処理を行わずに文字認識'), 'page-too-large');
-    check('textifier: Excel is still marked unsupported',
-        /Excel \(\.xlsx\)[^\n]*未対応/.test(t), 'excel');
+    // Excel now exists, and what it does and does not do both have to be on
+    // the page. The old assertion said only that it was unsupported; saying
+    // nothing at all about its limits would pass that check just as well.
+    check('textifier: the Excel workflow is described as select, confirm, export',
+        t.includes('範囲') && t.includes('確定') && t.includes('ドラッグ'), 'excel workflow');
+    check('textifier: Excel is stated to be native-only',
+        t.includes('文字情報を持つPDF'), 'native only');
+    check('textifier: the guide says the meaning is not judged automatically',
+        t.includes('内容の意味は自動判定していません'), 'meaning not judged');
+    check('textifier: string-first, blanks kept and merges not restored are all stated',
+        t.includes('テキストとして書き出します')
+        && t.includes('空白セルは空白のまま')
+        && t.includes('結合セルは復元しません'), 'excel value rules');
+    check('textifier: scanned table extraction is still marked unsupported',
+        t.includes('画像PDF（スキャン）の表抽出は未対応'), 'scanned unsupported');
+    check('textifier: the guide does not claim whole-PDF automatic table extraction',
+        t.includes('自動で探す機能ではありません'), 'no auto-discovery claim');
     check('textifier: the Word limits are stated',
         t.includes('PDFの見た目をWordへ再現する機能ではありません')
         && t.includes('表の構造は復元しません')
@@ -353,8 +368,11 @@ try {
         for (const img of shot) console.log(`  ${tool.padEnd(14)} ${img.src} ${img.w}x${img.h} loading=${img.lazy}`);
     }
     check('every screenshot the guide shows actually loads',
-        images.length === 6 && images.every((i) => i.w > 0 && i.h > 0),
+        images.length === 7 && images.every((i) => i.w > 0 && i.h > 0),
         `${images.filter((i) => i.w > 0).length}/${images.length}`);
+    check('the Excel workflow has a screenshot of its own',
+        images.some((i) => i.src.includes('textifier_excel.png')),
+        images.map((i) => i.src.split('/').pop()).join(' '));
     check('screenshots are lazily loaded', images.every((i) => i.lazy === 'lazy'));
 
     // ---- layout ----------------------------------------------------------------

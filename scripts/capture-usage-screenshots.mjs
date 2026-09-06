@@ -30,6 +30,8 @@ const GEOMETRY = path.join(ROOT, 'src', 'components', 'usage-screenshot-geometry
 const FRAME = { width: 1280, height: 900 };
 /** A taller frame for screens whose controls run past the fold. */
 const TALL = { width: 1280, height: 1150 };
+/** The Excel workflow is a tall screen: page image, preview and confirm. */
+const EXCEL_FRAME = { width: 1280, height: 1560 };
 
 if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
     console.error('No dist/ found. Run: npm run build');
@@ -209,6 +211,60 @@ const SCREENS = [
                 }
             });
             await page.waitForFunction(() => document.querySelector('select')?.value === 'word');
+        },
+    },
+    {
+        key: 'textifier_excel',
+        // Taller than the others on purpose: this screen is a workflow, and a
+        // frame that cuts the preview off would document half of it.
+        frame: EXCEL_FRAME,
+        async setup(page) {
+            await clickNav(page, 'PDFテキスト化');
+            await page.waitForFunction(() => document.body.innerText.includes('PDF Textification'));
+            await upload(page, 'input[type="file"]', path.join('excel', 'native-ruled-simple.pdf'));
+            await page.waitForFunction(() => document.querySelector('input[name="mode"][value="extract"]') !== null);
+            await page.evaluate(() => {
+                [...document.querySelectorAll('input[name="mode"]')].find((r) => r.value === 'extract').click();
+            });
+            await page.evaluate(() => {
+                const select = document.querySelector('select');
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+                setter.call(select, 'excel');
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            await page.waitForSelector('[data-usage-target="excel-page-canvas"]');
+            await page.waitForFunction(() => {
+                const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+                return c && c.width > 0 && c.height > 0;
+            }, { timeout: 30_000 });
+            await new Promise((r) => setTimeout(r, 900));
+
+            // Bring the page image to the top of the frame, so the canvas, the
+            // reconstructed table and the confirm control are all in shot.
+            await page.evaluate(() => {
+                document.querySelector('[data-usage-target="excel-page-canvas"]')
+                    .scrollIntoView({ block: 'start' });
+            });
+            await new Promise((r) => setTimeout(r, 250));
+
+            // A real drag, so the screenshot shows what a user actually does.
+            const box = await page.$eval('[data-usage-target="excel-page-canvas"]', (canvas) => {
+                const r = canvas.getBoundingClientRect();
+                return { x: r.x, y: r.y, width: r.width, pixelWidth: canvas.width };
+            });
+            const scale = (box.width / box.pixelWidth) * (box.pixelWidth / 595.28);
+            const from = { x: box.x + 54 * scale, y: box.y + 104 * scale };
+            const to = { x: box.x + 486 * scale, y: box.y + 198 * scale };
+            await page.mouse.move(from.x, from.y);
+            await page.mouse.down();
+            await page.mouse.move(to.x, to.y, { steps: 8 });
+            await page.mouse.up();
+            await page.waitForSelector('[data-usage-target="excel-preview"]', { timeout: 30_000 });
+            await new Promise((r) => setTimeout(r, 400));
+            await page.evaluate(() => {
+                document.querySelector('[data-usage-target="excel-page-canvas"]')
+                    .scrollIntoView({ block: 'start' });
+            });
         },
     },
 ];
