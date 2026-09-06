@@ -603,6 +603,257 @@ try {
         controlGrid?.length === 4 && controlGrid?.[0]?.[0] === '室名',
         `${controlGrid?.length}x${controlGrid?.[0]?.length}`);
 
+    // ---- leaving the workflow while work is in flight --------------------------
+    //
+    // Switching the output format unmounts the Excel component. Each probe
+    // below starts a job and leaves during it, driving both from inside the
+    // page so the departure provably lands while the job is still awaiting.
+    //
+    // Blob URL activity is observed by wrapping URL.createObjectURL and
+    // URL.revokeObjectURL from the test side. Nothing in the application is
+    // instrumented, and the wrappers delegate to the originals, so behaviour is
+    // unchanged -- they only count.
+    console.log('\n=== leaving during a page analysis ===');
+    const leaveDuringAnalysis = await (async () => {
+        await openExcelMode('mixed-native-scanned');
+        // Start a page transition and leave Excel in the same block, so the
+        // component unmounts while the analysis for page 2 is still awaiting.
+        return page.evaluate(() => {
+            document.querySelector('[aria-label="次のページ"]').click();
+            const select = document.querySelector('select');
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+            setter.call(select, 'txt');
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        });
+    })();
+    check('the workflow can be left while a page is being analysed', leaveDuringAnalysis === true);
+    await wait(1500);
+    const afterLeaveAnalysis = await page.evaluate(() => ({
+        workflow: document.querySelector('[data-usage-target="excel-workflow"]') !== null,
+        alert: document.querySelector('[role="alert"]')?.textContent ?? null,
+        analysing: document.body.innerText.includes('解析中'),
+    }));
+    check('the Excel workflow is gone', afterLeaveAnalysis.workflow === false);
+    check('an abandoned page analysis publishes no error',
+        afterLeaveAnalysis.alert === null, afterLeaveAnalysis.alert ?? '');
+    check('and no loading state is left behind on the screen',
+        afterLeaveAnalysis.analysing === false);
+
+    // Re-entering must be a clean instance, not the previous one resumed.
+    await page.evaluate(() => {
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'excel');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.geometryPage === '1' && c.dataset.selectable === 'true';
+    }, { timeout: 30_000 });
+    const reEntered = await page.evaluate(() => ({
+        geometryPage: document.querySelector('[data-usage-target="excel-page-canvas"]').dataset.geometryPage,
+        preview: document.querySelector('[data-usage-target="excel-preview"]') !== null,
+        confirmed: document.querySelector('[data-usage-target="excel-confirmed"]').innerText.replace(/\s+/g, ' '),
+        download: document.querySelector('[data-usage-target="excel-download"]') !== null,
+        alert: document.querySelector('[role="alert"]') !== null,
+    }));
+    console.log(`  re-entered: page=${reEntered.geometryPage} preview=${reEntered.preview} download=${reEntered.download}`);
+    check('re-entering starts at page 1 with fresh geometry',
+        reEntered.geometryPage === '1', reEntered.geometryPage);
+    check('re-entering carries no proposal, no confirmed table and no download',
+        reEntered.preview === false && reEntered.download === false
+        && reEntered.confirmed.includes('確定した表: 0') && reEntered.alert === false,
+        reEntered.confirmed.slice(0, 30));
+    await dragOnCanvas(canvasRectFor('mixed-native-scanned', await canvasPixelWidth()));
+    const afterReentryGrid = await previewGrid();
+    check('and a normal drag works in the new instance',
+        afterReentryGrid?.length === 4 && afterReentryGrid?.[0]?.[0] === '室名',
+        `${afterReentryGrid?.length}x${afterReentryGrid?.[0]?.length}`);
+
+    // ---- leaving during a reconstruction ----------------------------------------
+    console.log('\n=== leaving during a reconstruction ===');
+    await openExcelMode('native-dense-borderless');
+    // A dense borderless selection takes the bounded geometry route, which
+    // yields -- so leaving mid-flight is a real interruption rather than a
+    // race against something that had already finished.
+    const denseBox = truthOf('native-dense-borderless').pages[0].bbox;
+    const denseWidth = await canvasPixelWidth();
+    const denseScale = denseWidth / 595.28;
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="excel-page-canvas"]').scrollIntoView({ block: 'start' });
+    });
+    await wait(200);
+    await page.evaluate((rect, scale) => {
+        const canvas = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        const box = canvas.getBoundingClientRect();
+        const ratio = box.width / canvas.width;
+        const at = (x, y) => ({
+            clientX: box.left + x * scale * ratio, clientY: box.top + y * scale * ratio,
+            bubbles: true, pointerId: 1, isPrimary: true,
+        });
+        canvas.dispatchEvent(new PointerEvent('pointerdown', at(rect.left, rect.top)));
+        canvas.dispatchEvent(new PointerEvent('pointermove', at(rect.right, rect.bottom)));
+        canvas.dispatchEvent(new PointerEvent('pointerup', at(rect.right, rect.bottom)));
+        // Leave immediately: the reconstruction is still awaiting its first yield.
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'txt');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }, denseBox, denseScale);
+    await wait(1500);
+    const afterLeaveReconstruction = await page.evaluate(() => ({
+        workflow: document.querySelector('[data-usage-target="excel-workflow"]') !== null,
+        preview: document.querySelector('[data-usage-target="excel-preview"]') !== null,
+        alert: document.querySelector('[role="alert"]')?.textContent ?? null,
+    }));
+    check('leaving during a reconstruction removes the workflow',
+        afterLeaveReconstruction.workflow === false);
+    check('an abandoned reconstruction publishes no proposal and no error',
+        afterLeaveReconstruction.preview === false && afterLeaveReconstruction.alert === null,
+        afterLeaveReconstruction.alert ?? '');
+
+    await page.evaluate(() => {
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'excel');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.selectable === 'true';
+    }, { timeout: 30_000 });
+    check('re-entering after an abandoned reconstruction shows no proposal',
+        (await previewGrid()) === null);
+
+    // ---- leaving during a workbook build, and the blob it would have made ---------
+    console.log('\n=== leaving during a workbook build ===');
+    await openExcelMode('native-ruled-simple');
+    // Count blob URLs from here on. The wrappers delegate; they only observe.
+    await page.evaluate(() => {
+        window.__blob = { created: [], revoked: [] };
+        const createOriginal = URL.createObjectURL.bind(URL);
+        const revokeOriginal = URL.revokeObjectURL.bind(URL);
+        URL.createObjectURL = (obj) => {
+            const url = createOriginal(obj);
+            window.__blob.created.push(url);
+            return url;
+        };
+        URL.revokeObjectURL = (url) => {
+            window.__blob.revoked.push(url);
+            return revokeOriginal(url);
+        };
+    });
+    await dragOnCanvas(canvasRectFor('native-ruled-simple', await canvasPixelWidth()));
+    await page.click('[data-usage-target="excel-confirm"]');
+    await wait(300);
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="excel-export"]').click();
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'txt');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await wait(2000);
+    const afterLeaveExport = await page.evaluate(() => ({
+        workflow: document.querySelector('[data-usage-target="excel-workflow"]') !== null,
+        download: document.querySelector('[data-usage-target="excel-download"]') !== null,
+        alert: document.querySelector('[role="alert"]')?.textContent ?? null,
+        created: window.__blob.created.length,
+        revoked: window.__blob.revoked.length,
+    }));
+    console.log(`  blob URLs while leaving mid-export: created ${afterLeaveExport.created}, revoked ${afterLeaveExport.revoked}`);
+    check('leaving during a workbook build removes the workflow',
+        afterLeaveExport.workflow === false);
+    check('an abandoned export publishes no download',
+        afterLeaveExport.download === false);
+    check('and publishes no error either',
+        afterLeaveExport.alert === null, afterLeaveExport.alert ?? '');
+    // The precise claim, rather than one that 0 === 0 would satisfy: an export
+    // that is abandoned never reaches the point of making a URL at all.
+    check('an abandoned export never creates a blob URL in the first place',
+        afterLeaveExport.created === 0 && afterLeaveExport.revoked === 0,
+        `created ${afterLeaveExport.created}, revoked ${afterLeaveExport.revoked}`);
+
+    // ---- the blob URL of a finished workbook is released on the way out -----------
+    console.log('\n=== the workbook URL is released when the workflow closes ===');
+    await page.evaluate(() => {
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'excel');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.selectable === 'true';
+    }, { timeout: 30_000 });
+    const beforeExportCounts = await page.evaluate(() => ({
+        created: window.__blob.created.length, revoked: window.__blob.revoked.length,
+    }));
+    await dragOnCanvas(canvasRectFor('native-ruled-simple', await canvasPixelWidth()));
+    await page.click('[data-usage-target="excel-confirm"]');
+    await wait(300);
+    await page.click('[data-usage-target="excel-export"]');
+    await page.waitForSelector('[data-usage-target="excel-download"]', { timeout: 30_000 });
+    const withWorkbook = await page.evaluate(() => ({
+        href: document.querySelector('[data-usage-target="excel-download"]').getAttribute('href'),
+        created: window.__blob.created.length, revoked: window.__blob.revoked.length,
+    }));
+    check('exporting creates exactly one blob URL',
+        withWorkbook.created === beforeExportCounts.created + 1,
+        `${withWorkbook.created - beforeExportCounts.created} created`);
+    check('and it is the one the download points at',
+        String(withWorkbook.href).startsWith('blob:'), withWorkbook.href);
+
+    await page.evaluate(() => {
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'txt');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await wait(800);
+    const afterClose = await page.evaluate((href) => ({
+        revokedThatUrl: window.__blob.revoked.includes(href),
+        created: window.__blob.created.length,
+        revoked: window.__blob.revoked.length,
+        workflow: document.querySelector('[data-usage-target="excel-workflow"]') !== null,
+    }), withWorkbook.href);
+    console.log(`  on leaving: created ${afterClose.created}, revoked ${afterClose.revoked}, that URL revoked = ${afterClose.revokedThatUrl}`);
+    check('leaving the workflow revokes the workbook URL it was holding',
+        afterClose.revokedThatUrl === true);
+    check('every blob URL the workflow created has been released',
+        afterClose.created === afterClose.revoked,
+        `created ${afterClose.created}, revoked ${afterClose.revoked}`);
+
+    // Re-entering must not bring the finished download back.
+    await page.evaluate(() => {
+        const select = document.querySelector('select');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'excel');
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForFunction(() => {
+        const c = document.querySelector('[data-usage-target="excel-page-canvas"]');
+        return c && c.dataset.selectable === 'true';
+    }, { timeout: 30_000 });
+    const freshInstance = await page.evaluate(() => ({
+        download: document.querySelector('[data-usage-target="excel-download"]') !== null,
+        confirmed: document.querySelector('[data-usage-target="excel-confirmed"]').innerText.replace(/\s+/g, ' '),
+        preview: document.querySelector('[data-usage-target="excel-preview"]') !== null,
+    }));
+    check('the previous download does not reappear on re-entry',
+        freshInstance.download === false && freshInstance.preview === false
+        && freshInstance.confirmed.includes('確定した表: 0'),
+        freshInstance.confirmed.slice(0, 30));
+
+    // And the fresh instance can still produce a workbook.
+    await dragOnCanvas(canvasRectFor('native-ruled-simple', await canvasPixelWidth()));
+    await page.click('[data-usage-target="excel-confirm"]');
+    await wait(300);
+    await page.click('[data-usage-target="excel-export"]');
+    await page.waitForSelector('[data-usage-target="excel-download"]', { timeout: 30_000 });
+    check('a fresh export succeeds after all of that', await downloadPresent());
+
     // ---- accessibility and privacy --------------------------------------------------
     console.log('\n=== accessibility and network ===');
     // Checked with a proposal on screen, because that is when the confirm
