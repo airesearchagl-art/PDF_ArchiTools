@@ -34,7 +34,14 @@ const height = (t) => Math.max(1, t.y1 - t.y0);
  * one row of a scanned table into three.
  */
 export function groupRows(tokens, { overlap = 0.5 } = {}) {
-    const sorted = [...tokens].sort((a, b) => centreY(a) - centreY(b) || a.x0 - b.x0);
+    // Whitespace-only items are dropped first, and they have to be.
+    //
+    // pdf.js emits a separate item for a run of spaces, and measured across
+    // this corpus 195 of 603 native items are one of those -- every one of them
+    // with height 0. Left in, each becomes a zero-height "row" of its own and
+    // splits the row it sits in, so a four-row table groups as twelve.
+    const content = tokens.filter((t) => String(t.text).trim() !== '');
+    const sorted = [...content].sort((a, b) => centreY(a) - centreY(b) || a.x0 - b.x0);
     const rows = [];
     for (const token of sorted) {
         const row = rows[rows.length - 1];
@@ -219,6 +226,7 @@ export function detectByRuling(tokens, segments, options = {}) {
             const boundsRows = rowLines.slice(r0, r1 + 2).map((l) => l.pos);
             const boundsCols = colLines.slice(c0, c1 + 2).map((l) => l.pos);
             const inside = tokens.filter((t) => {
+                if (String(t.text).trim() === '') return false;
                 const cx = (t.x0 + t.x1) / 2;
                 const cy = (t.y0 + t.y1) / 2;
                 return cx >= boundsCols[0] - tol && cx <= boundsCols[boundsCols.length - 1] + tol
@@ -380,3 +388,74 @@ export const STRATEGIES = {
     ruling: (tokens, segments, options) => detectByRuling(tokens, segments, options),
     hybrid: (tokens, segments, options) => detectHybrid(tokens, segments, options),
 };
+
+// ---------------------------------------------------------------------------
+// Rotation
+// ---------------------------------------------------------------------------
+
+/**
+ * Undo a page's /Rotate, so reconstruction happens in the page's own upright
+ * space.
+ *
+ * Transform-correct token boxes are necessary and are not sufficient. Rows are
+ * grouped by vertical overlap and columns by shared left edges, and on a
+ * 90-degree page what the table calls a row runs down the display. Group in
+ * display space and the grid comes back transposed -- every cell present, every
+ * cell in the wrong place, which scores as zero and looks like a detector
+ * failure rather than a coordinate one.
+ *
+ * pdf.js gives display space as R(user). Composing the inverse of that with the
+ * upright viewport gives the maps below, where W and H are the page's own width
+ * and height (not the rotated viewport's):
+ *
+ *     0    (dx, dy)
+ *    90    (dy, H - dx)
+ *   180    (W - dx, H - dy)
+ *   270    (W - dy, dx)
+ */
+export function unrotatePoint(x, y, rotate, viewportWidth, viewportHeight) {
+    const r = ((rotate % 360) + 360) % 360;
+    // A quarter-turned viewport reports the page's height as its width.
+    const W = r % 180 === 90 ? viewportHeight : viewportWidth;
+    const H = r % 180 === 90 ? viewportWidth : viewportHeight;
+    switch (r) {
+        case 90: return { x: y, y: H - x };
+        case 180: return { x: W - x, y: H - y };
+        case 270: return { x: W - y, y: x };
+        default: return { x, y };
+    }
+}
+
+const unrotateBox = (b, rotate, vw, vh) => {
+    const a = unrotatePoint(b.x0 ?? b.left, b.y0 ?? b.top, rotate, vw, vh);
+    const c = unrotatePoint(b.x1 ?? b.right, b.y1 ?? b.bottom, rotate, vw, vh);
+    return {
+        x0: Math.min(a.x, c.x), x1: Math.max(a.x, c.x),
+        y0: Math.min(a.y, c.y), y1: Math.max(a.y, c.y),
+    };
+};
+
+export function normaliseTokens(tokens, rotate, vw, vh) {
+    if (!rotate) return tokens;
+    return tokens.map((t) => ({ ...t, ...unrotateBox(t, rotate, vw, vh) }));
+}
+
+export function normaliseSegments(segments, rotate, vw, vh) {
+    if (!rotate) return segments;
+    const swaps = ((rotate % 360) + 360) % 360 % 180 === 90;
+    return segments.map((s) => {
+        const b = unrotateBox(s, rotate, vw, vh);
+        return {
+            ...s, ...b,
+            orientation: swaps ? (s.orientation === 'h' ? 'v' : 'h') : s.orientation,
+            length: Math.max(b.x1 - b.x0, b.y1 - b.y0),
+        };
+    });
+}
+
+/** The same map, for an answer key's rectangles. */
+export function normaliseRect(rect, rotate, vw, vh) {
+    if (!rotate) return rect;
+    const b = unrotateBox(rect, rotate, vw, vh);
+    return { left: b.x0, top: b.y0, right: b.x1, bottom: b.y1 };
+}

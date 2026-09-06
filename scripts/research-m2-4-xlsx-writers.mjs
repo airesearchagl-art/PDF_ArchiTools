@@ -181,6 +181,7 @@ for (const pkg of ['xlsx', 'exceljs']) {
     if (meta.error) console.log(`             lookup failed: ${meta.error}`);
 }
 
+let sizesCe = null;
 let installed = false;
 try {
     fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'm2-4-probe', private: true, type: 'module' }));
@@ -188,9 +189,36 @@ try {
         { cwd: tmp, stdio: 'pipe', encoding: 'utf8', shell: process.platform === 'win32' });
     installed = true;
 } catch (error) {
-    console.log(`  install failed: ${String(error?.message ?? error).split('\n')[0]}`);
+    console.log(`  npm install failed: ${String(error?.message ?? error).split('\n')[0]}`);
 }
-check('the candidates could be installed for measurement', installed);
+
+/**
+ * The current Community Edition, from the project's own CDN.
+ *
+ * SheetJS is not distributed through npm any longer: the registry still
+ * resolves `xlsx`, and its `latest` is 0.18.5, but the project publishes CE
+ * from its own host. Measuring the npm artefact and calling it "current
+ * SheetJS" is exactly the error this fetch avoids, so both are measured and
+ * both are labelled -- npm as legacy, CDN as current. Installed in a directory
+ * of its own so the two can never be confused.
+ */
+const SHEETJS_CE = {
+    version: '0.20.3',
+    tarball: 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz',
+};
+const ceDir = path.join(tmp, 'ce');
+let ceInstalled = false;
+try {
+    fs.mkdirSync(ceDir, { recursive: true });
+    fs.writeFileSync(path.join(ceDir, 'package.json'), JSON.stringify({ name: 'm2-4-ce-probe', private: true, type: 'module' }));
+    execFileSync(npm, ['install', '--package-lock=false', '--no-save', '--no-audit', '--no-fund', SHEETJS_CE.tarball],
+        { cwd: ceDir, stdio: 'pipe', encoding: 'utf8', shell: process.platform === 'win32' });
+    ceInstalled = true;
+} catch (error) {
+    console.log(`  SheetJS CE install failed: ${String(error?.message ?? error).split('\n')[0]}`);
+}
+check('the npm candidates could be installed for measurement', installed);
+check('SheetJS CE could be fetched from the project\'s own CDN', ceInstalled, SHEETJS_CE.tarball);
 
 const dirSize = (dir) => {
     let total = 0;
@@ -200,6 +228,32 @@ const dirSize = (dir) => {
     }
     return total;
 };
+
+if (ceInstalled) {
+    const dir = path.join(ceDir, 'node_modules', 'xlsx');
+    const meta = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    const deps = Object.keys(meta.dependencies ?? {});
+    const size = dirSize(dir);
+    const files = fs.readdirSync(dir);
+    candidates.push({
+        pkg: 'xlsx (SheetJS CE, official CDN)',
+        version: meta.version,
+        license: meta.license,
+        installedSize: size,
+        deps,
+        source: SHEETJS_CE.tarball,
+        module: meta.module ?? null,
+        exportsEsm: Boolean(meta.exports && JSON.stringify(meta.exports).includes('mjs')),
+        browser: meta.browser ? 'declares a browser build' : 'no browser field',
+    });
+    console.log(`  SheetJS CE  version ${meta.version}  license ${meta.license}  on disk ${size} bytes  ${deps.length} runtime deps  ${meta.browser ? 'browser build' : 'no browser field'}`);
+    console.log(`              from ${SHEETJS_CE.tarball}`);
+    console.log(`              esm entry ${meta.module ?? '(none)'}   files: ${files.filter((f) => /\.(js|mjs|cjs)$/.test(f)).join(' ')}`);
+    check('SheetJS CE is newer than the npm listing',
+        meta.version === SHEETJS_CE.version && meta.version !== '0.18.5',
+        `CE ${meta.version} vs npm ${candidates.find((c) => c.pkg === 'xlsx')?.version ?? '?'}`);
+    check('SheetJS CE carries no runtime dependencies', deps.length === 0, JSON.stringify(deps));
+}
 
 if (installed) {
     for (const pkg of ['xlsx', 'exceljs']) {
@@ -259,9 +313,53 @@ if (installed) {
         check('ExcelJS opens the same bytes', false, String(error?.message ?? error).split('\n')[0]);
     }
 
+    // ---- SheetJS CE, as parser and as writer -------------------------------
+    if (ceInstalled) {
+        console.log('\n=== SheetJS CE 0.20.3, from the official CDN ===');
+        try {
+            const CE = await import(pathToFileURL(path.join(ceDir, 'node_modules', 'xlsx', 'xlsx.mjs')).href);
+            const wb = CE.read(bytesA, { type: 'buffer' });
+            const names = wb.SheetNames;
+            const sheet = wb.Sheets[names[0]];
+            const second = wb.Sheets[names[1]];
+            const merges = (sheet['!merges'] ?? []).length;
+            const multiline = sheet.B6?.v;
+            const blank = sheet.A2;
+            console.log(`  parses ours: sheets ${JSON.stringify(names)}  A1 ${JSON.stringify(sheet.A1?.v)}  merges ${merges}`);
+            console.log(`               B6 ${JSON.stringify(multiline)}  A2 ${blank === undefined ? '(absent)' : JSON.stringify(blank.v)}  B2 ${JSON.stringify(second?.B2?.v)} (${second?.B2?.t})  B3 ${JSON.stringify(second?.B3?.v)} (${second?.B3?.t})`);
+            check('CE 0.20.3 opens the hand-written workbook', names.length === SHEETS.length, JSON.stringify(names));
+            check('CE 0.20.3 keeps the Japanese sheet name and cell text',
+                names[0] === '仕上表' && sheet.A1?.v === '室名');
+            check('CE 0.20.3 reports the merged header', merges === SHEETS[0].merges.length, String(merges));
+            check('CE 0.20.3 keeps a newline inside a cell',
+                typeof multiline === 'string' && multiline.includes('\n'), JSON.stringify(multiline));
+            check('CE 0.20.3 keeps 001 as text and 12 as a number',
+                second?.B3?.t === 's' && second.B3.v === '001' && second?.B2?.t === 'n' && second.B2.v === 12,
+                `${second?.B3?.t}/${second?.B2?.t}`);
+            check('a blank cell reads back as empty, not as a value',
+                blank === undefined || blank.v === '' || blank.v === undefined,
+                blank === undefined ? 'absent' : JSON.stringify(blank.v));
+
+            const out = CE.utils.book_new();
+            for (const sheetSpec of SHEETS) {
+                const ws = CE.utils.aoa_to_sheet(sheetSpec.rows);
+                if (sheetSpec.merges.length) {
+                    ws['!merges'] = sheetSpec.merges.map((m) => ({ s: { r: m.r0, c: m.c0 }, e: { r: m.r1, c: m.c1 } }));
+                }
+                CE.utils.book_append_sheet(out, ws, sheetSpec.name);
+            }
+            const buf = CE.write(out, { type: 'buffer', bookType: 'xlsx' });
+            fs.writeFileSync(path.join(OUT, 'sheetjs-ce.xlsx'), buf);
+            sizesCe = buf.length;
+            console.log(`  writes the same workbook in ${buf.length} bytes`);
+        } catch (error) {
+            check('CE 0.20.3 opens the hand-written workbook', false, String(error?.message ?? error).split('\n')[0]);
+        }
+    }
+
     // ---- what the libraries produce, for size comparison -------------------
     console.log('\n=== output size, same workbook ===');
-    const sizes = { handwritten: bytesA.length };
+    const sizes = { handwritten: bytesA.length, sheetjsCe: sizesCe };
     try {
         const XLSX = (await import(pathToFileURL(path.join(tmp, 'node_modules', 'xlsx', 'xlsx.mjs')).href));
         const wb = XLSX.utils.book_new();

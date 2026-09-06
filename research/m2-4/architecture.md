@@ -1,8 +1,10 @@
 # M2-4 — browser-local Excel table reconstruction: architecture
 
-A spike, not an implementation. It exists to answer whether M2-4 should be built, in what shape, and what it must refuse to do. Every claim below is backed by a number in [`measurements.md`](./measurements.md); the corpus it was measured on is described in [`fixtures.md`](./fixtures.md); the comparison of the alternatives is in [`decision-matrix.md`](./decision-matrix.md).
+A spike, not an implementation. It exists to answer whether M2-4 should be built, in what shape, and what it must refuse to do. Every claim below is backed by a number in [`measurements.md`](./measurements.md); the corpus is described in [`fixtures.md`](./fixtures.md); the alternatives are compared in [`decision-matrix.md`](./decision-matrix.md).
 
 **Nothing in `src/` changed. No dependency was added. The Excel option in the UI is still disabled.**
+
+This is the second revision. An independent review found that the first one's central number — "user-selected region: 0 false positives" — was an artefact of the harness rather than a property of the reconstructor. That is corrected here, and it changes what the recommendation rests on, though not the recommendation itself.
 
 ---
 
@@ -10,123 +12,158 @@ A spike, not an implementation. It exists to answer whether M2-4 should be built
 
 > ### RECOMMEND REVISE
 >
-> Build M2-4, but not as "press Excel and get every table in the document". Build it as **the user points at a table and gets that table**, with the reconstruction refusing to answer when it is not sure.
+> Build M2-4 as: **the user points at a table, the reconstruction snaps to the ruled grid there, and nothing is written until the user has seen the result and confirmed it.**
+>
+> Preview and explicit confirmation are **not** a nicety on top. They are the only safety mechanism the evidence supports.
 
-The measurements do not support full-page automatic extraction on architectural drawings, and they do support user-directed reconstruction. The difference between the two is not a matter of tuning:
+Three findings decide the shape, and the third is new.
 
-| | full-page automatic | user-selected region |
+**1. Full-auto extraction is not viable here.** Across 8 adversarial drawing sheets, full-page detection invents **11 tables** on 7 of them. Confidence does not separate them: two aligned columns of notes score 95, a keynote list 80, a legend 72 — overlapping the real tables. Raising the threshold rejects real schedules too.
+
+**2. A user-drawn rectangle is workable, but only if the implementation snaps.** Handed a rectangle and told to treat it as the world, the reconstructor is fragile: a box four points off loses 90% of its cells, and a box that clips the left border loses all of them, because the table's own ruling lines fall outside it. Snapping to the enclosing ruled grid removes that dependence almost entirely — across every selection variant tested, **96% of cells on native pages**, with 1 fabricated cell instead of 17.
+
+**3. Selecting a region does not make the answer safe.** This is the correction. When a rectangle is drawn deliberately around a title block, a legend, a keynote list or two columns of notes, **4 of 8 reach `TABLE_CONFIDENT`** — they would export with no further question asked. The selection makes the result *asked for*; it does not make it *right*.
+
+So safety cannot come from the detector's semantics, and it cannot come from a confidence threshold. It comes from the user seeing the reconstructed grid and confirming it.
+
+## What `TABLE_CONFIDENT` may be taken to mean
+
+Given the above, the status names have to be honest about their scope.
+
+`TABLE_CONFIDENT` means: **a closed grid was found, its cells are consistently filled, and the reconstruction is structurally sound.** It does *not* mean the content is a schedule. A title block, a legend and a pair of note columns all produce structurally sound grids, because structurally they are grids.
+
+It follows that `TABLE_CONFIDENT` must not be an export gate. It is a hint about how much editing the preview will need — nothing more.
+
+## Why the traps cannot be filtered out
+
+An architectural sheet is *made of* table-shaped things that are not tables.
+
+- **A title block with a divider between label and value is a closed ruled grid of label/value pairs.** Not similar to a two-column schedule — the same structure. The difference is what the box means.
+- **Two aligned columns of notes, Japanese beside English, score 95** — higher than several real tables. Every geometric property of a table is present.
+
+No geometric rule separates these from a schedule, because there is no geometric difference to find. The user, looking at the sheet, resolves it instantly. That is the whole argument for a user-directed design — and the same argument says the user must also confirm what came back.
+
+## Rotation: supported, and it takes two steps
+
+The first revision claimed pdf.js's viewport transform "handles rotation", and checked it by counting token centres inside the outer table box — a check that passes whether or not the grid is transposed. Measured properly, at cell level:
+
+| step | `/Rotate 90` result |
+|---|---|
+| naive: display x + `item.width` | boxes land off the page |
+| transform-correct token quads only | **0 of 12 cells** — the grid is the transpose |
+| transform-correct quads **and** un-rotation to upright space | **12 of 12 cells, exact grid** |
+
+All four of 0°, 90°, 180° and 270° then reconstruct identically (4×3, 12/12, exact). Each answer key records the viewport transform it assumes and the gate holds it to the one pdf.js produced.
+
+**Rotated pages are supported in the MVP**, provided both steps are implemented. Rotated *text inside a cell* is not in scope.
+
+## What must be fixed before scanned pages work at all
+
+On the tested ruled-table fixtures, the pipeline **returns no text from inside the table** — 0 words at every resolution. The same table with its ruling lines removed reads normally (29 words). `ocr.ts` does not set `tessedit_pageseg_mode`; tesseract.js's documented default is `SINGLE_BLOCK`, and locally the unset default produces a **token stream identical by digest** to `SINGLE_BLOCK`, while `AUTO` recovers the cell text (5 words → 37).
+
+Bounded honestly: this is measured on synthetic ruled-table fixtures. It is not established that every ruled box in every real drawing is affected. What is established is that ruled-table content *can* be lost under the current segmentation, and that the same path is used by shipped features — Text Extraction and the searchable-PDF export.
+
+Two consequences:
+
+1. **It is a pre-existing defect, not one M2-4 introduces.** It should be raised and fixed on its own terms. This spike does not change `ocr.ts`; the sweep runs on a research-only worker.
+2. **No single segmentation is correct.** The default loses the table; `AUTO` loses a third of the drawing sheet. A per-region choice exists in the user-directed design and does not exist in the full-page one.
+
+Even unblocked, scanned reconstruction is weak: **32% of cells** across selection variants with `AUTO`, against **96%** for native. **Scanned pages stay out of the MVP.**
+
+## Existing architecture: what is kept and what is thrown away
+
+| stage | geometry in hand | what survives |
 |---|---|---|
-| false tables on 8 drawing sheets | **10** | **0** |
-| cell accuracy on native tables | 0–71% | **91%** |
-| exact grids | 7 of 10 | **10 of 11** |
+| `extractNativeText()` | every `TextItem` has a full transform | `item.str` concatenated. **All coordinates discarded.** |
+| `OcrEngine.recognisePage()` | word boxes in a block/paragraph/line tree | text + bbox + confidence; **line grouping discarded** |
+| `extractTextPdf()` scanned branch | `ocr.words` is right there | only `ocr.text`; **the boxes are dropped** |
+| `preprocessForOcr()` | returns `mapToRenderSpace` | used by the M1 searchable-PDF path, never by text extraction |
 
-A confidence gate narrows the gap (10 → 3 false positives) without closing it, and it costs recall: 7 real candidates were held back on the same run.
+**Both pipelines already compute the geometry and then discard it.** Nothing new has to be extracted; something already extracted has to stop being thrown away.
 
-## Why full-auto fails here, and why it is not a threshold problem
+The corollary rules out one design explicitly: **an architecture that recovers tables from `ExtractedPage.text` cannot work.** That string has no geometry, and the information that makes a table a table was destroyed one function earlier.
 
-An architectural sheet is *made of* table-shaped things that are not tables. The corpus contains eight of them, and the detector's output on two is worth stating plainly:
-
-- **A title block with a divider between label and value is a closed ruled grid of label/value pairs.** It is not merely similar to a two-column schedule — it is the same structure. It was detected at confidence 81 by the geometry route and again by the ruling route. No geometric rule can separate them, because there is no geometric difference to find. The difference is what the box *means*.
-- **Two aligned columns of notes, Japanese beside English, scored confidence 95** — higher than several real tables. They are the most table-shaped thing on the sheet and are not a table at all.
-
-A column grid, a legend, a keynote list and a dimension string are all similarly shaped. Raising the threshold until these are rejected also rejects real schedules; the two populations are not separable by the features available.
-
-The user, looking at the sheet, resolves all of this in one gesture. That is the architecture: **let the user supply the one piece of information the geometry does not contain.**
-
-## What has to be fixed before scanned pages work at all
-
-The pipeline as it ships **returns no text from inside a ruled table on a scanned page**. Zero words, at every resolution tested. The same table with its ruling lines removed is read normally (29 words inside the table).
-
-The cause is measured, not guessed: `tesseract.js` leaves segmentation at its default, and that default behaves byte-for-byte as `SINGLE_BLOCK` (psm 6). Setting `AUTO` recovers the cell text (5 words → 37).
-
-Two things follow.
-
-1. **This is a pre-existing defect in shipped features**, not something M2-4 introduces. Text Extraction and the searchable-PDF export lose the contents of every ruled box on a scanned page — on an architectural drawing that means the title block and every schedule. It should be raised and fixed on its own terms, separately from M2-4, and it is out of this spike's scope to change.
-2. **There is no single correct segmentation.** On the ruled table the default finds 0 of the cell words and `AUTO` finds them all; on a drawing sheet the default finds 37 words and `AUTO` finds 23. Choosing one mode for every page trades one loss for another. A per-region choice is available in the user-directed architecture and is not available in the full-page one — which is a second, independent reason the recommendation points the same way.
-
-Until it is addressed, **M2-4 on scanned pages cannot work**. With it addressed, scanned reconstruction is possible but weaker than native: 2–10 of 12 cells exact, against 12 of 12 for the same table drawn natively.
+Two token-stream properties any implementation must handle, both measured: `hasEOL` is false on every item in the corpus, so line structure must come from geometry; and **195 of 603 native items are whitespace-only with `height === 0`** — left in, each becomes a zero-height row and a four-row table groups as twelve.
 
 ## Proposed shape
 
 ```
 PDF
- └─ page classification                     (exists: classify.ts)
-     ├─ native → tokens with geometry       (exists, then discarded: extract.ts)
-     └─ scanned → render, preprocess, OCR   (exists, boxes then discarded: ocr.ts)
- └─ user selects a region on one page       NEW — the load-bearing step
- └─ ruling lines inside the region          NEW — from getOperatorList()
- └─ grid reconstruction                     NEW
- └─ status: confident / needs confirmation / unsupported
- └─ preview grid, editable before export    NEW
- └─ workbook model → .xlsx                  NEW — JSZip, no new dependency
+ └─ page classification                      (exists: classify.ts)
+     ├─ native → tokens with geometry        (exists, then discarded: extract.ts)
+     └─ scanned → render, preprocess, OCR    (exists, boxes discarded — and blocked)
+ └─ un-rotate to the page's upright space    NEW — required, not optional
+ └─ user drags a rectangle over one table    NEW — says WHICH table
+ └─ snap to the enclosing ruled grid         NEW — the robustness comes from here
+ └─ grid reconstruction
+ └─ status: structural confidence only
+ └─ PREVIEW, edit, explicit confirmation     NEW — the only safety mechanism
+ └─ workbook model → .xlsx                   NEW — JSZip, no new dependency
 ```
-
-Two properties of the existing code make this cheaper than it looks, and one makes it more expensive.
-
-**Cheaper.** Both pipelines already compute the geometry and then throw it away — `extractNativeText()` keeps `item.str` and drops the transform; the scanned branch keeps `ocr.text` and drops `ocr.words`. Nothing new has to be extracted; something already extracted has to stop being discarded. And `preprocess.ts` already returns `mapToRenderSpace`, which is what puts deskewed OCR boxes back into page space — it is simply not called by the text-extraction path today.
-
-**More expensive.** `ExtractedPage.text` is a plain string. An architecture that tries to find tables in *that* cannot work, and this is the one design that must be ruled out explicitly: the information a table is made of has already been destroyed by the time that string exists. Table reconstruction has to branch earlier, from tokens, not later, from text.
 
 ## Fail-safe model
 
 The default must not be "produce a spreadsheet anyway". A spreadsheet looks authoritative in a way a wrong text file does not: nobody re-reads a cell to check whether a row was invented.
 
-| status | when | what the user gets |
+| status | when | what happens |
 |---|---|---|
-| `TABLE_CONFIDENT` | closed ruled grid, cells filled consistently | the grid, previewed before export |
-| `TABLE_NEEDS_CONFIRMATION` | structure found but column boundaries unstable, or ambiguous spans | the grid, marked, not exportable until confirmed |
-| `NO_TABLE` | nothing table-shaped in the selection | told so, plainly |
-| `UNSUPPORTED_LAYOUT` | fewer than two rows or columns; overlapping tokens; a selection spanning table and drawing | told so, and told why |
+| `TABLE_CONFIDENT` | a closed grid, consistently filled | previewed, **still requires confirmation** |
+| `TABLE_NEEDS_CONFIRMATION` | structure found, boundaries unstable or spans ambiguous | previewed, marked, requires confirmation |
+| `NO_TABLE` | nothing table-shaped in the selection | said plainly |
+| `UNSUPPORTED_LAYOUT` | fewer than two rows or columns, overlapping tokens, a selection spanning table and drawing | said plainly, with the reason |
 
-Three refusals the prototype already implements and the measurements confirm:
+Three refusals the prototype implements and the measurements confirm:
 
-- **Blank cells stay blank.** 3 deliberately empty cells in the corpus, 0 filled in. A cell left empty in a schedule is information.
-- **Merged cells are never invented.** The merged-header fixture has 3 spans; the prototype claims 0 and reconstructs the rest from the ruled grid. A wide token can be a span or a long value, and nothing in the geometry distinguishes them.
-- **Values are not reinterpreted.** String-first: 0 of 13 drawing values fail to round-trip. Conservative numeric typing loses 1 (`18500.50` → `18500.5`); aggressive typing loses 4, including `1,200` → `1200` and `001` → `1`. On a drawing, `001` is a mark number and `1:100` is a scale.
+- **Blank cells stay blank.** 3 deliberately empty cells, 0 filled in.
+- **Merged cells are never invented.** 3 spans in the source, 0 claimed.
+- **Values are not reinterpreted.** String-first: 0 of 13 drawing values fail to round-trip, against 4 of 13 under aggressive typing.
 
 ## Writer
 
 **Hand-written OOXML, zipped with the JSZip already in `package.json`. No new dependency.**
 
-Six parts for a two-sheet workbook, 2,537 bytes, byte-identical across runs, and opened successfully by two independent parsers (SheetJS and ExcelJS) with Japanese sheet names, Japanese cell text, merged ranges, embedded newlines and `001`-as-text all intact.
+Six parts for a two-sheet workbook, 2,537 bytes, byte-identical across runs, opened successfully by **three** independent parsers — SheetJS CE 0.20.3, SheetJS 0.18.5 and ExcelJS 4.4.0 — with Japanese sheet names, Japanese cell text, merged ranges, embedded newlines, blank cells and `001`-as-text all intact.
 
-It is worth being clear that this is a bigger package than the `.docx` M2-3 writes — six parts against three, with a second relationship layer, because worksheets are parts the workbook points at by relationship ID. Assuming a spreadsheet is the same size of problem as a document is exactly the assumption that needed testing; it is not, and it is still small.
+The candidate comparison was refreshed against the project's own distribution rather than the npm registry. **SheetJS CE 0.20.3** (Apache-2.0, 8.1 MB, **zero runtime dependencies**, ESM entry, browser build) is a materially better package than the npm `xlsx@0.18.5` the first revision measured (7 dependencies). It is still 8 MB of library to write a 2.5 KB file, and the hand-written writer passes every content check CE does.
 
-Adding SheetJS (7.5 MB unpacked, 7 dependencies) or ExcelJS (21.8 MB, 9 dependencies) buys formatting, formulas and styling that a first release does not need, and costs a dependency in a browser bundle for a feature whose whole value is that nothing leaves the machine. **Neither is recommended for adoption.** If styling or number formats later become requirements, the decision should be revisited against the then-current versions rather than these.
+**Recommendation unchanged: adopt no dependency.** If number formats, styling or formulas later become requirements, revisit against the then-current CE release.
 
-**Not verified in Microsoft Excel.** There is no Excel and no LibreOffice on this machine. Two parsers accepting the bytes is good evidence and is not the same claim.
+**Not verified in Microsoft Excel.** There is no Excel and no LibreOffice on this machine. Three parsers accepting the bytes is good evidence and is not the same claim.
 
 ## Proposed MVP
 
-1. User opens PDF加工 → PDFテキスト化, chooses a page, drags a rectangle over a table.
-2. Ruling lines and tokens inside the rectangle reconstruct a grid.
-3. The grid is shown as a preview, with its status.
-4. `TABLE_CONFIDENT` → export. `TABLE_NEEDS_CONFIRMATION` → the user confirms or adjusts first.
+1. User opens PDFテキスト化, picks a page, drags a rectangle over a table.
+2. The page is un-rotated; the selection snaps to the enclosing ruled grid if there is one.
+3. The grid is shown as an editable preview with its status.
+4. **The user confirms.** Nothing is written before that, whatever the status says.
 5. One `.xlsx`, one sheet per confirmed table, string-first values, blanks preserved, merges not invented.
 
 ## Explicitly unsupported in the MVP
 
 - Whole-document automatic table extraction.
+- Export without preview and confirmation.
 - Merged-cell inference.
 - Number, date and currency typing (values are text).
 - Styling, column widths, formulas.
-- Tables split across pages, or spanning a page break.
-- Rotated **text** inside a cell (a rotated *page* is handled by the viewport transform).
-- Scanned pages, **until the segmentation defect is fixed**; and even then, at measured accuracy well below native.
+- Tables split across pages.
+- Rotated **text** inside a cell (a rotated *page* is supported).
+- Scanned pages, **until the segmentation defect is fixed** — and even then, at 32% measured cell accuracy, they need their own decision.
 
 ## Key risks
 
-1. **The segmentation defect gates half the feature** and is a pre-existing bug in shipped code. M2-4 should not be started before it is decided who fixes it and when.
-2. **Scanned accuracy may not be acceptable even once unblocked** — 2 of 12 cells exact on a skewed, noisy sheet. A scanned-page MVP may have to be deferred on its own evidence.
-3. **A preview UI is most of the work.** The reconstruction is milliseconds; the selection, preview, confirmation and edit surface is a feature in its own right and is not costed here.
-4. **The geometry route does not scale** — 2.1 s for 20,000 tokens on the main thread. If borderless tables are in scope, it needs a bound on candidate growth and a yield inside the page.
-5. **A spreadsheet carries more authority than a text file.** Every wrong cell is a defect that looks like data.
+1. **The preview and confirmation UI is the feature.** Reconstruction is milliseconds; selection, preview, editing and confirmation is a piece of work in its own right and is not costed here.
+2. **Users will select things that are not schedules**, and 4 of 8 such selections currently look confident. The preview must present the reconstruction as a proposal, never as a result.
+3. **The segmentation defect gates scanned pages** and is a pre-existing bug in shipped features.
+4. **Scanned accuracy may not be acceptable even once unblocked** — 32%.
+5. **The geometry route does not scale** — 2.1 s for 20,000 tokens. Needed only for borderless tables; needs a bound and an in-page yield.
+6. **A spreadsheet carries more authority than a text file.** Every wrong cell is a defect that looks like data.
 
 ## Required human decisions
 
-1. Accept **REVISE**, and with it that M2-4 asks the user to select a region rather than doing it silently.
-2. Decide whether the OCR segmentation defect is fixed first, separately, as a bug in M2-1/M2-2.
-3. Decide whether scanned pages are in the MVP at all, given the measured accuracy.
-4. Confirm **string-first values**, accepting that `12` arrives in Excel as text.
-5. Confirm **no new dependency**, i.e. the hand-written writer.
-6. Decide whether Microsoft Excel verification is required before release, and on whose machine.
+1. Accept **REVISE**: user-selected region, snap-to-grid, and mandatory preview and confirmation.
+2. Accept that `TABLE_CONFIDENT` is a structural statement and **cannot** be an export gate.
+3. Decide whether the OCR segmentation defect is fixed first, separately, as a bug in M2-1/M2-2.
+4. Decide whether scanned pages are in the MVP at all, given 32%.
+5. Confirm **string-first values**, accepting that `12` arrives in Excel as text.
+6. Confirm **no new dependency** (SheetJS CE 0.20.3 was re-evaluated and is not recommended).
+7. Decide whether Microsoft Excel verification is required before release, and on whose machine.

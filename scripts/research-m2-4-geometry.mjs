@@ -86,9 +86,13 @@ try {
     console.log(`  operators on the page: ${Object.entries(inspected.opNames).map(([k, v]) => `${k}x${v}`).join(' ')}`);
     console.log(`  constructPath args   : ${JSON.stringify(inspected.pathSample)}`);
 
-    const rotated = await page.evaluate(() => window.__m24.inspect('native-rotated-90'));
-    writeJson('inspect-native-rotated-90.json', rotated);
-    console.log(`  /Rotate 90 page      : rotate=${rotated.rotate} viewport=${rotated.viewport.width}x${rotated.viewport.height} transform=[${rotated.viewport.transform.join(', ')}]`);
+    // Every rotation, because the answer keys assume a transform per angle and
+    // an assumption is not evidence until pdf.js has been asked.
+    for (const rot of ['000', '090', '180', '270']) {
+        const dump = await page.evaluate((n) => window.__m24.inspect(n), `native-rotate-${rot}`);
+        writeJson(`inspect-native-rotate-${rot}.json`, dump);
+        console.log(`  /Rotate ${rot}          : viewport ${dump.viewport.width.toFixed(2)}x${dump.viewport.height.toFixed(2)}  transform [${dump.viewport.transform.join(', ')}]`);
+    }
 
     // ---- native tokens for every fixture ------------------------------------
     console.log('\n=== native tokens ===');

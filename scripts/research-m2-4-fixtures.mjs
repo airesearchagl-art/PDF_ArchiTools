@@ -46,6 +46,13 @@ if (!fs.existsSync(FONT)) {
 }
 fs.mkdirSync(OUT, { recursive: true });
 
+// Clear the corpus before rebuilding it. A fixture that was renamed leaves its
+// old file behind otherwise, and a stale answer key scored against fresh
+// tokens is a result that looks real and means nothing.
+for (const file of fs.readdirSync(OUT)) {
+    if (file.endsWith('.pdf') || file.endsWith('.truth.json')) fs.unlinkSync(path.join(OUT, file));
+}
+
 const EPOCH = new Date(0);
 
 /** pdf-lib stamps dates by default; fixed metadata keeps runs byte-identical. */
@@ -170,27 +177,52 @@ function drawTable(page, font, spec) {
 }
 
 /**
- * Move a table's answer key into the space a /Rotate 90 page is displayed in.
+ * The transform pdf.js gives a page at each /Rotate, at scale 1.
  *
- * Truth is written in display space for an unrotated page: (x, pageHeight - y).
- * pdf.js hands a 90-degree page the viewport transform [0,1,1,0,0,0], so the
- * displayed point is (y_pdf, x_pdf). Composing the two gives (H - dy, dx),
- * which is what this applies -- rather than leaving the probe and the answer
- * key to disagree about which way up the page is.
+ * Written down rather than derived per case, and checked: the probe dumps the
+ * transform pdf.js actually produced and the gate requires it to equal the one
+ * assumed here. If pdf.js ever disagrees with this table, the answer keys are
+ * wrong and the gate says so instead of the cell metrics quietly sagging.
  */
-function rotateTruth90(table) {
-    const pt = (x, y) => ({ x: A4_H - y, y: x });
+export function viewportTransform(rotate, width = A4_W, height = A4_H) {
+    switch (((rotate % 360) + 360) % 360) {
+        case 90: return [0, 1, 1, 0, 0, 0];
+        case 180: return [-1, 0, 0, 1, width, 0];
+        case 270: return [0, -1, -1, 0, height, width];
+        default: return [1, 0, 0, -1, 0, height];
+    }
+}
+
+const viewportSize = (rotate) => (((rotate % 360) + 360) % 360) % 180 === 90
+    ? { width: A4_H, height: A4_W }
+    : { width: A4_W, height: A4_H };
+
+/**
+ * Move a table's answer key into the space the page is displayed in.
+ *
+ * The key is built in display space for an unrotated page -- (x, H - y) in PDF
+ * user space. This undoes that to get back to user space, then applies the
+ * viewport transform for the rotation actually set on the page. One path for
+ * every angle, so 180 and 270 cannot be right by accident and wrong by
+ * omission.
+ */
+function rotateTruth(table, rotate) {
+    const m = viewportTransform(rotate);
+    const pt = (dx, dy) => {
+        const x = dx;
+        const y = A4_H - dy;
+        return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
+    };
     const box = (r) => {
-        const a = pt(r.left, r.top);
-        const b = pt(r.right, r.bottom);
+        const corners = [pt(r.left, r.top), pt(r.right, r.top), pt(r.right, r.bottom), pt(r.left, r.bottom)];
         return {
-            left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
-            top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y),
+            left: Math.min(...corners.map((c) => c.x)), right: Math.max(...corners.map((c) => c.x)),
+            top: Math.min(...corners.map((c) => c.y)), bottom: Math.max(...corners.map((c) => c.y)),
         };
     };
     return {
         ...table,
-        rotatedTo: 90,
+        rotatedTo: rotate,
         bbox: box(table.bbox),
         cells: table.cells.map((c) => ({ ...c, rect: box(c.rect), runs: [] })),
     };
@@ -711,17 +743,28 @@ const nativePage = (doc) => doc.addPage([A4_W, A4_H]);
     });
 }
 
-// --- positive: rotated page ----------------------------------------------------
-{
+// --- positive: the same table at every /Rotate ---------------------------------
+//
+// One logical table, four pages, so "does rotation work" is answered at cell
+// level for each angle rather than by one page standing in for four.
+for (const rotate of [0, 90, 180, 270]) {
     const { doc, font } = await newDoc();
     const page = nativePage(doc);
-    drawLines(page, font, 60, 60, ['仕上表（90度回転ページ）'], 14);
-    const table = drawTable(page, font, { x: 60, yTop: 110, colWidths: SIMPLE.colWidths, rowHeights: SIMPLE.rowHeights, cells: SIMPLE.cells });
-    page.setRotation(degrees(90));
-    await write('native-rotated-90', doc, {
+    drawLines(page, font, 60, 60, [`仕上表（/Rotate ${rotate}）`], 14);
+    const table = drawTable(page, font, {
+        x: 60, yTop: 110, colWidths: SIMPLE.colWidths, rowHeights: SIMPLE.rowHeights, cells: SIMPLE.cells,
+    });
+    if (rotate) page.setRotation(degrees(rotate));
+    const size = viewportSize(rotate);
+    await write(`native-rotate-${String(rotate).padStart(3, '0')}`, doc, {
         kind: 'positive', source: 'native',
-        note: 'rects are in the rotated display space the viewer shows, so the answer key and the probe speak one language',
-        pages: [{ page: 1, rotate: 90, width: A4_H, height: A4_W, tables: [rotateTruth90(table)] }],
+        note: 'rects are in the display space pdf.js presents for this rotation',
+        assumedViewportTransform: viewportTransform(rotate),
+        pages: [{
+            page: 1, rotate,
+            width: size.width, height: size.height,
+            tables: [rotateTruth(table, rotate)],
+        }],
     });
 }
 

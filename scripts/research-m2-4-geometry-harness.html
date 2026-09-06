@@ -107,24 +107,56 @@ window.__m24 = {
       const page = await doc.getPage(n);
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
+      const vt = Array.from(viewport.transform);
       const tokens = [];
       for (const item of content.items) {
         if (typeof item.str !== 'string') continue;
         if (item.str === '') continue;
-        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-        // tx[3] is the vertical scale of the composed matrix: the glyph height
-        // in display units. tx[4], tx[5] are the baseline origin.
-        const height = Math.hypot(tx[2], tx[3]) || item.height;
-        const width = item.width;
-        const x0 = tx[4];
-        const yBase = tx[5];
+
+        // The run's extent follows the text, not the screen.
+        //
+        // item.transform is [a,b,c,d,e,f]: (a,b) is the baseline direction in
+        // user space and (c,d) the direction glyphs rise in, both already
+        // carrying the font size. item.width and item.height are lengths in
+        // user space along those two directions. So the run occupies the
+        // parallelogram from (e,f) spanned by width along the normalised (a,b)
+        // and height along the normalised (c,d).
+        //
+        // Adding width to a display x -- which is what a naive reading of the
+        // composed matrix invites -- is only correct while the page is upright.
+        // On a /Rotate 90 page the baseline runs down the display, and a run
+        // laid out along display x lands somewhere the text never was.
+        const [a, b, c, d, e, f] = item.transform;
+        const uLen = Math.hypot(a, b) || 1;
+        const vLen = Math.hypot(c, d) || 1;
+        const ux = a / uLen;
+        const uy = b / uLen;
+        const vx = c / vLen;
+        const vy = d / vLen;
+        const w = item.width;
+        const h = item.height;
+
+        const toDisplay = (x, y) => ({
+          x: vt[0] * x + vt[2] * y + vt[4],
+          y: vt[1] * x + vt[3] * y + vt[5],
+        });
+        const quad = [[0, 0], [w, 0], [w, h], [0, h]]
+          .map(([s, t]) => toDisplay(e + s * ux + t * vx, f + s * uy + t * vy));
+        const xs = quad.map((p) => p.x);
+        const ys = quad.map((p) => p.y);
+
+        // Which way the run reads on screen, once everything is applied.
+        const start = quad[0];
+        const end = quad[1];
+        const runLength = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+
         tokens.push({
           text: item.str,
-          x0, x1: x0 + width,
-          // Display space runs downwards, so the glyph box sits above the
-          // baseline in page terms and below it in array terms.
-          y0: yBase - height, y1: yBase,
-          width, height,
+          x0: Math.min(...xs), x1: Math.max(...xs),
+          y0: Math.min(...ys), y1: Math.max(...ys),
+          width: w, height: h,
+          quad: quad.map((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]),
+          runDirection: [+((end.x - start.x) / runLength).toFixed(4), +((end.y - start.y) / runLength).toFixed(4)],
           dir: item.dir,
           fontName: item.fontName,
           hasEOL: item.hasEOL === true,
@@ -136,6 +168,9 @@ window.__m24 = {
         rotate: page.rotate,
         width: viewport.width,
         height: viewport.height,
+        // Dumped so the answer keys can be held to the transform pdf.js really
+        // used, rather than to one written down beside them.
+        viewportTransform: vt,
         tokens,
       });
       page.cleanup();
