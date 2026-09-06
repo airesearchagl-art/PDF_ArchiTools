@@ -92,6 +92,16 @@ export const USAGE_SCREENSHOTS: Record<string, UsageScreenshot> = {
             { targets: ['textifier-run'], desc: '実行開始' },
         ],
     },
+    textifier_excel: {
+        src: '/screenshots/textifier_excel.png',
+        state: 'PDFテキスト化, Text Extraction + Excel, synthetic native table, a range selected',
+        badges: [
+            { targets: ['excel-page-nav'], desc: 'ページを移動' },
+            { targets: ['excel-page-canvas'], desc: 'ページ上で表の範囲をドラッグ' },
+            { targets: ['excel-preview'], desc: '復元した表を確認・編集' },
+            { targets: ['excel-confirm'], desc: '内容を確認してこの表を確定' },
+        ],
+    },
 };
 
 /** Every target the capture script has to find, per screenshot. */

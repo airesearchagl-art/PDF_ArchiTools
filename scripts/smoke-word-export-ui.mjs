@@ -213,15 +213,15 @@ try {
     // ---- Word is offered where it can be produced, and nowhere else -----------
     const ocrFormats = await screenState();
     console.log(`  OCR mode  : ${JSON.stringify(ocrFormats.formatOptions)}`);
-    check('OCR mode does not offer Word',
-        ocrFormats.formatOptions.join(',') === 'pdf,excel(disabled)',
+    check('OCR mode offers only the searchable PDF, neither Word nor Excel',
+        ocrFormats.formatOptions.join(',') === 'pdf',
         ocrFormats.formatOptions.join(','));
 
     await selectMode('extract');
     const extractFormats = await screenState();
     console.log(`  Extract   : ${JSON.stringify(extractFormats.formatOptions)} default=${extractFormats.format}`);
-    check('Text Extraction offers both Text and Word, Excel still not',
-        extractFormats.formatOptions.join(',') === 'txt,word,excel(disabled)',
+    check('Text Extraction offers Text, Word and Excel',
+        extractFormats.formatOptions.join(',') === 'txt,word,excel',
         extractFormats.formatOptions.join(','));
     check('Text (.txt) stays the default', extractFormats.format === 'txt',
         String(extractFormats.format));

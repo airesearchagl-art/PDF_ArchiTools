@@ -234,7 +234,7 @@
             "file": "textifier.png",
             "width": 1280,
             "height": 1150,
-            "sha256": "dc708f59a6c3e1e2dd1eeca191fae589afc45898518ab01fa18bfced8d6050fe"
+            "sha256": "92618b7846f3af69d5a14fef9bd0ae4330fb1d436aeae8fa3359867ac603ad3d"
         },
         "targets": {
             "textifier-upload": {
@@ -254,6 +254,44 @@
                 "top": 84.9,
                 "width": 19.47,
                 "height": 4.09
+            }
+        }
+    },
+    "textifier_excel": {
+        "frame": {
+            "width": 1280,
+            "height": 1560
+        },
+        "screenshot": {
+            "file": "textifier_excel.png",
+            "width": 1280,
+            "height": 1560,
+            "sha256": "862908d6f64fc478cc24696580cfa8f6e585638dbd50865d830b42f43897c911"
+        },
+        "targets": {
+            "excel-page-nav": {
+                "left": 21.09,
+                "top": 0.15,
+                "width": 57.81,
+                "height": 2.24
+            },
+            "excel-page-canvas": {
+                "left": 21.17,
+                "top": 3.74,
+                "width": 56.25,
+                "height": 65.32
+            },
+            "excel-preview": {
+                "left": 21.09,
+                "top": 70.41,
+                "width": 57.81,
+                "height": 20.25
+            },
+            "excel-confirm": {
+                "left": 22.42,
+                "top": 86.94,
+                "width": 19.42,
+                "height": 2.63
             }
         }
     }
