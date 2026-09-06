@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M2-5 drawing-register probe harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>M2-5 drawing-register probe harness</h1>
+<p>Driven by <code>scripts/research-m2-5-probe.mjs</code>. Research only; not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { createWorker, PSM } from 'tesseract.js';
+import {
+  analysePageGeometry, configurePdfWorker, tokensInRect, toUprightPoint,
+} from '/src/utils/pdf-textifier/index.ts';
+import { preprocessForOcr } from '/src/utils/pdf-textifier/preprocess.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+configurePdfWorker();
+
+let docPromise = null;
+const openSet = () => {
+  if (!docPromise) {
+    docPromise = fetch('/test-fixtures/m2-5/drawing-set.pdf')
+      .then((r) => { if (!r.ok) throw new Error(`fixture: HTTP ${r.status}`); return r.arrayBuffer(); })
+      .then((buf) => pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise);
+  }
+  return docPromise;
+};
+
+/**
+ * One shared worker for the whole run.
+ *
+ * Creating a Tesseract worker costs several megabytes of WASM and language
+ * data. A register reads four fields on twenty pages, so a worker per field
+ * would pay that eighty times -- which is itself one of the measurements.
+ */
+let sharedWorker = null;
+let workerStartMs = 0;
+async function getWorker() {
+  if (sharedWorker) return sharedWorker;
+  const t0 = performance.now();
+  sharedWorker = await createWorker('jpn+eng', 1, {
+    workerPath: '/ocr/tesseract/worker.min.js',
+    corePath: '/ocr/tesseract/',
+    langPath: '/ocr/tessdata',
+    gzip: false,
+    workerBlobURL: false,
+  });
+  workerStartMs = performance.now() - t0;
+  return sharedWorker;
+}
+
+/**
+ * Render only a region of a page, into a canvas the size of that region.
+ *
+ * This is the question that decides whether region OCR on an A0 sheet is
+ * actually cheap. pdf.js takes `offsetX`/`offsetY` on a viewport, which shifts
+ * the rendered content; combined with a canvas sized to the region, the rest of
+ * the sheet is simply never rasterised. If that works, a title block on an A0
+ * costs a title block, not an A0.
+ */
+async function renderRegion(page, region, dpi, rotate, uprightSize) {
+  const scale = dpi / 72;
+  // The region is in upright space; the viewport draws in display space, so
+  // the region's corners go the other way through the same rotation.
+  const display = uprightRectToDisplay(region, rotate, uprightSize);
+  const viewport = page.getViewport({
+    scale,
+    offsetX: -display.left * scale,
+    offsetY: -display.top * scale,
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.ceil((display.right - display.left) * scale));
+  canvas.height = Math.max(1, Math.ceil((display.bottom - display.top) * scale));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('no 2d context');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvas, viewport, intent: 'print' }).promise;
+  return canvas;
+}
+
+/** Upright rectangle -> display rectangle, the inverse of the M2-4 map. */
+function uprightRectToDisplay(rect, rotate, upright) {
+  const r = ((rotate % 360) + 360) % 360;
+  const W = upright.width;
+  const H = upright.height;
+  const pt = (x, y) => {
+    switch (r) {
+      case 90: return { x: H - y, y: x };
+      case 180: return { x: W - x, y: H - y };
+      case 270: return { x: y, y: W - x };
+      default: return { x, y };
+    }
+  };
+  const a = pt(rect.left, rect.top);
+  const b = pt(rect.right, rect.bottom);
+  return {
+    left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
+    top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y),
+  };
+}
+
+const releaseCanvas = (c) => { if (c) { c.width = 0; c.height = 0; } };
+
+async function recognise(canvas, psm, { preprocess = false } = {}) {
+  const worker = await getWorker();
+  let owned = null;
+  let target = canvas;
+  if (preprocess) {
+    const prep = await preprocessForOcr(canvas, { deskew: true, noiseReduction: true });
+    if (prep.ownsCanvas) owned = prep.canvas;
+    target = prep.canvas;
+  }
+  const t0 = performance.now();
+  await worker.setParameters({ tessedit_pageseg_mode: PSM[psm] });
+  const { data } = await worker.recognize(target.toDataURL('image/png'), {}, { blocks: true, text: true });
+  const ms = performance.now() - t0;
+  releaseCanvas(owned);
+
+  const words = [];
+  for (const block of data.blocks ?? []) {
+    for (const para of block.paragraphs ?? []) {
+      for (const line of para.lines ?? []) {
+        for (const w of line.words ?? []) {
+          const text = (w.text ?? '').trim();
+          if (!text || !w.bbox) continue;
+          words.push({ text, bbox: w.bbox, confidence: w.confidence ?? 0 });
+        }
+      }
+    }
+  }
+  return {
+    text: (data.text ?? '').trim(),
+    words,
+    meanConfidence: words.length ? words.reduce((s, w) => s + w.confidence, 0) / words.length : null,
+    ms: Math.round(ms),
+  };
+}
+
+window.__m25 = {
+  psmOptions: Object.keys(PSM),
+  psmValues: { ...PSM },
+
+  async pageCount() {
+    const doc = await openSet();
+    return doc.numPages;
+  },
+
+  /** Page geometry, straight from the production analyser. */
+  async geometry(pageNumber) {
+    const doc = await openSet();
+    const g = await analysePageGeometry(doc, pageNumber);
+    return {
+      pageNumber: g.pageNumber, rotate: g.rotate,
+      displayWidth: g.displayWidth, displayHeight: g.displayHeight,
+      uprightWidth: g.uprightWidth, uprightHeight: g.uprightHeight,
+      scanned: g.scanned, allChars: g.allChars, interiorChars: g.interiorChars,
+      tokens: g.tokens.length,
+    };
+  },
+
+  /**
+   * Native text inside a set of field rectangles.
+   *
+   * Tokens are grouped into lines inside the rectangle and joined the way M2-4
+   * joins a cell, so a two-line title comes back as two lines rather than one
+   * run-on string.
+   */
+  async nativeFields(pageNumber, regions) {
+    const doc = await openSet();
+    const g = await analysePageGeometry(doc, pageNumber);
+    const out = {};
+    for (const [key, rect] of Object.entries(regions)) {
+      const inside = tokensInRect(g.tokens, rect);
+      const ordered = [...inside].sort((a, b) => {
+        const ay = (a.y0 + a.y1) / 2;
+        const by = (b.y0 + b.y1) / 2;
+        return Math.abs(ay - by) > 2 ? ay - by : a.x0 - b.x0;
+      });
+      const lines = [];
+      for (const token of ordered) {
+        const line = lines[lines.length - 1];
+        const last = line?.[line.length - 1];
+        const shared = last ? Math.min(last.y1, token.y1) - Math.max(last.y0, token.y0) : 0;
+        const smaller = last ? Math.min(last.y1 - last.y0, token.y1 - token.y0) : 0;
+        if (line && smaller > 0 && shared / smaller >= 0.5) line.push(token);
+        else lines.push([token]);
+      }
+      out[key] = {
+        text: lines.map((l) => l.map((t) => t.text).join('')).join('\n'),
+        tokenCount: inside.length,
+        lines: lines.length,
+      };
+    }
+    return { scanned: g.scanned, fields: out };
+  },
+
+  /** What a full-page raster would cost, against what a region costs. */
+  async renderCost(pageNumber, region, dpi) {
+    const doc = await openSet();
+    const g = await analysePageGeometry(doc, pageNumber);
+    const page = await doc.getPage(pageNumber);
+    const scale = dpi / 72;
+    const full = page.getViewport({ scale });
+    const fullPixels = Math.ceil(full.width) * Math.ceil(full.height);
+
+    const t0 = performance.now();
+    const canvas = await renderRegion(page, region, dpi, g.rotate,
+      { width: g.uprightWidth, height: g.uprightHeight });
+    const ms = performance.now() - t0;
+    // Read before releasing: releaseCanvas zeroes the dimensions, and reading
+    // them afterwards reports a region of 0x0 that never existed.
+    const regionWidth = canvas.width;
+    const regionHeight = canvas.height;
+    const regionPixels = regionWidth * regionHeight;
+    releaseCanvas(canvas);
+    page.cleanup();
+
+    return {
+      dpi,
+      fullPage: { width: Math.ceil(full.width), height: Math.ceil(full.height), pixels: fullPixels, bytes: fullPixels * 4 },
+      region: { width: regionWidth, height: regionHeight, pixels: regionPixels, bytes: regionPixels * 4 },
+      ratio: regionPixels / fullPixels,
+      ms: Math.round(ms),
+    };
+  },
+
+  /**
+   * Recognise each field on its own, at one segmentation mode.
+   *
+   * One render and one recognise per field, on a canvas the size of that field.
+   */
+  async ocrPerField(pageNumber, regions, psm, { dpi = 300, preprocess = false } = {}) {
+    const doc = await openSet();
+    const g = await analysePageGeometry(doc, pageNumber);
+    const page = await doc.getPage(pageNumber);
+    const out = {};
+    let totalMs = 0;
+    let totalPixels = 0;
+    for (const [key, rect] of Object.entries(regions)) {
+      const canvas = await renderRegion(page, rect, dpi, g.rotate,
+        { width: g.uprightWidth, height: g.uprightHeight });
+      totalPixels += canvas.width * canvas.height;
+      const result = await recognise(canvas, psm, { preprocess });
+      releaseCanvas(canvas);
+      totalMs += result.ms;
+      out[key] = {
+        text: result.text.replace(/\s+/g, ' ').trim(),
+        confidence: result.meanConfidence,
+        words: result.words.length,
+        ms: result.ms,
+      };
+    }
+    page.cleanup();
+    return { psm, dpi, preprocess, fields: out, totalMs, totalPixels };
+  },
+
+  /**
+   * Recognise the whole title block once, then assign words to fields.
+   *
+   * The other half of the comparison: one render and one recognise, with the
+   * word boxes mapped back into the region they fall in.
+   */
+  async ocrUnionRegion(pageNumber, regions, union, psm, { dpi = 300, preprocess = false } = {}) {
+    const doc = await openSet();
+    const g = await analysePageGeometry(doc, pageNumber);
+    const page = await doc.getPage(pageNumber);
+    const scale = dpi / 72;
+    const canvas = await renderRegion(page, union, dpi, g.rotate,
+      { width: g.uprightWidth, height: g.uprightHeight });
+    const pixels = canvas.width * canvas.height;
+    const result = await recognise(canvas, psm, { preprocess });
+    releaseCanvas(canvas);
+    page.cleanup();
+
+    // Word boxes are in the region canvas; put them back into upright points.
+    const display = uprightRectToDisplay(union, g.rotate, { width: g.uprightWidth, height: g.uprightHeight });
+    const assigned = {};
+    for (const key of Object.keys(regions)) assigned[key] = [];
+    const unplaced = [];
+    for (const word of result.words) {
+      const cx = display.left + ((word.bbox.x0 + word.bbox.x1) / 2) / scale;
+      const cy = display.top + ((word.bbox.y0 + word.bbox.y1) / 2) / scale;
+      const up = toUprightPoint(cx, cy, g.rotate, g.displayWidth, g.displayHeight);
+      let placed = false;
+      for (const [key, rect] of Object.entries(regions)) {
+        if (up.x >= rect.left && up.x <= rect.right && up.y >= rect.top && up.y <= rect.bottom) {
+          assigned[key].push(word);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) unplaced.push(word.text);
+    }
+
+    const fields = {};
+    for (const [key, words] of Object.entries(assigned)) {
+      const ordered = [...words].sort((a, b) => {
+        const ay = (a.bbox.y0 + a.bbox.y1) / 2;
+        const by = (b.bbox.y0 + b.bbox.y1) / 2;
+        return Math.abs(ay - by) > 6 ? ay - by : a.bbox.x0 - b.bbox.x0;
+      });
+      fields[key] = {
+        text: ordered.map((w) => w.text).join(' ').replace(/\s+/g, ' ').trim(),
+        confidence: ordered.length ? ordered.reduce((s, w) => s + w.confidence, 0) / ordered.length : null,
+        words: ordered.length,
+      };
+    }
+    return { psm, dpi, preprocess, fields, unplaced, totalMs: result.ms, totalPixels: pixels, wordCount: result.words.length };
+  },
+
+  /** How long the worker took to start, and whether it was reused. */
+  workerStats() {
+    return { started: sharedWorker !== null, startMs: Math.round(workerStartMs) };
+  },
+
+  async terminateWorker() {
+    if (!sharedWorker) return { terminated: false };
+    await sharedWorker.terminate();
+    sharedWorker = null;
+    return { terminated: true };
+  },
+};
+
+log('ready');
+window.__m25Ready = true;
+</script>
+</body>
+</html>
