@@ -102,6 +102,7 @@ jobs:
           node scripts/make-excel-fixtures.mjs
           node scripts/make-size-fixtures.mjs
           node scripts/make-titleblock-fixtures.mjs
+          node scripts/make-drawing-register-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -126,6 +127,9 @@ jobs:
 
       - name: Title-block updater
         run: node scripts/smoke-title-block-updater.mjs
+
+      - name: Drawing register
+        run: node scripts/smoke-drawing-register.mjs
 
       - name: Usage guide
         run: node scripts/smoke-usage-guide.mjs

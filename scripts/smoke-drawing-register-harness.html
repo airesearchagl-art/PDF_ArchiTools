@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drawing register smoke harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>Drawing register smoke harness</h1>
+<p>Driven by <code>scripts/smoke-drawing-register.mjs</code>. Not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import {
+  configurePdfWorker,
+  analyseRegisterPage, tokensToRawText, renderRegion, releaseRegion,
+  createProfile, applyProfile, AssignmentSet, parsePageRange, missingFields,
+  RegisterOcrEngine, extractRegister,
+  buildRow, confirmRow, invalidateRow, reviewSurface, attentionQueue,
+  exportReadiness, registerGrid, registerFileName, buildRegisterWorkbook,
+  displayValue, findDuplicates, registerSummary,
+  REGISTER_FIELDS, REGISTER_PAGE_SEG_MODE, REGISTER_SHEET_NAME,
+} from '/src/utils/pdf-textifier/index.ts';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+configurePdfWorker();
+
+const FIXTURE = '/test-fixtures/drawing-register/drawing-register.pdf';
+let docPromise = null;
+const openDoc = () => {
+  if (!docPromise) {
+    docPromise = fetch(FIXTURE)
+      .then((r) => { if (!r.ok) throw new Error(`fixture: HTTP ${r.status}`); return r.arrayBuffer(); })
+      .then((buf) => pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise);
+  }
+  return docPromise;
+};
+
+/** Every rendered region, so the gate can assert nothing rasterised a whole sheet. */
+window.__renders = [];
+const trackedRender = async (page, rect, options) => {
+  const region = await renderRegion(page, rect, options);
+  window.__renders.push({ width: region.width, height: region.height, pixels: region.pixels });
+  return region;
+};
+
+const truth = await fetch('/test-fixtures/drawing-register/drawing-register.truth.json').then((r) => r.json());
+const pageTruth = (n) => truth.pages.find((p) => p.page === n);
+
+/** Profiles built from the answer key, standing in for a person drawing them. */
+async function buildProfiles(doc) {
+  const geomA = await analyseRegisterPage(doc, 1);
+  const geomB = await analyseRegisterPage(doc, 6);
+  const geomFixed = await analyseRegisterPage(doc, 13);
+  const marginPage = truth.pages.find((p) => p.layout === 'C');
+  const geomMargin = await analyseRegisterPage(doc, marginPage.page);
+  return {
+    A: createProfile({
+      name: 'A: bottom right', model: 'normalised', page: geomA, fields: pageTruth(1).regions,
+    }),
+    B: createProfile({
+      name: 'B: right edge', model: 'normalised', page: geomB, fields: pageTruth(6).regions,
+    }),
+    fixed: createProfile({
+      name: 'A: fixed size', model: 'corner-anchored', page: geomFixed, fields: pageTruth(13).regions,
+    }),
+    margin: createProfile({
+      name: 'C: margin strip', model: 'normalised', page: geomMargin, fields: marginPage.regions,
+    }),
+  };
+}
+
+window.__register = {
+  ready: true,
+  REGISTER_PAGE_SEG_MODE,
+  REGISTER_SHEET_NAME,
+  FIELDS: [...REGISTER_FIELDS],
+
+  async pageCount() {
+    const doc = await openDoc();
+    return doc.numPages;
+  },
+
+  /** Page geometry, including tokens the table path would have withheld. */
+  async geometry(pageNumber) {
+    const doc = await openDoc();
+    const g = await analyseRegisterPage(doc, pageNumber);
+    const regions = pageTruth(pageNumber).regions;
+    return {
+      pageNumber: g.pageNumber, rotate: g.rotate,
+      displayWidth: g.displayWidth, displayHeight: g.displayHeight,
+      uprightWidth: g.uprightWidth, uprightHeight: g.uprightHeight,
+      scanned: g.scanned, allChars: g.allChars, interiorChars: g.interiorChars,
+      tokens: g.tokens.length,
+      fieldText: Object.fromEntries(REGISTER_FIELDS.map((f) => [f, tokensToRawText(g.tokens, regions[f])])),
+    };
+  },
+
+  /** What the table path reports for the same page, for the boundary check. */
+  async tableGeometry(pageNumber) {
+    const { analysePageGeometry } = await import('/src/utils/pdf-textifier/index.ts');
+    const doc = await openDoc();
+    const g = await analysePageGeometry(doc, pageNumber);
+    return { pageNumber, scanned: g.scanned, tokens: g.tokens.length };
+  },
+
+  /** One region render, reporting its size so a full-page raster is visible. */
+  async regionCost(pageNumber, dpi = 300) {
+    const doc = await openDoc();
+    const g = await analyseRegisterPage(doc, pageNumber);
+    const page = await doc.getPage(pageNumber);
+    const regions = applyProfile((await buildProfiles(doc)).A, g);
+    const scale = dpi / 72;
+    const full = page.getViewport({ scale, rotation: 0 });
+    const region = await trackedRender(page, regions.drawing_number, { dpi });
+    releaseRegion(region.canvas);
+    page.cleanup();
+    return {
+      pageNumber,
+      fullPage: {
+        width: Math.ceil(full.width), height: Math.ceil(full.height),
+        pixels: Math.ceil(full.width) * Math.ceil(full.height),
+      },
+      region: { width: region.width, height: region.height, pixels: region.pixels },
+    };
+  },
+
+  /** Recognise one page's fields, optionally through a deliberately wrong rotation. */
+  async recognise(pageNumber, { rotation = 0 } = {}) {
+    const doc = await openDoc();
+    const g = await analyseRegisterPage(doc, pageNumber);
+    const profiles = await buildProfiles(doc);
+    const regions = applyProfile(profiles.A, g);
+    const page = await doc.getPage(pageNumber);
+    const ocr = new RegisterOcrEngine();
+    try {
+      await ocr.start();
+      const run = await ocr.recogniseFields(page, regions, { rotation });
+      window.__renders.push({ width: 0, height: 0, pixels: run.pixels });
+      const want = pageTruth(pageNumber).values;
+      return {
+        pageNumber, rotation, rotate: g.rotate,
+        pixels: run.pixels, calls: run.calls, unplaced: run.unplaced.length,
+        fields: Object.fromEntries(REGISTER_FIELDS.map((f) => {
+          const got = run.fields[f]?.rawText ?? '';
+          const expected = want[f] ?? '';
+          return [f, {
+            rawText: got,
+            value: displayValue(got),
+            score: run.fields[f]?.score ?? null,
+            found: expected !== '' && got.replace(/\s+/gu, '').includes(expected.replace(/\s+/gu, '')),
+          }];
+        })),
+      };
+    } finally {
+      await ocr.terminate();
+      page.cleanup();
+    }
+  },
+
+  /** The whole document, through the production extraction path. */
+  async extract({ assignAll = true, skipLayoutB = false } = {}) {
+    const doc = await openDoc();
+    const profiles = await buildProfiles(doc);
+    const map = new Map([
+      [profiles.A.id, profiles.A],
+      [profiles.B.id, profiles.B],
+      [profiles.fixed.id, profiles.fixed],
+      [profiles.margin.id, profiles.margin],
+    ]);
+    const assignments = new AssignmentSet();
+    const layoutB = truth.pages.filter((p) => p.layout === 'B').map((p) => p.page);
+    const layoutC = truth.pages.filter((p) => p.layout === 'C').map((p) => p.page);
+    const fixed = truth.pages.filter((p) => p.blockScaling === 'fixed-physical-size').map((p) => p.page);
+    const rest = truth.pages
+      .filter((p) => p.layout === 'A' && p.blockScaling === 'proportional')
+      .map((p) => p.page);
+
+    assignments.assign(rest, profiles.A.id);
+    assignments.assign(fixed, profiles.fixed.id);
+    assignments.assign(layoutC, profiles.margin.id);
+    if (assignAll && !skipLayoutB) assignments.assign(layoutB, profiles.B.id);
+
+    const ocr = new RegisterOcrEngine();
+    try {
+      const result = await extractRegister({ doc, profiles: map, assignments, ocr });
+      window.__renders.push({ width: 0, height: 0, pixels: result.stats.maxRegionPixels });
+      return {
+        stats: result.stats,
+        unassignedInput: assignments.unassigned(doc.numPages),
+        rows: result.rows.map((row) => ({
+          pageNumber: row.pageNumber,
+          profileId: row.profileId,
+          extraction: row.extraction,
+          reviewStatus: row.reviewStatus,
+          reasons: row.reviewReasons,
+          fields: Object.fromEntries(REGISTER_FIELDS.map((f) => [f, {
+            rawText: row.fields[f].rawText,
+            value: row.fields[f].value,
+            source: row.fields[f].source,
+            score: row.fields[f].ocrScore,
+          }])),
+          expected: pageTruth(row.pageNumber).values,
+        })),
+        surface: reviewSurface(result.rows).map((e) => ({
+          pageNumber: e.pageNumber, reasons: e.reasons.length,
+          needsAttention: e.needsAttention, reviewStatus: e.reviewStatus,
+        })),
+        attention: attentionQueue(result.rows).map((e) => e.pageNumber),
+        duplicates: findDuplicates(result.rows),
+        summary: registerSummary(result.rows),
+      };
+    } finally {
+      await ocr.terminate();
+    }
+  },
+
+  /** Export gating and workbook integrity, on rows built without touching a PDF. */
+  async exportChecks() {
+    const pageCount = 3;
+    const rows = [
+      buildRow({ pageNumber: 1, fields: {
+        drawing_number: { rawText: '図面番号\n001', source: 'native' },
+        drawing_title: { rawText: '図面名称\n第一 平面図', source: 'native' },
+        revision: { rawText: 'REV\nA', source: 'native' },
+        revision_date: { rawText: '日付\n2026.09.01', source: 'native' },
+      } }),
+      buildRow({ pageNumber: 2, fields: {
+        drawing_number: { rawText: '図面番号\n=1+1', source: 'native' },
+        drawing_title: { rawText: '図面名称\n仮設\n二行目', source: 'native' },
+        revision: { rawText: '', source: 'native' },
+        revision_date: { rawText: '日付\n2026.09.02', source: 'native' },
+      } }),
+      buildRow({ pageNumber: 3, profileAssigned: false }),
+    ];
+
+    const before = exportReadiness(rows, pageCount, 0);
+    let refusedUnconfirmed = null;
+    try {
+      await buildRegisterWorkbook(rows, pageCount, { sourceRevision: 0 });
+      refusedUnconfirmed = false;
+    } catch (error) {
+      refusedUnconfirmed = String(error.message ?? error);
+    }
+
+    const confirmed = rows.map((row) => confirmRow(row));
+    const partial = [confirmed[0], confirmed[1], rows[2]];
+    let refusedOneUnconfirmed = null;
+    try {
+      await buildRegisterWorkbook(partial, pageCount, { sourceRevision: 0 });
+      refusedOneUnconfirmed = false;
+    } catch (error) {
+      refusedOneUnconfirmed = String(error.message ?? error);
+    }
+
+    let refusedMissingPage = null;
+    try {
+      await buildRegisterWorkbook(confirmed.slice(0, 2), pageCount, { sourceRevision: 0 });
+      refusedMissingPage = false;
+    } catch (error) {
+      refusedMissingPage = String(error.message ?? error);
+    }
+
+    const ready = exportReadiness(confirmed, pageCount, 0);
+    const workbook = await buildRegisterWorkbook(confirmed, pageCount, { sourceRevision: 0 });
+    let binary = '';
+    for (const byte of workbook.bytes) binary += String.fromCharCode(byte);
+
+    // Confirming and then editing must not leave a confirmed row behind.
+    const editedBack = invalidateRow(confirmed[0]);
+
+    return {
+      before: { ready: before.ready, reason: before.reason, unconfirmed: before.unconfirmedPages },
+      refusedUnconfirmed, refusedOneUnconfirmed, refusedMissingPage,
+      ready: { ready: ready.ready, confirmed: ready.confirmedCount, pageCount: ready.pageCount },
+      grid: registerGrid(confirmed),
+      fileName: registerFileName('site plan.pdf'),
+      workbook: { bytes: workbook.bytes.length, sheetCount: workbook.sheetCount, cellCount: workbook.cellCount },
+      base64: btoa(binary),
+      invalidated: { status: editedBack.reviewStatus, hadConfirmation: 'confirmation' in editedBack },
+      rawAfterConfirm: confirmed[0].fields.drawing_number.rawText,
+    };
+  },
+
+  /** The raw-text contract, end to end through the candidate model. */
+  rawTextContract() {
+    const messy = '  図面番号 \n  A-101  \n';
+    const row = buildRow({ pageNumber: 1, fields: { drawing_number: { rawText: messy, source: 'native' } } });
+    const verbatim = buildRow({
+      pageNumber: 1,
+      fields: { drawing_number: { rawText: messy, source: 'native' } },
+      deriveValue: (t) => t,
+    });
+    const confirmed = confirmRow(row, { drawing_number: 'A-108' });
+    return {
+      input: messy,
+      stored: row.fields.drawing_number.rawText,
+      display: row.fields.drawing_number.value,
+      otherPolicyValue: verbatim.fields.drawing_number.value,
+      otherPolicyRaw: verbatim.fields.drawing_number.rawText,
+      afterEditRaw: confirmed.fields.drawing_number.rawText,
+      afterEditValue: confirmed.fields.drawing_number.value,
+      recordRaw: confirmed.confirmation.raw.drawing_number,
+      recordProposed: confirmed.confirmation.proposed.drawing_number,
+      recordFinal: confirmed.confirmation.final.drawing_number,
+      edited: confirmed.confirmation.editedFields,
+    };
+  },
+
+  /** Assignment refuses to guess, and a profile refuses to be half-drawn. */
+  async assignmentChecks() {
+    const doc = await openDoc();
+    const profiles = await buildProfiles(doc);
+    const assignments = new AssignmentSet();
+    const a2LayoutA = truth.pages.filter((p) => p.size === 'A2' && p.layout === 'A' && p.blockScaling === 'proportional').map((p) => p.page);
+    const a2LayoutB = truth.pages.filter((p) => p.size === 'A2' && p.layout === 'B').map((p) => p.page);
+    assignments.assign(a2LayoutA, profiles.A.id);
+
+    const conflict = assignments.assign(a2LayoutA, profiles.B.id);
+    const reassigned = assignments.reassign(a2LayoutA, profiles.A.id);
+
+    return {
+      sameSizeAssigned: a2LayoutA,
+      sameSizeUnassigned: a2LayoutB,
+      lookupOnUnassigned: a2LayoutB.map((p) => assignments.get(p)),
+      unassignedList: assignments.unassigned(doc.numPages),
+      conflictReported: conflict.conflicts.length,
+      conflictAssigned: conflict.assigned.length,
+      reassigned: reassigned.length,
+      missingWhenIncomplete: missingFields({ drawing_number: pageTruth(1).regions.drawing_number }),
+      missingWhenComplete: missingFields(pageTruth(1).regions),
+      range: parsePageRange('1-3, 6, 99', doc.numPages),
+    };
+  },
+
+  /**
+   * The export gate, fed registers that are complete and confirmed and still
+   * wrong. Each one must come back without bytes.
+   */
+  async exportShapeChecks() {
+    const pageCount = 3;
+    const good = (n) => confirmRow(buildRow({ pageNumber: n, fields: {
+      drawing_number: { rawText: `A-10${n}`, source: 'native' },
+      drawing_title: { rawText: 'PLAN', source: 'native' },
+      revision: { rawText: 'A', source: 'native' },
+      revision_date: { rawText: '2026.09.01', source: 'native' },
+    } }));
+    const complete = [good(1), good(2), good(3)];
+
+    const attempt = async (rows, label) => {
+      const readiness = exportReadiness(rows, pageCount, 0);
+      let bytes = null;
+      let refused = null;
+      try {
+        const result = await buildRegisterWorkbook(rows, pageCount, { sourceRevision: 0 });
+        bytes = result.bytes.length;
+      } catch (error) {
+        refused = String(error.message ?? error);
+      }
+      return { label, ready: readiness.ready, reason: readiness.reason, bytes, refused };
+    };
+
+    return {
+      control: await attempt(complete, 'every page once, all confirmed'),
+      duplicate: await attempt([...complete, good(2)], 'a second row for page 2'),
+      pageZero: await attempt([good(0), good(1), good(2), good(3)], 'a row for page 0'),
+      pastEnd: await attempt([...complete, good(pageCount + 1)], 'a row past the last page'),
+      extraConfirmed: await attempt([...complete, good(2)], 'N pages plus one extra confirmed row'),
+      // Missing page 3, with page 2 present twice: the count matches and every
+      // expected page is "covered" only if duplicates are allowed to stand in.
+      duplicateNoMissingCount: await attempt([good(1), good(2), good(2)], 'duplicate covering a missing page'),
+      fractional: await attempt([good(1), good(2), { ...good(3), pageNumber: 2.5 }], 'a fractional page number'),
+    };
+  },
+
+  /** A register read under one arrangement, checked against another. */
+  async staleRevisionChecks() {
+    const pageCount = 2;
+    const rows = [1, 2].map((n) => confirmRow(buildRow({
+      pageNumber: n, sourceRevision: 1,
+      fields: { drawing_number: { rawText: `A-10${n}`, source: 'native' } },
+    })));
+
+    const same = exportReadiness(rows, pageCount, 1);
+    const moved = exportReadiness(rows, pageCount, 2);
+    let refused = null;
+    try {
+      await buildRegisterWorkbook(rows, pageCount, { sourceRevision: 2 });
+    } catch (error) {
+      refused = String(error.message ?? error);
+    }
+
+    // The bypass the review found: a caller that simply does not mention the
+    // revision. Types are gone at runtime, so these are the calls a plain
+    // JavaScript caller -- or one built against the older signature -- would
+    // actually make. Each must be refused rather than quietly skipping the
+    // staleness check.
+    const bypass = {};
+    for (const [label, call] of [
+      ['no options at all', () => buildRegisterWorkbook(rows, pageCount)],
+      ['empty options', () => buildRegisterWorkbook(rows, pageCount, {})],
+      ['only shouldCancel', () => buildRegisterWorkbook(rows, pageCount, { shouldCancel: () => false })],
+      ['an undefined revision', () => buildRegisterWorkbook(rows, pageCount, { sourceRevision: undefined })],
+      ['a revision that is not a number', () => buildRegisterWorkbook(rows, pageCount, { sourceRevision: null })],
+    ]) {
+      let bytes = null;
+      let error = null;
+      try {
+        const result = await call();
+        bytes = result.bytes.length;
+      } catch (e) {
+        error = String(e.message ?? e);
+      }
+      bypass[label] = { bytes, error };
+    }
+
+    // The same omission on a register that is otherwise perfectly exportable:
+    // it must still be refused, so the guard is about the missing revision and
+    // not about the rows happening to be stale.
+    const fresh = [1, 2].map((n) => confirmRow(buildRow({
+      pageNumber: n, sourceRevision: 7,
+      fields: { drawing_number: { rawText: `A-10${n}`, source: 'native' } },
+    })));
+    let freshWithRevision = null;
+    let freshWithout = null;
+    try {
+      const result = await buildRegisterWorkbook(fresh, pageCount, { sourceRevision: 7 });
+      freshWithRevision = result.bytes.length;
+    } catch (e) {
+      freshWithRevision = String(e.message ?? e);
+    }
+    try {
+      const result = await buildRegisterWorkbook(fresh, pageCount);
+      freshWithout = result.bytes.length;
+    } catch (e) {
+      freshWithout = String(e.message ?? e);
+    }
+    // Confirming a stale row again does not rescue it: the stamp travels with
+    // the row, so a second confirmation is still a confirmation of old values.
+    const reconfirmed = rows.map((row) => confirmRow(row));
+    const afterReconfirm = exportReadiness(reconfirmed, pageCount, 2);
+
+    return {
+      sameRevision: { ready: same.ready, stale: same.stalePages },
+      movedRevision: { ready: moved.ready, stale: moved.stalePages, reason: moved.reason },
+      refused,
+      afterReconfirm: { ready: afterReconfirm.ready, stale: afterReconfirm.stalePages },
+      revisionOnRows: reconfirmed.map((r) => r.sourceRevision),
+      bypass,
+      freshWithRevision,
+      freshWithout,
+    };
+  },
+
+  /**
+   * A recognition that stalls kills the worker. The next page must still be
+   * readable, which means the wrapper has to notice and build a new one.
+   */
+  async workerRecovery(pageNumber) {
+    const doc = await openDoc();
+    const g = await analyseRegisterPage(doc, pageNumber);
+    const profiles = await buildProfiles(doc);
+    const regions = applyProfile(profiles.A, g);
+    const page = await doc.getPage(pageNumber);
+    const ocr = new RegisterOcrEngine();
+    const want = pageTruth(pageNumber).values;
+    const hits = (run) => REGISTER_FIELDS.filter((f) => {
+      const expected = want[f] ?? '';
+      const got = run.fields[f]?.rawText ?? '';
+      return expected !== '' && got.replace(/\s+/gu, '').includes(expected.replace(/\s+/gu, ''));
+    }).length;
+
+    try {
+      await ocr.start();
+      const startedBefore = ocr.started;
+
+      // A one-millisecond bound: recognition cannot finish inside it, so this
+      // takes the same fatal path a genuinely stalled page would.
+      let fatal = null;
+      try {
+        await ocr.recogniseFields(page, regions, { timeoutMs: 1 });
+      } catch (error) {
+        fatal = String(error.message ?? error);
+      }
+      const startedAfterFatal = ocr.started;
+
+      // No explicit restart: the next call has to arrange its own worker, the
+      // way the extraction loop's next page would.
+      const recovered = await ocr.recogniseFields(page, regions);
+      return {
+        startedBefore,
+        fatal,
+        startedAfterFatal,
+        startedAfterRecovery: ocr.started,
+        recoveredHits: hits(recovered),
+        of: REGISTER_FIELDS.length,
+      };
+    } finally {
+      await ocr.terminate();
+      page.cleanup();
+    }
+  },
+
+  renders() {
+    return window.__renders;
+  },
+};
+
+log('ready');
+window.__registerReady = true;
+</script>
+</body>
+</html>

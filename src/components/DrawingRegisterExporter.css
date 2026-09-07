@@ -1,0 +1,295 @@
+/* The drawing register workflow. Kept beside the component rather than in the
+   shared textifier stylesheet, because it is one screen with one owner. */
+
+.drawing-register {
+    margin-top: 24px;
+    text-align: left;
+    color: #222;
+}
+
+.drawing-register h3 {
+    margin: 0 0 6px;
+    font-size: 18px;
+}
+
+.drawing-register h4 {
+    margin: 0 0 10px;
+    font-size: 15px;
+}
+
+.dr-lead {
+    margin: 0 0 18px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #444;
+}
+
+.dr-step {
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #fff;
+}
+
+.dr-muted {
+    color: #666;
+    font-size: 12px;
+}
+
+.dr-note {
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border-left: 3px solid #f0ad4e;
+    background: #fff8ec;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.dr-status {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: #2e7d32;
+}
+
+.dr-error {
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: #fdecea;
+    color: #b3261e;
+    font-size: 13px;
+}
+
+.dr-page-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.dr-canvas-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    border: 1px solid #ddd;
+    background: #fafafa;
+}
+
+.dr-canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.dr-canvas-active {
+    cursor: crosshair;
+}
+
+/* The rectangle being dragged. Positioned in percentages of the canvas so it
+   stays put when the canvas is scaled down to fit. */
+.dr-drag {
+    position: absolute;
+    border: 2px solid #1976d2;
+    background: rgba(25, 118, 210, 0.12);
+    pointer-events: none;
+}
+
+.dr-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 4px;
+}
+
+.dr-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.dr-field span {
+    font-size: 11px;
+    color: #777;
+}
+
+.dr-field-active {
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+}
+
+.dr-profile-form,
+.dr-assign-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.dr-profile-form label,
+.dr-assign-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: #444;
+}
+
+.dr-profile-form input,
+.dr-profile-form select,
+.dr-assign-form input,
+.dr-assign-form select {
+    padding: 7px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    min-width: 200px;
+}
+
+.drawing-register button {
+    padding: 8px 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.drawing-register button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dr-profile-list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+}
+
+.dr-profile-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+}
+
+.dr-profile-list li span:first-child {
+    font-weight: 600;
+    min-width: 160px;
+}
+
+.dr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.dr-table th,
+.dr-table td {
+    border-bottom: 1px solid #eee;
+    padding: 7px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.dr-table th {
+    background: #fafafa;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.dr-confirmed td {
+    background: #f4fbf5;
+}
+
+.dr-flag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #fff3cd;
+    color: #8a6d3b;
+    font-size: 11px;
+}
+
+.dr-review-row {
+    border-color: #1976d2;
+}
+
+.dr-reasons {
+    margin: 0 0 12px;
+    padding-left: 18px;
+    font-size: 12px;
+    color: #8a6d3b;
+}
+
+.dr-review-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.dr-review-field label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: #444;
+    min-width: 240px;
+}
+
+.dr-review-field input {
+    padding: 7px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* The raw text sits beside the value, not behind a tooltip: the value is a
+   guess made from it, and a reviewer deciding whether the guess is right needs
+   to see what it was made from. */
+.dr-raw {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1 1 260px;
+}
+
+.dr-raw pre {
+    margin: 0;
+    padding: 6px 8px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    background: #fafafa;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 120px;
+    overflow: auto;
+}
+
+.dr-row-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.dr-download {
+    display: inline-block;
+    margin-left: 12px;
+    font-size: 13px;
+    color: #1976d2;
+}
