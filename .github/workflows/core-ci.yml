@@ -133,3 +133,9 @@ jobs:
 
       - name: Usage guide
         run: node scripts/smoke-usage-guide.mjs
+
+      # Drives the built artifact, not the dev server: which worker the
+      # Annotator fetches depends on module evaluation order in the bundle,
+      # and only the bundle can answer that.
+      - name: Annotator local PDF worker
+        run: node scripts/smoke-annotator-local-worker.mjs

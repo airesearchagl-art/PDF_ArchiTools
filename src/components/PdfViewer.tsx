@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { GlobalWorkerOptions } from 'pdfjs-dist';
 import { Upload, ZoomIn, ZoomOut, Download, PenTool, Eraser, Layers, Plus, Eye, EyeOff, Trash2, Trash, Copy, Maximize, Ruler, Hexagon, Square, Target, MousePointer2 } from 'lucide-react';
 import { PdfPage } from './PdfPage';
 import type { ToolType, MeasurementScale } from './DrawingCanvas';
@@ -8,12 +7,9 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
+import { configurePdfWorker } from '../utils/pdf-worker-source';
 
 import './PdfViewer.css';
-
-// Set worker source
-// Use unpkg with .mjs for pdfjs-dist v3+ compatibility
-GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 interface PdfViewerProps {
     onLoad?: (pdf: pdfjsLib.PDFDocumentProxy) => void;
@@ -171,6 +167,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
 
         try {
             const arrayBuffer = await file.arrayBuffer();
+            // Right here, not at module scope: `GlobalWorkerOptions.workerSrc`
+            // is one global, and two other modules still assign it to a CDN when
+            // they load. In a bundle the last one to evaluate wins, so setting
+            // it at import time would leave which worker we fetch depending on
+            // import order. Setting it immediately before the only call that
+            // reads it makes that irrelevant.
+            configurePdfWorker();
             const loadedPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             setPdfDoc(loadedPdf);
             // Removed setCurrentPage(1);
