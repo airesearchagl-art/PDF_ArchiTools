@@ -285,18 +285,28 @@ try {
     // shipped artifact: no test hook, no injected URL. If the Annotator were
     // still relying on a module-scope assignment, whichever module evaluated
     // last would decide, and the request above could have been the CDN's.
-    console.log('\n=== the global is set to a CDN elsewhere, and this still went local ===');
+    console.log('\n=== no CDN worker is left anywhere in the bundle ===');
     const bundleJs = fs.readdirSync(path.join(ROOT, 'dist', 'assets'))
         .filter((name) => name.endsWith('.js'))
         .map((name) => fs.readFileSync(path.join(ROOT, 'dist', 'assets', name), 'utf8'))
         .join('\n');
     const cdnAssignments = bundleJs.match(/unpkg\.com\/pdfjs-dist/g) ?? [];
-    check('other modules in the shipped bundle still point this global at a CDN',
-        cdnAssignments.length > 0,
-        `${cdnAssignments.length} left, from split/merge and the PDF processor`);
-    probe('and the Annotator fetched its worker locally regardless',
+    // This used to assert the opposite: two other modules still assigned this
+    // global to a CDN, and the Annotator's point-of-use call was what kept its
+    // own request local regardless. Those two have since been fixed, so the
+    // expectation is now that nothing in the bundle points a PDF.js worker at a
+    // CDN at all.
+    //
+    // The point-of-use contract is still what makes the Annotator's result
+    // independent of module evaluation order, and it is still asserted below --
+    // it is the reason a future module-scope assignment elsewhere could not
+    // reach this feature.
+    check('no PDF.js worker is pointed at a CDN anywhere in the bundle',
+        cdnAssignments.length === 0,
+        cdnAssignments.length === 0 ? '0 assignments' : `${cdnAssignments.length} left`);
+    probe('and the Annotator fetched its worker from this app',
         localWorker.length >= 1 && unpkg.length === 0,
-        'which is what the point-of-use call buys, and a module-scope one would not');
+        `${localWorker.length} local, ${unpkg.length} unpkg`);
 
     const viewerSource = fs.readFileSync(
         path.join(ROOT, 'src', 'components', 'PdfViewer.tsx'), 'utf8');
