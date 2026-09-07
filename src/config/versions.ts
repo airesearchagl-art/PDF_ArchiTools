@@ -19,9 +19,9 @@ export interface ToolVersion {
 
 export const TOOL_VERSIONS: Record<string, ToolVersion> = {
     annotator: {
-        version: '1.1.1',
-        lastUpdate: '2026/01/29',
-        changelog: '初期リリース'
+        version: '1.1.2',
+        lastUpdate: '2026/09/07',
+        changelog: 'PDF表示処理をアプリ同梱のworkerへ統一し、外部CDNから取得しないよう修正'
     },
     comparator: {
         version: '1.1.1',
