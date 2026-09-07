@@ -249,6 +249,73 @@ const write = async (name, doc, note) => {
 }
 
 // ---------------------------------------------------------------------------
+// 7. croprot.pdf -- a crop origin AND a rotation, together
+// ---------------------------------------------------------------------------
+//
+// Each of those alone is already in the corpus. Together they are the case that
+// catches a save path which handles one and forgets the other, because either
+// fix on its own still looks right on the fixture that only exercises it.
+{
+    const doc = await PDFDocument.create();
+    doc.registerFontkit(fontkit);
+    stamp(doc, 'M3 crop and rotation together');
+    const font = await doc.embedFont(fs.readFileSync(FONT), { subset: false });
+    for (const rotate of [0, 90, 180, 270]) {
+        const page = doc.addPage([A4.w, A4.h]);
+        drawSheet(page, font, A4, `CROP + ROTATE ${rotate}`);
+        page.node.set(PDFName.of('CropBox'), doc.context.obj([50, 70, A4.w - 30, A4.h - 25]));
+        if (rotate) page.setRotation(degrees(rotate));
+    }
+    await write('croprot', doc, 'CropBox origin (50,70) on all four rotations');
+}
+
+// ---------------------------------------------------------------------------
+// 8. signed.pdf -- a signature field, for the support boundary
+// ---------------------------------------------------------------------------
+//
+// A signature *field*, not a real signature: enough to exercise detection,
+// which is what the boundary needs. Producing a genuinely signed document would
+// need a certificate and a signing implementation, and would measure those
+// rather than the refusal.
+{
+    const doc = await PDFDocument.create();
+    doc.registerFontkit(fontkit);
+    stamp(doc, 'M3 signature field');
+    const font = await doc.embedFont(fs.readFileSync(FONT), { subset: false });
+    const page = doc.addPage([A4.w, A4.h]);
+    drawSheet(page, font, A4, 'SIGNED');
+
+    const sig = doc.context.obj({
+        Type: PDFName.of('Annot'),
+        Subtype: PDFName.of('Widget'),
+        FT: PDFName.of('Sig'),
+        T: PDFString.of('approval.signature'),
+        Rect: doc.context.obj([60, 120, 300, 180]),
+        F: PDFNumber.of(4),
+    });
+    const sigRef = doc.context.register(sig);
+    page.node.set(PDFName.of('Annots'), doc.context.obj([sigRef]));
+
+    const form = doc.getForm();
+    form.acroForm.dict.set(PDFName.of('SigFlags'), PDFNumber.of(3));
+    form.acroForm.dict.set(PDFName.of('Fields'), doc.context.obj([sigRef]));
+
+    await write('signed', doc, 'one AcroForm signature field, for the refusal path');
+}
+
+// ---------------------------------------------------------------------------
+// 9. damaged.pdf -- a file that is not a PDF any more
+// ---------------------------------------------------------------------------
+{
+    const source = fs.readFileSync(path.join(OUT, 'native.pdf'));
+    const broken = Buffer.from(source);
+    // Wipe the cross-reference table's neighbourhood at the end of the file.
+    broken.fill(0x41, broken.length - 400, broken.length - 40);
+    fs.writeFileSync(path.join(OUT, 'damaged.pdf'), broken);
+    written.push({ name: 'damaged', bytes: broken.length, note: 'truncated xref region, for the refusal path' });
+}
+
+// ---------------------------------------------------------------------------
 // 6. a0.pdf -- the sheet nothing should rasterise whole
 // ---------------------------------------------------------------------------
 {

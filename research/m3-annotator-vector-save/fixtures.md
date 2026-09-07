@@ -1,7 +1,8 @@
 # M3 fixtures
 
-Six synthetic PDFs, fourteen pages. Each carries something a save path can lose,
-so that "the source is preserved" is a measurement rather than a claim.
+Nine synthetic PDFs, nineteen pages. Each carries something a save path can
+lose, or something it should refuse, so that "the source is preserved" is a
+measurement rather than a claim.
 
 No customer document and no real project drawing is used anywhere. The generator
 is `scripts/research-m3-fixtures.mjs`; it writes into `test-fixtures/m3/`, which
@@ -22,6 +23,9 @@ node scripts/research-m3-fixtures.mjs
 | `features.pdf` | 1 | two existing annotations (Square, Text), two AcroForm fields with values, metadata |
 | `scanned.pdf` | 2 | an image-only page, and an image page under an invisible text layer |
 | `a0.pdf` | 1 | one A0 sheet, for the rasterisation bound |
+| `croprot.pdf` | 4 | a CropBox origin of (50, 70) **and** all four rotations — each alone is already covered, and a save path that fixes one and forgets the other passes both of those |
+| `signed.pdf` | 1 | an AcroForm signature field, for the refusal path |
+| `damaged.pdf` | 3 | `native.pdf` with its cross-reference region overwritten |
 
 Measured before anything touches them:
 
@@ -70,11 +74,18 @@ cannot say which one went wrong.
 Positions are in points from the top-left, inside the tightest CropBox in the
 corpus, so the same set is meaningful on every fixture.
 
+`signed.pdf` carries a signature *field*, not a real signature: enough to
+exercise detection, which is what the boundary needs. Producing a genuinely
+signed document would need a certificate and a signing implementation, and would
+measure those rather than the refusal.
+
 ## What the corpus does not contain
 
 - No outline/bookmark tree. `pdf-lib` has no high-level API for one and building
   it by hand would have measured the fixture rather than the save path.
-- No encrypted, damaged, linearised or tagged PDF.
+- No encrypted or linearised or tagged PDF. There is a damaged one, but no
+  encrypted one: nothing in the dependency set can write encryption, so the
+  refusal path for it is code that exists and has not been exercised.
 - No page whose title block is rotated relative to its sheet.
 - No document over 4 pages, and nothing near the size of a real issue.
 - No real scan: the "scanned" pages are rasterised vector text, with none of the

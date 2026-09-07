@@ -48,7 +48,7 @@ try {
 
     // ---- what the corpus is ------------------------------------------------
     console.log('=== the corpus, before anything touches it ===');
-    const fixtures = ['native', 'rotated', 'boxes', 'features', 'scanned', 'a0'];
+    const fixtures = ['native', 'rotated', 'boxes', 'croprot', 'features', 'scanned', 'a0'];
     const before = {};
     for (const name of fixtures) {
         before[name] = await page.evaluate((n) => window.__m3.before(n), name);
@@ -205,6 +205,83 @@ try {
     console.log(`  vector, without one: produced ${failure.withoutEraser.produced} bytes, ${failure.withoutEraser.ops} operators`);
     console.log(`  a NaN coordinate: ${failure.nanCoordinate.refused ?? `produced ${failure.nanCoordinate.produced} bytes, ${failure.nanCoordinate.pathOps} path ops`}`);
     write('failure.json', failure);
+
+    console.log('\n=== what a substituted font actually costs ===');
+    const placement = await page.evaluate(() => window.__m3.textPlacement('hybrid'));
+    if (placement.failed) {
+        console.log(`  REFUSED  ${placement.failed}`);
+    } else {
+        console.log('    object                  as placed   best shift   at that shift');
+        for (const [id, r] of Object.entries(placement.out)) {
+            console.log(`    ${id.padEnd(22)} ${(r.atZero * 100).toFixed(1).padStart(6)}%`
+                + `   ${String(r.bestOffsetPoints).padStart(5)}pt`
+                + `   ${(r.best * 100).toFixed(1).padStart(6)}%`);
+        }
+    }
+    write('text-placement.json', placement);
+
+    // ---- RF-1: does a mark end up where the user put it? ---------------------
+    console.log('\n=== a mark placed where the user sees it, saved and reopened ===');
+    const markers = {};
+    for (const fixture of ['rotated', 'croprot']) {
+        markers[fixture] = {};
+        for (const candidate of ['overlay', 'hybrid', 'baseline']) {
+            const result = await page.evaluate(
+                (fx, c) => window.__m3.markerRoundTrip(fx, c), fixture, candidate,
+            );
+            markers[fixture][candidate] = result;
+            if (result.failed) {
+                console.log(`  ${fixture.padEnd(8)} ${candidate.padEnd(9)} REFUSED  ${result.failed}`);
+                continue;
+            }
+            const lost = result.pages.filter((p) => p.found === null).length;
+            const resized = result.pages.some((p) => p.pageSize.width > 1000);
+            console.log(`  ${fixture.padEnd(8)} ${candidate.padEnd(9)}`
+                + ` ${result.pages.map((p) => `r${p.rotate}:${p.found ? `${p.error.toFixed(1)}pt` : 'NOT FOUND'}`).join('  ')}`
+                + `${lost ? `  (${lost} not found)` : ''}`
+                // The baseline rewrites the page in capture pixels, so its
+                // numbers are in a different unit system and are not comparable
+                // as point errors. Said, rather than quietly tabulated.
+                + `${resized ? `  [page rewritten to ${result.pages[0].pageSize.width}x${result.pages[0].pageSize.height}; not point-comparable]` : ''}`);
+        }
+    }
+    write('markers.json', markers);
+
+    // ---- RF-2: painter order -------------------------------------------------
+    console.log('\n=== does the saved layer stack the way the canvas does? ===');
+    const ordered = {};
+    for (const candidate of ['overlay', 'hybrid']) {
+        ordered[candidate] = await page.evaluate((c) => window.__m3.orderedComposition(c), candidate);
+        console.log(`\n  ${candidate}:`);
+        for (const [label, r] of Object.entries(ordered[candidate].results)) {
+            if (r.failed) { console.log(`    ${label.padEnd(36)} REFUSED  ${r.failed}`); continue; }
+            console.log(`    ${label.padEnd(36)} ${(r.differingFraction * 100).toFixed(2).padStart(6)}% differing`
+                + `   ${r.runs.join(' -> ')}`);
+        }
+    }
+    write('ordered.json', ordered);
+
+    // ---- RF-4: which documents this will not write ---------------------------
+    console.log('\n=== documents this design refuses ===');
+    const boundary = await page.evaluate(() => window.__m3.supportBoundary());
+    for (const [name, r] of Object.entries(boundary)) {
+        console.log(`  ${name.padEnd(9)} supported=${String(r.supported).padEnd(6)}`
+            + ` ${r.problems.map((p) => p.code).join(', ') || '-'}`
+            + `  save: ${r.save.refused ? `refused (${r.save.refused.slice(0, 40)}...)` : `produced ${r.save.produced} bytes`}`);
+    }
+    write('boundary.json', boundary);
+
+    // ---- the source file is not touched --------------------------------------
+    console.log('\n=== the bytes the candidate was handed ===');
+    for (const candidate of CANDIDATES) {
+        const perFixture = fixtures
+            .map((fx) => ({ fx, unchanged: matrix[fx][candidate]?.sourceUnchanged }))
+            .filter((r) => r.unchanged !== undefined);
+        const allUnchanged = perFixture.every((r) => r.unchanged === true);
+        console.log(`  ${candidate.padEnd(9)} unchanged on ${perFixture.filter((r) => r.unchanged).length}`
+            + `/${perFixture.length} fixtures  (byte-for-byte)`);
+        void allUnchanged;
+    }
 
     // ---- network -------------------------------------------------------------
     console.log('\n=== network ===');

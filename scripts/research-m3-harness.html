@@ -20,6 +20,7 @@ import { sampleAnnotations, measureLabels } from '/research/m3-annotator-vector-
 import {
   saveBaseline, saveOverlay, saveVector, saveHybrid,
   renderAnnotations, renderOverlayCanvas, splitForHybrid, unsupportedForVector,
+  planComposition, paintedBounds, assessSource,
 } from '/research/m3-annotator-vector-save/prototype/save.mjs';
 import {
   inspectStructure, inspectRendered, initOpsNames, verdict,
@@ -77,11 +78,11 @@ async function runCandidate(name, sourceBytes, objects, options = {}) {
     return out;
   }
   if (name === 'overlay') {
-    return saveOverlay({ PDFDocument, sourceBytes, objects, ...options });
+    return saveOverlay({ PDFDocument, degrees, sourceBytes, objects, ...options });
   }
   if (name === 'vector') {
     return saveVector({
-      PDFDocument, rgb, degrees, sourceBytes, objects,
+      PDFDocument, rgb, sourceBytes, objects,
       fontBytes: await font(), fontkit, ...options,
     });
   }
@@ -136,28 +137,36 @@ window.__m3 = {
 
   /** Save a fixture through one candidate and report what survived. */
   async save(name, candidate, { bare = [], options = {} } = {}) {
-    const sourceBytes = await fixtureBytes(name);
-    const beforeBytes = sourceBytes.slice();
-    const before = await inspectBoth(beforeBytes.slice());
+    const before = await inspectBoth((await fixtureBytes(name)).slice());
     const objects = annotationsFor(before.structure.pageCount, { bare });
+
+    // The exact array the candidate is given, plus a copy of what it held.
+    const handedOver = await fixtureBytes(name);
+    const snapshot = handedOver.slice();
 
     let out;
     let refused = null;
     try {
-      out = await runCandidate(candidate, sourceBytes.slice(), objects, options);
+      out = await runCandidate(candidate, handedOver, objects, options);
     } catch (error) {
       return {
         candidate, failed: true,
         message: String(error.message ?? error),
         refused: error.refused ?? null,
+        // A refusal must leave the input alone too, so this is reported on the
+        // failure path as well as the success one.
+        sourceUnchanged: bytesEqual(handedOver, snapshot),
       };
     }
     refused = out.refused ?? null;
 
     const after = await inspectBoth(out.bytes.slice());
 
-    // Did the save mutate the bytes it was handed?
-    const sourceUnchanged = beforeBytes.length === (await fixtureBytes(name)).length;
+    // Did the save mutate the bytes it was handed? Compared byte for byte
+    // against a snapshot taken before the call, on the very array that was
+    // passed in. An earlier version compared two lengths of two different
+    // copies, which could not have failed.
+    const sourceUnchanged = bytesEqual(handedOver, snapshot);
 
     const perPage = before.rendered.pages.map((b, i) => {
       const a = after.rendered.pages[i];
@@ -511,11 +520,13 @@ window.__m3 = {
   /** Which objects the hybrid split sends to pixels, and which to operators. */
   hybridSplit() {
     const objects = sampleAnnotations();
-    const { vector, raster } = splitForHybrid(objects);
+    const { vector, raster, runs, wholeLayerRastered } = splitForHybrid(objects);
     return {
       total: objects.length,
       vector: vector.map((o) => o.id),
       raster: raster.map((o) => o.id),
+      runs,
+      wholeLayerRastered,
       unsupportedForVector: unsupportedForVector(objects).map((r) => r.id),
       labels: objects.filter((o) => o.type === 'measure')
         .map((o) => ({ id: o.id, labels: measureLabels(o).map((l) => l.text) })),
@@ -551,6 +562,354 @@ window.__m3 = {
   },
 };
 
+/**
+ * A marker whose colour appears nowhere else, at a known *display* position.
+ *
+ * Display, not upright: that is the space the app stores in, and the point of
+ * this probe is to drive a candidate the way the app would.
+ */
+function markerAt(x, y) {
+  return [{
+    id: 'marker',
+    type: 'stroke',
+    // Deliberately not square: a square fragment hides a swapped width and
+    // height, which is exactly how a wrong quadrant formula survived once.
+    points: [{ x, y }, { x: x + 30, y }, { x: x + 60, y }],
+    color: '#00FF00',
+    lineWidth: 24,
+    opacity: 1,
+    enablePressure: false,
+  }];
+}
+
+/** Where the marker ended up, in the saved page's own display space. */
+function findMarker(ctx, width, height, scale) {
+  const data = ctx.getImageData(0, 0, width, height).data;
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    // Green-dominant and bright: the marker and nothing else in the corpus.
+    if (data[i + 1] > 150 && data[i] < 120 && data[i + 2] < 120) {
+      const p = i / 4;
+      sx += p % width;
+      sy += Math.floor(p / width);
+      n += 1;
+    }
+  }
+  if (n === 0) return null;
+  return { x: (sx / n) / scale, y: (sy / n) / scale, pixels: n };
+}
+
+Object.assign(window.__m3, {
+  /**
+   * End to end: place a mark where the user sees it, save, re-open, and ask
+   * whether it is still where the user put it.
+   *
+   * The standalone transform round-trip cannot answer this. It checks that a
+   * function inverts itself; this checks that the whole save path uses it, and
+   * uses it the right way round.
+   */
+  async markerRoundTrip(name, candidate, { at = { x: 60, y: 60 } } = {}) {
+    const src = await fixtureBytes(name);
+    const doc = await openPdfjs(src.slice());
+    const out = [];
+
+    const objects = {};
+    for (let n = 1; n <= doc.numPages; n++) objects[n] = markerAt(at.x, at.y);
+    await doc.destroy();
+
+    let saved;
+    try {
+      saved = await runCandidate(candidate, (await fixtureBytes(name)).slice(), objects);
+    } catch (error) {
+      return { candidate, failed: String(error.message ?? error) };
+    }
+
+    const savedDoc = await openPdfjs(saved.bytes.slice());
+    for (let n = 1; n <= savedDoc.numPages; n++) {
+      const page = await savedDoc.getPage(n);
+      const scale = 2;
+      // The default viewport applies /Rotate, so this canvas is in exactly the
+      // display space the annotation was stored in.
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, viewport, intent: 'print' }).promise;
+      const found = findMarker(ctx, canvas.width, canvas.height, scale);
+      releaseCanvas(canvas);
+      // The marker is a horizontal stroke, so what a centroid finds is its
+      // middle, not its start. Comparing against the start would report a
+      // constant 30-point error that has nothing to do with the save path.
+      const expected = { x: at.x + 30, y: at.y };
+      const nat = page.getViewport({ scale: 1 });
+      out.push({
+        page: n,
+        rotate: page.rotate ?? 0,
+        expected,
+        pageSize: { width: round4(nat.width), height: round4(nat.height) },
+        found: found ? { x: round4(found.x), y: round4(found.y), pixels: found.pixels } : null,
+        error: found ? round4(Math.hypot(found.x - expected.x, found.y - expected.y)) : null,
+      });
+      page.cleanup();
+    }
+    await savedDoc.destroy();
+    return { candidate, fixture: name, pages: out };
+  },
+
+  /**
+   * Ordered composition: does the saved layer stack the way the canvas does?
+   *
+   * Each scenario is rendered as the app would render it, then saved and
+   * re-rendered, and the two are compared over the marks' own bounding box. A
+   * z-order inversion shows up here and nowhere else -- every one of these
+   * would pass a preservation check.
+   */
+  async orderedComposition(candidate) {
+    const strokeAt = (id, y, color, opts = {}) => ({
+      id, type: 'stroke', color, lineWidth: opts.width ?? 12, opacity: opts.opacity ?? 1,
+      enablePressure: opts.pressure ?? false,
+      isEraser: opts.eraser ?? false,
+      points: (opts.points ?? [{ x: 80, y }, { x: 300, y }]),
+    });
+    const eraserAt = (id, x) => strokeAt(id, 0, '#ffffff', {
+      eraser: true, width: 20, points: [{ x, y: 60 }, { x, y: 340 }],
+    });
+
+    const scenarios = {
+      'before, eraser, after': [
+        strokeAt('A', 100, '#FF0000'),
+        eraserAt('E', 150),
+        strokeAt('B', 100, '#0000FF', { points: [{ x: 80, y: 105 }, { x: 300, y: 105 }] }),
+      ],
+      'affected and unaffected interleaved': [
+        strokeAt('A', 120, '#FF0000'),
+        strokeAt('far', 300, '#00AA00', { points: [{ x: 80, y: 300 }, { x: 300, y: 300 }] }),
+        eraserAt('E', 150),
+        strokeAt('B', 125, '#0000FF', { points: [{ x: 80, y: 125 }, { x: 300, y: 125 }] }),
+      ],
+      'multiple erasers': [
+        strokeAt('A', 140, '#FF0000'),
+        eraserAt('E1', 130),
+        strokeAt('B', 145, '#0000FF', { points: [{ x: 80, y: 145 }, { x: 300, y: 145 }] }),
+        eraserAt('E2', 240),
+        strokeAt('C', 150, '#008000', { points: [{ x: 80, y: 150 }, { x: 300, y: 150 }] }),
+      ],
+      'pressure stroke, edge erased': [
+        {
+          id: 'P', type: 'stroke', color: '#AA00AA', lineWidth: 10, opacity: 1, enablePressure: true,
+          points: Array.from({ length: 13 }, (_, i) => ({
+            x: 80 + i * 18, y: 180, pressure: 0.15 + 0.85 * Math.sin((Math.PI * i) / 12),
+          })),
+        },
+        eraserAt('E', 110),
+      ],
+      'text partially erased': [
+        { id: 'T', type: 'text', x: 80, y: 200, text: 'ERASE ME', fontSize: 28, fontFamily: 'Arial', color: '#000080', opacity: 1 },
+        eraserAt('E', 140),
+      ],
+      'measurement line label erased': [
+        { id: 'M', type: 'measure', subtype: 'line', points: [{ x: 80, y: 240 }, { x: 300, y: 240 }], color: '#FF00FF', scale: { value: 0.3527, unit: 'mm' }, opacity: 1 },
+        eraserAt('E', 190),
+      ],
+      'poly labels erased': [
+        { id: 'M', type: 'measure', subtype: 'poly', points: [{ x: 80, y: 260 }, { x: 180, y: 290 }, { x: 300, y: 255 }], color: '#FFA500', scale: { value: 0.3527, unit: 'mm' }, opacity: 1 },
+        eraserAt('E', 200),
+      ],
+      'area fill and label erased': [
+        { id: 'M', type: 'measure', subtype: 'area', points: [{ x: 80, y: 300 }, { x: 260, y: 300 }, { x: 260, y: 400 }, { x: 80, y: 400 }], color: '#00008B', scale: { value: 0.3527, unit: 'mm' }, opacity: 1 },
+        eraserAt('E', 170),
+      ],
+      'overlapping annotations, no eraser': [
+        strokeAt('A', 330, '#FF0000', { width: 18 }),
+        strokeAt('B', 335, '#0000FF', { width: 18, opacity: 0.6, points: [{ x: 80, y: 335 }, { x: 300, y: 335 }] }),
+        { id: 'T', type: 'text', x: 120, y: 320, text: 'OVER', fontSize: 22, fontFamily: 'Arial', color: '#FFFFFF', opacity: 1 },
+      ],
+    };
+
+    const results = {};
+    for (const [label, objects] of Object.entries(scenarios)) {
+      const src = await fixtureBytes('native');
+      const doc = await openPdfjs(src.slice());
+      const page = await doc.getPage(1);
+      const scale = 2;
+      const viewport = page.getViewport({ scale });
+
+      const reference = document.createElement('canvas');
+      reference.width = Math.ceil(viewport.width);
+      reference.height = Math.ceil(viewport.height);
+      const rctx = reference.getContext('2d', { willReadFrequently: true });
+      rctx.fillStyle = '#fff';
+      rctx.fillRect(0, 0, reference.width, reference.height);
+      await page.render({ canvas: reference, viewport, intent: 'print' }).promise;
+      const layer = renderOverlayCanvas(objects, {
+        width: viewport.width / scale, height: viewport.height / scale, scale,
+      });
+      rctx.drawImage(layer, 0, 0);
+      releaseCanvas(layer);
+      page.cleanup();
+      await doc.destroy();
+
+      let saved;
+      try {
+        saved = await runCandidate(candidate, (await fixtureBytes('native')).slice(), { 1: objects, 2: [], 3: [] });
+      } catch (error) {
+        results[label] = { failed: String(error.message ?? error) };
+        releaseCanvas(reference);
+        continue;
+      }
+
+      const savedDoc = await openPdfjs(saved.bytes.slice());
+      const savedPage = await savedDoc.getPage(1);
+      const nat = savedPage.getViewport({ scale: 1 });
+      const fit = savedPage.getViewport({ scale: reference.width / nat.width });
+      const target = document.createElement('canvas');
+      target.width = reference.width;
+      target.height = reference.height;
+      const tctx = target.getContext('2d', { willReadFrequently: true });
+      tctx.fillStyle = '#fff';
+      tctx.fillRect(0, 0, target.width, target.height);
+      await savedPage.render({ canvas: target, viewport: fit, intent: 'print' }).promise;
+      savedPage.cleanup();
+      await savedDoc.destroy();
+
+      const boxes = objects.map(paintedBounds).filter(Boolean);
+      const box = {
+        x: Math.min(...boxes.map((b) => b.minX)) - 6,
+        y: Math.min(...boxes.map((b) => b.minY)) - 6,
+        width: Math.max(...boxes.map((b) => b.maxX)) - Math.min(...boxes.map((b) => b.minX)) + 12,
+        height: Math.max(...boxes.map((b) => b.maxY)) - Math.min(...boxes.map((b) => b.minY)) + 12,
+      };
+      const plan = planComposition(objects);
+      results[label] = {
+        ...compareRegion(rctx, tctx, box, scale, reference.width, reference.height),
+        runs: plan.runs.map((r) => `${r.kind}:${r.objects.map((o) => o.id).join('+')}`),
+        wholeLayerRastered: plan.wholeLayerRastered,
+      };
+      releaseCanvas(reference);
+      releaseCanvas(target);
+    }
+    return { candidate, results };
+  },
+
+  /**
+   * Separate the two things a substituted font costs.
+   *
+   * A different typeface differs in two ways at once: the glyphs are shaped
+   * differently, and its ascent is different, so text anchored at its *top*
+   * sits at a different height. Reporting one number for both leaves it unclear
+   * whether the placement arithmetic is wrong or the face simply differs.
+   *
+   * So each text object is compared at a range of vertical offsets. The offset
+   * that minimises the difference is the metric mismatch; whatever remains at
+   * that offset is the shape difference, and only the second is irreducible.
+   */
+  async textPlacement(candidate) {
+    const objects = sampleAnnotations().filter((o) => o.type === 'text');
+    const src = await fixtureBytes('native');
+    const doc = await openPdfjs(src.slice());
+    const page = await doc.getPage(1);
+    const scale = 2;
+    const viewport = page.getViewport({ scale });
+
+    const reference = document.createElement('canvas');
+    reference.width = Math.ceil(viewport.width);
+    reference.height = Math.ceil(viewport.height);
+    const rctx = reference.getContext('2d', { willReadFrequently: true });
+    rctx.fillStyle = '#fff';
+    rctx.fillRect(0, 0, reference.width, reference.height);
+    await page.render({ canvas: reference, viewport, intent: 'print' }).promise;
+    const layer = renderOverlayCanvas(objects, {
+      width: viewport.width / scale, height: viewport.height / scale, scale,
+    });
+    rctx.drawImage(layer, 0, 0);
+    releaseCanvas(layer);
+    page.cleanup();
+    await doc.destroy();
+
+    let saved;
+    try {
+      saved = await runCandidate(candidate, (await fixtureBytes('native')).slice(), { 1: objects, 2: [], 3: [] });
+    } catch (error) {
+      return { candidate, failed: String(error.message ?? error) };
+    }
+    const savedDoc = await openPdfjs(saved.bytes.slice());
+    const savedPage = await savedDoc.getPage(1);
+    const nat = savedPage.getViewport({ scale: 1 });
+    const fit = savedPage.getViewport({ scale: reference.width / nat.width });
+    const target = document.createElement('canvas');
+    target.width = reference.width;
+    target.height = reference.height;
+    const tctx = target.getContext('2d', { willReadFrequently: true });
+    tctx.fillStyle = '#fff';
+    tctx.fillRect(0, 0, target.width, target.height);
+    await savedPage.render({ canvas: target, viewport: fit, intent: 'print' }).promise;
+    savedPage.cleanup();
+    await savedDoc.destroy();
+
+    const out = {};
+    for (const obj of objects) {
+      const box = objectBox(obj);
+      let best = null;
+      for (let dy = -8; dy <= 8; dy += 0.5) {
+        const shifted = { ...box, y: box.y + dy };
+        const r = compareRegion(rctx, tctx, box, scale, reference.width, reference.height, {
+          shift: { x: 0, y: dy * scale },
+        });
+        void shifted;
+        if (!best || r.differingFraction < best.differingFraction) {
+          best = { ...r, dy };
+        }
+      }
+      const atZero = compareRegion(rctx, tctx, box, scale, reference.width, reference.height);
+      out[obj.id] = {
+        atZero: atZero.differingFraction,
+        best: best.differingFraction,
+        bestOffsetPoints: best.dy,
+        attributable: {
+          verticalMetric: Math.max(0, atZero.differingFraction - best.differingFraction),
+          glyphShape: best.differingFraction,
+        },
+      };
+    }
+    releaseCanvas(reference);
+    releaseCanvas(target);
+    return { candidate, out };
+  },
+
+  /** Which source documents this design will and will not write. */
+  async supportBoundary() {
+    const out = {};
+    for (const name of ['native', 'signed', 'damaged']) {
+      const bytes = await fixtureBytes(name);
+      let verdict;
+      try {
+        verdict = await assessSource(PDFDocument, bytes.slice());
+      } catch (error) {
+        verdict = { supported: false, problems: [{ code: 'threw', message: String(error.message ?? error) }] };
+      }
+      let saveResult;
+      try {
+        const r = await runCandidate('hybrid', (await fixtureBytes(name)).slice(), { 1: sampleAnnotations() });
+        saveResult = { produced: r.bytes.length };
+      } catch (error) {
+        saveResult = { refused: String(error.message ?? error) };
+      }
+      out[name] = {
+        supported: verdict.supported,
+        problems: (verdict.problems ?? []).map((p) => ({ code: p.code, message: p.message })),
+        signatureFields: verdict.signatureFields ?? [],
+        save: saveResult,
+      };
+    }
+    return out;
+  },
+});
+
 function objectBox(obj) {
   if (obj.type === 'text') {
     return {
@@ -568,13 +927,17 @@ function objectBox(obj) {
   };
 }
 
-function compareRegion(a, b, box, scale, maxW, maxH) {
+function compareRegion(a, b, box, scale, maxW, maxH, { shift = { x: 0, y: 0 } } = {}) {
   const x = Math.max(0, Math.floor(box.x * scale));
   const y = Math.max(0, Math.floor(box.y * scale));
   const w = Math.max(1, Math.min(Math.ceil(box.width * scale), maxW - x));
   const h = Math.max(1, Math.min(Math.ceil(box.height * scale), maxH - y));
+  // The second image may be sampled at an offset, so a difference that is only
+  // a vertical shift can be told apart from one that is a different shape.
+  const bx = Math.max(0, Math.min(maxW - w, Math.round(x + shift.x)));
+  const by = Math.max(0, Math.min(maxH - h, Math.round(y + shift.y)));
   const da = a.getImageData(x, y, w, h).data;
-  const db = b.getImageData(x, y, w, h).data;
+  const db = b.getImageData(bx, by, w, h).data;
   let sum = 0;
   let differing = 0;
   for (let i = 0; i < da.length; i += 4) {
@@ -591,6 +954,13 @@ function compareRegion(a, b, box, scale, maxW, maxH) {
 }
 
 const releaseCanvas = (c) => { if (c) { c.width = 0; c.height = 0; } };
+
+/** Byte-for-byte, because a length comparison cannot fail on a copy. */
+function bytesEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
 const round4 = (n) => Math.round(n * 10000) / 10000;
 
 async function sha256(bytes) {

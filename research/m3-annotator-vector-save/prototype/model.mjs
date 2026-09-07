@@ -25,12 +25,26 @@
  *     point pair whose width is the mean of the two pressures
  *     (`DrawingCanvas.tsx:242-254`).
  *
- * Coordinates are in **PDF points, origin top-left, y downwards** -- the space
- * a pdf.js viewport at scale 1 uses. That is already true of the app: pointer
- * events are divided by the zoom on the way in (`DrawingCanvas.tsx:129-138`),
- * so the stored numbers do not depend on how far the user was zoomed. This is
- * worth stating plainly because it means zoom-invariance is a property the
- * object model already has, and only the save path can throw it away.
+ * **The coordinate space, precisely.** Stored coordinates are in *display
+ * space*: points, origin top-left, y downwards, **with `/Rotate` already
+ * applied**. Not upright space. The chain is short and worth following, because
+ * an earlier version of this file got it wrong and the error is invisible on an
+ * unrotated page:
+ *
+ *   `PdfPage.tsx:74` sizes the canvas from `pageProxy.getViewport({ scale })`,
+ *   with no `rotation` argument, so the viewport carries the page's own
+ *   `/Rotate`. `DrawingCanvas.tsx:129-138` then converts a pointer event with
+ *   `(clientX - rect.left) / scale` and nothing else. Dividing by the zoom
+ *   removes the zoom; nothing removes the rotation.
+ *
+ * So a stored coordinate is zoom-independent -- that part was right -- and on a
+ * page with `/Rotate 90` it is expressed in the rotated frame the user is
+ * looking at. A save path must undo the rotation before writing, because a
+ * content stream is written unrotated.
+ *
+ * That is `displayToUpright()` in `coords.mjs`, and it is not optional: skipping
+ * it puts every mark on a rotated page in the wrong place, and every fixture
+ * that happens to be at `/Rotate 0` will agree that nothing is wrong.
  */
 
 /** @typedef {{ x: number, y: number, pressure?: number }} Point */
@@ -220,48 +234,105 @@ export function formatArea(points, scale) {
 }
 
 /**
- * The label text a measurement draws, computed the way the app computes it.
+ * Every label a measurement draws, matched to `DrawingCanvas.tsx:296-362`.
  *
- * Returned as a list of `{ text, x, y }` so a save path can place the same
- * strings. The app never stores these, so any candidate that wants them in the
- * output has to derive them -- and any candidate that forgets loses the numbers
- * while keeping the lines, which looks fine and means nothing.
+ * The app stores none of this -- the strings, their positions, their fonts and
+ * their white backing rectangles are all computed at draw time -- so a save
+ * path that wants them has to compute the same things. Getting the strings
+ * right and the placement wrong is not much better than losing them: the
+ * numbers end up somewhere that is not the line they describe.
+ *
+ * Each entry carries what the canvas actually uses, so both the mirror renderer
+ * and the vector writer can be driven from one description rather than two that
+ * drift:
+ *
+ *   `text`      the string
+ *   `x`, `y`    where `fillText` is called, in stored (display) space
+ *   `font`      the CSS font shorthand the app sets
+ *   `size`      the same size as a number, for the PDF writer
+ *   `bold`      whether that font is bold
+ *   `align`     `center` or `left`, as `ctx.textAlign` is set
+ *   `colour`    `null` means the measurement's own colour
+ *   `box`       the white rectangle drawn behind it, or null
+ *
+ * `textBaseline` is `'bottom'` for all of them (`DrawingCanvas.tsx:299`).
  */
 export function measureLabels(obj) {
     const p = obj.points;
-    if (obj.subtype === 'line' && p.length >= 2) {
-        const d = distance(p[0], p[1]);
-        return [{
-            text: formatLength(d, obj.scale),
-            x: (p[0].x + p[1].x) / 2,
-            y: (p[0].y + p[1].y) / 2 - 8,
-        }];
+    const out = [];
+    if (p.length < 2) return out;
+
+    if (obj.subtype === 'line') {
+        const [p1, p2] = p;
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        const text = formatLength(distance(p1, p2), obj.scale);
+        out.push({
+            text, x: midX, y: midY,
+            font: '12px Arial', size: 12, bold: false, align: 'center', colour: null,
+            box: { dx: -2, dy: -14, padWidth: 4, height: 16 },
+        });
+        return out;
     }
-    if (obj.subtype === 'poly' && p.length >= 2) {
-        const labels = [];
+
+    if (obj.subtype === 'poly') {
         let total = 0;
         for (let i = 0; i < p.length - 1; i++) {
             const d = distance(p[i], p[i + 1]);
             total += d;
-            labels.push({
-                text: formatLength(d, obj.scale),
-                x: (p[i].x + p[i + 1].x) / 2,
-                y: (p[i].y + p[i + 1].y) / 2 - 8,
+            const midX = (p[i].x + p[i + 1].x) / 2;
+            const midY = (p[i].y + p[i + 1].y) / 2;
+            out.push({
+                // The segment label sits 4 points below the midpoint and is
+                // drawn in grey, not in the measurement's colour.
+                text: formatLength(d, obj.scale), x: midX, y: midY + 4,
+                font: '10px Arial', size: 10, bold: false, align: 'center', colour: '#555555',
+                box: { dx: -1, dy: -10, padWidth: 2, height: 12 },
             });
         }
-        labels.push({
-            text: `Σ ${formatLength(total, obj.scale)}`,
-            x: p[p.length - 1].x + 8,
-            y: p[p.length - 1].y,
+        const last = p[p.length - 1];
+        out.push({
+            text: `Total: ${formatLength(total, obj.scale)}`,
+            x: last.x + 6, y: last.y,
+            font: 'bold 12px Arial', size: 12, bold: true, align: 'left', colour: null,
+            box: { dx: -2, dy: -14, padWidth: 4, height: 16 },
         });
-        return labels;
+        return out;
     }
+
     if (obj.subtype === 'area' && p.length >= 3) {
-        const cx = p.reduce((s, q) => s + q.x, 0) / p.length;
-        const cy = p.reduce((s, q) => s + q.y, 0) / p.length;
-        return [{ text: formatArea(p, obj.scale), x: cx, y: cy }];
+        const cx = p.reduce((s2, q) => s2 + q.x, 0) / p.length;
+        const cy = p.reduce((s2, q) => s2 + q.y, 0) / p.length;
+        out.push({
+            text: formatArea(p, obj.scale), x: cx, y: cy,
+            font: '12px Arial', size: 12, bold: false, align: 'center', colour: null,
+            box: { dx: -2, dy: -14, padWidth: 4, height: 16 },
+        });
     }
-    return [];
+    return out;
+}
+
+/** Vertices are drawn on poly and area measurements, radius 3. */
+export const MEASURE_VERTEX_RADIUS = 3;
+export const measureHasVertices = (obj) => obj.subtype !== 'line';
+
+/**
+ * Where a label's backing rectangle goes, given the text width.
+ *
+ * `align: 'left'` anchors the box at the label's x; everything else centres it.
+ * Matching `DrawingCanvas.tsx:311-312`, `:329-330`, `:341-343` and `:358-359`.
+ */
+export function labelBox(label, textWidth) {
+    if (!label.box) return null;
+    const left = label.align === 'left'
+        ? label.x + label.box.dx
+        : label.x - textWidth / 2 + label.box.dx;
+    return {
+        x: left,
+        y: label.y + label.box.dy,
+        width: textWidth + label.box.padWidth,
+        height: label.box.height,
+    };
 }
 
 /** #rrggbb -> {r,g,b} in 0..1, for pdf-lib. */

@@ -37,7 +37,8 @@ function probe(label, ok, detail = '') {
 
 const required = ['before.json', 'matrix.json', 'noop.json', 'zoom.json', 'rotation.json',
     'cropbox.json', 'a0.json', 'hybrid-split.json', 'fidelity.json', 'determinism.json',
-    'failure.json', 'network.json'];
+    'failure.json', 'network.json', 'markers.json', 'ordered.json', 'boundary.json',
+    'text-placement.json'];
 const missing = required.filter((f) => !has(f));
 if (missing.length) {
     console.error(`Missing results: ${missing.join(', ')}`);
@@ -47,7 +48,7 @@ if (missing.length) {
 
 const before = read('before.json');
 const matrix = read('matrix.json');
-const FIXTURES = ['native', 'rotated', 'boxes', 'features', 'scanned', 'a0'];
+const FIXTURES = ['native', 'rotated', 'boxes', 'croprot', 'features', 'scanned', 'a0'];
 const worstOf = (result, key) => {
     const order = ['lost', 'changed', 'preserved'];
     const real = result.perPage.map((p) => p[key]).filter((v) => order.includes(v));
@@ -69,6 +70,11 @@ check('all four rotation quadrants are present',
 check('a page is cropped, and one of the crops does not start at the origin',
     before.boxes.pages.some((p) => p.cropBox.x > 0 && p.cropBox.y > 0),
     before.boxes.pages.map((p) => `${p.cropBox.x},${p.cropBox.y}`).join(' | '));
+check('one fixture has a crop origin and a rotation at the same time',
+    before.croprot.pages.length === 4
+    && before.croprot.pages.every((p) => p.cropBox.x > 0 && p.cropBox.y > 0)
+    && new Set(before.croprot.pages.map((p) => p.rotate)).size === 4,
+    'each of the four quadrants, cropped at (50, 70)');
 check('there are existing annotations and form fields',
     before.features.pages[0].annotationCount >= 2 && before.features.form.fields.length >= 2,
     `${before.features.pages[0].annotationCount} annots, ${before.features.form.fields.length} fields`);
@@ -158,13 +164,22 @@ check('without an eraser it succeeds',
 probe('a coordinate that cannot mean anything is refused, not drawn',
     typeof failure.nanCoordinate.refused === 'string',
     failure.nanCoordinate.refused ?? `IT PRODUCED ${failure.nanCoordinate.produced} BYTES`);
-check('the hybrid sends only the eraser and the ink it touches to pixels',
-    split.raster.includes('stroke-eraser-mark') && split.raster.length === 3
-    && split.vector.length === split.total - 3,
+check('the hybrid rasterises the span an eraser reaches, and no more',
+    split.raster.includes('stroke-eraser-mark')
+    && split.raster[split.raster.length - 1] === 'stroke-eraser-mark'
+    && split.wholeLayerRastered === false,
     `pixels: ${split.raster.join(', ')}`);
 probe('and it does not send everything to pixels to be safe',
     split.vector.length > split.raster.length,
     `${split.vector.length} as operators, ${split.raster.length} as pixels`);
+// The span is deliberately over-inclusive. Objects inside it that no eraser
+// touches are rasterised too, because deciding otherwise means reasoning about
+// overlaps between every pair -- and being wrong there reorders the drawing.
+check('everything between the first affected object and the last eraser is in the span',
+    split.runs[0].kind === 'raster'
+    && split.runs[0].ids[split.runs[0].ids.length - 1] === 'stroke-eraser-mark'
+    && split.runs.slice(1).every((r) => r.kind === 'vector'),
+    split.runs.map((r) => `${r.kind}:${r.ids.length}`).join(' -> '));
 
 console.log('');
 console.log('=== annotation text a person can search for ===');
@@ -262,12 +277,24 @@ check('the hybrid reproduces the strokes it rasterises exactly',
     ['stroke-plain', 'stroke-alpha', 'stroke-eraser-mark']
         .every((id) => fidelity.hybrid.perTool[id].differingFraction < 0.01));
 check('and its vector pressure stroke is close',
-    fidelity.hybrid.perTool['stroke-pressure'].differingFraction < 0.05,
+    fidelity.hybrid.perTool['stroke-pressure'].differingFraction < 0.01,
     `${(fidelity.hybrid.perTool['stroke-pressure'].differingFraction * 100).toFixed(1)}% differing`);
 check('its text differs, because the font is a substitute',
     fidelity.hybrid.perTool['text-japanese'].differingFraction > 0.05,
     `${(fidelity.hybrid.perTool['text-japanese'].differingFraction * 100).toFixed(1)}% differing`
     + ' -- reported rather than hidden');
+
+// The reference renderer is a copy of the app's draw loop; if it drifts, every
+// fidelity number silently measures this repository instead of the product.
+const placement = read('text-placement.json');
+check('the text difference is glyph shape, not misplacement',
+    Object.values(placement.out).every((r) => r.atZero - r.best < 0.02),
+    Object.entries(placement.out)
+        .map(([id, r]) => `${id} ${(r.atZero * 100).toFixed(1)}% -> ${(r.best * 100).toFixed(1)}% at ${r.bestOffsetPoints}pt`)
+        .join('; '));
+probe('shifting the comparison does not rescue it',
+    Object.values(placement.out).every((r) => r.best > 0.05),
+    'no vertical offset makes a substituted face match');
 // The finding this whole spike turns on.
 probe('the baseline looks the best of all of them while preserving the least',
     fidelity.baseline.whole.differingFraction <= fidelity.overlay.whole.differingFraction
@@ -278,6 +305,86 @@ probe('the baseline looks the best of all of them while preserving the least',
 void worstTool;
 
 console.log('');
+console.log('');
+console.log('=== a mark ends up where the user put it, end to end ===');
+const markers = read('markers.json');
+for (const fixture of ['rotated', 'croprot']) {
+    for (const candidate of ['overlay', 'hybrid']) {
+        const r = markers[fixture][candidate];
+        check(`${candidate} on ${fixture}: every quadrant lands within a point`,
+            !r.failed && r.pages.every((p) => p.found !== null && p.error < 2),
+            r.failed ?? r.pages.map((p) => `r${p.rotate}:${p.error?.toFixed(1) ?? 'lost'}pt`).join(' '));
+    }
+}
+check('that includes a page with a crop origin and a rotation together',
+    markers.croprot.hybrid.pages.every((p) => p.error < 2),
+    markers.croprot.hybrid.pages.map((p) => `r${p.rotate}:${p.error.toFixed(1)}pt`).join(' '));
+// This is the check the standalone transform round-trip could not make: it
+// proves a function inverts itself, not that the save path calls it, or calls
+// it the right way round.
+probe('the baseline does not -- it flattens the rotation away',
+    markers.rotated.baseline.pages.every((p) => p.rotate === 0),
+    `every page comes back at /Rotate 0, and the page is rewritten to `
+    + `${markers.rotated.baseline.pages[0].pageSize.width}x${markers.rotated.baseline.pages[0].pageSize.height} capture pixels`);
+
+console.log('');
+console.log('=== the saved layer stacks the way the canvas does ===');
+const ordered = read('ordered.json');
+const scenarios = Object.keys(ordered.hybrid.results);
+check('every ordering scenario was measured', scenarios.length >= 9, `${scenarios.length} scenarios`);
+for (const [label, r] of Object.entries(ordered.hybrid.results)) {
+    if (r.failed) { check(`hybrid: ${label}`, false, r.failed); continue; }
+    // The all-vector scenario carries text, so it pays the font substitution.
+    const bound = label.includes('no eraser') ? 0.08 : 0.02;
+    check(`hybrid: ${label}`, r.differingFraction < bound,
+        `${(r.differingFraction * 100).toFixed(2)}% differing   ${r.runs.join(' -> ')}`);
+}
+const afterRun = ordered.hybrid.results['before, eraser, after'];
+probe('a stroke drawn after an eraser is written after the fragment, not under it',
+    afterRun.runs.join(' ').endsWith('vector:B'),
+    afterRun.runs.join(' -> '));
+probe('and an eraser two objects back still pulls the run open',
+    ordered.hybrid.results['multiple erasers'].runs[0] === 'raster:A+E1+B+E2',
+    ordered.hybrid.results['multiple erasers'].runs.join(' -> '));
+check('an object no eraser touches is still rasterised when it sits inside the span',
+    ordered.hybrid.results['affected and unaffected interleaved'].runs[0].includes('far'),
+    'conservative by construction: over-including costs pixels, under-including reorders marks');
+check('a layer with no eraser at all stays entirely vector',
+    ordered.hybrid.results['overlapping annotations, no eraser'].runs.every((r) => r.startsWith('vector')),
+    ordered.hybrid.results['overlapping annotations, no eraser'].runs.join(' -> '));
+
+console.log('');
+console.log('=== documents this design will not write ===');
+const boundary = read('boundary.json');
+check('an ordinary document is accepted and saved',
+    boundary.native.supported === true && boundary.native.save.produced > 0,
+    `${boundary.native.save.produced} bytes`);
+probe('a document with a signature field is refused, by name',
+    boundary.signed.supported === false
+    && boundary.signed.problems.some((p) => p.code === 'signed')
+    && typeof boundary.signed.save.refused === 'string',
+    boundary.signed.save.refused ?? 'IT PRODUCED A FILE');
+probe('a damaged document is refused before anything is written',
+    boundary.damaged.supported === false
+    && boundary.damaged.problems.some((p) => p.code === 'unreadable')
+    && typeof boundary.damaged.save.refused === 'string',
+    boundary.damaged.save.refused ?? 'IT PRODUCED A FILE');
+check('the refusal names the document, not an internal property',
+    boundary.signed.problems[0].message.includes('電子署名'),
+    boundary.signed.problems[0].message);
+
+console.log('');
+console.log('=== the bytes handed to a candidate are not modified ===');
+for (const candidate of ['baseline', 'overlay', 'vector', 'hybrid']) {
+    const results = FIXTURES.map((fx) => matrix[fx][candidate]).filter(Boolean);
+    check(`${candidate}: unchanged on every fixture, byte for byte`,
+        results.length === FIXTURES.length && results.every((r) => r.sourceUnchanged === true),
+        `${results.filter((r) => r.sourceUnchanged === true).length}/${results.length}`);
+}
+probe('including the candidate that refuses -- a refusal must not mutate either',
+    FIXTURES.every((fx) => matrix[fx].vector.failed === true && matrix[fx].vector.sourceUnchanged === true),
+    'vector refuses all seven and leaves all seven alone');
+
 console.log('=== the same input twice ===');
 const determinism = read('determinism.json');
 for (const candidate of ['overlay', 'hybrid']) {
