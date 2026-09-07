@@ -3,11 +3,14 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { Upload, ZoomIn, ZoomOut, Download, PenTool, Eraser, Layers, Plus, Eye, EyeOff, Trash2, Trash, Copy, Maximize, Ruler, Hexagon, Square, Target, MousePointer2 } from 'lucide-react';
 import { PdfPage } from './PdfPage';
 import type { ToolType, MeasurementScale } from './DrawingCanvas';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
 import { configurePdfWorker } from '../utils/pdf-worker-source';
+import {
+    saveAnnotatedPdf, annotatedFilename, AnnotatorSaveError,
+    type PageSnapshot, type SaveResult,
+} from '../utils/annotator-save';
+import type { PdfPageRef } from './PdfPage';
 
 import './PdfViewer.css';
 
@@ -27,6 +30,19 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveNotice, setSaveNotice] = useState<string[] | null>(null);
+
+    /**
+     * The uploaded file, kept as the master copy.
+     *
+     * Saving writes the annotations onto the original document, so the original
+     * bytes have to survive the upload. PDF.js may transfer the buffer it is
+     * handed, which detaches it — so the copy kept here and the copy given to
+     * PDF.js are separate slices of the same read, and neither can affect the
+     * other.
+     */
+    const sourceBytesRef = useRef<Uint8Array | null>(null);
+    const sourceNameRef = useRef<string>('document.pdf');
 
     // Drawing state
     const [tool, setTool] = useState<ToolType>('pen');
@@ -114,7 +130,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
     };
 
     // Refs for pages
-    const pageRefs = useRef<{ [key: number]: any }>({});
+    const pageRefs = useRef<{ [key: number]: PdfPageRef | null }>({});
 
     const duplicateSelection = () => {
         Object.values(pageRefs.current).forEach(ref => ref?.duplicateSelection?.());
@@ -167,6 +183,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
 
         try {
             const arrayBuffer = await file.arrayBuffer();
+            // One read, two independent copies. PDF.js is given its own, so
+            // whatever it does to that buffer cannot reach the copy a save
+            // depends on.
+            const bytes = new Uint8Array(arrayBuffer);
+            sourceBytesRef.current = bytes.slice();
+            sourceNameRef.current = file.name || 'document.pdf';
+            const forDisplay = bytes.slice();
             // Right here, not at module scope: `GlobalWorkerOptions.workerSrc`
             // is one global, and two other modules still assign it to a CDN when
             // they load. In a bundle the last one to evaluate wins, so setting
@@ -174,9 +197,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
             // import order. Setting it immediately before the only call that
             // reads it makes that irrelevant.
             configurePdfWorker();
-            const loadedPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const loadedPdf = await pdfjsLib.getDocument({ data: forDisplay }).promise;
             setPdfDoc(loadedPdf);
-            // Removed setCurrentPage(1);
+            setSaveNotice(null);
+            pageRefs.current = {};
             if (onLoad) onLoad(loadedPdf);
         } catch (err) {
             console.error('Error loading PDF:', err);
@@ -196,51 +220,90 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
         setScale(prev => Math.max(0.5, Math.min(6.0, prev + delta)));
     };
 
+    /**
+     * What the user is told when a save refuses.
+     *
+     * A generic "failed to export" tells them nothing about whether to retry,
+     * finish an operation, or pick a different file, so each cause gets its own
+     * sentence. The raw exception goes to the console, never to an alert.
+     */
+    const describeSaveFailure = (error: unknown): string => {
+        if (error instanceof AnnotatorSaveError) {
+            const lines = error.problems.map((p) => (
+                p.page ? `・${p.message}（${p.page}ページ）` : `・${p.message}`
+            ));
+            return lines.join('\n');
+        }
+        return 'PDFを保存できませんでした。もう一度お試しください。';
+    };
+
+    /** What the user is told when a save succeeds but cost something. */
+    const describeSaveWarnings = (result: SaveResult): string[] => {
+        const notices: string[] = [];
+        if (result.fontSubstituted) {
+            notices.push('文字注釈は検索可能な状態を保つため、互換フォントへ置換して保存しました。');
+        }
+        if (result.rasteredTextObjects.length > 0) {
+            const missing = [...new Set(result.rasteredTextObjects.flatMap((r) => r.missing))];
+            notices.push(
+                `${result.rasteredTextObjects.length}件の文字注釈は、使用フォントで表現できない文字`
+                + `（${missing.join(' ')}）を含むため画像として保存しました。`
+                + 'この注釈はPDFの文字検索の対象になりません。',
+            );
+        }
+        return notices;
+    };
+
     const handleDownload = async () => {
-        if (!pdfDoc) return;
+        const sourceBytes = sourceBytesRef.current;
+        if (!pdfDoc || !sourceBytes) return;
+        // One save at a time. A second click while the first is in flight would
+        // race two downloads and two sets of warnings.
+        if (isSaving) return;
+
         setIsSaving(true);
+        setSaveNotice(null);
+        let objectUrl: string | null = null;
         try {
-            // Initialize with pt or px. 'px' maps to 72dpi in jsPDF usually unless hotfixed. 
-            // Better to use 'pt' or 'px' and matching dimensions.
-            const pdf = new jsPDF({
-                unit: 'px',
-                hotfixes: ['px_scaling']
-            });
-            // Remove the default first page as we will add pages dynamically
-            pdf.deletePage(1);
-
-            const pageElements = document.querySelectorAll('.pdf-page-container');
-
-            for (let i = 0; i < pageElements.length; i++) {
-                const pageEl = pageElements[i] as HTMLElement;
-
-                // html2canvas captures the visual representation
-                const canvas = await html2canvas(pageEl, {
-                    scale: 2, // High resolution capture
-                    useCORS: true,
-                    logging: false,
-                    windowWidth: pageEl.scrollWidth,
-                    windowHeight: pageEl.scrollHeight
-                });
-
-                const imgData = canvas.toDataURL('image/jpeg', 0.85);
-                const imgWidth = canvas.width;
-                const imgHeight = canvas.height;
-
-                // Add page with the exact dimensions of the captured image
-                // orientation: landscape if width > height
-                const orientation = imgWidth > imgHeight ? 'l' : 'p';
-                pdf.addPage([imgWidth, imgHeight], orientation);
-
-                // Add image filling the page
-                pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+            // An unfinished operation is refused rather than skipped. Live pen
+            // ink and typed text are not in the object model until they are
+            // committed, so saving through them would return a finished-looking
+            // file with the mark missing.
+            const pages: PageSnapshot[] = [];
+            for (const [key, handle] of Object.entries(pageRefs.current)) {
+                if (!handle) continue;
+                const pending = handle.getPendingInteraction();
+                if (pending) {
+                    throw new AnnotatorSaveError([{
+                        code: 'pending-annotation',
+                        page: Number(key),
+                        message: `${pending.message}操作を完了してから保存してください。`,
+                    }]);
+                }
+                const layers = handle.getVisibleLayerSnapshots();
+                if (layers.length > 0) {
+                    pages.push({ pageNumber: Number(key), layers });
+                }
             }
 
-            pdf.save('annotated_document.pdf');
+            const result = await saveAnnotatedPdf({ sourceBytes, pages });
+
+            // Only now that every page is written does anything download.
+            const blob = new Blob([result.bytes.slice().buffer as ArrayBuffer], { type: 'application/pdf' });
+            objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = annotatedFilename(sourceNameRef.current);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            setSaveNotice(describeSaveWarnings(result));
         } catch (err) {
-            console.error("Export failed:", err);
-            alert("Failed to export PDF.");
+            console.error('Annotated save failed:', err);
+            setSaveNotice([describeSaveFailure(err)]);
         } finally {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
             setIsSaving(false);
         }
     };
@@ -586,7 +649,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                             </div>
                         </div>
 
-                        <button onClick={handleDownload} title="Download Annotated PDF" data-usage-target="annotator-save" style={{ marginLeft: 'auto' }}>
+                        <button onClick={handleDownload} disabled={isSaving} title="Download Annotated PDF" data-usage-target="annotator-save" style={{ marginLeft: 'auto' }}>
                             <Download size={20} />
                         </button>
                     </div>
@@ -633,6 +696,29 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
                 }}>
                     <div className="spinner" style={{ marginBottom: '10px' }}></div>
                     Saving PDF... Do not close.
+                </div>
+            )}
+            {saveNotice && saveNotice.length > 0 && (
+                // Font substitution and a rastered text object both change what
+                // the user gets, so they belong on screen rather than in the
+                // console. Failures land here too, one line per cause.
+                <div
+                    className="annotator-save-notice"
+                    role="status"
+                    data-testid="annotator-save-notice"
+                >
+                    <div className="annotator-save-notice-body">
+                        {saveNotice.map((line) => (
+                            <p key={line}>{line}</p>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setSaveNotice(null)}
+                        aria-label="通知を閉じる"
+                    >
+                        ×
+                    </button>
                 </div>
             )}
             <VersionFooter

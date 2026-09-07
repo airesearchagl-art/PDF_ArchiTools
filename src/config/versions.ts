@@ -19,9 +19,9 @@ export interface ToolVersion {
 
 export const TOOL_VERSIONS: Record<string, ToolVersion> = {
     annotator: {
-        version: '1.1.2',
-        lastUpdate: '2026/09/07',
-        changelog: 'PDF表示処理をアプリ同梱のworkerへ統一し、外部CDNから取得しないよう修正'
+        version: '1.2.0',
+        lastUpdate: '2026/09/08',
+        changelog: '注釈付きPDFの保存を、元PDFのベクター・検索可能な文字情報を保持する方式へ変更'
     },
     comparator: {
         version: '1.1.1',

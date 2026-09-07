@@ -220,9 +220,30 @@ try {
     check('annotator: no generic shape-drawing tool is claimed',
         !/図形ツール/.test(a) && a.includes('図形を描くツールはありません'),
         'shape tooling');
-    check('annotator: saving is described as page images, not preserved vectors',
-        a.includes('画像として書き出したもの') && !a.includes('ベクターを完全保持'),
+    // The save contract changed in v1.2.0, so this asserts the new one rather
+    // than being relaxed to accommodate it. The old wording is asserted absent:
+    // a guide that still promises page images would be describing a product
+    // that no longer exists.
+    check('annotator: saving is described as preserving the source, not as page images',
+        a.includes('元のPDFに注釈を書き加えたもの')
+        && !a.includes('各ページを画像として書き出したもの'),
         'save format');
+    check('annotator: the font substitution is stated, not implied',
+        a.includes('互換フォント') && a.includes('検索できる文字'),
+        'searchable text in a substituted face');
+    check('annotator: the glyph fallback and its cost are stated',
+        a.includes('画像として保存') && a.includes('検索の対象外'));
+    check('annotator: only visible layers are saved, and it says so',
+        a.includes('表示中のレイヤーだけ') && a.includes('非表示のレイヤーは出力されません'));
+    check('annotator: the raster limit is a number the user can act on',
+        a.includes('800万ピクセル') && a.includes('保存を中断'));
+    check('annotator: the documents it will not save are listed',
+        a.includes('電子署名') && a.includes('パスワード保護') && a.includes('破損'));
+    check('annotator: the original file is not overwritten, and it says so',
+        a.includes('_annotated.pdf'));
+    // The distinction that matters most if anyone relies on it.
+    check('annotator: erasing is not presented as redaction',
+        a.includes('墨消しではありません') || a.includes('黒塗り'));
     check('annotator: layers are described only as far as they go',
         a.includes('追加・表示切替・削除'), 'layer scope');
 

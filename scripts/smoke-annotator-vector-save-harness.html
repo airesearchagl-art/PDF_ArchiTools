@@ -1,0 +1,629 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>annotator vector-preserving save — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** save module in a real browser.
+ *
+ * Not a copy of it, and not a research prototype: the gate exists to test what
+ * ships, so everything below imports from `src/utils/annotator-save/`.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument } from 'pdf-lib';
+import { saveAnnotatedPdf, annotatedFilename, AnnotatorSaveError, MAX_RASTER_PIXELS }
+  from '/src/utils/annotator-save/index.ts';
+import { checkRasterBudget } from '/src/utils/annotator-save/composition.ts';
+import { assessSource } from '/src/utils/annotator-save/source-assessment.ts';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/annotator-save';
+const cache = new Map();
+async function fixture(name) {
+  if (!cache.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    cache.set(name, new Uint8Array(await r.arrayBuffer()));
+  }
+  return cache.get(name).slice();
+}
+
+// ---------------------------------------------------------------------------
+// Inspection: what a document carries, before and after
+// ---------------------------------------------------------------------------
+
+async function inspect(bytes) {
+  const doc = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+  const pages = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const content = await page.getTextContent();
+    const ops = await page.getOperatorList();
+    const OPS = pdfjsLib.OPS;
+    let paths = 0;
+    let images = 0;
+    for (const fn of ops.fnArray) {
+      if (fn === OPS.constructPath || fn === OPS.stroke || fn === OPS.fill
+        || fn === OPS.eoFill || fn === OPS.fillStroke) paths += 1;
+      if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject
+        || fn === OPS.paintInlineImageXObject) images += 1;
+    }
+    const annots = await page.getAnnotations();
+    const view = page.view;
+    pages.push({
+      text: content.items.map((i) => i.str).join(' '),
+      paths,
+      images,
+      annotations: annots.length,
+      rotate: page.rotate,
+      view: [view[0], view[1], view[2], view[3]],
+    });
+  }
+  const meta = await doc.getMetadata();
+  // Form values are read through pdf-lib: pdf.js exposes widgets, not values.
+  let formFields = {};
+  try {
+    const lib = await PDFDocument.load(bytes.slice(), { updateMetadata: false });
+    for (const f of lib.getForm().getFields()) {
+      formFields[f.getName()] = typeof f.getText === 'function' ? (f.getText() ?? '') : '';
+    }
+  } catch { formFields = { '(unreadable)': '' }; }
+  return {
+    pageCount: doc.numPages,
+    pages,
+    title: meta.info?.Title ?? '',
+    author: meta.info?.Author ?? '',
+    keywords: meta.info?.Keywords ?? '',
+    formFields,
+  };
+}
+
+/** Render one page to pixels, for locating a mark. */
+async function renderPage(bytes, pageNumber, scale = 1) {
+  const doc = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+  const page = await doc.getPage(pageNumber);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return { canvas, ctx, viewport };
+}
+
+/** The centroid of pixels close to a target colour. */
+function findColour(ctx, canvas, target, tolerance = 60) {
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let sx = 0; let sy = 0; let n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const dr = data[i] - target.r;
+    const dg = data[i + 1] - target.g;
+    const db = data[i + 2] - target.b;
+    if (Math.abs(dr) < tolerance && Math.abs(dg) < tolerance && Math.abs(db) < tolerance) {
+      const p = i / 4;
+      sx += p % canvas.width;
+      sy += Math.floor(p / canvas.width);
+      n += 1;
+    }
+  }
+  return n === 0 ? null : { x: sx / n, y: sy / n, count: n };
+}
+
+// ---------------------------------------------------------------------------
+// Annotation sets
+// ---------------------------------------------------------------------------
+
+const line = (from, to, steps = 10, pressure = null) => {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    pts.push({
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+      ...(pressure === null ? {} : { pressure: pressure(t) }),
+    });
+  }
+  return pts;
+};
+
+const stroke = (id, from, to, extra = {}) => ({
+  id, type: 'stroke', points: line(from, to), color: '#FF0000',
+  lineWidth: 3, opacity: 1, enablePressure: false, ...extra,
+});
+const eraser = (id, from, to) => stroke(id, from, to, {
+  color: '#ffffff', lineWidth: 14, isEraser: true,
+});
+const text = (id, x, y, s, extra = {}) => ({
+  id, type: 'text', x, y, text: s, fontSize: 16, fontFamily: 'Arial',
+  color: '#000080', opacity: 1, ...extra,
+});
+const measure = (id, subtype, points, extra = {}) => ({
+  id, type: 'measure', subtype, points, color: subtype === 'line' ? 'blue' : '#0000ff',
+  scale: { value: 0.3527, unit: 'mm' }, opacity: 1, ...extra,
+});
+
+/** One of everything the app can produce, none overlapping. */
+const sampleObjects = () => [
+  stroke('stroke-plain', { x: 90, y: 140 }, { x: 300, y: 200 }),
+  { ...stroke('stroke-alpha', { x: 90, y: 230 }, { x: 300, y: 230 }), opacity: 0.45 },
+  {
+    ...stroke('stroke-pressure', { x: 90, y: 265 }, { x: 300, y: 265 }),
+    enablePressure: true,
+    points: line({ x: 90, y: 265 }, { x: 300, y: 265 }, 10, (t) => 0.2 + 0.7 * t),
+  },
+  text('text-ascii', 90, 320, 'ASCII ANNOTATION'),
+  text('text-japanese', 90, 360, '日本語の注釈テキスト'),
+  measure('measure-line', 'line', [{ x: 90, y: 420 }, { x: 300, y: 460 }]),
+  measure('measure-poly', 'poly', [{ x: 90, y: 500 }, { x: 200, y: 520 }, { x: 300, y: 495 }]),
+  measure('measure-area', 'area', [
+    { x: 90, y: 580 }, { x: 250, y: 580 }, { x: 250, y: 670 }, { x: 90, y: 670 },
+  ]),
+];
+
+const onePage = (objects, layerId = 'layer-1', pageNumber = 1) => ([
+  { pageNumber, layers: [{ layerId, objects }] },
+]);
+
+const attempt = async (bytes, pages) => {
+  try {
+    const r = await saveAnnotatedPdf({ sourceBytes: bytes, pages });
+    return { ok: true, result: r, bytes: r.bytes.length };
+  } catch (error) {
+    return {
+      ok: false,
+      code: error instanceof AnnotatorSaveError ? error.code : 'threw',
+      message: String(error?.message ?? error),
+      problems: error instanceof AnnotatorSaveError
+        ? error.problems.map((p) => ({ code: p.code, page: p.page, message: p.message }))
+        : [],
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// The probes
+// ---------------------------------------------------------------------------
+
+window.__m3save = {
+  /** Everything the source carried, before and after a real save. */
+  async sourcePreservation() {
+    const source = await fixture('rich');
+    const before = await inspect(source);
+    const out = await attempt(source.slice(), onePage(sampleObjects()));
+    if (!out.ok) return { failed: out };
+    const after = await inspect(out.result.bytes);
+    return {
+      before,
+      after,
+      report: {
+        fontSubstituted: out.result.fontSubstituted,
+        rasterFragments: out.result.rasterFragments,
+        rasteredTextObjects: out.result.rasteredTextObjects.length,
+        annotationCount: out.result.annotationCount,
+        ms: out.result.ms,
+        outputBytes: out.result.bytes.length,
+      },
+    };
+  },
+
+  /** A save with nothing to add must not perturb the document. */
+  async noop() {
+    const source = await fixture('rich');
+    const out = await attempt(source.slice(), []);
+    if (!out.ok) return { failed: out };
+    let identical = out.result.bytes.length === source.length;
+    if (identical) {
+      for (let i = 0; i < source.length; i++) {
+        if (source[i] !== out.result.bytes[i]) { identical = false; break; }
+      }
+    }
+    return {
+      unchangedCopy: out.result.unchangedCopy,
+      byteIdentical: identical,
+      outputBytes: out.result.bytes.length,
+      sourceBytes: source.length,
+    };
+  },
+
+  /** Only visible layers reach the file. */
+  async visibleLayers() {
+    const source = await fixture('rich');
+    // The caller passes visible layers only; a hidden one is simply absent.
+    const pages = [{
+      pageNumber: 1,
+      layers: [
+        { layerId: 'layer-1', objects: [text('mark-A', 90, 300, 'MARKAAA')] },
+        { layerId: 'layer-2', objects: [text('mark-B', 90, 340, 'MARKBBB')] },
+      ],
+    }];
+    const out = await attempt(source.slice(), pages);
+    if (!out.ok) return { failed: out };
+    const after = await inspect(out.result.bytes);
+    const t = after.pages[0].text;
+    return {
+      A: t.includes('MARKAAA'),
+      B: t.includes('MARKBBB'),
+      C: t.includes('MARKCCC'),
+      visibleLayerCount: out.result.visibleLayerCount,
+    };
+  },
+
+  /**
+   * An eraser on one layer must not reach the layer beneath it.
+   *
+   * On screen each layer is its own canvas and `destination-out` only clears
+   * its own. A save that flattened the visible layers before planning would
+   * give layer 2's eraser the power to cut a hole in layer 1.
+   */
+  async layerLocalEraser() {
+    const source = await fixture('rich');
+    // Both strokes lie on the same line, in different colours, so which one a
+    // pixel belongs to is unambiguous. Layer 2's green covers layer 1's red,
+    // and layer 2's eraser cuts a window in the middle of its own green.
+    //
+    // Inside that window the red must show through. A save that flattened the
+    // visible layers before planning would erase both and leave white there,
+    // which is the failure this exists to catch.
+    const y = 300;
+    const red = {
+      ...stroke('under', { x: 120, y }, { x: 420, y }), color: '#FF0000', lineWidth: 10,
+    };
+    const green = {
+      ...stroke('over', { x: 120, y }, { x: 420, y }), color: '#00AA00', lineWidth: 10,
+    };
+    const rub = { ...eraser('rub', { x: 240, y }, { x: 300, y }), lineWidth: 22 };
+    const pages = [{
+      pageNumber: 1,
+      layers: [
+        { layerId: 'layer-1', objects: [red] },
+        { layerId: 'layer-2', objects: [green, rub] },
+      ],
+    }];
+    const out = await attempt(source.slice(), pages);
+    if (!out.ok) return { failed: out };
+
+    const { canvas, ctx } = await renderPage(out.result.bytes, 1, 1);
+    // Count by hue inside a band, in two x ranges: under the erased window,
+    // and outside it.
+    const countIn = (x0, x1) => {
+      const w = Math.max(1, Math.round(x1 - x0));
+      const { data } = ctx.getImageData(Math.round(x0), y - 6, w, 12);
+      let redPx = 0; let greenPx = 0; let whitePx = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]; const g = data[i + 1]; const bl = data[i + 2];
+        if (r > 150 && g < 110 && bl < 110) redPx += 1;
+        else if (g > 110 && r < 130 && bl < 130) greenPx += 1;
+        else if (r > 240 && g > 240 && bl > 240) whitePx += 1;
+      }
+      return { red: redPx, green: greenPx, white: whitePx };
+    };
+
+    return {
+      insideEraser: countIn(250, 292),
+      outsideEraser: countIn(140, 220),
+      fragments: out.result.rasterFragments,
+    };
+  },
+
+  /** Stacking survives, across the corpus the research settled on. */
+  async painterOrder() {
+    const source = await fixture('rich');
+    const A = (id) => stroke(id, { x: 120, y: 300 }, { x: 380, y: 300 });
+    const B = (id) => stroke(id, { x: 120, y: 320 }, { x: 380, y: 320 });
+    const E = (id) => eraser(id, { x: 200, y: 280 }, { x: 200, y: 360 });
+    const far = (id) => stroke(id, { x: 120, y: 700 }, { x: 300, y: 700 });
+    const P = (id) => ({
+      ...stroke(id, { x: 120, y: 300 }, { x: 380, y: 300 }),
+      enablePressure: true,
+      points: line({ x: 120, y: 300 }, { x: 380, y: 300 }, 10, (t) => 0.2 + 0.7 * t),
+    });
+    const scenarios = {
+      'before, eraser, after': [A('a'), E('e'), B('b')],
+      'affected and unaffected interleaved': [A('a'), far('f'), E('e'), B('b')],
+      'multiple erasers': [A('a'), E('e1'), B('b'), E('e2'), far('c')],
+      'pressure stroke, edge erased': [P('p'), E('e')],
+      'text partially erased': [text('t', 120, 290, 'ERASED TEXT'), E('e')],
+      'measurement line label erased': [
+        measure('m', 'line', [{ x: 120, y: 300 }, { x: 380, y: 340 }]), E('e')],
+      'poly labels erased': [
+        measure('m', 'poly', [{ x: 120, y: 300 }, { x: 250, y: 320 }, { x: 380, y: 300 }]), E('e')],
+      'area label and fill erased': [
+        measure('m', 'area', [
+          { x: 120, y: 300 }, { x: 380, y: 300 }, { x: 380, y: 400 }, { x: 120, y: 400 }]), E('e')],
+      'overlapping annotations, no eraser': [A('a'), B('b'), text('t', 130, 305, 'OVER')],
+    };
+    const out = {};
+    for (const [label, objects] of Object.entries(scenarios)) {
+      const r = await attempt(source.slice(), onePage(objects));
+      out[label] = r.ok
+        ? {
+          produced: r.result.bytes.length,
+          fragments: r.result.rasterFragments,
+          maxRasterPixels: r.result.maxRasterPixels,
+        }
+        : { refused: r.message };
+    }
+    return out;
+  },
+
+  /**
+   * Where a mark ends up, end to end.
+   *
+   * Placed, saved, reopened and located in pixels — not a round trip of the
+   * arithmetic, which cannot show that the save path calls it the right way
+   * round.
+   */
+  async placement(fixtureName) {
+    const source = await fixture(fixtureName);
+    const doc = await pdfjsLib.getDocument({ data: source.slice(), isEvalSupported: false }).promise;
+    const results = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      const w = viewport.width;
+      const h = viewport.height;
+      // An oblong marker, deliberately: a near-square hides a swapped width
+      // and height, which is exactly how a rotation bug survived once.
+      const quadrants = {
+        topLeft: { x: 40, y: 30 },
+        topRight: { x: w - 130, y: 30 },
+        bottomLeft: { x: 40, y: h - 60 },
+        bottomRight: { x: w - 130, y: h - 60 },
+      };
+      const objects = Object.entries(quadrants).map(([id, at]) => ({
+        ...stroke(`mark-${id}`, at, { x: at.x + 90, y: at.y + 24 }),
+        color: '#FF0000', lineWidth: 6,
+      }));
+      const saved = await attempt(source.slice(), [{
+        pageNumber: n, layers: [{ layerId: 'layer-1', objects }],
+      }]);
+      if (!saved.ok) { results.push({ page: n, refused: saved.message }); continue; }
+
+      const per = {};
+      for (const [id, at] of Object.entries(quadrants)) {
+        const only = [{
+          ...stroke(`only-${id}`, at, { x: at.x + 90, y: at.y + 24 }),
+          color: '#FF0000', lineWidth: 6,
+        }];
+        const one = await attempt(source.slice(), [{
+          pageNumber: n, layers: [{ layerId: 'layer-1', objects: only }],
+        }]);
+        if (!one.ok) { per[id] = { refused: one.message }; continue; }
+        const { canvas, ctx } = await renderPage(one.result.bytes, n, 1);
+        const found = findColour(ctx, canvas, { r: 255, g: 0, b: 0 });
+        const expected = { x: at.x + 45, y: at.y + 12 };
+        per[id] = found
+          ? {
+            expected,
+            actual: { x: found.x, y: found.y },
+            errorPt: Math.hypot(found.x - expected.x, found.y - expected.y),
+            pixels: found.count,
+          }
+          : { missing: true };
+      }
+      results.push({ page: n, rotate: page.rotate, view: page.view, quadrants: per });
+    }
+    return results;
+  },
+
+  /** Annotation text is searchable, in both scripts. */
+  async searchableText() {
+    const source = await fixture('rich');
+    const out = await attempt(source.slice(), onePage([
+      text('t-ascii', 90, 300, 'FINDME-ASCII'),
+      text('t-ja', 90, 340, '検索できる注釈'),
+      measure('m', 'line', [{ x: 90, y: 420 }, { x: 300, y: 460 }]),
+    ]));
+    if (!out.ok) return { failed: out };
+    const after = await inspect(out.result.bytes);
+    const t = after.pages[0].text;
+    return {
+      ascii: t.includes('FINDME-ASCII'),
+      japanese: t.includes('検索できる注釈'),
+      // The measurement label is written as vector text too, so its number
+      // should be extractable.
+      measureLabel: /\d+\.\d{2} mm/.test(t),
+      fontSubstituted: out.result.fontSubstituted,
+      sourceTextStillThere: t.includes('SEARCHABLE-SOURCE-TEXT'),
+    };
+  },
+
+  /** A character the embedded font has no glyph for. */
+  async glyphFallback() {
+    const source = await fixture('rich');
+    const out = await attempt(source.slice(), onePage([
+      text('t-emoji', 90, 300, 'OK ✅ 📐 done'),
+      text('t-plain', 90, 360, 'PLAINTEXT'),
+    ]));
+    if (!out.ok) return { failed: out };
+    const after = await inspect(out.result.bytes);
+    const { canvas, ctx } = await renderPage(out.result.bytes, 1, 1);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let dark = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] < 200 && data[i + 1] < 200 && data[i + 2] < 200) dark += 1;
+    }
+    return {
+      rastered: out.result.rasteredTextObjects,
+      fragments: out.result.rasterFragments,
+      emojiTextExtractable: after.pages[0].text.includes('done'),
+      plainTextExtractable: after.pages[0].text.includes('PLAINTEXT'),
+      inkPixels: dark,
+    };
+  },
+
+  /** The raster ceiling, to the pixel and through a real save. */
+  async rasterCeiling() {
+    const edge = (pixels) => {
+      const side = Math.sqrt(pixels) / 2;
+      try {
+        checkRasterBudget({ width: side, height: side }, 2, { page: 1 });
+        return 'accepted';
+      } catch (e) { return `refused: ${String(e.message).slice(0, 40)}`; }
+    };
+    const exact = (w, h) => {
+      try {
+        checkRasterBudget({ width: w, height: h }, 1, { page: 1 });
+        return 'accepted';
+      } catch (e) { return `refused: ${String(e.message).slice(0, 40)}`; }
+    };
+
+    // Through the writer, on the largest sheet: a fragment that fits, and a
+    // whole-layer one that cannot.
+    const a0 = await fixture('a0');
+    const span = (w, h) => [
+      stroke('ink', { x: 20, y: 20 }, { x: 20 + w, y: 20 + h }),
+      eraser('rub', { x: 20 + w, y: 20 }, { x: 20, y: 20 + h }),
+    ];
+    const small = await attempt(a0.slice(), onePage(span(300, 220)));
+    const whole = await attempt(a0.slice(), onePage(span(2300, 3300)));
+
+    return {
+      limit: MAX_RASTER_PIXELS,
+      maxMinusOne: exact(MAX_RASTER_PIXELS - 1, 1),
+      maxExactly: exact(MAX_RASTER_PIXELS, 1),
+      maxPlusOne: exact(MAX_RASTER_PIXELS + 1, 1),
+      justUnder: edge(MAX_RASTER_PIXELS - 40000),
+      justOver: edge(MAX_RASTER_PIXELS + 40000),
+      smallFragment: small.ok
+        ? { produced: small.result.bytes.length, maxRasterPixels: small.result.maxRasterPixels, ms: small.result.ms }
+        : { refused: small.message },
+      wholeA0Layer: whole.ok
+        ? { PRODUCED: whole.result.bytes.length, maxRasterPixels: whole.result.maxRasterPixels }
+        : { refused: whole.message, code: whole.code },
+    };
+  },
+
+  /** Which source documents this will and will not write. */
+  async supportBoundary() {
+    const out = {};
+    for (const name of ['rich', 'multipage', 'signed', 'damaged', 'unreadable-form']) {
+      const bytes = await fixture(name);
+      let verdict;
+      try {
+        const v = await assessSource(bytes.slice());
+        verdict = {
+          supported: v.supported,
+          problems: v.problems.map((p) => ({ code: p.code, message: p.message })),
+        };
+      } catch (error) {
+        verdict = { supported: false, problems: [{ code: 'threw', message: String(error.message) }] };
+      }
+      const saved = await attempt(bytes.slice(), onePage(sampleObjects()));
+      out[name] = {
+        ...verdict,
+        save: saved.ok
+          ? { produced: saved.result.bytes.length }
+          : { refused: saved.message, code: saved.code },
+      };
+    }
+    return out;
+  },
+
+  /** Nothing this refuses may produce bytes, and nothing may touch the input. */
+  async failClosed() {
+    const source = await fixture('multipage');
+    const good = [stroke('ok', { x: 90, y: 140 }, { x: 300, y: 200 })];
+    const cases = {
+      'unknown object type': onePage([{ id: 'x', type: 'sticker', x: 10, y: 10 }]),
+      'invalid measure subtype': onePage([measure('m', 'volume', [{ x: 1, y: 1 }, { x: 2, y: 2 }])]),
+      'NaN in a stroke': onePage([{ ...good[0], points: [{ x: NaN, y: 1 }, { x: 2, y: 2 }] }]),
+      'NaN in a text position': onePage([text('t', NaN, 10, 'hi')]),
+      'opacity out of range': onePage([{ ...good[0], opacity: 4 }]),
+      'zero line width': onePage([{ ...good[0], lineWidth: 0 }]),
+      'page 0': [{ pageNumber: 0, layers: [{ layerId: 'l', objects: good }] }],
+      'page N + 1': [{ pageNumber: 4, layers: [{ layerId: 'l', objects: good }] }],
+      'fractional page': [{ pageNumber: 2.5, layers: [{ layerId: 'l', objects: good }] }],
+      'duplicate page entries': [
+        { pageNumber: 1, layers: [{ layerId: 'l', objects: good }] },
+        { pageNumber: 1, layers: [{ layerId: 'l2', objects: good }] },
+      ],
+    };
+    const out = {};
+    for (const [label, pages] of Object.entries(cases)) {
+      const r = await attempt(source.slice(), pages);
+      out[label] = r.ok
+        ? { PRODUCED: r.result.bytes.length }
+        : { refused: r.message, code: r.code, problems: r.problems.length };
+    }
+    out['a valid job'] = await (async () => {
+      const r = await attempt(source.slice(), onePage(good));
+      return r.ok ? { produced: r.result.bytes.length } : { refused: r.message };
+    })();
+    return out;
+  },
+
+  /** The bytes handed in are never modified, on success or refusal. */
+  async sourceBytesUnchanged() {
+    const out = {};
+    const compare = (a, b) => {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      return true;
+    };
+    for (const [label, name, pages] of [
+      ['success', 'rich', onePage(sampleObjects())],
+      ['no-op', 'rich', []],
+      ['refused: signed', 'signed', onePage(sampleObjects())],
+      ['refused: invalid', 'rich', onePage([{ id: 'x', type: 'sticker' }])],
+    ]) {
+      const bytes = await fixture(name);
+      const reference = bytes.slice();
+      const r = await attempt(bytes, pages);
+      out[label] = {
+        outcome: r.ok ? 'saved' : 'refused',
+        unchanged: compare(bytes, reference),
+        length: bytes.length,
+      };
+    }
+    return out;
+  },
+
+  /** The output name, and that it is never the input's. */
+  filenames() {
+    return {
+      'drawing.pdf': annotatedFilename('drawing.pdf'),
+      'A-101 平面図.pdf': annotatedFilename('A-101 平面図.pdf'),
+      'no-extension': annotatedFilename('no-extension'),
+      'dots.in.name.pdf': annotatedFilename('dots.in.name.pdf'),
+      empty: annotatedFilename(''),
+    };
+  },
+
+  /** How long a save takes and what it costs, for the record. */
+  async performance() {
+    const rows = {};
+    const runs = [
+      ['A4 ordinary vector', 'rich', sampleObjects()],
+      ['A4 with an eraser fragment', 'rich', [
+        stroke('a', { x: 120, y: 300 }, { x: 380, y: 300 }),
+        eraser('e', { x: 200, y: 280 }, { x: 200, y: 360 })]],
+      ['A0 small fragment', 'a0', [
+        stroke('a', { x: 120, y: 300 }, { x: 380, y: 300 }),
+        eraser('e', { x: 200, y: 280 }, { x: 200, y: 360 })]],
+      ['A0 near the ceiling', 'a0', [
+        stroke('a', { x: 20, y: 20 }, { x: 1000, y: 990 }),
+        eraser('e', { x: 1000, y: 20 }, { x: 20, y: 990 })]],
+    ];
+    for (const [label, name, objects] of runs) {
+      const bytes = await fixture(name);
+      const r = await attempt(bytes.slice(), onePage(objects));
+      rows[label] = r.ok
+        ? {
+          ms: r.result.ms,
+          outputBytes: r.result.bytes.length,
+          maxRasterPixels: r.result.maxRasterPixels,
+          fragments: r.result.rasterFragments,
+        }
+        : { refused: r.message };
+    }
+    return rows;
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m3ready = true;
+</script>

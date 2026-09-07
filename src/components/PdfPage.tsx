@@ -1,7 +1,30 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { DrawingCanvas, type ToolType } from './DrawingCanvas';
+import {
+    DrawingCanvas, type ToolType, type DrawingCanvasRef,
+    type CanvasObject, type PendingInteraction,
+} from './DrawingCanvas';
 import { type Layer } from './PdfViewer';
+
+/** One visible layer's committed objects, bottom layer first. */
+export interface LayerObjects {
+    layerId: string;
+    objects: CanvasObject[];
+}
+
+export interface PdfPageRef {
+    duplicateSelection: () => void;
+    deleteSelection: () => void;
+    /**
+     * A deep copy of every visible layer's objects, bottom layer first.
+     *
+     * Hidden layers are excluded rather than filtered downstream: they are
+     * `display: none` on screen and must not appear in the file.
+     */
+    getVisibleLayerSnapshots: () => LayerObjects[];
+    /** An unfinished interaction on any visible layer, or null. */
+    getPendingInteraction: () => PendingInteraction | null;
+}
 
 interface PdfPageProps {
     pdfDoc: pdfjsLib.PDFDocumentProxy;
@@ -22,7 +45,7 @@ interface PdfPageProps {
     onCalibrationEnd: (start: { x: number, y: number }, end: { x: number, y: number }) => void;
 }
 
-export const PdfPage = React.forwardRef<any, PdfPageProps>(({
+export const PdfPage = React.forwardRef<PdfPageRef, PdfPageProps>(({
     pdfDoc,
     pageNumber,
     scale,
@@ -118,6 +141,49 @@ export const PdfPage = React.forwardRef<any, PdfPageProps>(({
         };
     }, [pageProxy, scale]);
 
+    // One handle per layer, not one shared between them.
+    //
+    // Every layer's DrawingCanvas used to be given the same forwarded ref, so
+    // with three layers all three wrote to one slot and only the last-rendered
+    // one survived. That was invisible while the ref was only used for
+    // duplicate and delete on the active layer; it is not survivable for a save,
+    // which has to read every visible layer.
+    const layerRefs = useRef<Map<string, DrawingCanvasRef>>(new Map());
+    const setLayerRef = (layerId: string) => (handle: DrawingCanvasRef | null) => {
+        if (handle) layerRefs.current.set(layerId, handle);
+        else layerRefs.current.delete(layerId);
+    };
+
+    // A deleted layer's handle would otherwise linger and be saved.
+    useEffect(() => {
+        const live = new Set(layers.map((l) => l.id));
+        for (const id of [...layerRefs.current.keys()]) {
+            if (!live.has(id)) layerRefs.current.delete(id);
+        }
+    }, [layers]);
+
+    const visibleLayers = () => layers.filter((l) => l.visible);
+
+    useImperativeHandle(ref, () => ({
+        // Selection actions stay on the active layer only, so an action taken
+        // on one layer cannot reach into another.
+        duplicateSelection: () => layerRefs.current.get(activeLayerId)?.duplicateSelection(),
+        deleteSelection: () => layerRefs.current.get(activeLayerId)?.deleteSelection(),
+        getVisibleLayerSnapshots: () => visibleLayers()
+            .map((layer) => ({
+                layerId: layer.id,
+                objects: layerRefs.current.get(layer.id)?.getSaveSnapshot() ?? [],
+            }))
+            .filter((entry) => entry.objects.length > 0),
+        getPendingInteraction: () => {
+            for (const layer of visibleLayers()) {
+                const pending = layerRefs.current.get(layer.id)?.getPendingInteraction();
+                if (pending) return pending;
+            }
+            return null;
+        },
+    }));
+
     return (
         <div
             className="pdf-page-container"
@@ -142,7 +208,7 @@ export const PdfPage = React.forwardRef<any, PdfPageProps>(({
             {layers.map(layer => (
                 <div key={layer.id} style={{ display: layer.visible ? 'block' : 'none' }}>
                     <DrawingCanvas
-                        ref={ref}
+                        ref={setLayerRef(layer.id)}
                         width={dimensions.width}
                         height={dimensions.height}
                         scale={scale}
