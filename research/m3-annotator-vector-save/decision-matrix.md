@@ -38,7 +38,7 @@ needs settling first) and **DEFER** (not now).
 | whole-page visual difference | **0.20%** | 0.63% | ¹ | 1.44% |
 | mark lands where it was put, all quadrants | *page rewritten* | **0.4 pt** | ¹ | **0.4 pt** |
 | A0 max raster | 32.14 Mpx | **refused³** | ¹ | **0.19 Mpx** |
-| A0 runtime | 368 ms | **n/a³** | ¹ | **47 ms** |
+| A0 runtime | 428 ms | **n/a³** | ¹ | **44 ms** |
 | output size (native.pdf) | **288 KB** | 1163 KB | ¹ | 1096 KB |
 | refuses signed / damaged sources | no | **yes** | **yes** | **yes** |
 | leaves its input bytes alone | **yes** | **yes** | **yes** | **yes** |
@@ -104,7 +104,11 @@ column above is identical — and adds two things A cannot:
 - **searchable annotation text**, Japanese included, plus the measurement
   labels. A's annotations are a picture; no candidate that rasterises them can
   make them searchable, and that is inherent rather than a defect.
-- **an A0 that costs 0.19 Mpx instead of 32.14**, and 28 ms instead of 1386.
+- **an A0 that costs 0.19 Mpx instead of 32.14**, and 44 ms against the
+  baseline's 428. (Candidate A has no runtime on that page at all any more:
+  the 8 Mpx ceiling refuses its page-sized overlay outright. The previously
+  reported *1386 ms* for A is **historical** — it was measured before the
+  ceiling existed, and that save no longer happens.)
   A's overlay is page-sized because a transparent layer over a page is a
   page-sized image; C rasterises the marks rather than the paper.
 
@@ -327,6 +331,31 @@ writers loop over source pages rather than over annotations.
 | --- | --- |
 | validate as each object is written | **rejected** -- earlier objects are already in the file |
 | validate the whole job before writing anything | **ADOPT** |
+| validate the caller's object, then write from it | **rejected** -- see below |
+| **validate, normalise and snapshot at one boundary** | **ADOPT** |
+
+Checking and then writing from the caller's own object leaves two seams, and
+both leak the same way the original bug did:
+
+**Identity.** Preflight resolved a page key with `Number()`; the writers
+resolved it with `objects[i + 1]`, which stringifies. Those agree on `"2"` and
+disagree on `"02"`, `"2e0"`, `"+2"` and `" 2"` — all four coerce to the integer
+2, pass every check, and are then looked for under `"2"`, where there is
+nothing. Validated as page 2, written as no page at all. The preflight was
+closing a silent-drop path while holding one open.
+
+**Time.** Whatever the caller mutates between the check and the write is what
+gets written, so the bytes correspond to no validated state.
+
+`prepareSaveJob()` closes both: page keys are required to be the canonical
+decimal form of their own number, resolved once into a `Map` keyed by number so
+there is no coercion left to disagree about, and the annotations are deep-copied
+so a later mutation cannot reach the writer. Writers take the snapshot and never
+see the caller's object.
+
+Normalising `"02"` to page 2 would also close the identity gap. For the MVP it
+is **rejected** in favour of refusing: a caller emitting `"02"` has a bug of its
+own, and silently accepting it hides that.
 
 The whole set is checked first and a single problem stops all of it, so a
 refusal produces no bytes rather than a truncated document. Returning the list
@@ -334,7 +363,7 @@ of problems rather than throwing on the first lets the UI show all of them at
 once. Nine invalid cases, each refused by all three writers with no output:
 unknown object type, invalid measure subtype, NaN in a stroke, NaN in a text
 position, opacity outside 0–1, zero line width, page 0, page N+1, fractional
-page. §measurements 15.
+page — plus the four non-canonical spellings above. §measurements 15, 18.
 
 ## 10. Dependencies
 
@@ -452,3 +481,12 @@ a candidate.
 | 3. candidates | A retained as a fallback | A **refused on A0** by the ceiling its own design implies |
 | 8b. sources | unreadable form ⇒ carry on | unreadable form ⇒ **refuse**; `/FT /Sig` and `/SigFlags` read directly |
 | hybrid split | 3 of 10 raster / 7 vector | **4 raster / 6 vector**, in ordered runs |
+
+## What the third review changed
+
+| entry | was | now |
+| --- | --- | --- |
+| 9. failure | preflight validated, writers read the caller's object | **validate + normalise + snapshot at one boundary**; `"02"`/`"2e0"`/`"+2"`/`" 2"` refused, caller mutation cannot reach the writer |
+| 8b. sources | `form-unreadable` was code with no document to fire it | a **fixture that actually fails form inspection**, with pages that read cleanly |
+| 12. raster | bound checked either side, approximately | **MAX−1 accept, MAX accept, MAX+1 reject**, to the pixel |
+| 3. candidates | A's A0 runtime quoted as 1386 ms | **historical** — under the ceiling that save does not happen |

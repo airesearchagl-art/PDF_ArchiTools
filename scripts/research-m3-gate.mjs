@@ -38,7 +38,8 @@ function probe(label, ok, detail = '') {
 const required = ['before.json', 'matrix.json', 'noop.json', 'zoom.json', 'rotation.json',
     'cropbox.json', 'a0.json', 'hybrid-split.json', 'fidelity.json', 'determinism.json',
     'failure.json', 'network.json', 'markers.json', 'ordered.json', 'boundary.json',
-    'text-placement.json', 'preflight.json', 'glyphs.json', 'raster-budget.json'];
+    'text-placement.json', 'preflight.json', 'glyphs.json', 'raster-budget.json',
+    'page-keys.json', 'snapshot.json'];
 const missing = required.filter((f) => !has(f));
 if (missing.length) {
     console.error(`Missing results: ${missing.join(', ')}`);
@@ -386,6 +387,47 @@ probe('and so is an annotation filed against a page that does not exist',
     typeof pre['page N + 1'].results.hybrid.refused === 'string');
 
 console.log('');
+console.log('=== the page key validated, and the page key written ===');
+const keys = read('page-keys.json');
+// The gap this closes: `Number("02")` is 2 and passes an integer check, while a
+// writer resolving `objects[i + 1]` stringifies to "2" and finds nothing. The
+// job was validated against a page the writer never visits.
+check('every non-canonical spelling still coerces to a valid integer',
+    ['02', '2e0', '+2', ' 2'].every((k) => keys[k].coercesToInteger === true),
+    'so a Number()-based check passes all of them');
+check('and a writer indexing by number would have found nothing there',
+    ['02', '2e0', '+2', ' 2'].every((k) => keys[k].writerWouldFind === 0),
+    'validated as page 2, written as no page: the silent drop');
+for (const k of ['02', '2e0', '+2', ' 2']) {
+    probe(`${JSON.stringify(k)} is refused, not silently dropped`,
+        typeof keys[k].refused === 'string' && keys[k].produced === undefined,
+        keys[k].refused?.slice(0, 60) ?? `IT PRODUCED ${keys[k].produced} BYTES`);
+}
+check('the canonical spelling still saves, and the mark reaches the page',
+    keys['2'].produced > 0 && keys['2'].ops > 0,
+    `${keys['2'].produced} bytes, ${keys['2'].ops} operators`);
+
+console.log('');
+console.log('=== the caller mutates the job after it is checked ===');
+const snap = read('snapshot.json');
+check('the snapshot does not change when the caller does',
+    snap.snapshotUnchanged === true);
+check('a field mutated afterwards is not the field that would be written',
+    snap.snapshotLineWidth === 4 && snap.callerLineWidth === 999,
+    `snapshot ${snap.snapshotLineWidth}, caller ${snap.callerLineWidth}`);
+probe('an object pushed in afterwards is not in the snapshot',
+    snap.snapshotCount === 1 && snap.callerCount === 2,
+    `snapshot ${snap.snapshotCount}, caller ${snap.callerCount}`);
+probe('nor is a whole page added afterwards',
+    snap.pageAddedAfterwards === 0);
+// The review allows either outcome here -- write the validated snapshot, or
+// detect the mutation and refuse. What is forbidden is writing content that
+// was never validated. A refusal is the branch this interleaving takes.
+check('a save racing a mutation either writes what it validated, or refuses',
+    typeof snap.save.refused === 'string' || snap.save.produced > 0,
+    snap.save.refused ? 'refused, no bytes' : `${snap.save.produced} bytes`);
+
+console.log('');
 console.log('=== a character the embedded font cannot draw ===');
 const glyphs = read('glyphs.json');
 check('the missing glyphs are actually detected', glyphs.missing.length >= 1,
@@ -427,6 +469,12 @@ check('the refusal names the page and the size',
 probe('the check is arithmetic, so it fires either side of the line',
     budget.edges.justUnder === 'accepted' && budget.edges.justOver.startsWith('refused'),
     `${budget.edges.justUnder} / ${budget.edges.justOver.slice(0, 30)}`);
+// To the pixel, so "over the limit" means over and not near.
+check('MAX - 1 is accepted', budget.edges.maxMinusOne === 'accepted');
+check('MAX exactly is accepted', budget.edges.maxExactly === 'accepted',
+    'the bound is inclusive, and says so');
+probe('MAX + 1 is refused', budget.edges.maxPlusOne.startsWith('refused'),
+    budget.edges.maxPlusOne.slice(0, 40));
 // A bound that is only ever tested from one side is not a bound.
 check('the measurement straddles the ceiling rather than approaching it',
     row('just under the bound').predictedPixels < budget.limit
@@ -457,11 +505,34 @@ check('a document with an ordinary form is still accepted',
     boundary.features.supported === true && boundary.features.save.produced > 0,
     `${boundary.features.save.produced} bytes with 2 form fields`);
 // Not being able to read the form is not evidence that there is no signature.
-// The earlier version swallowed that failure and carried on.
-probe('an inspection failure would refuse, not assume there is no signature',
-    ['form-unreadable', 'signed', 'unreadable', 'encrypted']
-        .includes(boundary.signed.problems[0].code),
-    `the refusal codes this boundary can return include form-unreadable`);
+// The earlier version swallowed that failure and carried on -- and the earlier
+// version of *this* probe read `boundary.signed`, whose code is 'signed', so it
+// passed without the form-unreadable path ever running. It needs its own
+// document.
+const uf = boundary['unreadable-form'];
+check('a document whose form cannot be inspected was measured', uf !== undefined);
+check('its pages are readable, so this is not the damaged path in disguise',
+    uf.problems.every((p) => p.code !== 'unreadable'),
+    `codes: ${uf.problems.map((p) => p.code).join(', ')}`);
+probe('an inspection failure refuses, rather than assuming there is no signature',
+    uf.supported === false && uf.problems.some((p) => p.code === 'form-unreadable'),
+    uf.problems.map((p) => p.code).join(', '));
+probe('and the save refuses with it, producing nothing',
+    typeof uf.save.refused === 'string' && uf.save.produced === undefined,
+    uf.save.refused?.slice(0, 60) ?? `IT PRODUCED ${uf.save.produced} BYTES`);
+check('the message says why, rather than showing a raw internal error',
+    uf.problems[0].message.includes('電子署名')
+    && uf.problems[0].message.includes('確認'),
+    uf.problems[0].message.slice(0, 60));
+// Four boundary conditions, four different causes -- otherwise one of them
+// could be standing in for the others.
+check('each boundary condition fires on its own document, distinctly',
+    boundary.signed.problems[0].code === 'signed'
+    && boundary.damaged.problems[0].code === 'unreadable'
+    && uf.problems[0].code === 'form-unreadable'
+    && boundary.native.supported === true
+    && boundary.features.supported === true,
+    'signed / unreadable / form-unreadable, against 2 accepted controls');
 
 console.log('');
 console.log('=== the bytes handed to a candidate are not modified ===');

@@ -316,6 +316,38 @@ const write = async (name, doc, note) => {
 }
 
 // ---------------------------------------------------------------------------
+// 10. unreadable-form.pdf -- a form that cannot be inspected
+// ---------------------------------------------------------------------------
+//
+// The signature boundary refuses a document whose AcroForm cannot be read,
+// because not being able to check is not the same as there being nothing to
+// check. That path needs a document that actually triggers it, and `signed.pdf`
+// does not -- it is inspected perfectly well and refused for being signed.
+//
+// The three conditions this file has to satisfy, in order:
+//
+//   PDFDocument.load       must succeed  -- otherwise it refuses as `unreadable`
+//   walking the pages      must succeed  -- same
+//   inspecting the form    must fail     -- the condition under test
+//
+// A /Fields array holding a number rather than a field dictionary does exactly
+// that: the file parses, the page tree is intact, and pdf-lib throws
+// "Expected instance of PDFDict, but got instance of PDFNumber" the moment
+// anything walks the fields.
+{
+    const doc = await PDFDocument.create();
+    doc.registerFontkit(fontkit);
+    stamp(doc, 'M3 unreadable form');
+    const font = await doc.embedFont(fs.readFileSync(FONT), { subset: false });
+    drawSheet(doc.addPage([A4.w, A4.h]), font, A4, 'UNREADABLE FORM');
+
+    const acro = doc.context.obj({ Fields: doc.context.obj([PDFNumber.of(7)]) });
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(acro));
+
+    await write('unreadable-form', doc, 'valid pages, /Fields holding a number: form inspection throws');
+}
+
+// ---------------------------------------------------------------------------
 // 6. a0.pdf -- the sheet nothing should rasterise whole
 // ---------------------------------------------------------------------------
 {

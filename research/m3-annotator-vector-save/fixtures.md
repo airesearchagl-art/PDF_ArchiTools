@@ -25,6 +25,7 @@ node scripts/research-m3-fixtures.mjs
 | `a0.pdf` | 1 | one A0 sheet, for the rasterisation bound |
 | `croprot.pdf` | 4 | a CropBox origin of (50, 70) **and** all four rotations — each alone is already covered, and a save path that fixes one and forgets the other passes both of those |
 | `signed.pdf` | 1 | an AcroForm signature field, for the refusal path |
+| `unreadable-form.pdf` | one A4 page, and an `/AcroForm` whose `/Fields` holds a number rather than a field dictionary. Loads, walks its pages, and throws the moment the form is inspected — the only fixture that fires the `form-unreadable` boundary |
 | `damaged.pdf` | 3 | `native.pdf` with its cross-reference region overwritten |
 
 Measured before anything touches them:

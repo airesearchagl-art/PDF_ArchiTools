@@ -172,13 +172,36 @@ The fallback where `hasGlyphForCodePoint` is unavailable reports *every*
 character as unsupported. That is the safe direction, and it is also untested:
 no font object in this corpus lacks the method.
 
-## The preflight is negative evidence about nine cases
+## The preflight is negative evidence about thirteen cases
 
-Nine invalid inputs, each refused with no output bytes, plus one valid control
-that still produces a file. What it does not establish is completeness: these
-are the cases we thought of. An unrecognised object type and an out-of-range
-page were only found by looking for silent drops on purpose, and the same
-search done differently would probably find more.
+Nine invalid annotations and four non-canonical page keys, each refused with no
+output bytes, against valid controls that still produce a file. What it does not
+establish is completeness: these are the cases we thought of. The non-canonical
+keys are the sharpest illustration — the preflight had been shipped, reviewed
+and gated once before anyone asked what `"02"` would do, and the answer was a
+silent drop with a clean bill of health. The same search done again would
+probably find more.
+
+## The snapshot is proven immune, not proven race-free
+
+The synchronous evidence is direct: after `prepareSaveJob()` returns, mutating
+the caller's object — a field, an added annotation, an added page — changes
+nothing the writer will read.
+
+The interleaving evidence is weaker. One probe mutates the caller's object while
+a save is in flight, and that save **refuses**, because the mutation landed
+before `prepareSaveJob()` ran. That is one of the two permitted outcomes and it
+is the one this timing produces; it is not a survey of every interleaving. What
+makes the property hold is structural — there is exactly one entry point, and it
+copies before anything else happens — rather than something these probes
+enumerate.
+
+## The form-unreadable fixture breaks the form one way
+
+`/Fields` holding a number. Real files fail form inspection for many other
+reasons — a broken cross-reference into the field tree, a cyclic `/Kids`, a
+field dictionary missing `/FT`. The refusal is keyed on the inspection throwing
+at all, not on that particular malformation, but only that one has been run.
 
 ## What was deliberately not attempted
 

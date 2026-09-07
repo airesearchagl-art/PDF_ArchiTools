@@ -21,7 +21,7 @@ import {
   saveBaseline, saveOverlay, saveVector, saveHybrid,
   renderAnnotations, renderOverlayCanvas, splitForHybrid, unsupportedForVector,
   planComposition, paintedBounds, assessSource, preflight,
-  MAX_RASTER_PIXELS, checkRasterBudget, unsupportedGlyphs,
+  MAX_RASTER_PIXELS, checkRasterBudget, unsupportedGlyphs, prepareSaveJob,
 } from '/research/m3-annotator-vector-save/prototype/save.mjs';
 import {
   inspectStructure, inspectRendered, initOpsNames, verdict,
@@ -63,6 +63,17 @@ async function font() {
 const openPdfjs = (bytes) => pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
 
 const font_ = () => font();
+
+/** prepareSaveJob's refusal, as a list, so a probe can read it either way. */
+function prepareSaveJobProblems(objects, pageCount) {
+  try {
+    prepareSaveJob(objects, pageCount);
+    return [];
+  } catch (error) {
+    return (error.problems ?? [{ message: String(error.message ?? error) }])
+      .map((p) => `${p.page}/${p.id ?? '-'}: ${p.message}`);
+  }
+}
 
 /** Which characters the embedded font cannot draw. */
 async function page_missingGlyphs(text, fontBytes) {
@@ -1047,17 +1058,121 @@ Object.assign(window.__m3, {
         return `refused: ${String(error.message ?? error).slice(0, 40)}`;
       }
     };
+    // The line itself, to the pixel. `at()` squares a side, so the exact cases
+    // are built from integer dimensions that multiply to the bound exactly.
+    const atExact = (w, h) => {
+      try {
+        checkRasterBudget({ width: w, height: h }, 1, { page: 1 });
+        return 'accepted';
+      } catch (error) {
+        return `refused: ${String(error.message ?? error).slice(0, 40)}`;
+      }
+    };
     out.edges = {
       justUnder: at(MAX_RASTER_PIXELS - 40000),
       justOver: at(MAX_RASTER_PIXELS + 40000),
+      maxMinusOne: atExact(MAX_RASTER_PIXELS - 1, 1),
+      maxExactly: atExact(MAX_RASTER_PIXELS, 1),
+      maxPlusOne: atExact(MAX_RASTER_PIXELS + 1, 1),
     };
     return out;
   },
 
   /** Which source documents this design will and will not write. */
+  /**
+   * The page key a job is validated under, and the one it is written under.
+   *
+   * `Number("02")` is 2, an integer, in range -- so it passed every preflight
+   * check. The writers resolve a page with `objects[i + 1]`, which stringifies
+   * to "2" and finds nothing there. Validated as page 2, written as no page at
+   * all: the silent drop the preflight exists to stop, wearing a passing
+   * preflight. Four spellings of the same number probe it.
+   */
+  async canonicalPageKeys() {
+    const annotation = () => sampleAnnotations().filter((o) => o.type === 'stroke' && !o.isEraser).slice(0, 1);
+    const out = {};
+
+    for (const key of ['02', '2e0', '+2', ' 2', '2']) {
+      const objects = { [key]: annotation() };
+      const coerced = Number(key);
+      const row = {
+        coercesToInteger: Number.isInteger(coerced) && coerced >= 1,
+        // What the old writers would have found under this key.
+        writerWouldFind: Array.isArray(objects[2]) ? objects[2].length : 0,
+        problems: prepareSaveJobProblems(objects, 3),
+      };
+      try {
+        const r = await runCandidate('hybrid', (await fixtureBytes('native')).slice(), objects);
+        // For the canonical control, confirm the mark actually reached the page.
+        row.produced = r.bytes.length;
+        row.ops = r.ops;
+      } catch (error) {
+        row.refused = String(error.message ?? error);
+      }
+      out[key] = row;
+    }
+    return out;
+  },
+
+  /**
+   * What happens to the caller's object between the check and the write.
+   *
+   * Validating one object and writing from it later leaves a window: whatever
+   * the caller mutates in it is what actually gets written, and the bytes then
+   * correspond to no validated state at all. The snapshot closes it.
+   */
+  async snapshotMutation() {
+    const objects = {
+      1: [{
+        id: 'stroke-a', type: 'stroke', color: '#FF0000', lineWidth: 4, opacity: 1,
+        points: [{ x: 60, y: 60 }, { x: 200, y: 200 }],
+      }],
+    };
+
+    const job = prepareSaveJob(objects, 3);
+    const before = JSON.stringify(job.forPage(1));
+
+    // Every way a caller could reach in afterwards.
+    objects[1][0].lineWidth = 999;
+    objects[1][0].points[0].x = NaN;
+    objects[1].push({ id: 'sneaked-in', type: 'sticker' });
+    objects[4] = [{ id: 'off-page', type: 'stroke' }];
+
+    const after = JSON.stringify(job.forPage(1));
+
+    // And the same thing through an actual save.
+    const objects2 = {
+      1: [{
+        id: 'stroke-b', type: 'stroke', color: '#0000FF', lineWidth: 4, opacity: 1,
+        points: [{ x: 60, y: 60 }, { x: 200, y: 200 }],
+      }],
+    };
+    const bytes = (await fixtureBytes('native')).slice();
+    const saving = runCandidate('hybrid', bytes, objects2);
+    objects2[1][0].lineWidth = NaN;          // would be refused if read now
+    objects2[1].push({ id: 'late', type: 'sticker' });  // would be refused too
+    let saveOutcome;
+    try {
+      const r = await saving;
+      saveOutcome = { produced: r.bytes.length, ops: r.ops };
+    } catch (error) {
+      saveOutcome = { refused: String(error.message ?? error) };
+    }
+
+    return {
+      snapshotUnchanged: before === after,
+      snapshotLineWidth: job.forPage(1)[0].lineWidth,
+      callerLineWidth: objects[1][0].lineWidth,
+      snapshotCount: job.forPage(1).length,
+      callerCount: objects[1].length,
+      pageAddedAfterwards: job.forPage(4).length,
+      save: saveOutcome,
+    };
+  },
+
   async supportBoundary() {
     const out = {};
-    for (const name of ['native', 'signed', 'damaged', 'features']) {
+    for (const name of ['native', 'signed', 'damaged', 'features', 'unreadable-form']) {
       const bytes = await fixtureBytes(name);
       let verdict;
       try {

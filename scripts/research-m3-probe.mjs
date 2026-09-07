@@ -272,6 +272,25 @@ try {
     }
     write('preflight.json', pre);
 
+    // ---- the page key a job is validated under -------------------------------
+    console.log('\n=== the page key validated, and the page key written ===');
+    const keys = await page.evaluate(() => window.__m3.canonicalPageKeys());
+    for (const [key, r] of Object.entries(keys)) {
+        const outcome = r.refused ? `refused: ${r.refused.slice(0, 52)}` : `saved ${r.produced}B, ${r.ops} ops`;
+        console.log(`  ${JSON.stringify(key).padEnd(7)} Number()->int ${String(r.coercesToInteger).padEnd(5)}`
+            + `  old writer would find ${r.writerWouldFind}   ${outcome}`);
+    }
+    write('page-keys.json', keys);
+
+    console.log('\n=== the caller mutates the job after it is checked ===');
+    const snap = await page.evaluate(() => window.__m3.snapshotMutation());
+    console.log(`  snapshot unchanged by caller mutation: ${snap.snapshotUnchanged}`);
+    console.log(`  line width  snapshot ${snap.snapshotLineWidth}  caller ${snap.callerLineWidth}`);
+    console.log(`  objects     snapshot ${snap.snapshotCount}  caller ${snap.callerCount}`
+        + `   page added afterwards: ${snap.pageAddedAfterwards}`);
+    console.log(`  save during mutation: ${snap.save.refused ? `refused: ${snap.save.refused.slice(0, 60)}` : `${snap.save.produced}B`}`);
+    write('snapshot.json', snap);
+
     console.log('\n=== a character the embedded font cannot draw ===');
     const glyph = await page.evaluate(() => window.__m3.glyphCoverage());
     console.log(`  missing glyphs: ${glyph.missing.join(' ') || 'none'}`);

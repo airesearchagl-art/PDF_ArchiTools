@@ -437,8 +437,18 @@ export function preflight(objectsByPage, pageCount) {
     const at = (page, id, message) => problems.push({ page, id, message });
 
     for (const [key, list] of Object.entries(objectsByPage ?? {})) {
+        // `Number(key)` is not enough, and the gap it leaves is the exact bug
+        // this preflight exists to close. "02", "2e0", "+2" and " 2" all
+        // convert to the integer 2 and would pass every check below -- while
+        // the writers read `objects[i + 1]`, which stringifies to "2" and finds
+        // nothing. Validated as page 2, written as no page at all: a silent
+        // drop, wearing a passing preflight.
+        //
+        // So the key is required to be the canonical decimal form of its own
+        // number. Normalising instead would also close it, but for the MVP a
+        // caller producing "02" has a bug of its own and should hear about it.
         const page = Number(key);
-        if (!Number.isInteger(page)) {
+        if (!Number.isInteger(page) || String(page) !== key) {
             at(key, null, `ページ番号が整数ではありません: ${JSON.stringify(key)}`);
             continue;
         }
@@ -507,8 +517,28 @@ export function preflight(objectsByPage, pageCount) {
     return problems;
 }
 
-/** Throw unless every annotation is one this design will write. */
-function requireValid(objectsByPage, pageCount) {
+/**
+ * Validate, normalise and snapshot the job, as one boundary.
+ *
+ * Validating and then writing from the caller's object leaves two seams, and
+ * both leak:
+ *
+ * 1. **Identity.** Preflight resolved a page key with `Number()`; the writers
+ *    resolve it with `objects[i + 1]`, which stringifies. Those two agree on
+ *    "2" and disagree on "02" -- so a job could be validated against a page the
+ *    writer then never visits. Checked as page 2, written as nothing.
+ * 2. **Time.** Whatever the caller mutates between the check and the write is
+ *    what actually gets written. The bytes would then correspond to no
+ *    validated state at all.
+ *
+ * A snapshot closes both: page keys are resolved once, into a `Map` keyed by
+ * number so there is no string coercion left to disagree about, and the
+ * annotations are deep-copied so later mutation of the caller's object cannot
+ * reach the writer. Writers take the snapshot and never see `objectsByPage`.
+ *
+ * Returns a frozen job; throws with `.problems` if anything is unwritable.
+ */
+export function prepareSaveJob(objectsByPage, pageCount) {
     const problems = preflight(objectsByPage, pageCount);
     if (problems.length > 0) {
         const first = problems[0];
@@ -518,6 +548,24 @@ function requireValid(objectsByPage, pageCount) {
         error.problems = problems;
         throw error;
     }
+
+    // Deep copy, so the thing validated is the thing written. structuredClone
+    // is available in every runtime this design targets; the JSON round-trip is
+    // the fallback and is equivalent for this plain-data model.
+    const copy = typeof structuredClone === 'function'
+        ? (v) => structuredClone(v)
+        : (v) => JSON.parse(JSON.stringify(v));
+
+    const pages = new Map();
+    for (const [key, list] of Object.entries(objectsByPage ?? {})) {
+        pages.set(Number(key), Object.freeze(copy(list)));
+    }
+    return Object.freeze({
+        pageCount,
+        pages,
+        /** The only way a writer asks what is on a page. */
+        forPage: (n) => pages.get(n) ?? [],
+    });
 }
 
 /**
@@ -808,13 +856,13 @@ export async function saveOverlay({
 }) {
     const started = performance.now();
     const doc = await requireSupported(PDFDocument, sourceBytes);
-    requireValid(objects, doc.getPageCount());
+    const job = prepareSaveJob(objects, doc.getPageCount());
     const pages = doc.getPages();
     let maxPixels = 0;
     let overlays = 0;
 
     for (let i = 0; i < pages.length; i++) {
-        const list = objects[i + 1] ?? [];
+        const list = job.forPage(i + 1);
         if (skipEmptyPages && list.length === 0) continue;
 
         const page = pages[i];
@@ -976,7 +1024,7 @@ export async function saveVector({
 }) {
     const started = performance.now();
     const doc = await requireSupported(PDFDocument, sourceBytes);
-    requireValid(objects, doc.getPageCount());
+    const job = prepareSaveJob(objects, doc.getPageCount());
     doc.registerFontkit(fontkit);
     // The app's fontFamily is a CSS family name and cannot be resolved to a
     // file; a document font is embedded instead, and the substitution is
@@ -986,7 +1034,7 @@ export async function saveVector({
 
     const refused = [];
     for (let i = 0; i < pages.length; i++) {
-        const list = objects[i + 1] ?? [];
+        const list = job.forPage(i + 1);
         for (const r of unsupportedForVector(list)) {
             refused.push({ page: i + 1, ...r });
         }
@@ -1013,7 +1061,7 @@ export async function saveVector({
 
     let ops = 0;
     for (let i = 0; i < pages.length; i++) {
-        const list = objects[i + 1] ?? [];
+        const list = job.forPage(i + 1);
         if (list.length === 0) continue;
         const map = pageMapper(pages[i]);
         for (const obj of list) ops += drawObjectVector(pages[i], obj, map, { font, rgb });
@@ -1035,7 +1083,7 @@ export async function saveHybrid({
 }) {
     const started = performance.now();
     const doc = await requireSupported(PDFDocument, sourceBytes);
-    requireValid(objects, doc.getPageCount());
+    const job = prepareSaveJob(objects, doc.getPageCount());
     doc.registerFontkit(fontkit);
     const font = await doc.embedFont(fontBytes, { subset: true });
     const pages = doc.getPages();
@@ -1058,7 +1106,7 @@ export async function saveHybrid({
     };
 
     for (let i = 0; i < pages.length; i++) {
-        const list = objects[i + 1] ?? [];
+        const list = job.forPage(i + 1);
         if (list.length === 0) continue;
         const page = pages[i];
         const map = pageMapper(page);

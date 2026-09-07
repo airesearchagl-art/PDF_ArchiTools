@@ -128,6 +128,10 @@ So the boundary is checked before anything is written, and refuses by name:
 | damaged beyond reading | refused, after walking every page rather than trusting that a successful `load` means a usable file |
 | a form that cannot be inspected | refused -- not knowing whether there is a signature is not the same as there being none |
 
+Each of those refusals is exercised by a document that actually produces it —
+including the last, which needs a file that loads cleanly, walks its pages
+cleanly, and fails only when something reads the form. `measurements.md` 9.
+
 The last row is the one worth stating plainly, because the first version of this
 design got it backwards: it caught the inspection failure and carried on, which
 turns *we could not check* into *there is nothing to check*. A signature is also
@@ -149,8 +153,9 @@ Outlines and bookmarks are **unmeasured**, and nothing here claims they survive.
    assess the document -- signature, encryption, every page readable.
    an inspection that cannot complete refuses; it does not assume a pass
              |
-   preflight every annotation on every page, before writing anything.
-   one problem stops the whole save, so a refusal produces no bytes
+   prepareSaveJob() -- validate every annotation, require canonical page
+   keys, and take a frozen deep copy. one problem stops the whole save,
+   so a refusal produces no bytes. writers read only this snapshot
              |
    pdf-lib loads the document -- pages, text, vectors, images,
    annotations, form, metadata all stay as they are
@@ -240,13 +245,23 @@ that looks complete.
 **Whole** is the part that needs enforcing rather than stating. Validating each
 object as it is written is not fail-closed: by the time the fourth object is
 rejected, three are already in the document. So the entire job is checked before
-a single operator is emitted, and one problem stops all of it. The conditions:
+a single operator is emitted, and one problem stops all of it.
+
+And the thing checked must be the thing written. Validating the caller's object
+and then writing from it leaves two seams — the check and the write can disagree
+about *which page* a key names, and about *what* is on it a moment later — so
+validation, normalisation and a frozen snapshot are one boundary,
+`prepareSaveJob()`, and the writers see nothing else. `### The job is a
+snapshot` below.
+
+The conditions:
 
 | | |
 | --- | --- |
 | an unsupported annotation type or measure subtype | refused |
 | a coordinate, line width, font size or opacity that is not a sensible finite number | refused |
 | a page index the document does not have, or one that is not an integer | refused |
+| a page key that is not the canonical decimal form of its own number (`"02"`, `"2e0"`, `"+2"`, `" 2"`) | refused |
 | a source document that failed to load, or could not be assessed | refused |
 | a raster fragment over `MAX_RASTER_PIXELS` (8,000,000) | refused |
 | a font that cannot be embedded | refused |
@@ -264,6 +279,33 @@ The glyph row is the exception, and deliberately so. A missing glyph is not a
 malformed input — it is something operators cannot express, like the eraser, so
 it takes the eraser's route rather than stopping the save. What it must not do
 is write `.notdef` and report success.
+
+### The job is a snapshot
+
+A page key reaches the writers twice: once as something preflight resolves, once
+as something a writer looks up. If those two resolutions can disagree, the
+preflight is validating a different job from the one being written — and they
+did. `Number("02")` is the integer 2 and passed every check; `objects[2]`
+stringifies to `"2"` and found nothing there. Validated as page 2, written as no
+page at all, with a clean preflight on top of it.
+
+There is a second, quieter version of the same problem: whatever the caller
+mutates between the check and the write is what gets written.
+
+So both are removed rather than guarded. `prepareSaveJob()` is the only entry:
+
+```
+caller's objectsByPage
+   -> validate every annotation, and require each page key to be the
+      canonical decimal form of its own number
+   -> resolve keys once, into a Map keyed by number
+   -> deep copy the annotations, freeze the result
+   -> writers receive the job; the caller's object is never read again
+```
+
+A non-canonical key is **refused** rather than normalised. Normalising would
+close the identity gap equally well, and for the MVP a caller emitting `"02"`
+has a bug worth hearing about rather than absorbing.
 
 ### How large a raster fragment may be
 

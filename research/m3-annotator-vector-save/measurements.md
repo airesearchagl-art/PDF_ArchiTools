@@ -320,6 +320,8 @@ the REVISE in `decision-matrix.md` is about.
 | `native.pdf` | supported | 1,115,994 bytes |
 | `signed.pdf` | **refused** — `signed` | `電子署名付きPDFは、保存すると署名が無効になるため、現在は処理できません。` |
 | `damaged.pdf` | **refused** — `unreadable` | refused before anything is written |
+| `unreadable-form.pdf` | **refused** — `form-unreadable` | refused before anything is written |
+| `features.pdf` (2 ordinary form fields) | supported | 1,117,436 bytes |
 
 Every candidate re-serialises the document, which invalidates a signature over
 it. Producing that file and reporting success is the worst kind of preservation
@@ -361,6 +363,42 @@ The refusal names the document rather than an internal property:
 A document with an ordinary AcroForm is still accepted — `features.pdf`, two
 form fields, saves normally — so this is not a blanket refusal of forms.
 
+### The path needed a document that actually fires it
+
+The first version of this evidence did not have one. The probe read
+`signed.pdf`'s refusal code and accepted any of `form-unreadable`, `signed`,
+`unreadable` or `encrypted` — and `signed.pdf` returns `signed`, so the check
+passed without the form-unreadable path ever running. Code with no document to
+exercise it is not evidence that the code works.
+
+`unreadable-form.pdf` is built for it, and has to satisfy three conditions in
+order:
+
+| | must |
+| --- | --- |
+| `PDFDocument.load` | **succeed** — otherwise it refuses as `unreadable` and proves nothing |
+| walking every page's boxes | **succeed** — same |
+| inspecting the AcroForm | **fail** — the condition under test |
+
+An `/AcroForm` whose `/Fields` array holds a number instead of a field
+dictionary does exactly that: the file parses, the page tree is intact, and
+pdf-lib throws `Expected instance of PDFDict, but got instance of PDFNumber` the
+moment anything walks the fields.
+
+| | result |
+| --- | --- |
+| `assessSource` | `supported: false`, `code: form-unreadable` |
+| the page-readable check | passes — this is not the damaged path in disguise |
+| `saveHybrid` | **refused, no output bytes** |
+| the message | 電子署名の有無を確認できないため保存しない旨。raw exception ではない |
+
+The four boundary conditions now fire on four different documents —
+`signed` / `unreadable` / `form-unreadable`, against two accepted controls — so
+none of them is standing in for another.
+
+**The gate was checked against itself here.** Restoring the old
+`catch { /* swallow */ }` makes this probe fail.
+
 Making it fail closed had an immediate benefit beyond the measurement: the
 `catch {}` had also been swallowing a real `ReferenceError` in the inspection
 code, which surfaced the moment the swallow was removed. A silent catch hides
@@ -376,10 +414,10 @@ once, at the 2x scale the design uses:
 
 | | largest raster | live RGBA | runtime | output |
 | --- | --- | --- | --- | --- |
-| baseline (today) | 32.14 Mpx | 129 MB | 368 ms | 441 KB |
+| baseline (today) | 32.14 Mpx | 129 MB | 428 ms | 441 KB |
 | A, whole-page overlay | 32.14 Mpx needed | 129 MB | — | **refused** |
 | B, vector only | — | — | — | refused (pixel eraser) |
-| C, hybrid | **0.19 Mpx** | 0.8 MB | 47 ms | 1114 KB |
+| C, hybrid | **0.19 Mpx** | 0.8 MB | 44 ms | 1114 KB |
 
 A's refusal is new, and it is the fragment ceiling of section 12 applied to A's
 own design rather than a failure of the measurement:
@@ -545,9 +583,17 @@ calculate the painted bounds of the run
 ```
 
 Ordering is the point. Checking after `canvas.width = ...` means the allocation
-being guarded against has already happened. Verified from both sides on the
-arithmetic alone: `MAX_RASTER_PIXELS - 40000` accepted, `+ 40000` refused. A
-bound only ever tested from below is not a bound.
+being guarded against has already happened. Verified on the arithmetic alone,
+to the pixel:
+
+| | result |
+| --- | --- |
+| `MAX_RASTER_PIXELS - 1` | accepted |
+| `MAX_RASTER_PIXELS` exactly | **accepted** — the bound is inclusive, and says so |
+| `MAX_RASTER_PIXELS + 1` | **refused** |
+
+A bound only ever tested from below is not a bound, and one tested only at
+±40,000 does not say where the line is.
 
 The refusal names the page and the size the fragment would have needed —
 `page 1, 3460x2560` — because "too large" with no number is not actionable.
@@ -563,9 +609,60 @@ meaningless:
 
 The consequence for candidate A is section 10.
 
-## 18. The gate
+## 18. The page key a job is validated under
 
-`scripts/research-m3-gate.mjs` re-asserts **145 claims, 48 of them negative
+Section 15's preflight closed the silent-drop path and left one open, in the
+same shape.
+
+Preflight resolved a page key with `Number(key)`. The writers resolved one with
+`objects[i + 1]`, which stringifies. Those two agree on `"2"` and disagree on
+every other spelling of the same number:
+
+| key | `Number(key)` | integer? | in range? | preflight | what `objects[2]` finds |
+| --- | --- | --- | --- | --- | --- |
+| `"2"` | 2 | yes | yes | pass | the annotation |
+| `"02"` | 2 | yes | yes | **pass** | **nothing** |
+| `"2e0"` | 2 | yes | yes | **pass** | **nothing** |
+| `"+2"` | 2 | yes | yes | **pass** | **nothing** |
+| `" 2"` | 2 | yes | yes | **pass** | **nothing** |
+
+A job validated against page 2 and written against no page. The file comes back
+complete, the preflight comes back clean, and the mark is gone — which is
+exactly what section 15 exists to prevent.
+
+Fixing it as a stricter key check alone would leave the second seam: whatever
+the caller mutates between the check and the write is what gets written, so the
+bytes would correspond to no validated state.
+
+Both are closed at one boundary. `prepareSaveJob()` validates, requires each key
+to be the canonical decimal form of its own number, resolves keys once into a
+`Map` keyed by number, deep-copies the annotations, and returns a frozen job.
+Writers take the job and never see the caller's object.
+
+| | result |
+| --- | --- |
+| `"02"`, `"2e0"`, `"+2"`, `" 2"` | **refused**, no output bytes |
+| `"2"` (control) | saved, 1107202 bytes, 12 operators — the mark reaches the page |
+| caller mutates a field after the check | snapshot line width 4, caller's 999 |
+| caller pushes an object in afterwards | snapshot holds 1, caller holds 2 |
+| caller adds a whole page afterwards | not in the snapshot |
+| a save racing a mutation | **refused**, no bytes |
+
+The last row is one of the two outcomes the design permits — write the validated
+snapshot, or detect the mutation and refuse. What it must never do is write
+content that was never validated, and it does not.
+
+Normalising `"02"` to page 2 would close the identity gap just as well. Refusing
+is chosen for the MVP because a caller emitting `"02"` has a bug, and accepting
+it quietly hides that.
+
+**The gate was checked against itself here.** Reverting the canonical-key check
+makes all four probes fail with `IT PRODUCED 1107202 BYTES` — a saved file with
+the annotation dropped, which is the defect in its original form.
+
+## 19. The gate
+
+`scripts/research-m3-gate.mjs` re-asserts **165 claims, 56 of them negative
 probes** — including the unusual one that the current save path must *fail*
 preservation. A comparison in which every candidate passes proves nothing about
 any of them.
