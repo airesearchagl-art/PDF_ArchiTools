@@ -35,6 +35,39 @@ export type {
     TableReconstructOptions, TableSource, TableStatus, TableToken,
 } from './table-types';
 
+// The drawing register: one row per page, four title-block fields, confirmed
+// by a person before anything can be exported. Separate from the table work
+// above -- it shares the coordinate space and the workbook writer, and nothing
+// else.
+export {
+    displayValue, emptyRow, buildRow, findDuplicates, annotateRegister,
+    reviewSurface, attentionQueue, confirmRow, invalidateRow, exportReadiness,
+    registerGrid, registerFileName, registerSummary, buildRegisterWorkbook,
+    REGISTER_COLUMNS, REGISTER_SHEET_NAME,
+} from './drawing-register';
+export type { FieldExtraction, ExportReadiness } from './drawing-register';
+export {
+    REGISTER_FIELDS, FIELD_LABELS, TRANSFER_MODEL_LABELS, REVIEW_REASONS, LOW_OCR_SCORE,
+} from './drawing-register-types';
+export type {
+    RegisterFieldName, TransferModel, FieldSource, TemplateProfile, PageAssignment,
+    RegisterField, RegisterRow, ReviewEntry, RowStatus, RowExtraction,
+    ConfirmationRecord, ExtractionStats, RegisterExtractionResult,
+} from './drawing-register-types';
+export {
+    createProfile, missingFields, transferRect, applyProfile, unionRect,
+    AssignmentSet, parsePageRange,
+} from './drawing-register-template';
+export type { UprightPage } from './drawing-register-template';
+export {
+    analyseRegisterPage, tokensToRawText, renderRegion, releaseRegion, REGISTER_DPI,
+} from './drawing-register-geometry';
+export type { RegisterPageGeometry, RenderedRegion } from './drawing-register-geometry';
+export { RegisterOcrEngine, wordsToRawText, REGISTER_PAGE_SEG_MODE } from './drawing-register-ocr';
+export type { RecognisedField, RegionRecognition } from './drawing-register-ocr';
+export { extractRegister, reExtractPage } from './drawing-register-extract';
+export type { ExtractOptions } from './drawing-register-extract';
+
 /** Report only what preprocessing actually did, not the internals of how. */
 export function summarise(prep: OcrPreprocessResult): PagePreprocessInfo {
     return {

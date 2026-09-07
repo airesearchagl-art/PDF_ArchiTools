@@ -87,14 +87,38 @@ function canvasToDataUrl(canvas: HTMLCanvasElement): string {
  * Created lazily, because a document with no scanned pages should never pay for
  * loading several megabytes of WASM and language data.
  */
+export interface OcrEngineOptions {
+    /**
+     * Tesseract page segmentation mode, as a Tesseract parameter value.
+     *
+     * Left undefined by default, and that default is load-bearing: the OCR
+     * pipeline and the text-extraction pipeline have always passed no
+     * parameters at all, so libtesseract's own default applies. Setting one
+     * here globally would change what every existing caller gets out of a
+     * scanned page, which is not a change any of them asked for.
+     *
+     * The drawing register does ask for one -- a title-block field is a single
+     * block of text and says so -- and it gets its own engine instance, and
+     * therefore its own worker, so the parameter never reaches the pipelines
+     * that did not request it.
+     */
+    pageSegMode?: string;
+}
+
 export class OcrEngine {
     private worker: TesseractWorker | null = null;
     private readonly langs: string;
     private readonly onPageProgress?: (progress: number) => void;
+    private readonly pageSegMode?: string;
 
-    constructor(langs: string, onPageProgress?: (progress: number) => void) {
+    constructor(
+        langs: string,
+        onPageProgress?: (progress: number) => void,
+        options: OcrEngineOptions = {},
+    ) {
         this.langs = langs;
         this.onPageProgress = onPageProgress;
+        this.pageSegMode = options.pageSegMode;
     }
 
     get started(): boolean {
@@ -150,8 +174,20 @@ export class OcrEngine {
         });
 
         try {
+            // No segmentation mode configured means an empty parameter bag --
+            // byte for byte what this call has always sent. Only an engine
+            // constructed with one sends anything here.
+            //
+            // The cast is needed because tesseract.js forwards keys it does not
+            // recognise straight to SetVariable, which is how a segmentation
+            // mode gets set at all, while its published type for this argument
+            // does not describe that. It is confined to this one call.
+            const params = (this.pageSegMode === undefined
+                ? {}
+                : { tessedit_pageseg_mode: this.pageSegMode }
+            ) as Parameters<TesseractWorker['recognize']>[1];
             const { data } = await Promise.race([
-                this.worker.recognize(image, {}, { blocks: true, text: true }),
+                this.worker.recognize(image, params, { blocks: true, text: true }),
                 timeout,
             ]);
             const words = flattenWords(data.blocks as RecognisedBlock[] | null);

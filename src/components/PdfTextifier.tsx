@@ -7,6 +7,7 @@ import { Upload, FileText, Check, Download, Loader, Settings, ArrowRight, AlertT
 import { renderPageToCanvas } from '../utils/pdfDiff';
 
 import { ExcelTableExporter } from './ExcelTableExporter';
+import { DrawingRegisterExporter } from './DrawingRegisterExporter';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
 import { textifyPdf, extractTextPdf, buildWordDocument, WORD_MIME, TextifyError, configurePdfWorker, preprocessSkipNotice } from '../utils/pdf-textifier';
@@ -19,7 +20,7 @@ interface TextifierOptions {
     deskew: boolean;
     noiseReduction: boolean;
     mode: Mode;
-    outputFormat: 'pdf' | 'txt' | 'word' | 'excel';
+    outputFormat: 'pdf' | 'txt' | 'word' | 'excel' | 'drawing-register';
 }
 
 /**
@@ -314,6 +315,7 @@ export const PdfTextifier: React.FC = () => {
      * screen where nothing has been produced yet.
      */
     const isExcel = options.mode === 'extract' && options.outputFormat === 'excel';
+    const isRegister = options.mode === 'extract' && options.outputFormat === 'drawing-register';
 
     const ocrPages = result?.pages.filter((p) => p.kind === 'scanned') ?? [];
     const recognisedWords = ocrPages.reduce((sum, p) => sum + p.ocrWords, 0);
@@ -448,6 +450,11 @@ export const PdfTextifier: React.FC = () => {
                                                 output of the same run, so it is offered only
                                                 where it can actually be produced. */}
                                             <option value="excel">Excel (.xlsx)</option>
+                                            {/* A different workflow again: one row per
+                                                sheet from the title block, not a table
+                                                out of one page. Named so the two are not
+                                                mistaken for each other. */}
+                                            <option value="drawing-register">図面一覧（Excel）</option>
                                         </>}
                                 </select>
                             </div>
@@ -459,8 +466,13 @@ export const PdfTextifier: React.FC = () => {
                         <ExcelTableExporter file={file} doc={previewPdf} />
                     )}
 
+                    {/* 3b. Drawing register: profile, assign, review every row, export. */}
+                    {file && previewPdf && isRegister && (
+                        <DrawingRegisterExporter file={file} doc={previewPdf} />
+                    )}
+
                     {/* 3. Action Section */}
-                    {file && !result && !isExcel && (
+                    {file && !result && !isExcel && !isRegister && (
                         <div style={{ textAlign: 'center' }}>
                             <button
                                 data-usage-target="textifier-run"
@@ -549,7 +561,7 @@ export const PdfTextifier: React.FC = () => {
                     )}
 
                     {/* 4. Result Section */}
-                    {result && !isExcel && (
+                    {result && !isExcel && !isRegister && (
                         <div style={{ textAlign: 'center', animation: 'fadeIn 0.5s ease' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '60px', height: '60px', borderRadius: '50%', background: '#dffff0', color: '#00c853', marginBottom: '15px' }}>
                                 <Check size={32} />

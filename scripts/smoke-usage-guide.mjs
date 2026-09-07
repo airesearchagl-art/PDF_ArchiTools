@@ -194,7 +194,7 @@ try {
     });
     console.log(`  ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.3.0', versions.processor === '1.3.0', JSON.stringify(versions));
-    check('PDFテキスト化 shows v1.6.0', versions.textifier === '1.6.0', JSON.stringify(versions));
+    check('PDFテキスト化 shows v1.7.0', versions.textifier === '1.7.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
     // ---- content, read from the panel it belongs to ---------------------------

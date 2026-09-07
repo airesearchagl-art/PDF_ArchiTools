@@ -113,7 +113,20 @@ export function isContentToken(text: string): boolean {
     return text.trim() !== '';
 }
 
-async function readTokens(page: PDFPageProxy, viewport: pdfjsLib.PageViewport): Promise<TableToken[]> {
+/**
+ * Every text run on a page, in upright space, whatever the page is made of.
+ *
+ * Exported because the drawing register needs the same tokens under a
+ * different policy. `analysePageGeometry` below deliberately refuses to hand
+ * back tokens for a page its classifier calls scanned -- correct for table
+ * reconstruction, where marginal text must never become a one-cell table. The
+ * register decides native-or-recognised per *field*, so it has to be able to
+ * see a drawing number stamped as vector text on an otherwise raster sheet.
+ *
+ * The alternative was a second copy of this transform maths. One reader with
+ * two callers can be wrong in one place; two readers drift.
+ */
+export async function readTokens(page: PDFPageProxy, viewport: pdfjsLib.PageViewport): Promise<TableToken[]> {
     const content = await page.getTextContent();
     const vt = Array.from(viewport.transform);
     const rotate = page.rotate ?? 0;

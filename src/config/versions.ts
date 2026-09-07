@@ -34,9 +34,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '図枠一括更新機能を追加'
     },
     textifier: {
-        version: '1.6.0',
-        lastUpdate: '2026/09/06',
-        changelog: '文字情報を持つPDFの表を範囲指定してExcel（.xlsx）へ書き出す機能を追加'
+        version: '1.7.0',
+        lastUpdate: '2026/09/07',
+        changelog: '表題欄の位置を指定して、1ページ1行の図面一覧をExcel（.xlsx）へ書き出す機能を追加'
     },
     splitMerge: {
         version: '1.1.1',
