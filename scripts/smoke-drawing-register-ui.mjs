@@ -283,26 +283,67 @@ try {
         afterDrop.revoked >= 1 && afterDrop.live === 0,
         `created ${afterDrop.created}, revoked ${afterDrop.revoked}, live ${afterDrop.live}`);
 
-    // Deleting a profile must unconfirm everything built with it.
+    // Changing the arrangement must not leave the old reading behind for
+    // somebody to confirm a second time.
     await confirmPage(1);
     await page.evaluate(() => {
         const section = document.querySelector('[data-usage-target="drawing-register-export"]');
         [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Excel')).click();
     });
     await page.waitForSelector('.dr-download', { timeout: 60000 });
+    const confirmedBefore = (await rowStatuses()).filter((r) => r.status === 'confirmed').length;
+    check('every row is confirmed and a workbook exists before the change',
+        confirmedBefore === 15 && await page.$('.dr-download') !== null,
+        `${confirmedBefore} confirmed`);
+
+    // Reassign a page to nothing by deleting the profile it belongs to.
     await page.evaluate(() => {
         const li = document.querySelector('.dr-profile-list li');
         [...li.querySelectorAll('button')].find((b) => b.textContent.trim() === '削除').click();
     });
-    await wait(150);
-    const afterProfileDelete = await rowStatuses();
-    probe('deleting the profile unconfirms every row built from it',
-        afterProfileDelete.every((r) => r.status === 'unconfirmed'),
-        `${afterProfileDelete.length} rows back to unconfirmed`);
-    check('and the workbook goes with it', await page.$('.dr-download') === null);
+    await wait(200);
+
+    probe('the old reading is discarded, not just unconfirmed',
+        await page.$('[data-usage-target="drawing-register-review"]') === null,
+        'there is no stale row left on screen to confirm again');
+    probe('so there is nothing to confirm',
+        (await rowStatuses()).length === 0,
+        'the review table is gone until the register is read again');
+    probe('and nothing to export',
+        await page.$('[data-usage-target="drawing-register-export"]') === null
+        && await page.$('.dr-download') === null,
+        'the export section goes with the rows');
     const afterProfile = await page.evaluate(() => ({ ...window.__urls, live: window.__urls.live.size }));
     check('no object URL is left live', afterProfile.live === 0,
         `created ${afterProfile.created}, revoked ${afterProfile.revoked}`);
+
+    // Reading again is the only way back, and it starts from unconfirmed.
+    await page.evaluate(() => {
+        const button = [...document.querySelectorAll('.dr-field')].length;
+        return button;
+    });
+    for (const name of fieldOrder) {
+        await page.evaluate((label) => {
+            const button = [...document.querySelectorAll('.dr-field')]
+                .find((b) => b.textContent.includes(label));
+            button.click();
+        }, { drawing_number: '図面番号', drawing_title: '図面名称', revision: '版', revision_date: '日付' }[name]);
+        await dragField(regions[name]);
+    }
+    await page.type('.dr-profile-form input[type="text"]', 'A: 表題欄（再作成）');
+    await clickByText('プロファイルを保存');
+    await page.waitForSelector('[data-usage-target="drawing-register-assign"]');
+    await page.type('.dr-assign-form input[type="text"]', assignable.join(', '));
+    await clickByText('割り当て');
+    await wait(80);
+    await clickByText('図面一覧を読み取る');
+    await page.waitForSelector('[data-usage-target="drawing-register-review"]', { timeout: 180000 });
+    const afterReextract = await rowStatuses();
+    check('reading again gives a full register of unconfirmed rows',
+        afterReextract.length === 15 && afterReextract.every((r) => r.status === 'unconfirmed'),
+        `${afterReextract.length} rows, all unconfirmed`);
+    check('and the export is blocked until they are confirmed again',
+        (await exportEnabled()) === false);
 
     console.log('\n=== leaving, and coming back ===');
     // Switching format unmounts the workflow.

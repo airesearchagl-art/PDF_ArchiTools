@@ -41,10 +41,11 @@ function emptyField(): RegisterField {
     return { rawText: '', value: '', source: 'none', ocrScore: null, wordCount: null, reviewReasons: [] };
 }
 
-export function emptyRow(pageNumber: number): RegisterRow {
+export function emptyRow(pageNumber: number, sourceRevision = 0): RegisterRow {
     return {
         pageNumber,
         profileId: null,
+        sourceRevision,
         fields: Object.fromEntries(REGISTER_FIELDS.map((name) => [name, emptyField()])) as Record<RegisterFieldName, RegisterField>,
         reviewReasons: [],
         reviewStatus: 'unconfirmed',
@@ -83,14 +84,15 @@ export function buildRow(options: {
     profileAssigned?: boolean;
     fields?: Partial<Record<RegisterFieldName, FieldExtraction>>;
     ocrFailed?: boolean;
+    sourceRevision?: number;
     deriveValue?: (rawText: string) => string;
 }): RegisterRow {
     const {
         pageNumber, profileId = null, profileAssigned = true,
-        fields = {}, ocrFailed = false, deriveValue = displayValue,
+        fields = {}, ocrFailed = false, sourceRevision = 0, deriveValue = displayValue,
     } = options;
 
-    const row = emptyRow(pageNumber);
+    const row = emptyRow(pageNumber, sourceRevision);
     row.profileId = profileId;
 
     if (!profileAssigned) {
@@ -245,43 +247,101 @@ export interface ExportReadiness {
     confirmedCount: number;
     unconfirmedPages: number[];
     missingPages: number[];
+    /** Page numbers carried by more than one row. */
+    duplicatePages: number[];
+    /** Page numbers that are not a whole number in 1..pageCount. */
+    outOfRangePages: number[];
+    /** Rows read under an arrangement that is no longer current. */
+    stalePages: number[];
     reason: string | null;
 }
 
 /**
  * Whether this register may be exported.
  *
- * The rule is `confirmed rows === PDF pages`, and it is checked here rather
- * than only in the UI. A disabled button is a suggestion; a caller that
- * reaches the export function directly must get the same answer, or the gate
- * is decoration.
+ * The rule is stronger than "nothing is missing and everything is confirmed",
+ * because that pair is satisfiable by a register that is also wrong. A register
+ * holding two rows for page 3, or a row for page 0, or an extra row past the
+ * end of the document, can contain every page and be entirely confirmed --
+ * and the workbook that comes out of it is a document list nobody can trust,
+ * with a sheet counted twice or a sheet that does not exist.
+ *
+ * So what is checked is a bijection: exactly one row per page of the PDF, each
+ * page number a whole number inside the document, each appearing once, every
+ * one of them confirmed, and every one read under the current arrangement of
+ * profiles and assignments.
+ *
+ * It is checked here rather than only in the UI. A disabled button is a
+ * suggestion; this is the rule, and a caller arriving by any other route gets
+ * the same answer.
  */
-export function exportReadiness(rows: RegisterRow[], pageCount: number): ExportReadiness {
-    const byPage = new Map(rows.map((row) => [row.pageNumber, row]));
+export function exportReadiness(
+    rows: RegisterRow[], pageCount: number, sourceRevision?: number,
+): ExportReadiness {
+    const seen = new Map<number, number>();
+    const outOfRangePages: number[] = [];
+    for (const row of rows) {
+        const page = row.pageNumber;
+        if (!Number.isInteger(page) || page < 1 || page > pageCount) {
+            outOfRangePages.push(page);
+            continue;
+        }
+        seen.set(page, (seen.get(page) ?? 0) + 1);
+    }
+
     const missingPages: number[] = [];
     for (let page = 1; page <= pageCount; page++) {
-        if (!byPage.has(page)) missingPages.push(page);
+        if (!seen.has(page)) missingPages.push(page);
     }
+    const duplicatePages = [...seen.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([page]) => page)
+        .sort((a, b) => a - b);
+
     const unconfirmedPages = rows
         .filter((row) => row.reviewStatus !== 'confirmed')
         .map((row) => row.pageNumber)
         .sort((a, b) => a - b);
+    const stalePages = sourceRevision === undefined
+        ? []
+        : rows.filter((row) => row.sourceRevision !== sourceRevision)
+            .map((row) => row.pageNumber)
+            .sort((a, b) => a - b);
     const confirmedCount = rows.length - unconfirmedPages.length;
 
+    const list = (pages: number[]) =>
+        `${pages.slice(0, 5).join(', ')}${pages.length > 5 ? ' ほか' : ''}`;
+
     let reason: string | null = null;
-    if (missingPages.length > 0) {
-        reason = `${missingPages.length}ページ分の行がありません（ページ ${missingPages.slice(0, 5).join(', ')}${missingPages.length > 5 ? ' ほか' : ''}）`;
+    if (pageCount < 1) {
+        reason = 'ページがありません。';
+    } else if (outOfRangePages.length > 0) {
+        reason = `この文書にないページの行があります（${list(outOfRangePages)}）`;
+    } else if (duplicatePages.length > 0) {
+        reason = `同じページの行が重複しています（ページ ${list(duplicatePages)}）`;
+    } else if (missingPages.length > 0) {
+        reason = `${missingPages.length}ページ分の行がありません（ページ ${list(missingPages)}）`;
+    } else if (rows.length !== pageCount) {
+        // Belt and braces. With the three checks above satisfied this cannot
+        // differ -- and if it ever does, the register is not what it claims and
+        // the export stops rather than guessing which reading is right.
+        reason = `行数（${rows.length}）がページ数（${pageCount}）と一致しません。`;
+    } else if (stalePages.length > 0) {
+        reason = `プロファイルまたは割り当ての変更後、読み取り直していない行があります（ページ ${list(stalePages)}）`;
     } else if (unconfirmedPages.length > 0) {
-        reason = `未確認の行が${unconfirmedPages.length}件あります（ページ ${unconfirmedPages.slice(0, 5).join(', ')}${unconfirmedPages.length > 5 ? ' ほか' : ''}）`;
+        reason = `未確認の行が${unconfirmedPages.length}件あります（ページ ${list(unconfirmedPages)}）`;
     }
 
     return {
-        ready: reason === null && pageCount > 0,
+        ready: reason === null,
         pageCount,
         rowCount: rows.length,
         confirmedCount,
         unconfirmedPages,
         missingPages,
+        duplicatePages,
+        outOfRangePages,
+        stalePages,
         reason,
     };
 }
@@ -326,9 +386,11 @@ export function registerFileName(sourceName: string): string {
  * this function by any other route gets the same answer.
  */
 export async function buildRegisterWorkbook(
-    rows: RegisterRow[], pageCount: number, options: { shouldCancel?: () => boolean } = {},
+    rows: RegisterRow[],
+    pageCount: number,
+    options: { shouldCancel?: () => boolean; sourceRevision?: number } = {},
 ): Promise<WorkbookResult> {
-    const readiness = exportReadiness(rows, pageCount);
+    const readiness = exportReadiness(rows, pageCount, options.sourceRevision);
     if (!readiness.ready) {
         throw new Error(readiness.reason ?? '確認済みの行がありません。');
     }

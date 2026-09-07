@@ -65,7 +65,7 @@ export {
 export type { RegisterPageGeometry, RenderedRegion } from './drawing-register-geometry';
 export { RegisterOcrEngine, wordsToRawText, REGISTER_PAGE_SEG_MODE } from './drawing-register-ocr';
 export type { RecognisedField, RegionRecognition } from './drawing-register-ocr';
-export { extractRegister, reExtractPage } from './drawing-register-extract';
+export { extractRegister } from './drawing-register-extract';
 export type { ExtractOptions } from './drawing-register-extract';
 
 /** Report only what preprocessing actually did, not the internals of how. */

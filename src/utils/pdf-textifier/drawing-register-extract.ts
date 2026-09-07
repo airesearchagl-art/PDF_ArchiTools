@@ -30,6 +30,13 @@ export interface ExtractOptions {
     profiles: Map<string, TemplateProfile>;
     assignments: AssignmentSet;
     ocr: RegisterOcrEngine;
+    /**
+     * The arrangement of profiles and assignments these rows are read under.
+     *
+     * Stamped onto every row, so a register can be told apart from the one that
+     * would be produced now. See `RegisterRow.sourceRevision`.
+     */
+    sourceRevision?: number;
     dpi?: number;
     /** Polled between pages; true abandons the run without publishing. */
     shouldCancel?: () => boolean;
@@ -43,7 +50,10 @@ export interface ExtractOptions {
  * an abandoned run from a failed one and publish neither.
  */
 export async function extractRegister(options: ExtractOptions): Promise<RegisterExtractionResult> {
-    const { doc, profiles, assignments, ocr, dpi, shouldCancel = () => false, onProgress } = options;
+    const {
+        doc, profiles, assignments, ocr, dpi, sourceRevision = 0,
+        shouldCancel = () => false, onProgress,
+    } = options;
     const started = Date.now();
     const total = doc.numPages;
     const rows: RegisterRow[] = [];
@@ -63,7 +73,7 @@ export async function extractRegister(options: ExtractOptions): Promise<Register
         // page is not run through some other template that happens to exist.
         if (!profile) {
             stats.unassignedPages += 1;
-            rows.push(buildRow({ pageNumber, profileAssigned: false }));
+            rows.push(buildRow({ pageNumber, profileAssigned: false, sourceRevision }));
             continue;
         }
         stats.assignedPages += 1;
@@ -116,76 +126,9 @@ export async function extractRegister(options: ExtractOptions): Promise<Register
         }
 
         if (shouldCancel()) throw new Error('cancelled');
-        rows.push(buildRow({ pageNumber, profileId: profile.id, fields, ocrFailed }));
+        rows.push(buildRow({ pageNumber, profileId: profile.id, fields, ocrFailed, sourceRevision }));
     }
 
     stats.ms = Date.now() - started;
-    return { rows: annotateRegister(rows), stats };
-}
-
-/**
- * Re-read one page, for a retry a person asked for.
- *
- * Returns a *new candidate*. It does not write over the existing row: the
- * caller shows both and lets the user decide, because a retry that silently
- * replaces a value the user was looking at is indistinguishable from the value
- * having been wrong all along.
- */
-export async function reExtractPage(options: {
-    doc: PDFDocumentProxy;
-    pageNumber: number;
-    profile: TemplateProfile;
-    ocr: RegisterOcrEngine;
-    dpi?: number;
-    /** Recognise each field on its own instead of one pass over the block. */
-    perField?: boolean;
-}): Promise<{ row: RegisterRow; pixels: number; calls: number }> {
-    const { doc, pageNumber, profile, ocr, dpi, perField = false } = options;
-    const geometry = await analyseRegisterPage(doc, pageNumber);
-    const regions = applyProfile(profile, geometry);
-
-    const fields: Partial<Record<RegisterFieldName, FieldExtraction>> = {};
-    const needsOcr: Partial<Record<RegisterFieldName, SelectionRect>> = {};
-    for (const name of REGISTER_FIELDS) {
-        const rawText = tokensToRawText(geometry.tokens, regions[name]);
-        if (rawText !== '') fields[name] = { rawText, source: 'native' };
-        else needsOcr[name] = regions[name];
-    }
-
-    let pixels = 0;
-    let calls = 0;
-    let ocrFailed = false;
-    if (Object.keys(needsOcr).length > 0) {
-        const page = await doc.getPage(pageNumber);
-        try {
-            await ocr.start();
-            const run = perField
-                ? await ocr.recogniseFieldsSeparately(page, needsOcr, { dpi })
-                : await ocr.recogniseFields(page, needsOcr, { dpi });
-            pixels = run.pixels;
-            calls = run.calls;
-            for (const name of Object.keys(needsOcr) as RegisterFieldName[]) {
-                const found = run.fields[name];
-                fields[name] = {
-                    rawText: found?.rawText ?? '',
-                    source: 'ocr',
-                    ocrScore: found?.score ?? null,
-                    wordCount: found?.wordCount ?? null,
-                };
-            }
-        } catch {
-            ocrFailed = true;
-            for (const name of Object.keys(needsOcr) as RegisterFieldName[]) {
-                fields[name] = { rawText: '', source: 'none' };
-            }
-        } finally {
-            page.cleanup();
-        }
-    }
-
-    return {
-        row: buildRow({ pageNumber, profileId: profile.id, fields, ocrFailed }),
-        pixels,
-        calls,
-    };
+    return { rows: annotateRegister(rows), stats, sourceRevision };
 }

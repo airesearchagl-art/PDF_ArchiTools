@@ -8,10 +8,11 @@
  * produce anything the union path cannot. Words are attributed by where they
  * are, so each field still gets its own text, word count and score.
  *
- * A per-field pass is kept available, but only as something a person asks for.
- * There is no threshold at which this module switches to it on its own,
- * because no such threshold has been measured, and inventing one would mean
- * quietly changing how a page was read on the strength of a guess.
+ * Recognising each field separately is not offered. It measured no better, and
+ * there is no threshold at which switching would be justified -- none has been
+ * measured. A fallback that fires on a guess changes how a page was read for
+ * reasons nobody can inspect, so rather than ship an unused capability and
+ * describe it as available, this release does not have one.
  */
 
 import type * as pdfjsLib from 'pdfjs-dist';
@@ -71,8 +72,24 @@ export class RegisterOcrEngine {
         return this.engine?.started === true;
     }
 
+    /**
+     * Make sure there is a live worker, replacing a dead one.
+     *
+     * The condition is `started`, not "an engine object exists". A recognition
+     * that stalls is fatal: `OcrEngine` tears its worker down, because there is
+     * no way to abort one in flight. The wrapper survives that, so a check for
+     * the wrapper would return happily and every page after the first stall
+     * would fail against a worker that is not there -- one bad page turning
+     * into a whole register of empty rows.
+     */
     async start(): Promise<void> {
-        if (this.engine) return;
+        if (this.engine?.started) return;
+        if (this.engine) {
+            // Terminating a torn-down engine is a no-op; this is here for the
+            // case where it is alive but unusable.
+            await this.engine.terminate().catch(() => { /* already gone */ });
+            this.engine = null;
+        }
         const engine = new OcrEngine(this.langs, undefined, {
             pageSegMode: REGISTER_PAGE_SEG_MODE,
         });
@@ -88,7 +105,7 @@ export class RegisterOcrEngine {
     }
 
     private require(): OcrEngine {
-        if (!this.engine) throw new Error('文字認識エンジンが起動していません。');
+        if (!this.engine?.started) throw new Error('文字認識エンジンが起動していません。');
         return this.engine;
     }
 
@@ -103,7 +120,7 @@ export class RegisterOcrEngine {
     async recogniseFields(
         page: pdfjsLib.PDFPageProxy,
         rects: Partial<Record<RegisterFieldName, SelectionRect>>,
-        options: { dpi?: number; rotation?: number } = {},
+        options: { dpi?: number; rotation?: number; timeoutMs?: number } = {},
     ): Promise<RegionRecognition> {
         const entries = Object.entries(rects) as [RegisterFieldName, SelectionRect][];
         if (entries.length === 0) {
@@ -113,6 +130,7 @@ export class RegisterOcrEngine {
         const union = unionRect(entries.map(([, rect]) => rect));
         if (!union) return { fields: {}, unplaced: [], pixels: 0, ms: 0, calls: 0 };
 
+        await this.start();
         const started = performance.now();
         const region = await renderRegion(page, union, {
             dpi: options.dpi ?? REGISTER_DPI,
@@ -120,7 +138,9 @@ export class RegisterOcrEngine {
         });
         let output;
         try {
-            output = await this.require().recognisePage(region.canvas);
+            output = options.timeoutMs === undefined
+                ? await this.require().recognisePage(region.canvas)
+                : await this.require().recognisePage(region.canvas, options.timeoutMs);
         } finally {
             releaseRegion(region.canvas);
         }
@@ -157,44 +177,6 @@ export class RegisterOcrEngine {
         };
     }
 
-    /**
-     * Recognise each field on its own.
-     *
-     * Offered only where a person has asked for it after seeing the union
-     * result. It is not a fallback this module chooses: there is no measured
-     * rule for when one is better, and switching on a guess would change the
-     * reading of a page for reasons nobody could inspect.
-     */
-    async recogniseFieldsSeparately(
-        page: pdfjsLib.PDFPageProxy,
-        rects: Partial<Record<RegisterFieldName, SelectionRect>>,
-        options: { dpi?: number } = {},
-    ): Promise<RegionRecognition> {
-        const entries = Object.entries(rects) as [RegisterFieldName, SelectionRect][];
-        const fields: Partial<Record<RegisterFieldName, RecognisedField>> = {};
-        const started = performance.now();
-        let pixels = 0;
-        let calls = 0;
-
-        for (const [name, rect] of entries) {
-            const region = await renderRegion(page, rect, { dpi: options.dpi ?? REGISTER_DPI });
-            pixels += region.pixels;
-            let output;
-            try {
-                output = await this.require().recognisePage(region.canvas);
-                calls += 1;
-            } finally {
-                releaseRegion(region.canvas);
-            }
-            fields[name] = {
-                rawText: wordsToRawText(output.words),
-                wordCount: output.words.length,
-                score: output.meanConfidence,
-            };
-        }
-
-        return { fields, unplaced: [], pixels, ms: Math.round(performance.now() - started), calls };
-    }
 }
 
 /**

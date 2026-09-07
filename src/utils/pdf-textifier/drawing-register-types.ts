@@ -159,6 +159,20 @@ export interface RegisterRow {
     pageNumber: number;
     /** Null when no profile covers this page. The row still exists. */
     profileId: string | null;
+    /**
+     * Which set of profiles and assignments this row was read under.
+     *
+     * A row is only meaningful against the arrangement that produced it. Change
+     * a profile's rectangles, move a page to another profile, delete a profile
+     * -- and the values in every row read under the old arrangement describe
+     * something that no longer exists. Taking the confirmation off is not
+     * enough, because the stale values are still sitting there to be confirmed
+     * again.
+     *
+     * So the arrangement carries a number, the row records it, and the export
+     * refuses a register whose rows were not all read under the current one.
+     */
+    sourceRevision: number;
     fields: Record<RegisterFieldName, RegisterField>;
     /** Reasons that concern the row rather than one field. */
     reviewReasons: string[];
@@ -190,4 +204,6 @@ export interface ExtractionStats {
 export interface RegisterExtractionResult {
     rows: RegisterRow[];
     stats: ExtractionStats;
+    /** The arrangement these rows were read under. */
+    sourceRevision: number;
 }

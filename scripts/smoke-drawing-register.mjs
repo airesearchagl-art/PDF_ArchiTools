@@ -285,6 +285,52 @@ try {
     check('confirmation leaves the raw text alone',
         exp.rawAfterConfirm === '図面番号\n001', JSON.stringify(exp.rawAfterConfirm));
 
+    console.log('\n=== a complete, confirmed register that is still wrong ===');
+    const shape = await page.evaluate(() => window.__register.exportShapeChecks());
+    check('the control case does produce a workbook',
+        shape.control.ready === true && shape.control.bytes > 0,
+        `${shape.control.bytes} bytes`);
+    for (const [key, label] of [
+        ['duplicate', 'two rows for the same page'],
+        ['pageZero', 'a row for page 0'],
+        ['pastEnd', 'a row past the last page'],
+        ['extraConfirmed', 'an extra confirmed row on top of every page'],
+        ['duplicateNoMissingCount', 'a duplicate standing in for a missing page'],
+        ['fractional', 'a page number that is not a whole number'],
+    ]) {
+        const result = shape[key];
+        probe(`${label} produces no workbook`,
+            result.ready === false && result.bytes === null && typeof result.refused === 'string',
+            result.bytes === null ? (result.reason ?? result.refused) : `IT RETURNED ${result.bytes} BYTES`);
+    }
+
+    console.log('\n=== rows read under an arrangement that has since changed ===');
+    const stale = await page.evaluate(() => window.__register.staleRevisionChecks());
+    check('a register checked against the arrangement it was read under is ready',
+        stale.sameRevision.ready === true && stale.sameRevision.stale.length === 0);
+    probe('the same rows are refused once the arrangement moves on',
+        stale.movedRevision.ready === false && stale.movedRevision.stale.length === 2,
+        stale.movedRevision.reason);
+    probe('and the export function refuses them too',
+        typeof stale.refused === 'string', stale.refused || 'IT RETURNED A WORKBOOK');
+    probe('confirming a stale row again does not make it exportable',
+        stale.afterReconfirm.ready === false && stale.afterReconfirm.stale.length === 2,
+        `rows still stamped ${stale.revisionOnRows.join(', ')}`);
+
+    console.log('\n=== a stalled recognition does not poison the rest of the run ===');
+    const scannedPage = truth.pages.find((p) => p.kind === 'scanned' && p.rotate === 0).page;
+    const recovery = await page.evaluate((n) => window.__register.workerRecovery(n), scannedPage);
+    check('the engine starts', recovery.startedBefore === true);
+    probe('a recognition that cannot finish in time fails fatally',
+        typeof recovery.fatal === 'string', recovery.fatal || 'IT DID NOT FAIL');
+    probe('and takes the worker down with it',
+        recovery.startedAfterFatal === false,
+        'there is no way to abort a recognition in flight, so the worker goes');
+    check('the next recognition builds a new worker without being asked',
+        recovery.startedAfterRecovery === true);
+    check('and reads the page it was given',
+        recovery.recoveredHits >= 3, `${recovery.recoveredHits}/${recovery.of} fields after recovery`);
+
     console.log('\n=== the workbook ===');
     const header = exp.grid[0];
     check('the sheet has the register columns',

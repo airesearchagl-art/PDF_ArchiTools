@@ -57,6 +57,9 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
     const [assignmentVersion, setAssignmentVersion] = useState(0);
 
     const [rows, setRows] = useState<RegisterRow[] | null>(null);
+    // Bumped whenever the profiles or the assignments change. Rows carry the
+    // number they were read under, and the export refuses any that do not match.
+    const [sourceRevision, setSourceRevision] = useState(0);
     const [openPage, setOpenPage] = useState<number | null>(null);
     const [edits, setEdits] = useState<Partial<Record<RegisterFieldName, string>>>({});
     const [workbookUrl, setWorkbookUrl] = useState<string | null>(null);
@@ -99,17 +102,28 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
     }, []);
 
     /**
-     * Anything that changes what a row was built from unconfirms it.
+     * A change to the profiles or the assignments discards the whole reading.
      *
-     * "The screen shows the new value, the download holds the old one" is the
-     * failure this prevents, and it is silent, so the invalidation is loud: the
-     * workbook goes, and every affected row goes back to unconfirmed.
+     * Taking the confirmations off is not enough. The values would still be
+     * sitting there -- read through a template that has since moved, or a page
+     * that now belongs to a different profile -- ready to be confirmed a second
+     * time and exported. So the rows go, the revision moves on, and the
+     * register has to be read again.
+     *
+     * That is blunter than a partial recompute and it is the right size for
+     * this: "the screen shows the new arrangement, the file holds the old one"
+     * is a silent failure, and nothing here is expensive enough to justify
+     * risking it.
      */
-    const invalidateAll = useCallback((reason: string) => {
+    const invalidateArrangement = useCallback((reason: string) => {
+        extractGeneration.current++;
         workbookGeneration.current++;
+        setSourceRevision((r) => r + 1);
         dropWorkbook();
-        setRows((current) => (current ? current.map(invalidateRow) : current));
-        setStatus(reason);
+        setRows(null);
+        setOpenPage(null);
+        setEdits({});
+        setStatus(`${reason} もう一度読み取ってください。`);
     }, [dropWorkbook]);
 
     // A new document is a new everything.
@@ -130,6 +144,7 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
         setAssignProfileId('');
         setAssignRange('');
         setRows(null);
+        setSourceRevision(0);
         setOpenPage(null);
         setEdits({});
         setError(null);
@@ -280,8 +295,8 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
         setProfiles((current) => current.filter((p) => p.id !== profileId));
         setAssignmentVersion((v) => v + 1);
         if (assignProfileId === profileId) setAssignProfileId('');
-        invalidateAll(dropped.length > 0
-            ? `プロファイルを削除しました。${dropped.length}ページの割り当てが外れ、確認済みの行は未確認に戻りました。`
+        invalidateArrangement(dropped.length > 0
+            ? `プロファイルを削除しました。${dropped.length}ページの割り当てが外れました。`
             : 'プロファイルを削除しました。');
     };
 
@@ -297,7 +312,7 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
             assignmentsRef.current.reassign(pages, assignProfileId);
             setAssignmentVersion((v) => v + 1);
             setError(null);
-            invalidateAll(`${pages.length}ページを割り当て直しました。`);
+            invalidateArrangement(`${pages.length}ページを割り当て直しました。`);
             return;
         }
         const result = assignmentsRef.current.assign(pages, assignProfileId);
@@ -309,7 +324,7 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
             setError(null);
         }
         if (result.assigned.length > 0) {
-            invalidateAll(`${result.assigned.length}ページを割り当てました。`);
+            invalidateArrangement(`${result.assigned.length}ページを割り当てました。`);
         }
     };
 
@@ -338,6 +353,7 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
                 profiles: new Map(profiles.map((p) => [p.id, p])),
                 assignments: assignmentsRef.current,
                 ocr,
+                sourceRevision,
                 shouldCancel: stale,
                 onProgress: (n, total) => {
                     if (stale()) return;
@@ -362,8 +378,8 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
     const surface = useMemo(() => (rows ? reviewSurface(rows) : []), [rows]);
     const attention = useMemo(() => (rows ? attentionQueue(rows) : []), [rows]);
     const readiness = useMemo(
-        () => exportReadiness(rows ?? [], doc.numPages),
-        [rows, doc.numPages],
+        () => exportReadiness(rows ?? [], doc.numPages, sourceRevision),
+        [rows, doc.numPages, sourceRevision],
     );
 
     const openRow = rows?.find((row) => row.pageNumber === openPage) ?? null;
@@ -410,7 +426,9 @@ export const DrawingRegisterExporter: React.FC<Props> = ({ file, doc }) => {
         try {
             // The readiness check lives inside buildRegisterWorkbook too. A
             // disabled button is a suggestion; that check is the rule.
-            const result = await buildRegisterWorkbook(snapshot, doc.numPages, { shouldCancel: stale });
+            const result = await buildRegisterWorkbook(snapshot, doc.numPages, {
+                shouldCancel: stale, sourceRevision,
+            });
             if (stale()) return;
             const blob = new Blob([result.bytes as BlobPart], { type: XLSX_MIME });
             publishWorkbook(URL.createObjectURL(blob));

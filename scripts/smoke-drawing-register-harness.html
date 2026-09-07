@@ -16,7 +16,7 @@ import {
   configurePdfWorker,
   analyseRegisterPage, tokensToRawText, renderRegion, releaseRegion,
   createProfile, applyProfile, AssignmentSet, parsePageRange, missingFields,
-  RegisterOcrEngine, extractRegister, reExtractPage,
+  RegisterOcrEngine, extractRegister,
   buildRow, confirmRow, invalidateRow, reviewSurface, attentionQueue,
   exportReadiness, registerGrid, registerFileName, buildRegisterWorkbook,
   displayValue, findDuplicates, registerSummary,
@@ -332,6 +332,125 @@ window.__register = {
       missingWhenComplete: missingFields(pageTruth(1).regions),
       range: parsePageRange('1-3, 6, 99', doc.numPages),
     };
+  },
+
+  /**
+   * The export gate, fed registers that are complete and confirmed and still
+   * wrong. Each one must come back without bytes.
+   */
+  async exportShapeChecks() {
+    const pageCount = 3;
+    const good = (n) => confirmRow(buildRow({ pageNumber: n, fields: {
+      drawing_number: { rawText: `A-10${n}`, source: 'native' },
+      drawing_title: { rawText: 'PLAN', source: 'native' },
+      revision: { rawText: 'A', source: 'native' },
+      revision_date: { rawText: '2026.09.01', source: 'native' },
+    } }));
+    const complete = [good(1), good(2), good(3)];
+
+    const attempt = async (rows, label) => {
+      const readiness = exportReadiness(rows, pageCount);
+      let bytes = null;
+      let refused = null;
+      try {
+        const result = await buildRegisterWorkbook(rows, pageCount);
+        bytes = result.bytes.length;
+      } catch (error) {
+        refused = String(error.message ?? error);
+      }
+      return { label, ready: readiness.ready, reason: readiness.reason, bytes, refused };
+    };
+
+    return {
+      control: await attempt(complete, 'every page once, all confirmed'),
+      duplicate: await attempt([...complete, good(2)], 'a second row for page 2'),
+      pageZero: await attempt([good(0), good(1), good(2), good(3)], 'a row for page 0'),
+      pastEnd: await attempt([...complete, good(pageCount + 1)], 'a row past the last page'),
+      extraConfirmed: await attempt([...complete, good(2)], 'N pages plus one extra confirmed row'),
+      // Missing page 3, with page 2 present twice: the count matches and every
+      // expected page is "covered" only if duplicates are allowed to stand in.
+      duplicateNoMissingCount: await attempt([good(1), good(2), good(2)], 'duplicate covering a missing page'),
+      fractional: await attempt([good(1), good(2), { ...good(3), pageNumber: 2.5 }], 'a fractional page number'),
+    };
+  },
+
+  /** A register read under one arrangement, checked against another. */
+  async staleRevisionChecks() {
+    const pageCount = 2;
+    const rows = [1, 2].map((n) => confirmRow(buildRow({
+      pageNumber: n, sourceRevision: 1,
+      fields: { drawing_number: { rawText: `A-10${n}`, source: 'native' } },
+    })));
+
+    const same = exportReadiness(rows, pageCount, 1);
+    const moved = exportReadiness(rows, pageCount, 2);
+    let refused = null;
+    try {
+      await buildRegisterWorkbook(rows, pageCount, { sourceRevision: 2 });
+    } catch (error) {
+      refused = String(error.message ?? error);
+    }
+    // Confirming a stale row again does not rescue it: the stamp travels with
+    // the row, so a second confirmation is still a confirmation of old values.
+    const reconfirmed = rows.map((row) => confirmRow(row));
+    const afterReconfirm = exportReadiness(reconfirmed, pageCount, 2);
+
+    return {
+      sameRevision: { ready: same.ready, stale: same.stalePages },
+      movedRevision: { ready: moved.ready, stale: moved.stalePages, reason: moved.reason },
+      refused,
+      afterReconfirm: { ready: afterReconfirm.ready, stale: afterReconfirm.stalePages },
+      revisionOnRows: reconfirmed.map((r) => r.sourceRevision),
+    };
+  },
+
+  /**
+   * A recognition that stalls kills the worker. The next page must still be
+   * readable, which means the wrapper has to notice and build a new one.
+   */
+  async workerRecovery(pageNumber) {
+    const doc = await openDoc();
+    const g = await analyseRegisterPage(doc, pageNumber);
+    const profiles = await buildProfiles(doc);
+    const regions = applyProfile(profiles.A, g);
+    const page = await doc.getPage(pageNumber);
+    const ocr = new RegisterOcrEngine();
+    const want = pageTruth(pageNumber).values;
+    const hits = (run) => REGISTER_FIELDS.filter((f) => {
+      const expected = want[f] ?? '';
+      const got = run.fields[f]?.rawText ?? '';
+      return expected !== '' && got.replace(/\s+/gu, '').includes(expected.replace(/\s+/gu, ''));
+    }).length;
+
+    try {
+      await ocr.start();
+      const startedBefore = ocr.started;
+
+      // A one-millisecond bound: recognition cannot finish inside it, so this
+      // takes the same fatal path a genuinely stalled page would.
+      let fatal = null;
+      try {
+        await ocr.recogniseFields(page, regions, { timeoutMs: 1 });
+      } catch (error) {
+        fatal = String(error.message ?? error);
+      }
+      const startedAfterFatal = ocr.started;
+
+      // No explicit restart: the next call has to arrange its own worker, the
+      // way the extraction loop's next page would.
+      const recovered = await ocr.recogniseFields(page, regions);
+      return {
+        startedBefore,
+        fatal,
+        startedAfterFatal,
+        startedAfterRecovery: ocr.started,
+        recoveredHits: hits(recovered),
+        of: REGISTER_FIELDS.length,
+      };
+    } finally {
+      await ocr.terminate();
+      page.cleanup();
+    }
   },
 
   renders() {
