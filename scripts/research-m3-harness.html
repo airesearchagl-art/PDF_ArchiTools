@@ -20,7 +20,8 @@ import { sampleAnnotations, measureLabels } from '/research/m3-annotator-vector-
 import {
   saveBaseline, saveOverlay, saveVector, saveHybrid,
   renderAnnotations, renderOverlayCanvas, splitForHybrid, unsupportedForVector,
-  planComposition, paintedBounds, assessSource,
+  planComposition, paintedBounds, assessSource, preflight,
+  MAX_RASTER_PIXELS, checkRasterBudget, unsupportedGlyphs,
 } from '/research/m3-annotator-vector-save/prototype/save.mjs';
 import {
   inspectStructure, inspectRendered, initOpsNames, verdict,
@@ -60,6 +61,16 @@ async function font() {
 }
 
 const openPdfjs = (bytes) => pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+
+const font_ = () => font();
+
+/** Which characters the embedded font cannot draw. */
+async function page_missingGlyphs(text, fontBytes) {
+  const doc = await PDFDocument.create();
+  doc.registerFontkit(fontkit);
+  const embedded = await doc.embedFont(fontBytes, { subset: true });
+  return unsupportedGlyphs(embedded, text);
+}
 
 /** Annotations on every page of a fixture, except any page listed as bare. */
 function annotationsFor(pageCount, { bare = [] } = {}) {
@@ -881,10 +892,172 @@ Object.assign(window.__m3, {
     return { candidate, out };
   },
 
+  /**
+   * Annotations a save must refuse rather than quietly skip.
+   *
+   * Each case used to slip through: an unknown type hit a `return 0`, and an
+   * annotation filed against a page the document does not have was never
+   * looked at, because the writers loop over source pages. Both come back as a
+   * finished-looking file with a mark missing.
+   */
+  async preflightCases() {
+    const ok = () => sampleAnnotations().filter((o) => o.type === 'stroke' && !o.isEraser).slice(0, 1);
+    const cases = {
+      'unknown object type': { 1: [{ id: 'x', type: 'sticker', x: 10, y: 10 }] },
+      'invalid measure subtype': { 1: [{ id: 'm', type: 'measure', subtype: 'volume', points: [{ x: 1, y: 1 }, { x: 2, y: 2 }], color: '#000000', scale: { value: 1, unit: 'mm' }, opacity: 1 }] },
+      'NaN in a stroke': { 1: [{ id: 's', type: 'stroke', points: [{ x: NaN, y: 1 }, { x: 2, y: 2 }], color: '#000000', lineWidth: 2, opacity: 1 }] },
+      'NaN in a text position': { 1: [{ id: 't', type: 'text', x: NaN, y: 10, text: 'hi', fontSize: 12, fontFamily: 'Arial', color: '#000000', opacity: 1 }] },
+      'opacity out of range': { 1: [{ ...ok()[0], opacity: 4 }] },
+      'zero line width': { 1: [{ ...ok()[0], lineWidth: 0 }] },
+      'page 0': { 0: ok() },
+      'page N + 1': { 4: ok() },
+      'fractional page': { 2.5: ok() },
+    };
+
+    const out = {};
+    for (const [label, objects] of Object.entries(cases)) {
+      const problems = preflight(objects, 3);
+      const results = {};
+      for (const candidate of ['overlay', 'vector', 'hybrid']) {
+        try {
+          const r = await runCandidate(candidate, (await fixtureBytes('native')).slice(), objects);
+          results[candidate] = { produced: r.bytes.length };
+        } catch (error) {
+          results[candidate] = { refused: String(error.message ?? error) };
+        }
+      }
+      out[label] = { problems: problems.map((p) => `${p.page}/${p.id ?? '-'}: ${p.message}`), results };
+    }
+
+    // The control: a valid job must still go through.
+    const good = { 1: ok() };
+    out['a valid job'] = {
+      problems: preflight(good, 3),
+      results: Object.fromEntries(await Promise.all(['overlay', 'vector', 'hybrid'].map(async (c) => {
+        try {
+          const r = await runCandidate(c, (await fixtureBytes('native')).slice(), good);
+          return [c, { produced: r.bytes.length }];
+        } catch (error) {
+          return [c, { refused: String(error.message ?? error) }];
+        }
+      }))),
+    };
+    return out;
+  },
+
+  /**
+   * A character the embedded font has no glyph for.
+   *
+   * Not a structural error, so it is not a preflight rejection -- it is the
+   * same kind of problem as the pixel eraser, something operators cannot
+   * express. The vector-only candidate refuses; the hybrid sends that one text
+   * object to pixels and keeps going.
+   */
+  async glyphCoverage() {
+    const objects = { 1: [{
+      id: 'text-emoji', type: 'text', x: 90, y: 200,
+      text: 'OK \u2705 \uD83D\uDCD0 done', fontSize: 18, fontFamily: 'Arial',
+      color: '#000000', opacity: 1,
+    }] };
+
+    const font = await font_();
+    const missing = await page_missingGlyphs(objects[1][0].text, font);
+
+    const out = { missing };
+    for (const candidate of ['vector', 'hybrid']) {
+      try {
+        const r = await runCandidate(candidate, (await fixtureBytes('native')).slice(), objects);
+        const rendered = await inspectRendered(pdfjsLib, r.bytes.slice());
+        out[candidate] = {
+          produced: r.bytes.length,
+          rasteredForGlyphs: (r.rasteredForGlyphs ?? []).map((g) => g.id),
+          textExtracted: rendered.pages[0].text.includes('done'),
+        };
+      } catch (error) {
+        out[candidate] = { refused: String(error.message ?? error) };
+      }
+    }
+    return out;
+  },
+
+  /**
+   * How much a raster fragment costs, and where the ceiling should sit.
+   *
+   * Fragments of increasing size on the largest sheet, so the bound is chosen
+   * from this rather than borrowed from another feature.
+   */
+  async rasterBudget() {
+    // Chosen so that two of them straddle the proposed ceiling: the bound has
+    // to be justified by what it costs on either side of it, not by a round
+    // number.
+    const spans = [
+      ['small', 200, 150],
+      ['medium', 700, 500],
+      ['large', 1400, 1000],
+      ['just under the bound', 1700, 1100],
+      ['just over the bound', 1700, 1250],
+      ['whole A0 layer', 2380, 3360],
+    ];
+    const out = { limit: MAX_RASTER_PIXELS, rows: [] };
+
+    for (const [label, w, h] of spans) {
+      // A stroke and an eraser that between them span the requested area, so
+      // the planner puts exactly that region into one fragment.
+      const objects = { 1: [
+        { id: 'ink', type: 'stroke', color: '#FF0000', lineWidth: 6, opacity: 1,
+          points: [{ x: 20, y: 20 }, { x: 20 + w, y: 20 + h }] },
+        { id: 'eraser', type: 'stroke', color: '#ffffff', lineWidth: 20, opacity: 1, isEraser: true,
+          points: [{ x: 20 + w, y: 20 }, { x: 20, y: 20 + h }] },
+      ] };
+      const bounds = objects[1].map(paintedBounds);
+      const box = {
+        width: Math.max(...bounds.map((b) => b.maxX)) - Math.min(...bounds.map((b) => b.minX)) + 8,
+        height: Math.max(...bounds.map((b) => b.maxY)) - Math.min(...bounds.map((b) => b.minY)) + 8,
+      };
+      const predicted = Math.ceil(box.width * 2) * Math.ceil(box.height * 2);
+
+      const started = performance.now();
+      let result;
+      try {
+        const r = await runCandidate('hybrid', (await fixtureBytes('a0')).slice(), objects);
+        result = { produced: r.bytes.length, maxPixels: r.maxPixels, ms: r.ms };
+      } catch (error) {
+        result = {
+          refused: String(error.message ?? error),
+          budget: error.rasterBudget ?? null,
+        };
+      }
+      out.rows.push({
+        label,
+        span: { w, h },
+        predictedPixels: predicted,
+        predictedRgbaBytes: predicted * 4,
+        wallMs: Math.round(performance.now() - started),
+        ...result,
+      });
+    }
+
+    // The boundary itself, on the arithmetic rather than through a save.
+    const at = (pixels) => {
+      const side = Math.sqrt(pixels) / 2;
+      try {
+        checkRasterBudget({ width: side, height: side }, 2, { page: 1 });
+        return 'accepted';
+      } catch (error) {
+        return `refused: ${String(error.message ?? error).slice(0, 40)}`;
+      }
+    };
+    out.edges = {
+      justUnder: at(MAX_RASTER_PIXELS - 40000),
+      justOver: at(MAX_RASTER_PIXELS + 40000),
+    };
+    return out;
+  },
+
   /** Which source documents this design will and will not write. */
   async supportBoundary() {
     const out = {};
-    for (const name of ['native', 'signed', 'damaged']) {
+    for (const name of ['native', 'signed', 'damaged', 'features']) {
       const bytes = await fixtureBytes(name);
       let verdict;
       try {

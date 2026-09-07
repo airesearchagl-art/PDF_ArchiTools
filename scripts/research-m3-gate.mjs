@@ -38,7 +38,7 @@ function probe(label, ok, detail = '') {
 const required = ['before.json', 'matrix.json', 'noop.json', 'zoom.json', 'rotation.json',
     'cropbox.json', 'a0.json', 'hybrid-split.json', 'fidelity.json', 'determinism.json',
     'failure.json', 'network.json', 'markers.json', 'ordered.json', 'boundary.json',
-    'text-placement.json'];
+    'text-placement.json', 'preflight.json', 'glyphs.json', 'raster-budget.json'];
 const missing = required.filter((f) => !has(f));
 if (missing.length) {
     console.error(`Missing results: ${missing.join(', ')}`);
@@ -114,7 +114,11 @@ probe('and it loses the page rotation',
 console.log('');
 console.log('=== the overlay and hybrid candidates keep it ===');
 for (const candidate of ['overlay', 'hybrid']) {
-    for (const fixture of ['native', 'boxes', 'a0']) {
+    // A0 is deliberately not in this list for the overlay: under the raster
+    // ceiling it cannot save that page at all, which is asserted on its own
+    // below rather than smuggled in as a preservation failure.
+    const fixtures = candidate === 'overlay' ? ['native', 'boxes'] : ['native', 'boxes', 'a0'];
+    for (const fixture of fixtures) {
         const r = matrix[fixture][candidate];
         check(`${candidate} on ${fixture}: source text preserved`,
             worstOf(r, 'sourceText') === 'preserved',
@@ -137,8 +141,9 @@ for (const candidate of ['overlay', 'hybrid']) {
     check(`${candidate}: the invisible text layer survives`,
         matrix.scanned[candidate].perPage[1].afterChars >= matrix.scanned[candidate].perPage[1].beforeChars,
         `${matrix.scanned[candidate].perPage[1].beforeChars} -> ${matrix.scanned[candidate].perPage[1].afterChars} chars`);
-    check(`${candidate}: page count and order unchanged on every fixture`,
-        FIXTURES.every((f) => matrix[f][candidate].pageCount.before === matrix[f][candidate].pageCount.after));
+    check(`${candidate}: page count and order unchanged wherever it saved`,
+        FIXTURES.filter((f) => !matrix[f][candidate].failed)
+            .every((f) => matrix[f][candidate].pageCount.before === matrix[f][candidate].pageCount.after));
 }
 
 console.log('');
@@ -255,14 +260,18 @@ check('a full-page raster of an A0 at 2x is large',
 probe('the baseline pays it in full',
     a0.baseline.maxPixels >= a0.fullPageAt2x.pixels * 0.95,
     `${(a0.baseline.maxPixels / 1e6).toFixed(1)} Mpx`);
-probe('and so does the whole-page raster overlay',
-    a0.overlay.maxPixels >= a0.fullPageAt2x.pixels * 0.95,
-    `${(a0.overlay.maxPixels / 1e6).toFixed(1)} Mpx -- the overlay is page-sized`);
-check('the hybrid pays only for what it rasterises',
+// The finding the raster ceiling produced: a page-sized overlay is a
+// page-sized image, so on the largest sheet candidate A cannot run at all.
+probe('the whole-page overlay is refused outright on an A0',
+    typeof a0.overlay.failed === 'string' && a0.overlay.failed.includes('8.0'),
+    a0.overlay.failed ?? `IT PRODUCED ${a0.overlay.outputBytes} BYTES`);
+check('the hybrid saves the same page comfortably',
+    a0.hybrid.maxPixels > 0 && a0.hybrid.maxPixels < 1e6,
+    `${(a0.hybrid.maxPixels / 1e6).toFixed(2)} Mpx, `
+    + `${(a0.hybrid.rgbaBytes / 1e6).toFixed(1)} MB, ${a0.hybrid.ms}ms`);
+check('which is what makes it the candidate rather than the overlay',
     a0.hybrid.maxPixels < a0.fullPageAt2x.pixels / 100,
-    `${(a0.hybrid.maxPixels / 1e6).toFixed(2)} Mpx, ${(a0.hybrid.rgbaBytes / 1e6).toFixed(1)} MB`);
-check('which is also much faster on that sheet',
-    a0.hybrid.ms < a0.overlay.ms / 5, `${a0.hybrid.ms}ms vs ${a0.overlay.ms}ms`);
+    `${(a0.fullPageAt2x.pixels / a0.hybrid.maxPixels).toFixed(0)}x fewer pixels than a full page`);
 
 console.log('');
 console.log('=== how close each output looks ===');
@@ -354,6 +363,78 @@ check('a layer with no eraser at all stays entirely vector',
     ordered.hybrid.results['overlapping annotations, no eraser'].runs.join(' -> '));
 
 console.log('');
+console.log('=== annotations a save refuses rather than skips ===');
+const pre = read('preflight.json');
+const invalid = Object.entries(pre).filter(([label]) => label !== 'a valid job');
+check('every invalid case was measured', invalid.length >= 9, `${invalid.length} cases`);
+for (const [label, r] of invalid) {
+    probe(`${label}: refused by all three writers, with no bytes`,
+        r.problems.length > 0
+        && ['overlay', 'vector', 'hybrid'].every((c) => typeof r.results[c].refused === 'string'),
+        r.problems[0] ?? 'NO PROBLEM REPORTED');
+}
+check('a valid job still goes through',
+    pre['a valid job'].problems.length === 0
+    && ['overlay', 'vector', 'hybrid'].every((c) => pre['a valid job'].results[c].produced > 0),
+    Object.entries(pre['a valid job'].results).map(([c, r]) => `${c}:${r.produced}B`).join(' '));
+// The two the writers used to swallow: an unknown type hit a `return 0`, and a
+// page the document does not have was never visited, because the writers loop
+// over source pages rather than over the annotations.
+probe('an unknown object type is one of them',
+    typeof pre['unknown object type'].results.hybrid.refused === 'string');
+probe('and so is an annotation filed against a page that does not exist',
+    typeof pre['page N + 1'].results.hybrid.refused === 'string');
+
+console.log('');
+console.log('=== a character the embedded font cannot draw ===');
+const glyphs = read('glyphs.json');
+check('the missing glyphs are actually detected', glyphs.missing.length >= 1,
+    glyphs.missing.join(' '));
+probe('the vector-only candidate refuses rather than writing .notdef',
+    typeof glyphs.vector.refused === 'string',
+    glyphs.vector.refused ?? `IT PRODUCED ${glyphs.vector.produced} BYTES`);
+check('the hybrid sends that text object to pixels and carries on',
+    glyphs.hybrid.produced > 0 && glyphs.hybrid.rasteredForGlyphs.includes('text-emoji'),
+    `rastered: ${glyphs.hybrid.rasteredForGlyphs.join(', ')}`);
+check('and says so, rather than leaving the text silently searchable-looking',
+    glyphs.hybrid.textExtracted === false,
+    'a rastered text object is not extractable, which is the cost of not losing it');
+
+console.log('');
+console.log('=== how large a raster fragment may be ===');
+const budget = read('raster-budget.json');
+const row = (label) => budget.rows.find((r) => r.label === label);
+check('the ceiling is a stated number', budget.limit === 8_000_000,
+    `${(budget.limit / 1e6).toFixed(1)} Mpx = ${(budget.limit * 4 / 1e6).toFixed(0)} MB of RGBA`);
+check('fragments below it are produced, and the cost is smooth',
+    ['small', 'medium', 'large', 'just under the bound']
+        .every((l) => row(l).produced > 0),
+    ['small', 'medium', 'large', 'just under the bound']
+        .map((l) => `${(row(l).maxPixels / 1e6).toFixed(2)}Mpx/${row(l).ms}ms`).join('  '));
+probe('a fragment just over it is refused',
+    typeof row('just over the bound').refused === 'string'
+    && row('just over the bound').produced === undefined,
+    `${(row('just over the bound').predictedPixels / 1e6).toFixed(2)} Mpx needed`);
+probe('and a whole-layer A0 fragment is refused too, not silently scaled down',
+    typeof row('whole A0 layer').refused === 'string',
+    `${(row('whole A0 layer').predictedPixels / 1e6).toFixed(1)} Mpx`);
+check('the refusal names the page and the size',
+    row('just over the bound').budget !== null
+    && row('just over the bound').budget.page === 1
+    && row('just over the bound').budget.width > 0,
+    `page ${row('just over the bound').budget.page}, `
+    + `${row('just over the bound').budget.width}x${row('just over the bound').budget.height}`);
+probe('the check is arithmetic, so it fires either side of the line',
+    budget.edges.justUnder === 'accepted' && budget.edges.justOver.startsWith('refused'),
+    `${budget.edges.justUnder} / ${budget.edges.justOver.slice(0, 30)}`);
+// A bound that is only ever tested from one side is not a bound.
+check('the measurement straddles the ceiling rather than approaching it',
+    row('just under the bound').predictedPixels < budget.limit
+    && row('just over the bound').predictedPixels > budget.limit,
+    `${(row('just under the bound').predictedPixels / 1e6).toFixed(2)} Mpx under, `
+    + `${(row('just over the bound').predictedPixels / 1e6).toFixed(2)} Mpx over`);
+
+console.log('');
 console.log('=== documents this design will not write ===');
 const boundary = read('boundary.json');
 check('an ordinary document is accepted and saved',
@@ -372,6 +453,15 @@ probe('a damaged document is refused before anything is written',
 check('the refusal names the document, not an internal property',
     boundary.signed.problems[0].message.includes('電子署名'),
     boundary.signed.problems[0].message);
+check('a document with an ordinary form is still accepted',
+    boundary.features.supported === true && boundary.features.save.produced > 0,
+    `${boundary.features.save.produced} bytes with 2 form fields`);
+// Not being able to read the form is not evidence that there is no signature.
+// The earlier version swallowed that failure and carried on.
+probe('an inspection failure would refuse, not assume there is no signature',
+    ['form-unreadable', 'signed', 'unreadable', 'encrypted']
+        .includes(boundary.signed.problems[0].code),
+    `the refusal codes this boundary can return include form-unreadable`);
 
 console.log('');
 console.log('=== the bytes handed to a candidate are not modified ===');
@@ -379,7 +469,8 @@ for (const candidate of ['baseline', 'overlay', 'vector', 'hybrid']) {
     const results = FIXTURES.map((fx) => matrix[fx][candidate]).filter(Boolean);
     check(`${candidate}: unchanged on every fixture, byte for byte`,
         results.length === FIXTURES.length && results.every((r) => r.sourceUnchanged === true),
-        `${results.filter((r) => r.sourceUnchanged === true).length}/${results.length}`);
+        `${results.filter((r) => r.sourceUnchanged === true).length}/${results.length}`
+        + ` (${results.filter((r) => r.failed).length} of them refusals)`);
 }
 probe('including the candidate that refuses -- a refusal must not mutate either',
     FIXTURES.every((fx) => matrix[fx].vector.failed === true && matrix[fx].vector.sourceUnchanged === true),

@@ -261,6 +261,41 @@ try {
     }
     write('ordered.json', ordered);
 
+    // ---- annotations a save must refuse --------------------------------------
+    console.log('\n=== annotations a save must refuse, not skip ===');
+    const pre = await page.evaluate(() => window.__m3.preflightCases());
+    for (const [label, r] of Object.entries(pre)) {
+        const verdicts = ['overlay', 'vector', 'hybrid']
+            .map((c) => `${c}:${r.results[c].refused ? 'refused' : `${r.results[c].produced}B`}`)
+            .join('  ');
+        console.log(`  ${label.padEnd(26)} ${String(r.problems.length).padStart(2)} problem(s)   ${verdicts}`);
+    }
+    write('preflight.json', pre);
+
+    console.log('\n=== a character the embedded font cannot draw ===');
+    const glyph = await page.evaluate(() => window.__m3.glyphCoverage());
+    console.log(`  missing glyphs: ${glyph.missing.join(' ') || 'none'}`);
+    for (const c of ['vector', 'hybrid']) {
+        const r = glyph[c];
+        console.log(`  ${c.padEnd(9)} ${r.refused ? `refused  ${r.refused.slice(0, 70)}` : `produced ${r.produced}B, rastered ${r.rasteredForGlyphs.join(',') || 'nothing'}, text extractable ${r.textExtracted}`}`);
+    }
+    write('glyphs.json', glyph);
+
+    console.log('\n=== how large a raster fragment may be ===');
+    const budget = await page.evaluate(() => window.__m3.rasterBudget());
+    console.log(`  limit: ${(budget.limit / 1e6).toFixed(1)} Mpx (${(budget.limit * 4 / 1e6).toFixed(0)} MB of RGBA)`);
+    console.log('    span                 predicted    RGBA      result');
+    for (const r of budget.rows) {
+        const outcome = r.refused
+            ? `refused (${r.budget ? `${(r.budget.pixels / 1e6).toFixed(1)} Mpx needed` : 'no budget'})`
+            : `${(r.maxPixels / 1e6).toFixed(2)} Mpx, ${(r.produced / 1024).toFixed(0)} KB, ${r.ms}ms`;
+        console.log(`    ${r.label.padEnd(20)} ${(r.predictedPixels / 1e6).toFixed(2).padStart(6)} Mpx`
+            + ` ${(r.predictedRgbaBytes / 1e6).toFixed(0).padStart(5)} MB   ${outcome}`);
+    }
+    console.log(`  just under the limit: ${budget.edges.justUnder}`);
+    console.log(`  just over the limit:  ${budget.edges.justOver}`);
+    write('raster-budget.json', budget);
+
     // ---- RF-4: which documents this will not write ---------------------------
     console.log('\n=== documents this design refuses ===');
     const boundary = await page.evaluate(() => window.__m3.supportBoundary());

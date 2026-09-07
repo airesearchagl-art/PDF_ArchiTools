@@ -331,25 +331,77 @@ to return a document, and the save then failed in the middle with
 least useful thing to say. The assessment now walks every page and reads its
 boxes before anything is produced, and refuses with a reason.
 
+### Not being able to check is not a pass
+
+The first version of this assessment wrapped the form inspection in
+`catch { /* a form we cannot read is not evidence of a signature */ }` and
+carried on. The comment was true and the behaviour was the opposite of it: a
+document whose AcroForm cannot be read came back **supported**, which converts
+*we could not check* into *there is nothing to check*.
+
+| | before | now |
+| --- | --- | --- |
+| form inspection throws | swallowed, document accepted | **refused**, `form-unreadable` |
+| how a signature is recognised | constructor name only | constructor name, **`/FT /Sig` from the dictionary**, and **`/SigFlags`** |
+| pages inspected | first | **every page** |
+
+Reading `/FT` directly matters because a constructor name is a property of the
+library build, not of the document: a field that pdf-lib does not classify as a
+signature is still a signature if its dictionary says `/Sig`. `/SigFlags` on the
+AcroForm catches a document that declares signatures without an intact field
+list.
+
+The refusal names the document rather than an internal property:
+
+```
+このPDFのフォーム情報を読み取れなかったため、電子署名の有無を確認できませんでした。
+確認できない状態では保存しません。
+```
+
+A document with an ordinary AcroForm is still accepted — `features.pdf`, two
+form fields, saves normally — so this is not a blanket refusal of forms.
+
+Making it fail closed had an immediate benefit beyond the measurement: the
+`catch {}` had also been swallowing a real `ReferenceError` in the inspection
+code, which surfaced the moment the swallow was removed. A silent catch hides
+its own bugs as readily as the document's.
+
 **Encryption is unmeasured.** The refusal path exists in the code; nothing in
 the dependency set can write an encrypted PDF to test it against.
 
 ## 10. The largest sheet
 
-An A0 at the current capture scale of 2×:
+`a0.pdf`, one 2384x3370pt page. What each candidate has to hold in memory at
+once, at the 2x scale the design uses:
 
-| | max raster | RGBA | output | time |
+| | largest raster | live RGBA | runtime | output |
 | --- | --- | --- | --- | --- |
-| a full page at 2× | 32.14 Mpx | 129 MB | — | — |
-| **baseline** | 32.14 Mpx | 128.6 MB | 430 KB | 370 ms |
-| **overlay** | 32.14 Mpx | 128.6 MB | 1232 KB | 1386 ms |
-| vector | — | — | *refused* | — |
-| **hybrid** | **0.19 Mpx** | **0.8 MB** | 1088 KB | **28 ms** |
+| baseline (today) | 32.14 Mpx | 129 MB | 368 ms | 441 KB |
+| A, whole-page overlay | 32.14 Mpx needed | 129 MB | — | **refused** |
+| B, vector only | — | — | — | refused (pixel eraser) |
+| C, hybrid | **0.19 Mpx** | 0.8 MB | 47 ms | 1114 KB |
 
-The overlay preserves everything and still pays the whole page in pixels,
-because a page-sized transparent layer is a page-sized image. That is a real
-finding against the simplest preserving option, and the reason the hybrid earns
-its extra complexity: **169× fewer pixels and 49× faster** on the same sheet.
+A's refusal is new, and it is the fragment ceiling of section 12 applied to A's
+own design rather than a failure of the measurement:
+
+```
+ページ 1 の注釈を画像化するには 32.1 メガピクセル（4768x6741）が必要で、
+上限の 8.0 メガピクセルを超えます。
+```
+
+A's overlay is the size of the page by construction, so on the largest sheet the
+bound the architecture requires refuses the architecture's own fallback. C needs
+166x fewer pixels for the same annotations on the same page, because it
+rasterises the span an eraser reaches and nothing else.
+
+This is reported rather than engineered around. Raising the bound to admit it
+means admitting 129 MB of live RGBA — the cost this spike exists to stop paying.
+Falling back to a whole-page raster would destroy the vector source. Scaling
+down would blur the marks silently. The honest consequence is that A is not a
+candidate; see decision-matrix section 3.
+
+The baseline's number is the one to sit with: it pays 129 MB on every save
+today, and produces the smallest file, because it has thrown the drawing away.
 
 ## 11. The same input twice
 
@@ -399,9 +451,121 @@ to point at it — the Annotator simply does not call it.
 **Pre-existing production debt**, not introduced by this spike, and this is a
 research PR: reported here and left alone. See `decision-matrix.md`.
 
-## 14. The gate
+## 15. Annotations a save refuses rather than skips
 
-`scripts/research-m3-gate.mjs` re-asserts **121 claims, 32 of them negative
+Fail-closed was stated in the first revision and not enforced. Two routes still
+returned a finished-looking file with a mark missing:
+
+- an object type the writer did not recognise hit a `return 0` and contributed
+  nothing;
+- an annotation filed against a page the document does not have was never
+  looked at, because both writers loop over *source pages* rather than over
+  annotations.
+
+Neither is detectable downstream. The whole job is now checked before a single
+operator is written, and one problem stops all of it.
+
+| case | what the refusal says | overlay | vector | hybrid |
+| --- | --- | --- | --- | --- |
+| unknown object type (`sticker`) | 未対応の注釈の種類です | refused | refused | refused |
+| invalid measure subtype (`volume`) | 未対応の計測の種類です | refused | refused | refused |
+| NaN in a stroke point | 線の座標に数値でない値があります | refused | refused | refused |
+| NaN in a text position | 文字の座標に数値でない値があります | refused | refused | refused |
+| opacity 4 | 不透明度が 0 から 1 の数値ではありません | refused | refused | refused |
+| line width 0 | 線幅が正の数値ではありません | refused | refused | refused |
+| page 0 | この文書に 0 ページ目はありません | refused | refused | refused |
+| page N+1 | この文書に 4 ページ目はありません（全 3 ページ） | refused | refused | refused |
+| fractional page (2.5) | ページ番号が整数ではありません | refused | refused | refused |
+
+**Output bytes in every one of those rows: none.** A refusal that had already
+written half a document would be no better than the silent drop.
+
+The control matters as much as the nine: a valid job still goes through, at
+1113779 B (overlay) and 1107201 B (vector, hybrid). A preflight that refuses
+everything would pass all nine probes and be useless.
+
+## 16. A character the embedded font cannot draw
+
+Section 8 measures what substituting the *face* costs. Missing the glyph
+entirely is a different failure: a custom font maps an unknown code point to
+`.notdef`, which draws as nothing, so the save reports success and the character
+is gone. Nothing in the output distinguishes it from a character the user never
+typed.
+
+Probed with `OK ✅ 📐 done` in the embedded document font:
+
+| | result |
+| --- | --- |
+| glyphs detected as missing | `✅` `📐` |
+| B, vector only | **refused** — この保存方式では表現できない注釈があります |
+| C, hybrid | writes the file; that one text object goes to pixels |
+| is the rastered text still extractable? | **no**, and the result says so |
+
+C's answer is the eraser's answer: something operators cannot express goes to
+pixels, scoped to the one object, and the loss of searchability is reported
+rather than hidden. Nothing depends on what was drawn before a text object, so
+this needs no run closure — unlike an eraser.
+
+Where the question cannot be asked at all — a font object that does not expose
+`hasGlyphForCodePoint` — every non-space character is reported as unsupported.
+Not knowing is not evidence of coverage.
+
+## 17. How large a raster fragment may be
+
+Any design that rasterises needs a stated ceiling or it has just moved today's
+memory problem somewhere less visible. Measured on the A0 fixture, at the 2x
+scale the design uses, rather than borrowed from another feature:
+
+| fragment | predicted pixels | live RGBA | wall time | result |
+| --- | --- | --- | --- | --- |
+| small (200x150pt) | 0.17 Mpx | 0.7 MB | 38 ms | written |
+| medium (700x500pt) | 1.55 Mpx | 6.2 MB | 65 ms | written |
+| large (1400x1000pt) | 5.89 Mpx | 24 MB | 303 ms | written |
+| near the bound (1980x1420pt) | 7.82 Mpx | 31 MB | 333 ms | written |
+| over the bound (2300x1700pt) | 8.86 Mpx | 35 MB | — | **refused** |
+| whole A0 layer (2380x3360pt) | 32.68 Mpx | 131 MB | — | **refused** |
+
+The cost is smooth: roughly four bytes of live canvas per pixel, with the PNG
+encode dominating the runtime. There is no knee to find — the curve stays smooth
+right up to the point where the allocation is itself the problem. So the bound
+is a judgement about how much memory one save may claim, not a discovered
+threshold, and it is written down as such.
+
+**MAX_RASTER_PIXELS = 8,000,000.** 32 MB of live RGBA, a third of a second to
+encode, a quarter of what one A0 page at 2x costs, and about forty times the
+largest fragment any annotation set in this corpus actually produced.
+
+The check runs on the arithmetic:
+
+```
+calculate the painted bounds of the run
+  -> multiply by the render scale
+  -> compare with MAX_RASTER_PIXELS
+  -> over: throw, naming page and size, before any canvas exists
+```
+
+Ordering is the point. Checking after `canvas.width = ...` means the allocation
+being guarded against has already happened. Verified from both sides on the
+arithmetic alone: `MAX_RASTER_PIXELS - 40000` accepted, `+ 40000` refused. A
+bound only ever tested from below is not a bound.
+
+The refusal names the page and the size the fragment would have needed —
+`page 1, 3460x2560` — because "too large" with no number is not actionable.
+
+Three behaviours deliberately absent, each of which would make the ceiling
+meaningless:
+
+- **no fallback to rasterising the source page.** That destroys exactly what is
+  being preserved.
+- **no silent scale-down.** The user's marks would come back blurrier with
+  nothing to tell them.
+- **no post-allocation check.** See above.
+
+The consequence for candidate A is section 10.
+
+## 18. The gate
+
+`scripts/research-m3-gate.mjs` re-asserts **145 claims, 48 of them negative
 probes** — including the unusual one that the current save path must *fail*
 preservation. A comparison in which every candidate passes proves nothing about
 any of them.

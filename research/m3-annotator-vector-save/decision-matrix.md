@@ -29,7 +29,7 @@ needs settling first) and **DEFER** (not now).
 | CropBox / MediaBox | **changed** | preserved | preserved¹ | **preserved** |
 | page count and order | preserved | preserved | preserved¹ | **preserved** |
 | no-op save is harmless | **no** | yes | yes | **yes** |
-| annotations as vector | no | no | yes¹ | **partly (7 of 10)** |
+| annotations as vector | no | no | yes¹ | **partly (6 of 10)** |
 | added text searchable | no | no | yes¹ | **yes** |
 | pixel-eraser fidelity | exact | **exact** | **impossible** | **exact** |
 | painter order preserved | n/a | **yes** | ¹ | **yes** (9 scenarios, ≤0.7%) |
@@ -37,13 +37,16 @@ needs settling first) and **DEFER** (not now).
 | Japanese text | 2.5% | **0.4%** | ¹ | 16.3% (substitute font) |
 | whole-page visual difference | **0.20%** | 0.63% | ¹ | 1.44% |
 | mark lands where it was put, all quadrants | *page rewritten* | **0.4 pt** | ¹ | **0.4 pt** |
-| A0 max raster | 32.14 Mpx | 32.14 Mpx | ¹ | **0.19 Mpx** |
-| A0 runtime | 370 ms | 1386 ms | ¹ | **28 ms** |
+| A0 max raster | 32.14 Mpx | **refused³** | ¹ | **0.19 Mpx** |
+| A0 runtime | 368 ms | **n/a³** | ¹ | **47 ms** |
 | output size (native.pdf) | **288 KB** | 1163 KB | ¹ | 1096 KB |
 | refuses signed / damaged sources | no | **yes** | **yes** | **yes** |
 | leaves its input bytes alone | **yes** | **yes** | **yes** | **yes** |
 | deterministic bytes | **no** | yes | ¹ | **yes** |
-| fails closed | not exercised | not exercised | **yes** | **yes** |
+| fails closed | not exercised | **yes** | **yes** | **yes** |
+| refuses an unsaveable annotation before writing | no | **yes** (9/9) | **yes** (9/9) | **yes** (9/9) |
+| a character the font lacks | silently absent | drawn as pixels | **refused** | **drawn as pixels, reported** |
+| raster fragment ceiling | none | 8 Mpx, page-sized ⇒ **fails on A0** | n/a | **8 Mpx, per fragment** |
 | browser-only | yes | yes | yes | yes |
 | new dependencies | 0 | 0 | 0 | **0** |
 | implementation complexity | lowest | low | moderate | **highest** |
@@ -54,6 +57,11 @@ annotation columns are unmeasurable on this corpus.
 
 ² The baseline replaces every page with one JPEG, so an image count survives by
 coincidence rather than by preservation.
+
+³ Not a defect in the measurement -- it is the raster ceiling of section 12
+applied to A's own design. A's overlay is page-sized by construction, so on an
+A0 it needs 32.1 Mpx against a bound of 8.0, and is refused before allocating
+anything. C needs 0.19 Mpx on the same page. See section 3.
 
 ---
 
@@ -112,6 +120,26 @@ Its costs are real and are not hidden:
 **Keep A inside C, not beside it.** The hybrid is A applied to a smaller region.
 A page that somehow needs everything rastered degrades to the overlay with the
 source still preserved — one implementation, not two.
+
+### What the raster ceiling did to candidate A
+
+Deciding the fragment bound (section 12) settled this question harder than the
+fidelity numbers did. A's overlay is one image the size of the page, so the
+bound applies to the whole page:
+
+| | pixels needed on the A0 | against a bound of 8.0 Mpx |
+|---|---|---|
+| A, whole-page overlay | 32.1 Mpx (4768x6741) | **refused** |
+| C, per-run fragments | 0.19 Mpx | 166x under |
+
+A cannot save the largest sheet this product exists to handle. That is not a
+tuning problem: raising the bound to admit an A0 overlay means admitting 129 MB
+of live RGBA, which is the cost the current save path already pays and this
+spike exists to stop paying. Nor is scaling the overlay down an option -- it
+would quietly blur the user's marks with no way for them to know.
+
+So A survives only as a description of C's worst case, on pages small enough
+for a whole-layer fragment to fit under the bound. It is not a candidate.
 
 ## 4. Coordinates
 
@@ -189,6 +217,25 @@ spike can inform and should not make.
 
 What must never be claimed is that a chosen family was preserved.
 
+### A character the font cannot draw
+
+Substituting the face has a measured cost. Missing the glyph entirely does not:
+a custom font maps an unknown code point to `.notdef`, which draws as nothing,
+so a save can swallow an emoji and report success. Asking fontkit before writing
+is the only way to know.
+
+| option | verdict |
+| --- | --- |
+| write it and let `.notdef` happen | **rejected** -- silent loss |
+| refuse the save | B's behaviour; correct for a vector-only design |
+| **send that one text object to pixels** | **ADOPT** for C |
+
+It is the same problem as the eraser -- something operators cannot express --
+so it takes the same route, and the same reporting: that text object is no
+longer extractable, and the result says so rather than leaving it looking
+searchable. Probed with `OK ✅ 📐 done`: both symbols detected as missing, B
+refuses, C rasters the one object and carries on. §measurements 16.
+
 ## 8. The pixel eraser, and composition order
 
 | option | verdict |
@@ -243,6 +290,23 @@ before anything is produced.
 dependency set can write an encrypted PDF to exercise it against. Outlines and
 bookmarks are unmeasured too, and no candidate claims them.
 
+### Not being able to check is not a pass
+
+The first version caught a failure to read the AcroForm and carried on, which
+silently turns *we could not check for a signature* into *there is no
+signature*. A document whose form structure is unreadable is exactly the kind
+this design must not write.
+
+| option | verdict |
+| --- | --- |
+| unreadable form ⇒ assume unsigned | **rejected** |
+| unreadable form ⇒ refuse, saying why | **ADOPT** |
+
+Inspection also no longer rests on a constructor name alone: each field's `/FT`
+is read from the dictionary, and `/SigFlags` on the AcroForm is checked, so a
+signature survives a build that names its classes differently. Every page is
+walked, not just the first. §measurements 9.
+
 ## 9. Failure behaviour
 
 | option | verdict |
@@ -252,6 +316,25 @@ bookmarks are unmeasured too, and no candidate claims them.
 
 §11. A partial save that looks complete is the worst outcome available here,
 because nothing downstream can tell it apart from a good one.
+
+The first version of that decision was written but not enforced. Two routes
+still produced a finished-looking file with a mark missing: an object type the
+writer did not recognise fell through a `return 0`, and an annotation filed
+against a page the document does not have was never visited at all, because the
+writers loop over source pages rather than over annotations.
+
+| option | verdict |
+| --- | --- |
+| validate as each object is written | **rejected** -- earlier objects are already in the file |
+| validate the whole job before writing anything | **ADOPT** |
+
+The whole set is checked first and a single problem stops all of it, so a
+refusal produces no bytes rather than a truncated document. Returning the list
+of problems rather than throwing on the first lets the UI show all of them at
+once. Nine invalid cases, each refused by all three writers with no output:
+unknown object type, invalid measure subtype, NaN in a stroke, NaN in a text
+position, opacity outside 0–1, zero line width, page 0, page N+1, fractional
+page. §measurements 15.
 
 ## 10. Dependencies
 
@@ -300,11 +383,51 @@ adopted, and it is not conditional on any of this.
 
 ---
 
+## 12. How large a raster fragment may be
+
+A design that rasterises anything needs a stated ceiling, or it has simply moved
+the current save path's memory problem somewhere less visible. The number was
+measured on the A0 fixture rather than borrowed from elsewhere in the product.
+
+| fragment | pixels | live RGBA | encode | result |
+| --- | --- | --- | --- | --- |
+| small | 0.17 Mpx | 0.7 MB | 38 ms | written |
+| medium | 1.55 Mpx | 6 MB | 65 ms | written |
+| large | 5.89 Mpx | 24 MB | 303 ms | written |
+| just under the bound | 7.82 Mpx | 31 MB | 333 ms | written |
+| just over the bound | 8.86 Mpx | 35 MB | — | **refused** |
+| whole A0 annotation layer | 32.7 Mpx | 131 MB | — | **refused** |
+
+| option | verdict |
+| --- | --- |
+| no ceiling | **rejected** -- this is the current defect, relocated |
+| reuse the 80 Mpx figure another feature uses | **rejected** -- different cost shape, and unmeasured here |
+| **8 Mpx per fragment** | **ADOPT** |
+
+8 Mpx is 32 MB of live RGBA and encodes in about a third of a second on this
+machine. The cost is smooth right up to it, it is a quarter of what one A0 page
+at 2x would take, and it is roughly forty times the largest fragment any
+annotation set in this corpus actually produced (0.19 Mpx).
+
+Three things it deliberately is not:
+
+- **not a page bound.** It bounds one fragment. A layer that needs more is
+  refused; the source page is never rasterised as a consolation, because that
+  would destroy exactly what this design exists to preserve.
+- **not a scale-down.** Shrinking the fragment to fit would silently blur the
+  user's marks, and they would have no way to know it happened.
+- **not checked after allocation.** The arithmetic runs on the bounds; the
+  canvas is created only if it passes. Checking afterwards means the allocation
+  being guarded against has already happened.
+
+The consequence for candidate A is in section 3: it is the reason A stops being
+a candidate.
+
 ## Summary
 
 | | |
 | --- | --- |
-| **ADOPT** | Candidate **C**, the hybrid: source preserved via pdf-lib; the annotation layer planned as an ordered sequence of runs so stacking survives; operators where they work and a bounded transparent raster for the span an eraser reaches into, with conservative painted bounds; coordinates converted **display → upright → PDF**, against the CropBox; measurement labels derived and written as text; a support boundary that refuses signed, encrypted and unreadable sources by name; fail closed and whole. Candidate **A** retained as the degradation path inside it. |
+| **ADOPT** | Candidate **C**, the hybrid: source preserved via pdf-lib; the annotation layer planned as an ordered sequence of runs so stacking survives; operators where they work and a bounded transparent raster for the span an eraser reaches into, with conservative painted bounds; coordinates converted **display → upright → PDF**, against the CropBox; measurement labels derived and written as text; a support boundary that refuses signed, encrypted and unreadable sources by name; fail closed and whole. Candidate **A** is *not* retained as a standalone candidate: under the 8 Mpx fragment ceiling its page-sized overlay cannot save an A0 at all. It survives only as the description of C's worst case on pages small enough to fit. |
 | **REVISE** | the annotation font: substitution is unavoidable, its cost is measured, and what the user is told — or offered — is a product decision. |
 | **DEFER** | Candidate B alone; geometric difference for the eraser; annotations as native PDF annotation objects; any editing of existing source content. |
 | **SEPARATE** | the unpkg worker request in `PdfViewer.tsx:16` — a privacy fix that should not wait for this. |
@@ -318,3 +441,14 @@ adopted, and it is not conditional on any of this.
 | 7. font | 8–12%, cause unattributed | 9–16%, and separated: **glyph shape, not misplacement** |
 | 8b. sources | absent | signed / encrypted / damaged **refused by name** |
 | evidence | source-mutation checked by length | checked **byte for byte**, refusal path included |
+
+## What the second review changed
+
+| entry | was | now |
+| --- | --- | --- |
+| 9. failure | fail-closed stated, not enforced | **preflight before any bytes**; 9 invalid cases refused by all three writers |
+| 7. font | substitution cost only | a **missing glyph** is detected and rastered, not written as `.notdef` |
+| 12. raster | no stated ceiling | **8 Mpx per fragment**, measured, checked before allocation |
+| 3. candidates | A retained as a fallback | A **refused on A0** by the ceiling its own design implies |
+| 8b. sources | unreadable form ⇒ carry on | unreadable form ⇒ **refuse**; `/FT /Sig` and `/SigFlags` read directly |
+| hybrid split | 3 of 10 raster / 7 vector | **4 raster / 6 vector**, in ordered runs |

@@ -126,6 +126,14 @@ So the boundary is checked before anything is written, and refuses by name:
 | a signature field | refused -- saving would invalidate it |
 | encrypted / password-protected | refused |
 | damaged beyond reading | refused, after walking every page rather than trusting that a successful `load` means a usable file |
+| a form that cannot be inspected | refused -- not knowing whether there is a signature is not the same as there being none |
+
+The last row is the one worth stating plainly, because the first version of this
+design got it backwards: it caught the inspection failure and carried on, which
+turns *we could not check* into *there is nothing to check*. A signature is also
+looked for in three ways rather than one — the field type, `/FT /Sig` read from
+the dictionary, and `/SigFlags` on the AcroForm — because a constructor name is
+a property of the library build, not of the document.
 
 `measurements.md` section 9 has the results. The encrypted path is code that
 exists and has **not** been exercised: nothing in the dependency set can write
@@ -138,6 +146,12 @@ Outlines and bookmarks are **unmeasured**, and nothing here claims they survive.
 ```
    the source PDF bytes, as loaded
              |
+   assess the document -- signature, encryption, every page readable.
+   an inspection that cannot complete refuses; it does not assume a pass
+             |
+   preflight every annotation on every page, before writing anything.
+   one problem stops the whole save, so a refusal produces no bytes
+             |
    pdf-lib loads the document -- pages, text, vectors, images,
    annotations, form, metadata all stay as they are
              |
@@ -147,9 +161,13 @@ Outlines and bookmarks are **unmeasured**, and nothing here claims they survive.
              |
        +--------------------+---------------------------+
        | a run of objects   | the span an eraser reaches |
-       | written as         | into: one transparent      |
-       | operators          | raster fragment            |
+       | written as         | into, or a glyph the font  |
+       | operators          | lacks: one transparent     |
+       |                    | raster fragment            |
        +--------------------+---------------------------+
+             |            check the fragment's pixel count
+             |            against MAX_RASTER_PIXELS -- on the
+             |            arithmetic, before any canvas exists
              |
        emitted in painter order, so stacking survives by
        construction -- pdf-lib appends in call order
@@ -217,14 +235,56 @@ family was preserved.
 
 Fail closed, and fail whole. A save that cannot express something stops with the
 object named and the reason given; it does not drop the mark and return a file
-that looks complete. Measured: a pixel eraser under Level B refuses with the
-object id and an explanation, and a `NaN` coordinate is refused by pdf-lib's own
-type check rather than written as a broken operator.
+that looks complete.
 
-The conditions that must fail closed: an unsupported annotation type, a
-coordinate that is not a finite number, a page index with no matching source
-page, a font that cannot be embedded, a raster fragment larger than a stated
-bound, and a source document that failed to load.
+**Whole** is the part that needs enforcing rather than stating. Validating each
+object as it is written is not fail-closed: by the time the fourth object is
+rejected, three are already in the document. So the entire job is checked before
+a single operator is emitted, and one problem stops all of it. The conditions:
+
+| | |
+| --- | --- |
+| an unsupported annotation type or measure subtype | refused |
+| a coordinate, line width, font size or opacity that is not a sensible finite number | refused |
+| a page index the document does not have, or one that is not an integer | refused |
+| a source document that failed to load, or could not be assessed | refused |
+| a raster fragment over `MAX_RASTER_PIXELS` (8,000,000) | refused |
+| a font that cannot be embedded | refused |
+| a character the embedded font has no glyph for | that text object is rastered, and the loss of searchability reported |
+
+The first version of this section listed those conditions and did not enforce
+them: an unrecognised object type fell through a `return 0`, and an annotation
+filed against a page the document does not have was never visited, because the
+writers loop over source pages rather than over annotations. Both produced a
+finished-looking file with a mark missing — the one outcome worse than a
+refusal, because nothing downstream can tell it apart from a good save.
+Nine invalid cases now refuse with no output bytes; `measurements.md` 15.
+
+The glyph row is the exception, and deliberately so. A missing glyph is not a
+malformed input — it is something operators cannot express, like the eraser, so
+it takes the eraser's route rather than stopping the save. What it must not do
+is write `.notdef` and report success.
+
+### How large a raster fragment may be
+
+`MAX_RASTER_PIXELS = 8,000,000`, measured in `measurements.md` 17 rather than
+borrowed from another feature: 32 MB of live RGBA, about a third of a second to
+encode, a quarter of one A0 page at 2x, and roughly forty times the largest
+fragment this corpus produces.
+
+The order is the design:
+
+```
+painted bounds of the run -> x render scale -> compare with the bound
+   -> over: refuse, naming the page and the size, before allocating
+```
+
+A ceiling checked after `canvas.width = ...` is not a ceiling. And three
+responses are ruled out because each makes it meaningless: falling back to
+rasterising the source page (which destroys what is being preserved), scaling
+the fragment down (the user's marks come back blurrier with nothing to tell
+them), and raising the bound to fit the largest case (which is the cost this
+design exists to avoid).
 
 ### Lifecycle
 
@@ -255,16 +315,29 @@ exporters already use, and this is where it would apply:
   name, before anything is written;
 - measurement labels derived and written as text, because the app does not store
   them;
+- every annotation preflighted before a single operator is written, so a
+  refusal produces no bytes rather than a partial document;
+- a stated ceiling on any one raster fragment, checked on the arithmetic before
+  a canvas is allocated;
 - fail closed on anything unsupported, naming it.
 
 It preserves everything the overlay preserves, adds searchable annotation text
 including Japanese, and on an A0 sheet costs 0.19 Mpx against the overlay's
 32.14 — because it rasterises the marks rather than the paper.
 
-**Keep Level A as the fallback path inside it.** The hybrid *is* Level A applied
-to a smaller region; if a page turns out to need everything rastered, the result
-is the overlay and the source is still preserved. That is a graceful degradation
-rather than a second implementation.
+**Level A is not kept as a fallback.** That was the first version's conclusion
+and deciding the raster bound overturned it. The hybrid *is* Level A applied to
+a smaller region, so on a small page a whole-layer fragment degrades into the
+overlay gracefully — but A's overlay is page-sized by construction, and on an A0
+that is 32.1 Mpx against a bound of 8.0. The largest sheet this product exists
+to handle is the one A cannot save.
+
+Which means the degradation has a floor, and it must be stated rather than
+discovered: if a page's annotation layer needs more than `MAX_RASTER_PIXELS` in
+one fragment, the save **refuses**. It does not fall back to rasterising the
+page. No annotation set in this corpus comes close — the largest fragment
+measured is 0.19 Mpx — but the behaviour at the limit is a refusal, not a
+quietly worse file.
 
 **REVISE before implementing**: the font. Substitution is unavoidable, and the
 measured cost is **glyph shape, not misplacement** -- searching for the vertical

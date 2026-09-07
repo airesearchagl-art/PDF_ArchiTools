@@ -129,6 +129,57 @@ claims to. They load and re-serialise, so object numbering and stream layout
 move. Anything that needs byte identity — a signature, a hash-based audit — is
 not served by any candidate here, and that was not measured.
 
+## The raster ceiling is a judgement, not a discovered threshold
+
+`MAX_RASTER_PIXELS = 8,000,000` is measured (§17) but not *derived*. The cost
+curve is smooth — roughly four bytes of live canvas per pixel, PNG encode
+dominating the time — so there is no knee in the data that picks the number for
+us. What the measurement establishes is the shape of the cost and that 8 Mpx
+sits comfortably inside what this machine handles; where exactly to draw the
+line is a decision about how much memory one save may claim.
+
+Two specific gaps behind it:
+
+- **one machine, one browser.** 333 ms to encode 7.82 Mpx is this laptop in
+  headless Chromium. A phone or a low-end tablet would be slower, possibly much
+  slower, and might fail to allocate well below 8 Mpx. The failure there is a
+  browser allocation error, which is caught and refused, but its *threshold* is
+  unmeasured.
+- **the bound is never actually reached in practice here.** The largest
+  fragment any annotation set in this corpus produces is 0.19 Mpx, forty times
+  under. The over-bound rows were constructed to test the check, not observed.
+  So the ceiling is proven to work and not proven to be *needed* at 8 rather
+  than 4 or 16.
+
+## Candidate A's A0 refusal is a consequence, not an experiment
+
+A cannot save the A0 fixture because the ceiling refuses a page-sized overlay.
+That is a real and decisive result, but it is a result about A *under this
+bound*: a larger bound would admit it, at the memory cost this design exists to
+avoid. Read it as "A's cost does not scale with sheet size, and the largest
+sheets are the ones this product is for", not as a measurement of A failing on
+its own terms.
+
+## Glyph coverage was probed with two characters
+
+`✅` and `📐`, in one embedded font. That is enough to show the detection works
+and that the two candidates diverge as designed, and it says nothing about how
+often real annotation text contains characters the document font lacks. The
+answer for CJK annotation text specifically — the case most likely to matter
+here — is unmeasured.
+
+The fallback where `hasGlyphForCodePoint` is unavailable reports *every*
+character as unsupported. That is the safe direction, and it is also untested:
+no font object in this corpus lacks the method.
+
+## The preflight is negative evidence about nine cases
+
+Nine invalid inputs, each refused with no output bytes, plus one valid control
+that still produces a file. What it does not establish is completeness: these
+are the cases we thought of. An unrecognised object type and an out-of-range
+page were only found by looking for silent drops on purpose, and the same
+search done differently would probably find more.
+
 ## What was deliberately not attempted
 
 - **Editing existing source content.** M3 preserves a document while adding to

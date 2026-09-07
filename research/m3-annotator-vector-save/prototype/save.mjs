@@ -250,6 +250,54 @@ function boundsOverlap(a, b) {
 }
 
 // ---------------------------------------------------------------------------
+// How large a raster fragment may be
+// ---------------------------------------------------------------------------
+
+/**
+ * The ceiling on one raster fragment, in pixels.
+ *
+ * Chosen from the measurement in `measurements.md` section 11 rather than
+ * borrowed from another feature. The shape of that data: a fragment costs
+ * roughly four bytes of live canvas per pixel and its PNG encode dominates the
+ * runtime, so the cost is smooth right up to the point where allocating the
+ * canvas is itself the problem. 8 Mpx is 32 MB of RGBA and encodes in about a
+ * fifth of a second on this machine; it is a quarter of what a full A0 page at
+ * 2x would take, and comfortably larger than any fragment the annotation sets
+ * here produce.
+ *
+ * It is a bound on the *fragment*, never on the page: a layer that needs more
+ * than this is refused, and the source page is not rasterised as a consolation.
+ */
+export const MAX_RASTER_PIXELS = 8_000_000;
+
+/**
+ * Decide whether a fragment may be drawn, *before* any canvas exists.
+ *
+ * Ordering matters here and is the whole point of separating this out. Checking
+ * after allocation means the allocation has already happened -- which on a
+ * pathological layer is the failure being guarded against. So the arithmetic is
+ * done on the bounds, and the canvas is only created if it passes.
+ *
+ * Scaling the fragment down to fit is deliberately not an option: it would
+ * silently change how sharp a user's marks are, and they would have no way to
+ * know.
+ */
+export function checkRasterBudget(bounds, scale, { page, limit = MAX_RASTER_PIXELS } = {}) {
+    const width = Math.max(1, Math.ceil(bounds.width * scale));
+    const height = Math.max(1, Math.ceil(bounds.height * scale));
+    const pixels = width * height;
+    if (pixels > limit) {
+        const error = new Error(
+            `ページ ${page} の注釈を画像化するには ${(pixels / 1e6).toFixed(1)} メガピクセル`
+            + `（${width}x${height}）が必要で、上限の ${(limit / 1e6).toFixed(1)} メガピクセルを超えます。`,
+        );
+        error.rasterBudget = { page, width, height, pixels, limit };
+        throw error;
+    }
+    return { width, height, pixels };
+}
+
+// ---------------------------------------------------------------------------
 // Composition planning
 // ---------------------------------------------------------------------------
 
@@ -278,12 +326,30 @@ function boundsOverlap(a, b) {
  * layer, which is the documented fallback: the annotation layer becomes one
  * transparent image. The source page is still never rasterised.
  */
-export function planComposition(objects) {
-    const eraserIndices = [];
-    objects.forEach((obj, i) => {
-        if (obj.type === 'stroke' && obj.isEraser) eraserIndices.push(i);
+export function planComposition(objects, { mustRaster = () => false } = {}) {
+    const bounds = objects.map(paintedBounds);
+    const required = new Set();
+
+    // An eraser, and everything from the earliest mark it reaches back to,
+    // through to the eraser itself. Contiguous, because ordering inside that
+    // stretch is what the subtraction depends on.
+    objects.forEach((obj, e) => {
+        if (!(obj.type === 'stroke' && obj.isEraser)) return;
+        let start = e;
+        for (let i = 0; i < e; i++) {
+            if (boundsOverlap(bounds[i], bounds[e])) { start = i; break; }
+        }
+        for (let i = start; i <= e; i++) required.add(i);
     });
-    if (eraserIndices.length === 0) {
+
+    // Anything the caller cannot express as operators for its own reasons --
+    // a glyph the embedded font does not have, say. These need no closure:
+    // nothing depends on what was drawn before them.
+    objects.forEach((obj, i) => {
+        if (mustRaster(obj, i)) required.add(i);
+    });
+
+    if (required.size === 0) {
         return {
             runs: objects.length ? [{ kind: 'vector', from: 0, to: objects.length - 1, objects }] : [],
             rasterSpan: null,
@@ -291,36 +357,25 @@ export function planComposition(objects) {
         };
     }
 
-    const bounds = objects.map(paintedBounds);
-    const lastEraser = eraserIndices[eraserIndices.length - 1];
-
-    // The earliest object any later eraser subtracts from.
-    let start = eraserIndices[0];
-    for (let i = 0; i < start; i++) {
-        const touched = eraserIndices.some((e) => e > i && boundsOverlap(bounds[i], bounds[e]));
-        if (touched) {
-            start = i;
-            break;
+    // Walk once, grouping neighbours of the same kind. Runs come out in painter
+    // order, so emitting them in order preserves stacking.
+    const runs = [];
+    let from = 0;
+    let kind = required.has(0) ? 'raster' : 'vector';
+    for (let i = 1; i <= objects.length; i++) {
+        const next = i < objects.length ? (required.has(i) ? 'raster' : 'vector') : null;
+        if (next !== kind) {
+            runs.push({ kind, from, to: i - 1, objects: objects.slice(from, i) });
+            from = i;
+            kind = next;
         }
     }
 
-    const runs = [];
-    if (start > 0) {
-        runs.push({ kind: 'vector', from: 0, to: start - 1, objects: objects.slice(0, start) });
-    }
-    runs.push({
-        kind: 'raster', from: start, to: lastEraser, objects: objects.slice(start, lastEraser + 1),
-    });
-    if (lastEraser < objects.length - 1) {
-        runs.push({
-            kind: 'vector', from: lastEraser + 1, to: objects.length - 1,
-            objects: objects.slice(lastEraser + 1),
-        });
-    }
+    const rasterIndices = [...required].sort((a, b) => a - b);
     return {
         runs,
-        rasterSpan: { from: start, to: lastEraser },
-        wholeLayerRastered: start === 0 && lastEraser === objects.length - 1,
+        rasterSpan: { from: rasterIndices[0], to: rasterIndices[rasterIndices.length - 1] },
+        wholeLayerRastered: required.size === objects.length,
     };
 }
 
@@ -352,6 +407,146 @@ export function unsupportedForVector(objects) {
         }
     }
     return reasons;
+}
+
+// ---------------------------------------------------------------------------
+// Preflight
+// ---------------------------------------------------------------------------
+
+const finite = (n) => typeof n === 'number' && Number.isFinite(n);
+
+const SIGNATURE_UNCHECKABLE = 'このPDFのフォーム情報を読み取れなかったため、'
+    + '電子署名の有無を確認できませんでした。確認できない状態では保存しません。';
+
+/**
+ * Everything that must be true before a single operator is written.
+ *
+ * The writers used to fall through on anything they did not recognise --
+ * `drawObjectVector` returned 0 for an unknown type, and both writers loop over
+ * the *source* pages, so an annotation filed against a page that does not exist
+ * was never looked at. Both are silent drops, and a silent drop is the one
+ * outcome worse than a refusal: the file comes back looking complete and a mark
+ * the user made is gone.
+ *
+ * So the whole job is checked first, and a single problem stops all of it.
+ * Returning the list rather than throwing lets a caller show every problem at
+ * once instead of one per attempt.
+ */
+export function preflight(objectsByPage, pageCount) {
+    const problems = [];
+    const at = (page, id, message) => problems.push({ page, id, message });
+
+    for (const [key, list] of Object.entries(objectsByPage ?? {})) {
+        const page = Number(key);
+        if (!Number.isInteger(page)) {
+            at(key, null, `ページ番号が整数ではありません: ${JSON.stringify(key)}`);
+            continue;
+        }
+        if (page < 1 || page > pageCount) {
+            at(page, null, `この文書に ${page} ページ目はありません（全 ${pageCount} ページ）。`);
+            continue;
+        }
+        if (!Array.isArray(list)) {
+            at(page, null, '注釈の一覧が配列ではありません。');
+            continue;
+        }
+
+        for (const obj of list) {
+            const id = obj?.id ?? '(no id)';
+            if (!obj || typeof obj !== 'object') {
+                at(page, id, '注釈オブジェクトではありません。');
+                continue;
+            }
+            if (!['stroke', 'text', 'measure'].includes(obj.type)) {
+                at(page, id, `未対応の注釈の種類です: ${JSON.stringify(obj.type)}`);
+                continue;
+            }
+            if (obj.opacity !== undefined && (!finite(obj.opacity) || obj.opacity < 0 || obj.opacity > 1)) {
+                at(page, id, `不透明度が 0 から 1 の数値ではありません: ${JSON.stringify(obj.opacity)}`);
+            }
+
+            if (obj.type === 'stroke') {
+                if (!Array.isArray(obj.points) || obj.points.length < 2) {
+                    at(page, id, '線の点が 2 点未満です。');
+                } else if (!obj.points.every((p) => p && finite(p.x) && finite(p.y))) {
+                    at(page, id, '線の座標に数値でない値があります。');
+                } else if (!obj.points.every((p) => p.pressure === undefined || finite(p.pressure))) {
+                    at(page, id, '筆圧に数値でない値があります。');
+                }
+                if (!finite(obj.lineWidth) || obj.lineWidth <= 0) {
+                    at(page, id, `線幅が正の数値ではありません: ${JSON.stringify(obj.lineWidth)}`);
+                }
+            } else if (obj.type === 'text') {
+                if (typeof obj.text !== 'string') {
+                    at(page, id, '文字列ではありません。');
+                }
+                if (!finite(obj.x) || !finite(obj.y)) {
+                    at(page, id, '文字の座標に数値でない値があります。');
+                }
+                if (!finite(obj.fontSize) || obj.fontSize <= 0) {
+                    at(page, id, `文字サイズが正の数値ではありません: ${JSON.stringify(obj.fontSize)}`);
+                }
+            } else {
+                if (!['line', 'poly', 'area'].includes(obj.subtype)) {
+                    at(page, id, `未対応の計測の種類です: ${JSON.stringify(obj.subtype)}`);
+                }
+                if (!Array.isArray(obj.points) || obj.points.length < 2) {
+                    at(page, id, '計測の点が 2 点未満です。');
+                } else if (!obj.points.every((p) => p && finite(p.x) && finite(p.y))) {
+                    at(page, id, '計測の座標に数値でない値があります。');
+                }
+                if (obj.subtype === 'area' && Array.isArray(obj.points) && obj.points.length < 3) {
+                    at(page, id, '面積の点が 3 点未満です。');
+                }
+                if (!obj.scale || !finite(obj.scale.value) || obj.scale.value <= 0) {
+                    at(page, id, '計測の縮尺が正の数値ではありません。');
+                }
+            }
+        }
+    }
+    return problems;
+}
+
+/** Throw unless every annotation is one this design will write. */
+function requireValid(objectsByPage, pageCount) {
+    const problems = preflight(objectsByPage, pageCount);
+    if (problems.length > 0) {
+        const first = problems[0];
+        const error = new Error(
+            `保存できない注釈があります（ページ ${first.page}${first.id ? ` / ${first.id}` : ''}）: ${first.message}`,
+        );
+        error.problems = problems;
+        throw error;
+    }
+}
+
+/**
+ * Characters the embedded font has no glyph for.
+ *
+ * A custom font maps anything it does not have to `.notdef`, which draws as
+ * nothing or as a box -- so a save can silently swallow an emoji and report
+ * success. Asking fontkit directly is the only way to know before writing.
+ *
+ * Where the question cannot be asked at all, every character is reported as
+ * unsupported rather than none: not knowing is not evidence of coverage.
+ */
+export function unsupportedGlyphs(pdfFont, text) {
+    const fk = pdfFont?.embedder?.font;
+    const chars = [...text];
+    if (!fk || typeof fk.hasGlyphForCodePoint !== 'function') {
+        return chars.filter((c) => c.trim() !== '');
+    }
+    const missing = [];
+    for (const ch of chars) {
+        const cp = ch.codePointAt(0);
+        if (ch.trim() === '') continue;
+        try {
+            if (!fk.hasGlyphForCodePoint(cp)) missing.push(ch);
+        } catch {
+            missing.push(ch);
+        }
+    }
+    return [...new Set(missing)];
 }
 
 // ---------------------------------------------------------------------------
@@ -415,12 +610,39 @@ export async function assessSource(PDFDocument, bytes) {
     }
 
     // A signature lives in the AcroForm as a field whose /FT is /Sig.
+    //
+    // Being unable to read the form is **not** evidence that there is no
+    // signature -- it is evidence that the question could not be asked. An
+    // earlier version swallowed that failure and carried on, which turns "we
+    // could not check" into "there is nothing to check". Both the field types
+    // and the raw dictionaries are inspected now, and a failure of either
+    // refuses the document.
     const signatureFields = [];
     try {
         for (const field of doc.getForm().getFields()) {
-            if (/Signature/i.test(field.constructor.name)) signatureFields.push(field.getName());
+            const name = field.getName();
+            if (/Signature/i.test(field.constructor.name)) {
+                signatureFields.push(name);
+                continue;
+            }
+            // Not every build names the class the same way, so the dictionary
+            // is checked too rather than trusting a constructor name.
+            const ft = field.acroField?.dict?.get?.(nameFor(doc, 'FT'));
+            const ftName = ft?.asString ? ft.asString() : String(ft ?? '');
+            if (ftName === '/Sig') signatureFields.push(name);
         }
-    } catch { /* a form we cannot read is not evidence of a signature */ }
+        const sigFlags = doc.getForm().acroForm?.dict?.get?.(nameFor(doc, 'SigFlags'));
+        if (sigFlags !== undefined && signatureFields.length === 0) {
+            signatureFields.push('(SigFlags set)');
+        }
+    } catch (error) {
+        problems.push({
+            code: 'form-unreadable',
+            message: SIGNATURE_UNCHECKABLE,
+            detail: String(error?.message ?? error),
+        });
+        return { supported: false, problems, signatureFields: [], doc: null };
+    }
 
     if (signatureFields.length > 0) {
         problems.push({
@@ -430,6 +652,16 @@ export async function assessSource(PDFDocument, bytes) {
     }
 
     return { supported: problems.length === 0, problems, signatureFields, doc };
+}
+
+/**
+ * A PDFName for a key, built through the context rather than imported.
+ *
+ * Keeping pdf-lib's classes out of this module's imports means the prototype
+ * takes exactly the same objects the caller already has.
+ */
+function nameFor(doc, key) {
+    return doc.context.obj({ [key]: 0 }).keys()[0];
 }
 
 /** Throw unless the source is one this design will write. */
@@ -576,6 +808,7 @@ export async function saveOverlay({
 }) {
     const started = performance.now();
     const doc = await requireSupported(PDFDocument, sourceBytes);
+    requireValid(objects, doc.getPageCount());
     const pages = doc.getPages();
     let maxPixels = 0;
     let overlays = 0;
@@ -586,10 +819,15 @@ export async function saveOverlay({
 
         const page = pages[i];
         const map = pageMapper(page);
+        // The budget is checked on the arithmetic, before a canvas exists.
+        const budget = checkRasterBudget(
+            { width: map.geom.displayWidth, height: map.geom.displayHeight },
+            overlayScale, { page: i + 1 },
+        );
         const canvas = renderOverlayCanvas(list, {
             width: map.geom.displayWidth, height: map.geom.displayHeight, scale: overlayScale,
         });
-        maxPixels = Math.max(maxPixels, canvas.width * canvas.height);
+        maxPixels = Math.max(maxPixels, budget.pixels);
 
         const png = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
         const buf = new Uint8Array(await png.arrayBuffer());
@@ -738,6 +976,7 @@ export async function saveVector({
 }) {
     const started = performance.now();
     const doc = await requireSupported(PDFDocument, sourceBytes);
+    requireValid(objects, doc.getPageCount());
     doc.registerFontkit(fontkit);
     // The app's fontFamily is a CSS family name and cannot be resolved to a
     // file; a document font is embedded instead, and the substitution is
@@ -747,8 +986,23 @@ export async function saveVector({
 
     const refused = [];
     for (let i = 0; i < pages.length; i++) {
-        for (const r of unsupportedForVector(objects[i + 1] ?? [])) {
+        const list = objects[i + 1] ?? [];
+        for (const r of unsupportedForVector(list)) {
             refused.push({ page: i + 1, ...r });
+        }
+        // A custom font maps a character it does not have to .notdef, which
+        // draws as nothing. Writing that and reporting success would lose the
+        // character silently, so this candidate refuses instead.
+        for (const obj of list) {
+            if (obj.type !== 'text') continue;
+            const missing = unsupportedGlyphs(font, obj.text);
+            if (missing.length > 0) {
+                refused.push({
+                    page: i + 1,
+                    id: obj.id,
+                    reason: `埋め込みフォントに字形がない文字があります: ${missing.join(' ')}`,
+                });
+            }
         }
     }
     if (refused.length > 0) {
@@ -781,6 +1035,7 @@ export async function saveHybrid({
 }) {
     const started = performance.now();
     const doc = await requireSupported(PDFDocument, sourceBytes);
+    requireValid(objects, doc.getPageCount());
     doc.registerFontkit(fontkit);
     const font = await doc.embedFont(fontBytes, { subset: true });
     const pages = doc.getPages();
@@ -789,13 +1044,25 @@ export async function saveHybrid({
     let maxPixels = 0;
     let fragments = 0;
     let wholeLayerPages = 0;
+    const rasteredForGlyphs = [];
+
+    // A character the embedded font cannot draw is the same kind of problem as
+    // a pixel eraser: not expressible as operators. So it takes the same route
+    // -- that text object goes to pixels, and nothing is lost or refused.
+    const glyphFallback = (obj) => {
+        if (obj.type !== 'text') return false;
+        const missing = unsupportedGlyphs(font, obj.text);
+        if (missing.length === 0) return false;
+        rasteredForGlyphs.push({ id: obj.id, missing });
+        return true;
+    };
 
     for (let i = 0; i < pages.length; i++) {
         const list = objects[i + 1] ?? [];
         if (list.length === 0) continue;
         const page = pages[i];
         const map = pageMapper(page);
-        const plan = planComposition(list);
+        const plan = planComposition(list, { mustRaster: glyphFallback });
         if (plan.wholeLayerRastered) wholeLayerPages += 1;
 
         for (const run of plan.runs) {
@@ -806,10 +1073,13 @@ export async function saveHybrid({
 
             const bounds = runBounds(run.objects, pad);
             if (!bounds) continue;
+            // Arithmetic first: a fragment that would be too large is refused
+            // before anything is allocated, which is the point of the check.
+            const budget = checkRasterBudget(bounds, overlayScale, { page: i + 1 });
             const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.ceil(bounds.width * overlayScale));
-            canvas.height = Math.max(1, Math.ceil(bounds.height * overlayScale));
-            maxPixels = Math.max(maxPixels, canvas.width * canvas.height);
+            canvas.width = budget.width;
+            canvas.height = budget.height;
+            maxPixels = Math.max(maxPixels, budget.pixels);
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             renderAnnotations(ctx, run.objects, {
                 scale: overlayScale, offset: { x: bounds.x, y: bounds.y },
@@ -827,7 +1097,8 @@ export async function saveHybrid({
     const bytes = await doc.save({ useObjectStreams: false });
     return {
         bytes, ms: Math.round(performance.now() - started),
-        ops, maxPixels, fragments, wholeLayerPages, fontSubstituted: true,
+        ops, maxPixels, fragments, wholeLayerPages, rasteredForGlyphs,
+        fontSubstituted: true,
     };
 }
 
