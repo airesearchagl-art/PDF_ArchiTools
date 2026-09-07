@@ -294,6 +294,167 @@ try {
         outBytes.length > sourceBytes.length,
         `${sourceBytes.length} -> ${outBytes.length} bytes`);
 
+    // ---- a save whose UI has gone away -------------------------------------
+    //
+    // A save is asynchronous, and the top navigation can unmount the Annotator
+    // while one is running. A run that no longer owns the UI must publish
+    // nothing: the file it produces is of a document that is no longer open,
+    // and it would arrive with nothing to explain it.
+    //
+    // The seam is real rather than injected: the first text-bearing save has to
+    // fetch `/ocr/fonts/MPLUS1p-Regular.ttf` from this origin, so holding that
+    // response open holds the save open. No test hook exists in production code
+    // for this; the request is intercepted at the network layer.
+    console.log('\n=== a save whose UI has gone away ===');
+
+    let releaseFont = null;
+    // The font was already fetched by the first save, so without this the
+    // browser serves it from cache and the interception never sees it.
+    await page.setCacheEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+        if (req.url().endsWith('/ocr/fonts/MPLUS1p-Regular.ttf') && !releaseFont) {
+            releaseFont = () => req.continue().catch(() => {});
+            return;
+        }
+        req.continue().catch(() => {});
+    });
+
+    // Back to a clean Annotator with a document and some text on it.
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.evaluate(() => {
+        [...document.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('PDF加筆'))?.click();
+    });
+    await page.waitForSelector('input[type="file"][accept="application/pdf"]');
+    const input2 = await page.$('input[type="file"][accept="application/pdf"]');
+    await input2.uploadFile(FIXTURE);
+    await page.waitForSelector('canvas.pdf-canvas', { timeout: 60000 });
+    await settle(1200);
+
+    const box2 = await page.evaluate(() => {
+        const c = document.querySelector('canvas.pdf-canvas');
+        const r = c.getBoundingClientRect();
+        return { x: r.x, y: r.y };
+    });
+    await clickByTitle('Text Tool');
+    await page.mouse.click(box2.x + 120, box2.y + 260);
+    await page.waitForSelector('textarea', { timeout: 20000 });
+    await page.type('textarea', 'STALERUNTEXT');
+    await page.evaluate(() => document.querySelector('textarea')?.blur());
+    await settle(300);
+
+    const beforeStale = fs.readdirSync(downloads);
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="annotator-save"]')?.click();
+    });
+
+    // The save is now waiting on the font.
+    await settle(1500);
+    check('the save is in flight, held on the font request',
+        releaseFont !== null && fs.readdirSync(downloads).length === beforeStale.length,
+        'nothing downloaded yet');
+
+    // Leave the Annotator while it runs.
+    await page.evaluate(() => {
+        [...document.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('PDF比較'))?.click();
+    });
+    await settle(600);
+    const unmounted = await page.evaluate(
+        () => document.querySelector('canvas.pdf-canvas') === null,
+    );
+    check('the Annotator unmounted', unmounted);
+
+    // Let the save finish into a UI that is no longer there.
+    if (releaseFont) releaseFont();
+    await settle(4000);
+
+    const afterStale = fs.readdirSync(downloads).filter((f2) => !beforeStale.includes(f2));
+    probe('a save that lost its UI downloads nothing',
+        afterStale.length === 0,
+        afterStale.length === 0 ? '0 downloads' : `IT DOWNLOADED ${afterStale.join(', ')}`);
+    probe('and leaves no stale notice behind',
+        await page.evaluate(() => document.querySelector('[data-testid="annotator-save-notice"]') === null));
+    const stateErrors = consoleErrors.filter(
+        (t) => /unmounted|not mounted|memory leak|setState/i.test(t),
+    );
+    check('and no state-after-unmount warning', stateErrors.length === 0, stateErrors.join(' | ') || '0');
+
+    await page.setRequestInterception(false).catch(() => {});
+
+    // ---- what counts as unfinished -----------------------------------------
+    //
+    // Refusing an unfinished operation is only right if "unfinished" means what
+    // the user would say it means. `startDrawing` assigns
+    // `currentPointsRef.current = [pos]` for every tool including plain text
+    // (DrawingCanvas.tsx:520), and nothing clears it afterwards — so a check
+    // that treats any leftover point as a half-drawn shape refuses a complete,
+    // text-only save. Both directions are asserted here.
+    console.log('\n=== what counts as unfinished ===');
+    await page.setRequestInterception(false).catch(() => {});
+    await page.setCacheEnabled(true);
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.evaluate(() => {
+        [...document.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('PDF加筆'))?.click();
+    });
+    await page.waitForSelector('input[type="file"][accept="application/pdf"]');
+    const input3 = await page.$('input[type="file"][accept="application/pdf"]');
+    await input3.uploadFile(FIXTURE);
+    await page.waitForSelector('canvas.pdf-canvas', { timeout: 60000 });
+    await settle(1200);
+    const box3 = await page.evaluate(() => {
+        const c = document.querySelector('canvas.pdf-canvas');
+        const r = c.getBoundingClientRect();
+        return { x: r.x, y: r.y };
+    });
+
+    // A text annotation and nothing else.
+    await clickByTitle('Text Tool');
+    await page.mouse.click(box3.x + 120, box3.y + 200);
+    await page.waitForSelector('textarea', { timeout: 20000 });
+    await page.type('textarea', 'TEXTONLYSAVE');
+    await page.evaluate(() => document.querySelector('textarea')?.blur());
+    await settle(300);
+
+    const textOnly = await saveOnce('text only');
+    check('a text-only save is not mistaken for an unfinished drawing',
+        textOnly.bytes !== undefined,
+        textOnly.bytes ? `${textOnly.bytes.length} bytes` : 'REFUSED');
+    if (textOnly.bytes) {
+        const t = await extract(textOnly.bytes);
+        check('and the text is in the file',
+            t[0].text.includes('TEXTONLYSAVE'));
+    }
+
+    // A polygon with vertices placed and never closed: genuinely unfinished.
+    await clickByTitle('Measure Polyline');
+    await page.mouse.click(box3.x + 100, box3.y + 400);
+    await settle(150);
+    await page.mouse.click(box3.x + 260, box3.y + 430);
+    await settle(300);
+
+    const beforePending = fs.readdirSync(downloads);
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="annotator-save"]')?.click();
+    });
+    await settle(2500);
+    const pendingNotice = await page.evaluate(
+        () => document.querySelector('[data-testid="annotator-save-notice"]')?.textContent ?? null,
+    );
+    const pendingDownloads = fs.readdirSync(downloads).filter((f2) => !beforePending.includes(f2));
+    // Which of the pending kinds names it is not the point -- a polygon
+    // mid-placement is both "drawing" and "an unfinished shape". What has to
+    // hold is that it refuses and says what to do about it.
+    probe('an unfinished polygon refuses the save, and says what to finish',
+        (pendingNotice ?? '').includes('操作を完了してから保存')
+        && /描画中|作図中|範囲指定|入力中|移動中/.test(pendingNotice ?? ''),
+        JSON.stringify((pendingNotice ?? '').slice(0, 34)));
+    probe('and produces no file',
+        pendingDownloads.length === 0,
+        pendingDownloads.length === 0 ? '0 downloads' : `IT DOWNLOADED ${pendingDownloads.join(', ')}`);
+
     // ---- the worker, and the network ---------------------------------------
     console.log('\n=== the network ===');
     const localWorker = requests.filter((u) => u === `${ORIGIN}/pdf.worker.min.mjs`);

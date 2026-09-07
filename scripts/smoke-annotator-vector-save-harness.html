@@ -11,7 +11,7 @@
  * ships, so everything below imports from `src/utils/annotator-save/`.
  */
 import * as pdfjsLib from 'pdfjs-dist';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { saveAnnotatedPdf, annotatedFilename, AnnotatorSaveError, MAX_RASTER_PIXELS }
   from '/src/utils/annotator-save/index.ts';
 import { checkRasterBudget } from '/src/utils/annotator-save/composition.ts';
@@ -497,10 +497,200 @@ window.__m3save = {
     };
   },
 
+  /**
+   * Which way up a text annotation reads after the save.
+   *
+   * A stroke is written as endpoints, each mapped on its own, so it survives
+   * any page rotation. Text is an anchor *and a basis*, and mapping only the
+   * anchor puts the annotation in the right place lying on its side. The
+   * all-quadrant placement probe could not see this, because it used strokes.
+   *
+   * So this reads the text's own transform back out of the saved file,
+   * composes it with the page viewport the way a viewer does, and asks what
+   * angle the baseline is at on screen.
+   */
+  async textOrientation(fixtureName) {
+    const source = await fixture(fixtureName);
+    const doc = await pdfjsLib.getDocument({ data: source.slice(), isEvalSupported: false }).promise;
+    const results = [];
+
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      const anchor = { x: 60, y: 90 };
+      const objects = [
+        text(`orient-${n}`, anchor.x, anchor.y, `ORIENT${n}`),
+        measure(`label-${n}`, 'line',
+          [{ x: 60, y: 200 }, { x: 260, y: 240 }]),
+      ];
+      const out = await attempt(source.slice(), [{
+        pageNumber: n, layers: [{ layerId: 'layer-1', objects }],
+      }]);
+      if (!out.ok) { results.push({ page: n, refused: out.message }); continue; }
+
+      const saved = await pdfjsLib.getDocument({
+        data: out.result.bytes.slice(), isEvalSupported: false,
+      }).promise;
+      const savedPage = await saved.getPage(n);
+      const savedViewport = savedPage.getViewport({ scale: 1 });
+      const content = await savedPage.getTextContent();
+
+      const measured = content.items
+        .filter((i) => i.str && i.str.trim() !== '')
+        .map((i) => {
+          const m = pdfjsLib.Util.transform(savedViewport.transform, i.transform);
+          return {
+            str: i.str,
+            angle: Math.round((Math.atan2(m[1], m[0]) * 180) / Math.PI),
+            x: m[4],
+            y: m[5],
+          };
+        });
+
+      const mark = measured.find((i) => i.str.includes(`ORIENT${n}`));
+      // The measurement's label is a formatted length, so it is found by shape.
+      const label = measured.find((i) => /^\s*\d+\.\d{2} mm\s*$/.test(i.str));
+
+      results.push({
+        page: n,
+        rotate: page.rotate,
+        viewport: { width: viewport.width, height: viewport.height },
+        text: mark
+          ? { angle: mark.angle, x: mark.x, y: mark.y, expected: anchor, extractable: true }
+          : { missing: true, sawInstead: measured.map((i) => i.str).slice(0, 6) },
+        label: label ? { angle: label.angle, str: label.str } : { missing: true },
+      });
+    }
+    return results;
+  },
+
+  /**
+   * A non-square transparent fragment on a rotated, cropped page.
+   *
+   * Rotation has produced a placement bug here before, and a near-square
+   * fragment hid it — a square hides a swapped width and height. So the
+   * fragment is deliberately oblong, and it is located in pixels after a
+   * round trip rather than trusted.
+   */
+  async fragmentOrientation(fixtureName) {
+    const source = await fixture(fixtureName);
+    const doc = await pdfjsLib.getDocument({ data: source.slice(), isEvalSupported: false }).promise;
+    const results = [];
+
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      // Wide and short, with an eraser through it, so the run is rastered.
+      const at = { x: 60, y: 120 };
+      const w = 240;
+      const h = 60;
+      const objects = [
+        { ...stroke('wide', { x: at.x, y: at.y }, { x: at.x + w, y: at.y }),
+          color: '#FF0000', lineWidth: 12 },
+        { ...stroke('down', { x: at.x, y: at.y }, { x: at.x, y: at.y + h }),
+          color: '#FF0000', lineWidth: 12 },
+        eraser('rub', { x: at.x + w - 30, y: at.y }, { x: at.x + w, y: at.y }),
+      ];
+      const out = await attempt(source.slice(), [{
+        pageNumber: n, layers: [{ layerId: 'layer-1', objects }],
+      }]);
+      if (!out.ok) { results.push({ page: n, refused: out.message }); continue; }
+
+      const { canvas, ctx } = await renderPage(out.result.bytes, n, 1);
+      const found = findColour(ctx, canvas, { r: 255, g: 0, b: 0 });
+      // The L shape is wider than it is tall, so its ink centroid sits left of
+      // and above the middle of its bounding box. A fragment placed with width
+      // and height swapped puts it somewhere else entirely.
+      const expected = { x: at.x + w / 3, y: at.y + h / 4 };
+      results.push({
+        page: n,
+        rotate: page.rotate,
+        fragments: out.result.rasterFragments,
+        found: found ? { x: found.x, y: found.y, pixels: found.count } : null,
+        expected,
+        errorPt: found ? Math.hypot(found.x - expected.x, found.y - expected.y) : null,
+      });
+    }
+    return results;
+  },
+
+  /**
+   * Whether assessing a document changes it.
+   *
+   * In pdf-lib 1.17.1 `getForm()` is not read-only: it routes through
+   * `getOrCreateForm()`, so a document with no AcroForm gains an empty one just
+   * by being inspected, and it calls `deleteXFA()` on anything carrying XFA.
+   * Either one destroys part of the source before a byte is written.
+   */
+  async formSideEffects() {
+    const hasAcroForm = async (bytes) => {
+      const lib = await PDFDocument.load(bytes.slice(), { updateMetadata: false });
+      return lib.catalog.get(PDFName.of('AcroForm')) !== undefined;
+    };
+    const hasXfa = async (bytes) => {
+      const lib = await PDFDocument.load(bytes.slice(), { updateMetadata: false });
+      const raw = lib.catalog.get(PDFName.of('AcroForm'));
+      if (raw === undefined) return false;
+      const acro = lib.catalog.lookup(PDFName.of('AcroForm'));
+      return acro?.get?.(PDFName.of('XFA')) !== undefined;
+    };
+
+    const out = {};
+
+    // No form: assessing must not create one, and neither must a real save.
+    const noForm = await fixture('no-form');
+    const noFormReference = noForm.slice();
+    out['no-form'] = { acroFormBefore: await hasAcroForm(noForm) };
+    const assessed = await assessSource(noForm.slice());
+    out['no-form'].assessed = assessed.supported;
+    const savedNoForm = await attempt(noForm, onePage(sampleObjects()));
+    out['no-form'].saved = savedNoForm.ok ? savedNoForm.result.bytes.length : null;
+    out['no-form'].acroFormAfter = savedNoForm.ok
+      ? await hasAcroForm(savedNoForm.result.bytes)
+      : null;
+    out['no-form'].inputUnchanged = (() => {
+      if (noForm.length !== noFormReference.length) return false;
+      for (let i = 0; i < noForm.length; i++) if (noForm[i] !== noFormReference[i]) return false;
+      return true;
+    })();
+
+    // XFA: refused, and never stripped.
+    const xfa = await fixture('xfa');
+    const xfaReference = xfa.slice();
+    out.xfa = { xfaBefore: await hasXfa(xfa) };
+    const xfaVerdict = await assessSource(xfa.slice());
+    out.xfa.supported = xfaVerdict.supported;
+    out.xfa.code = xfaVerdict.problems[0]?.code ?? null;
+    out.xfa.message = xfaVerdict.problems[0]?.message ?? null;
+    const savedXfa = await attempt(xfa, onePage(sampleObjects()));
+    out.xfa.saved = savedXfa.ok ? savedXfa.result.bytes.length : undefined;
+    out.xfa.refused = savedXfa.ok ? null : savedXfa.message;
+    out.xfa.xfaStillInInput = await hasXfa(xfa);
+    out.xfa.inputUnchanged = (() => {
+      if (xfa.length !== xfaReference.length) return false;
+      for (let i = 0; i < xfa.length; i++) if (xfa[i] !== xfaReference[i]) return false;
+      return true;
+    })();
+
+    // An ordinary form still works, values and all.
+    const rich = await fixture('rich');
+    const savedRich = await attempt(rich.slice(), onePage(sampleObjects()));
+    if (savedRich.ok) {
+      const lib = await PDFDocument.load(savedRich.result.bytes.slice(), { updateMetadata: false });
+      out['ordinary-form'] = {
+        saved: savedRich.result.bytes.length,
+        fields: Object.fromEntries(lib.getForm().getFields()
+          .map((fd) => [fd.getName(), typeof fd.getText === 'function' ? (fd.getText() ?? '') : ''])),
+      };
+    } else {
+      out['ordinary-form'] = { refused: savedRich.message };
+    }
+    return out;
+  },
+
   /** Which source documents this will and will not write. */
   async supportBoundary() {
     const out = {};
-    for (const name of ['rich', 'multipage', 'signed', 'damaged', 'unreadable-form']) {
+    for (const name of ['rich', 'multipage', 'no-form', 'signed', 'damaged', 'unreadable-form', 'xfa']) {
       const bytes = await fixture(name);
       let verdict;
       try {

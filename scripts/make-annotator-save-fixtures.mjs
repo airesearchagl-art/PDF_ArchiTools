@@ -292,6 +292,47 @@ async function write(name, doc, note) {
 }
 
 // ---------------------------------------------------------------------------
+// 9. no-form.pdf -- a document with no AcroForm at all
+// ---------------------------------------------------------------------------
+//
+// The control for a mutation that is easy to miss: in pdf-lib 1.17.1
+// `getForm()` routes through `getOrCreateForm()`, so merely *inspecting* a
+// document for signatures gives it an empty AcroForm, which then persists into
+// whatever is saved. The dictionary must still be absent afterwards -- "zero
+// fields" is not the same claim.
+{
+    const doc = await PDFDocument.create();
+    stamp(doc, 'M3 no form');
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    drawSheet(doc.addPage([A4.w, A4.h]), font, A4, 'NO FORM');
+    await write('no-form', doc, 'no /AcroForm in the catalog at all');
+}
+
+// ---------------------------------------------------------------------------
+// 10. xfa.pdf -- form data pdf-lib deletes rather than fails on
+// ---------------------------------------------------------------------------
+//
+// `getForm()` calls `deleteXFA()` on anything carrying XFA, with a console
+// warning and no error. A save that inspected the document would therefore
+// destroy its forms and report success -- so the boundary has to refuse before
+// anything touches the form.
+{
+    const doc = await PDFDocument.create();
+    stamp(doc, 'M3 XFA form');
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([A4.w, A4.h]);
+    drawSheet(page, font, A4, 'XFA FORM');
+    const ctx = doc.context;
+    const xfa = ctx.obj([
+        PDFString.of('preamble'),
+        ctx.register(ctx.flateStream('<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"></xdp:xdp>')),
+    ]);
+    const acro = ctx.obj({ Fields: ctx.obj([]), XFA: xfa });
+    doc.catalog.set(PDFName.of('AcroForm'), ctx.register(acro));
+    await write('xfa', doc, 'an existing AcroForm carrying /XFA');
+}
+
+// ---------------------------------------------------------------------------
 // 8. damaged.pdf -- a file that is not a PDF any more
 // ---------------------------------------------------------------------------
 {

@@ -238,7 +238,9 @@ try {
     check('annotator: the raster limit is a number the user can act on',
         a.includes('800万ピクセル') && a.includes('保存を中断'));
     check('annotator: the documents it will not save are listed',
-        a.includes('電子署名') && a.includes('パスワード保護') && a.includes('破損'));
+        a.includes('電子署名') && a.includes('パスワード保護') && a.includes('破損')
+        && a.includes('XFA'),
+        'including XFA, which would otherwise be silently stripped');
     check('annotator: the original file is not overwritten, and it says so',
         a.includes('_annotated.pdf'));
     // The distinction that matters most if anyone relies on it.

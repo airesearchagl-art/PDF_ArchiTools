@@ -44,6 +44,42 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
     const sourceBytesRef = useRef<Uint8Array | null>(null);
     const sourceNameRef = useRef<string>('document.pdf');
 
+    /**
+     * Who a finished save belongs to.
+     *
+     * A save is asynchronous and the app can move on while it runs: the top
+     * navigation unmounts this component, or the user opens a different
+     * document. A run that no longer owns the UI must publish nothing — no
+     * download, no notice, no state update — because the file it produces is of
+     * a document that is no longer open, and it would arrive without any
+     * context explaining itself.
+     *
+     * Three things can invalidate a run, so all three are captured when it
+     * starts and re-checked after every await, immediately before anything
+     * leaves this function:
+     *
+     *   `mountedRef`  — this component is still on screen
+     *   `saveRunRef`  — no later save has superseded this one
+     *   `sourceRunRef`— the document being saved is still the one that is open
+     *
+     * The generation is compared to a captured token rather than a boolean, so
+     * an older run cannot mistake a newer run's "in progress" for its own.
+     */
+    const mountedRef = useRef(true);
+    const saveRunRef = useRef(0);
+    const sourceRunRef = useRef(0);
+    const savingRef = useRef(false);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            // Anything still running is orphaned by this, whatever it goes on
+            // to compute.
+            saveRunRef.current += 1;
+        };
+    }, []);
+
     // Drawing state
     const [tool, setTool] = useState<ToolType>('pen');
     const [color, setColor] = useState('#000000');
@@ -187,6 +223,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
             // whatever it does to that buffer cannot reach the copy a save
             // depends on.
             const bytes = new Uint8Array(arrayBuffer);
+            // A save of the previous document must not publish a file now that
+            // a different one is open.
+            sourceRunRef.current += 1;
+            saveRunRef.current += 1;
             sourceBytesRef.current = bytes.slice();
             sourceNameRef.current = file.name || 'document.pdf';
             const forDisplay = bytes.slice();
@@ -257,10 +297,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
     const handleDownload = async () => {
         const sourceBytes = sourceBytesRef.current;
         if (!pdfDoc || !sourceBytes) return;
-        // One save at a time. A second click while the first is in flight would
-        // race two downloads and two sets of warnings.
-        if (isSaving) return;
+        // A ref rather than the `isSaving` state: a second click can arrive
+        // before React has re-rendered with the state set, and then two saves
+        // race two downloads.
+        if (savingRef.current) return;
 
+        const run = saveRunRef.current + 1;
+        saveRunRef.current = run;
+        const sourceRun = sourceRunRef.current;
+        /** Whether this run still owns the UI it would publish into. */
+        const owns = () => mountedRef.current
+            && saveRunRef.current === run
+            && sourceRunRef.current === sourceRun;
+
+        savingRef.current = true;
         setIsSaving(true);
         setSaveNotice(null);
         let objectUrl: string | null = null;
@@ -288,7 +338,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
 
             const result = await saveAnnotatedPdf({ sourceBytes, pages });
 
-            // Only now that every page is written does anything download.
+            // The last gate before anything leaves this function. The bytes may
+            // be perfectly good and still belong to nobody.
+            if (!owns()) return;
+
             const blob = new Blob([result.bytes.slice().buffer as ArrayBuffer], { type: 'application/pdf' });
             objectUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -301,10 +354,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ onLoad }) => {
             setSaveNotice(describeSaveWarnings(result));
         } catch (err) {
             console.error('Annotated save failed:', err);
-            setSaveNotice([describeSaveFailure(err)]);
+            // A refusal belongs to its run too: showing it after the user has
+            // moved on is an explanation of something they can no longer see.
+            if (owns()) setSaveNotice([describeSaveFailure(err)]);
         } finally {
             if (objectUrl) URL.revokeObjectURL(objectUrl);
-            setIsSaving(false);
+            if (saveRunRef.current === run) savingRef.current = false;
+            // Never a state setter on an unmounted or superseded run.
+            if (owns()) setIsSaving(false);
         }
     };
 

@@ -125,6 +125,18 @@ export function drawObjectVector(
             font,
             color: rgb(c.r, c.g, c.b),
             opacity: obj.opacity ?? 1,
+            // The anchor is not enough. A stroke is written as endpoints, each
+            // mapped on its own, so it comes out right whatever the page
+            // rotation is. Text is an anchor plus a basis, and only the anchor
+            // was being mapped -- so on a rotated page the annotation landed in
+            // the right place lying on its side. Measured at /Rotate 90, 180
+            // and 270: 90, 180 and -90 degrees off.
+            //
+            // The page's own /Rotate is what turns PDF +x into display +x, so
+            // it is also what turns text written in user space into text that
+            // reads horizontally on screen -- the same value, and for the same
+            // reason, as the one `placeDisplayImage` gives a fragment.
+            rotate: degrees(map.geom.rotate),
         });
         return 1;
     }
@@ -207,8 +219,11 @@ export function drawObjectVector(
         const left = label.align === 'left' ? label.x : label.x - width / 2;
         const at = toPdf({ x: left, y: label.y });
         const lc = parseColour(label.colour ?? obj.color);
+        // Same as above: a measurement's labels are text and need the basis
+        // turned, not just the anchor placed.
         page.drawText(label.text, {
             x: at.x, y: at.y, size: label.size, font, color: rgb(lc.r, lc.g, lc.b),
+            rotate: degrees(map.geom.rotate),
         });
         ops += 1;
     }

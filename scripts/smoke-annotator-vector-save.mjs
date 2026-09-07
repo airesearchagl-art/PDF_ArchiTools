@@ -178,6 +178,81 @@ try {
         }
     }
 
+    // ---- which way up the text reads --------------------------------------
+    for (const fx of ['rotated', 'croprot']) {
+        console.log(`\n=== text and labels read the right way up: ${fx} ===`);
+        const rows = await page.evaluate((f2) => window.__m3save.textOrientation(f2), fx);
+        for (const r of rows) {
+            check(`${fx} p${r.page} (/Rotate ${r.rotate}): the text annotation is extractable`,
+                r.text.extractable === true,
+                r.text.missing ? `saw: ${(r.text.sawInstead ?? []).join(' | ')}` : r.text.x !== undefined
+                    ? `at (${r.text.x.toFixed(0)}, ${r.text.y.toFixed(0)})` : '');
+            // The one a stroke-only probe cannot see.
+            probe(`${fx} p${r.page} (/Rotate ${r.rotate}): its baseline is horizontal on screen`,
+                r.text.angle === 0, `${r.text.angle}deg`);
+            // The stored y is the *top* of the glyph box and pdf.js reports the
+            // baseline, so the two differ by the ascent by design. Asserting
+            // that gap is the assertion: it is what keeps text from sitting a
+            // line high, and it must hold identically at every rotation.
+            const dropped = r.text.y - r.text.expected.y;
+            check(`${fx} p${r.page}: and it is where it was put, one ascent below the top`,
+                Math.abs(r.text.x - r.text.expected.x) <= 2
+                && dropped > 12 && dropped < 21,
+                `x ${r.text.x.toFixed(1)} vs ${r.text.expected.x}, `
+                + `baseline ${dropped.toFixed(1)}pt below the stored top (16pt text)`);
+            probe(`${fx} p${r.page} (/Rotate ${r.rotate}): the measurement label too`,
+                r.label.angle === 0, r.label.missing ? 'LABEL MISSING' : `${r.label.angle}deg  ${r.label.str}`);
+        }
+    }
+
+    for (const fx of ['rotated', 'croprot']) {
+        console.log(`\n=== a non-square raster fragment, rotated: ${fx} ===`);
+        const rows = await page.evaluate((f2) => window.__m3save.fragmentOrientation(f2), fx);
+        for (const r of rows) {
+            check(`${fx} p${r.page} (/Rotate ${r.rotate}): the fragment was written`,
+                r.fragments === 1 && r.found !== null,
+                r.found ? `${r.found.pixels} ink pixels` : 'NOT FOUND');
+            probe(`${fx} p${r.page}: and it landed where the marks were drawn`,
+                r.errorPt !== null && r.errorPt <= 12,
+                r.errorPt === null ? 'MISSING' : `${r.errorPt.toFixed(1)}pt from the expected centroid`);
+        }
+    }
+
+    // ---- assessing must not change the document ---------------------------
+    console.log('\n=== inspecting a document does not modify it ===');
+    const side = await page.evaluate(() => window.__m3save.formSideEffects());
+    const nf = side['no-form'];
+    check('the no-form fixture really has no AcroForm', nf.acroFormBefore === false);
+    check('and it saves normally', nf.saved > 0, `${nf.saved} bytes`);
+    // pdf-lib's getForm() creates one; this asserts the dictionary itself is
+    // still absent, not merely that it holds no fields.
+    probe('the saved file still has no AcroForm dictionary',
+        nf.acroFormAfter === false,
+        nf.acroFormAfter === false ? 'absent, as it was' : 'AN ACROFORM WAS CREATED');
+    check('and the input bytes were untouched', nf.inputUnchanged === true);
+
+    const xf = side.xfa;
+    check('the XFA fixture really carries XFA', xf.xfaBefore === true);
+    probe('an XFA document is refused, distinctly',
+        xf.supported === false && xf.code === 'xfa-unsupported',
+        xf.code ?? 'no code');
+    probe('and the save produces no bytes',
+        typeof xf.refused === 'string' && xf.saved === undefined,
+        xf.refused?.slice(0, 60) ?? `IT PRODUCED ${xf.saved} BYTES`);
+    check('the refusal explains itself without a raw exception',
+        (xf.message ?? '').includes('XFA') && (xf.message ?? '').includes('保存できません'),
+        (xf.message ?? '').slice(0, 50));
+    // The failure this replaces: getForm() strips XFA and carries on.
+    probe('the XFA is still in the source afterwards',
+        xf.xfaStillInInput === true,
+        xf.xfaStillInInput ? 'intact' : 'THE XFA WAS DELETED');
+    check('and the input bytes were untouched', xf.inputUnchanged === true);
+
+    check('an ordinary form is still accepted, values and all',
+        side['ordinary-form'].saved > 0
+        && side['ordinary-form'].fields['drawing.number'] === 'A-101',
+        JSON.stringify(side['ordinary-form'].fields));
+
     // ---- annotation text --------------------------------------------------
     console.log('\n=== added text is searchable ===');
     const searchable = await page.evaluate(() => window.__m3save.searchableText());

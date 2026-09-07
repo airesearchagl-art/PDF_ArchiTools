@@ -87,6 +87,7 @@ export type SaveErrorCode =
     | 'encrypted'
     | 'unreadable'
     | 'form-unreadable'
+    | 'xfa-unsupported'
     | 'pending-annotation'
     | 'raster-budget'
     | 'invalid-annotation'

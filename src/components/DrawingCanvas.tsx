@@ -209,10 +209,20 @@ const DrawingCanvasComponent: React.ForwardRefRenderFunction<DrawingCanvasRef, D
             }
             // Poly and area accumulate vertices between clicks and are only
             // committed on double-click, so a half-drawn shape lives here.
-            if (currentPointsRef.current.length > 0) {
+            //
+            // Only for those two tools. `startDrawing` assigns
+            // `currentPointsRef.current = [pos]` for every other tool as well
+            // (DrawingCanvas.tsx:520), including a plain text click, and nothing
+            // clears it afterwards -- so treating any leftover point as an
+            // unfinished shape refuses a perfectly complete text-only save.
+            if ((tool === 'measure-poly' || tool === 'measure-area')
+                && currentPointsRef.current.length > 0) {
                 return { kind: 'shape', message: '作図中の図形があります。' };
             }
-            if (lassoPath !== null || selectionRect !== null) {
+            // A rubber-band that is still live: a measurement or calibration
+            // being dragged, or a lasso mid-sweep. `isDrawing` covers the
+            // pointer being down; these cover an overlay left on screen.
+            if (isDrawing && (lassoPath !== null || selectionRect !== null)) {
                 return { kind: 'measure', message: '範囲指定または計測が完了していません。' };
             }
             return null;

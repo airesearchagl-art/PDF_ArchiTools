@@ -7,29 +7,30 @@
  * that file and reporting success is the worst kind of preservation failure —
  * the document still looks signed and is not.
  *
- * These are refused before anything is written, by name.
+ * **This inspection must not itself modify the document.** That is not a
+ * theoretical worry: in pdf-lib 1.17.1 `getForm()` is not read-only. It routes
+ * through `getOrCreateForm()`, so a document with no AcroForm *gains an empty
+ * one* merely by being looked at, and it calls `deleteXFA()` on anything
+ * carrying XFA form data — destroying it before a single byte is written. Both
+ * were measured against the exact pinned version.
+ *
+ * So the catalog is read at the dictionary level first, and `getForm()` is only
+ * reached once an ordinary, non-XFA AcroForm is known to be there already.
  */
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict } from 'pdf-lib';
 import type { SaveProblem } from './types';
 
 const SIGNATURE_UNCHECKABLE = 'このPDFのフォーム情報を読み取れなかったため、'
     + '電子署名の有無を確認できませんでした。確認できない状態では保存しません。';
+
+const XFA_UNSUPPORTED = 'このPDFには現在安全に保持できないXFAフォームが含まれているため、'
+    + '注釈付きPDFとして保存できません。元のフォーム情報を保護するため処理を中止しました。';
 
 export interface SourceVerdict {
     supported: boolean;
     problems: SaveProblem[];
     signatureFields: string[];
     doc: PDFDocument | null;
-}
-
-/**
- * A PDFName for a key, built through the document's own context.
- *
- * pdf-lib's `PDFName` is not imported here on purpose: going through the
- * context means this works against whatever build the caller already loaded.
- */
-function nameFor(doc: PDFDocument, key: string): unknown {
-    return (doc.context.obj({ [key]: 0 }) as unknown as { keys(): unknown[] }).keys()[0];
 }
 
 export async function assessSource(bytes: Uint8Array): Promise<SourceVerdict> {
@@ -79,14 +80,44 @@ export async function assessSource(bytes: Uint8Array): Promise<SourceVerdict> {
         return { supported: false, problems, signatureFields: [], doc: null };
     }
 
-    // A signature lives in the AcroForm as a field whose /FT is /Sig.
-    //
-    // Being unable to read the form is **not** evidence that there is no
-    // signature — it is evidence that the question could not be asked. Catching
-    // that and carrying on would turn "we could not check" into "there is
-    // nothing to check", so it refuses instead. The field types and the raw
-    // dictionaries are both inspected, because a constructor name is a property
-    // of the library build rather than of the document.
+    // ---- the form, read rather than created --------------------------------
+    let acroForm: PDFDict | undefined;
+    try {
+        const raw = doc.catalog.get(PDFName.of('AcroForm'));
+        if (raw !== undefined) {
+            const resolved = doc.catalog.lookup(PDFName.of('AcroForm'));
+            if (!(resolved instanceof PDFDict)) {
+                throw new Error('AcroForm is not a dictionary');
+            }
+            acroForm = resolved;
+        }
+    } catch (error) {
+        problems.push({
+            code: 'form-unreadable',
+            message: SIGNATURE_UNCHECKABLE,
+            detail: String((error as Error)?.message ?? error),
+        });
+        return { supported: false, problems, signatureFields: [], doc: null };
+    }
+
+    // No AcroForm at all. There is nothing to inspect and nothing to sign, and
+    // — importantly — nothing is created by having looked.
+    if (!acroForm) {
+        return { supported: true, problems, signatureFields: [], doc };
+    }
+
+    // XFA is form data pdf-lib cannot read or write, and its own `getForm()`
+    // deletes it rather than failing. Losing a document's forms to a save that
+    // reports success is exactly the preservation failure this boundary exists
+    // to prevent, so it refuses instead.
+    if (acroForm.get(PDFName.of('XFA')) !== undefined) {
+        problems.push({ code: 'xfa-unsupported', message: XFA_UNSUPPORTED });
+        return { supported: false, problems, signatureFields: [], doc: null };
+    }
+
+    // An ordinary AcroForm that already exists and has no XFA: `getForm()` has
+    // nothing left to create or delete, so it is safe to traverse the fields
+    // with it.
     const signatureFields: string[] = [];
     try {
         const form = doc.getForm();
@@ -96,20 +127,18 @@ export async function assessSource(bytes: Uint8Array): Promise<SourceVerdict> {
                 signatureFields.push(name);
                 continue;
             }
+            // A constructor name is a property of the library build, not of the
+            // document, so the dictionary is checked too.
             const dict = (field as unknown as {
-                acroField?: { dict?: { get?: (k: unknown) => unknown } };
+                acroField?: { dict?: { get?: (k: PDFName) => unknown } };
             }).acroField?.dict;
-            const ft = dict?.get?.(nameFor(doc, 'FT'));
+            const ft = dict?.get?.(PDFName.of('FT'));
             const ftName = (ft as { asString?: () => string })?.asString
                 ? (ft as { asString: () => string }).asString()
                 : String(ft ?? '');
             if (ftName === '/Sig') signatureFields.push(name);
         }
-        const acro = (form as unknown as {
-            acroForm?: { dict?: { get?: (k: unknown) => unknown } };
-        }).acroForm?.dict;
-        const sigFlags = acro?.get?.(nameFor(doc, 'SigFlags'));
-        if (sigFlags !== undefined && signatureFields.length === 0) {
+        if (acroForm.get(PDFName.of('SigFlags')) !== undefined && signatureFields.length === 0) {
             signatureFields.push('(SigFlags set)');
         }
     } catch (error) {
