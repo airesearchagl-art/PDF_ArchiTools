@@ -103,6 +103,7 @@ jobs:
           node scripts/make-size-fixtures.mjs
           node scripts/make-titleblock-fixtures.mjs
           node scripts/make-drawing-register-fixtures.mjs
+          node scripts/make-annotator-save-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -139,3 +140,12 @@ jobs:
       # and only the bundle can answer that.
       - name: Annotator local PDF worker
         run: node scripts/smoke-annotator-local-worker.mjs
+
+      # Drives the production save module, then the real UI of the built
+      # artifact: the first proves the module does the right thing when handed
+      # a job, the second proves the app hands it that job.
+      - name: Annotator vector-preserving save
+        run: node scripts/smoke-annotator-vector-save.mjs
+
+      - name: Annotator save through the UI
+        run: node scripts/smoke-annotator-save-ui.mjs

@@ -73,9 +73,33 @@ interface MeasureObject extends BaseObject {
 
 export type CanvasObject = StrokeObject | TextObject | MeasureObject;
 
+/** An unfinished interaction, and what the user has to do to settle it. */
+export interface PendingInteraction {
+    kind: 'drawing' | 'text' | 'shape' | 'measure' | 'selection' | 'drag';
+    message: string;
+}
+
 export interface DrawingCanvasRef {
     duplicateSelection: () => void;
     deleteSelection: () => void;
+    /**
+     * A deep copy of the committed objects, safe to hand to a save.
+     *
+     * Never the live array. The caller must not be able to mutate canvas state
+     * through what it is given, and a save in flight must not see later edits:
+     * the bytes have to correspond to the state that was validated.
+     */
+    getSaveSnapshot: () => CanvasObject[];
+    /**
+     * An interaction that has not been committed to `objects` yet.
+     *
+     * Live pen ink exists only as canvas pixels plus a ref until pointerup;
+     * typed text lives in a textarea until it is committed; a polygon is only
+     * finished on double-click. Saving through any of those would produce a
+     * finished-looking file with the mark missing, so a save refuses instead.
+     * A selection is not pending — it changes nothing about what is stored.
+     */
+    getPendingInteraction: () => PendingInteraction | null;
 }
 
 const DrawingCanvasComponent: React.ForwardRefRenderFunction<DrawingCanvasRef, DrawingCanvasProps> = ({
@@ -171,7 +195,38 @@ const DrawingCanvasComponent: React.ForwardRefRenderFunction<DrawingCanvasRef, D
             setSelectedIds(newSelectedIds);
             onSelectionChange?.(Array.from(newSelectedIds));
         },
-        deleteSelection: deleteSelectionInternal
+        deleteSelection: deleteSelectionInternal,
+        getSaveSnapshot: () => JSON.parse(JSON.stringify(objects)) as CanvasObject[],
+        getPendingInteraction: () => {
+            if (textInput !== null && textInput.text.trim() !== '') {
+                return { kind: 'text', message: '入力中の文字があります。' };
+            }
+            if (isDragging) {
+                return { kind: 'drag', message: '移動中の注釈があります。' };
+            }
+            if (isDrawing) {
+                return { kind: 'drawing', message: '描画中の操作があります。' };
+            }
+            // Poly and area accumulate vertices between clicks and are only
+            // committed on double-click, so a half-drawn shape lives here.
+            //
+            // Only for those two tools. `startDrawing` assigns
+            // `currentPointsRef.current = [pos]` for every other tool as well
+            // (DrawingCanvas.tsx:520), including a plain text click, and nothing
+            // clears it afterwards -- so treating any leftover point as an
+            // unfinished shape refuses a perfectly complete text-only save.
+            if ((tool === 'measure-poly' || tool === 'measure-area')
+                && currentPointsRef.current.length > 0) {
+                return { kind: 'shape', message: '作図中の図形があります。' };
+            }
+            // A rubber-band that is still live: a measurement or calibration
+            // being dragged, or a lasso mid-sweep. `isDrawing` covers the
+            // pointer being down; these cover an overlay left on screen.
+            if (isDrawing && (lassoPath !== null || selectionRect !== null)) {
+                return { kind: 'measure', message: '範囲指定または計測が完了していません。' };
+            }
+            return null;
+        }
     }));
 
     // --- Rendering ---
