@@ -101,6 +101,12 @@ const record = (url) => {
 };
 page.on('request', (r) => record(r.url()));
 page.on('pageerror', (e) => pageErrors.push(e.message));
+// PdfPage catches a failed render and only logs it, so the console is the one
+// place a render failure is visible at all.
+const consoleErrors = [];
+page.on('console', (m) => {
+    if (m.type() === 'error') consoleErrors.push(m.text());
+});
 // PDF.js runs in a Web Worker, and page-level events do not see the worker's
 // own traffic -- including the request that fetches the worker's dependencies.
 browser.on('targetcreated', async (target) => {
@@ -138,25 +144,71 @@ try {
     await input.uploadFile(uploadPath);
 
     // ---- it has to actually render ---------------------------------------
-    await page.waitForSelector('canvas', { timeout: 60000 });
+    // The page canvas specifically. There is an annotation canvas stacked over
+    // it, and `querySelector('canvas')` would happily settle for that one --
+    // which is empty by design and says nothing about whether the PDF rendered.
+    await page.waitForSelector('canvas.pdf-canvas', { timeout: 60000 });
     await page.waitForFunction(() => {
-        const c = document.querySelector('canvas');
+        const c = document.querySelector('canvas.pdf-canvas');
         return c && c.width > 0 && c.height > 0;
     }, { timeout: 60000 });
     // Let any late worker traffic arrive before the counting starts.
     await new Promise((resolve) => { setTimeout(resolve, 1500); });
 
     const rendered = await page.evaluate(() => {
-        const canvases = [...document.querySelectorAll('canvas')];
-        const c = canvases[0];
+        /**
+         * Pixels that are actually marked.
+         *
+         * Transparency is the trap. An un-rendered canvas is (0,0,0,0)
+         * everywhere, and a test that only asks "is this all white?" reads
+         * those zeroed colour channels as dark ink and calls the blank canvas
+         * painted. PdfPage catches a render failure and only logs it, leaving
+         * exactly that canvas behind at full size -- so the wrong question
+         * passes on the real failure.
+         *
+         * Alpha first, then colour.
+         */
+        const inkPixels = (canvas) => {
+            if (!canvas || !canvas.width || !canvas.height) return 0;
+            const { data } = canvas.getContext('2d')
+                .getImageData(0, 0, canvas.width, canvas.height);
+            let ink = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+                if (a > 0 && (r < 245 || g < 245 || b < 245)) ink++;
+            }
+            return ink;
+        };
+
+        // Controls for the classifier itself, so the measurement above is not
+        // taken on trust: an untouched canvas must read as 0, and a canvas with
+        // one known black mark must not.
+        const scratch = document.createElement('canvas');
+        scratch.width = 40;
+        scratch.height = 40;
+        const untouched = inkPixels(scratch);
+        const ctx = scratch.getContext('2d');
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(4, 4, 10, 10);
+        const marked = inkPixels(scratch);
+
+        const white = document.createElement('canvas');
+        white.width = 40;
+        white.height = 40;
+        const wctx = white.getContext('2d');
+        wctx.fillStyle = '#ffffff';
+        wctx.fillRect(0, 0, 40, 40);
+        const whiteOnly = inkPixels(white);
+
+        const pdfCanvas = document.querySelector('canvas.pdf-canvas');
         const err = document.querySelector('.error-message');
         return {
-            canvasCount: canvases.length,
-            width: c?.width ?? 0,
-            height: c?.height ?? 0,
-            blank: c ? !c.getContext('2d')
-                .getImageData(0, 0, c.width, c.height).data.some((v, i) => i % 4 !== 3 && v !== 255)
-                : true,
+            canvasCount: document.querySelectorAll('canvas').length,
+            pdfCanvasFound: pdfCanvas !== null,
+            width: pdfCanvas?.width ?? 0,
+            height: pdfCanvas?.height ?? 0,
+            ink: inkPixels(pdfCanvas),
+            control: { untouched, marked, whiteOnly },
             errorText: err?.textContent ?? '',
             stillLoading: document.body.textContent?.includes('Loading PDF...') ?? false,
         };
@@ -165,15 +217,32 @@ try {
     // A gate that only counted requests would pass just as happily on a broken
     // upload that never fetched anything at all.
     console.log('\n=== the document actually opened ===');
-    check('the upload was accepted and a page canvas exists',
-        rendered.canvasCount > 0, `${rendered.canvasCount} canvas element(s)`);
-    check('the canvas has real dimensions',
+    check('the upload was accepted and the page canvas exists',
+        rendered.pdfCanvasFound, `${rendered.canvasCount} canvas element(s), one of them .pdf-canvas`);
+    check('the page canvas has real dimensions',
         rendered.width > 0 && rendered.height > 0, `${rendered.width}x${rendered.height}`);
-    check('and something was drawn on it',
-        rendered.blank === false, 'not a blank white canvas');
+
+    // The classifier before its verdict. An un-rendered canvas is transparent,
+    // not white, and a check that misses that reads (0,0,0,0) as black ink and
+    // passes on a page that never drew.
+    probe('an untouched transparent canvas counts as no ink',
+        rendered.control.untouched === 0, `${rendered.control.untouched} ink pixels`);
+    probe('and so does a plain white one',
+        rendered.control.whiteOnly === 0, `${rendered.control.whiteOnly} ink pixels`);
+    check('while a canvas with one known black mark does not',
+        rendered.control.marked === 100, `${rendered.control.marked} ink pixels for a 10x10 fill`);
+
+    // The fixture is black text plus a 400x320 rectangle outline, so a rendered
+    // page is thousands of marked pixels. The threshold is far below that and
+    // far above nothing, rather than tuned to this fixture's exact output.
+    check('and the page canvas was actually painted',
+        rendered.ink > 500, `${rendered.ink} ink pixels`);
     check('no loading error is shown',
         rendered.errorText === '', rendered.errorText || 'no error message');
     check('and it is not still loading', rendered.stillLoading === false);
+    probe('PdfPage logged no render error, which is the only place one appears',
+        consoleErrors.filter((t) => t.includes('Render error:')).length === 0,
+        consoleErrors.filter((t) => t.includes('Render error:')).join(' | ') || '0 render errors');
 
     // ---- where the worker came from --------------------------------------
     const duringOpen = requests.slice(beforeUpload);
@@ -201,6 +270,8 @@ try {
             ? '0 external HTTP(S) requests across the whole session'
             : external.join(' '));
     check('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
+    check('and no console errors at all',
+        consoleErrors.length === 0, consoleErrors.join(' | ') || '0 console errors');
 
     // ---- the part a source diff cannot show ------------------------------
     //
