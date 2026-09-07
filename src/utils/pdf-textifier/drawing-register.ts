@@ -274,9 +274,15 @@ export interface ExportReadiness {
  * It is checked here rather than only in the UI. A disabled button is a
  * suggestion; this is the rule, and a caller arriving by any other route gets
  * the same answer.
+ *
+ * `sourceRevision` is required, not optional. An optional one reads as a
+ * courtesy and behaves as an opt-in: a caller that leaves it out gets a
+ * cheerful "ready" for a register read under an arrangement that no longer
+ * exists. There is no useful answer to "is this exportable" that does not say
+ * which arrangement is current, so the question cannot be asked without it.
  */
 export function exportReadiness(
-    rows: RegisterRow[], pageCount: number, sourceRevision?: number,
+    rows: RegisterRow[], pageCount: number, sourceRevision: number,
 ): ExportReadiness {
     const seen = new Map<number, number>();
     const outOfRangePages: number[] = [];
@@ -302,11 +308,10 @@ export function exportReadiness(
         .filter((row) => row.reviewStatus !== 'confirmed')
         .map((row) => row.pageNumber)
         .sort((a, b) => a - b);
-    const stalePages = sourceRevision === undefined
-        ? []
-        : rows.filter((row) => row.sourceRevision !== sourceRevision)
-            .map((row) => row.pageNumber)
-            .sort((a, b) => a - b);
+    const stalePages = rows
+        .filter((row) => row.sourceRevision !== sourceRevision)
+        .map((row) => row.pageNumber)
+        .sort((a, b) => a - b);
     const confirmedCount = rows.length - unconfirmedPages.length;
 
     const list = (pages: number[]) =>
@@ -381,15 +386,25 @@ export function registerFileName(sourceName: string): string {
 /**
  * Build the register workbook.
  *
- * The readiness check is repeated here rather than trusted to the caller. A
- * disabled button is a suggestion; this is the rule, and a caller that reaches
- * this function by any other route gets the same answer.
+ * Every check is repeated here rather than trusted to the caller. A disabled
+ * button is a suggestion; this is the rule, and a caller reaching this function
+ * by any other route gets the same answer.
+ *
+ * `sourceRevision` is required, and the guard below is deliberately a runtime
+ * one rather than a type. Types are gone by the time this runs: a caller in
+ * plain JavaScript, or one built against an older signature, would otherwise
+ * omit the revision and be handed a workbook of rows read through a template
+ * that has since moved. A safety rule that only holds while everybody compiles
+ * against the current declaration is not a safety rule.
  */
 export async function buildRegisterWorkbook(
     rows: RegisterRow[],
     pageCount: number,
-    options: { shouldCancel?: () => boolean; sourceRevision?: number } = {},
+    options: { sourceRevision: number; shouldCancel?: () => boolean },
 ): Promise<WorkbookResult> {
+    if (!Number.isFinite(options?.sourceRevision)) {
+        throw new Error('図面一覧を書き出すには、現在の読み取り時点の指定が必要です。');
+    }
     const readiness = exportReadiness(rows, pageCount, options.sourceRevision);
     if (!readiness.ready) {
         throw new Error(readiness.reason ?? '確認済みの行がありません。');

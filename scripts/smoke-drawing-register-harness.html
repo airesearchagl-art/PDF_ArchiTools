@@ -235,10 +235,10 @@ window.__register = {
       buildRow({ pageNumber: 3, profileAssigned: false }),
     ];
 
-    const before = exportReadiness(rows, pageCount);
+    const before = exportReadiness(rows, pageCount, 0);
     let refusedUnconfirmed = null;
     try {
-      await buildRegisterWorkbook(rows, pageCount);
+      await buildRegisterWorkbook(rows, pageCount, { sourceRevision: 0 });
       refusedUnconfirmed = false;
     } catch (error) {
       refusedUnconfirmed = String(error.message ?? error);
@@ -248,7 +248,7 @@ window.__register = {
     const partial = [confirmed[0], confirmed[1], rows[2]];
     let refusedOneUnconfirmed = null;
     try {
-      await buildRegisterWorkbook(partial, pageCount);
+      await buildRegisterWorkbook(partial, pageCount, { sourceRevision: 0 });
       refusedOneUnconfirmed = false;
     } catch (error) {
       refusedOneUnconfirmed = String(error.message ?? error);
@@ -256,14 +256,14 @@ window.__register = {
 
     let refusedMissingPage = null;
     try {
-      await buildRegisterWorkbook(confirmed.slice(0, 2), pageCount);
+      await buildRegisterWorkbook(confirmed.slice(0, 2), pageCount, { sourceRevision: 0 });
       refusedMissingPage = false;
     } catch (error) {
       refusedMissingPage = String(error.message ?? error);
     }
 
-    const ready = exportReadiness(confirmed, pageCount);
-    const workbook = await buildRegisterWorkbook(confirmed, pageCount);
+    const ready = exportReadiness(confirmed, pageCount, 0);
+    const workbook = await buildRegisterWorkbook(confirmed, pageCount, { sourceRevision: 0 });
     let binary = '';
     for (const byte of workbook.bytes) binary += String.fromCharCode(byte);
 
@@ -349,11 +349,11 @@ window.__register = {
     const complete = [good(1), good(2), good(3)];
 
     const attempt = async (rows, label) => {
-      const readiness = exportReadiness(rows, pageCount);
+      const readiness = exportReadiness(rows, pageCount, 0);
       let bytes = null;
       let refused = null;
       try {
-        const result = await buildRegisterWorkbook(rows, pageCount);
+        const result = await buildRegisterWorkbook(rows, pageCount, { sourceRevision: 0 });
         bytes = result.bytes.length;
       } catch (error) {
         refused = String(error.message ?? error);
@@ -390,6 +390,52 @@ window.__register = {
     } catch (error) {
       refused = String(error.message ?? error);
     }
+
+    // The bypass the review found: a caller that simply does not mention the
+    // revision. Types are gone at runtime, so these are the calls a plain
+    // JavaScript caller -- or one built against the older signature -- would
+    // actually make. Each must be refused rather than quietly skipping the
+    // staleness check.
+    const bypass = {};
+    for (const [label, call] of [
+      ['no options at all', () => buildRegisterWorkbook(rows, pageCount)],
+      ['empty options', () => buildRegisterWorkbook(rows, pageCount, {})],
+      ['only shouldCancel', () => buildRegisterWorkbook(rows, pageCount, { shouldCancel: () => false })],
+      ['an undefined revision', () => buildRegisterWorkbook(rows, pageCount, { sourceRevision: undefined })],
+      ['a revision that is not a number', () => buildRegisterWorkbook(rows, pageCount, { sourceRevision: null })],
+    ]) {
+      let bytes = null;
+      let error = null;
+      try {
+        const result = await call();
+        bytes = result.bytes.length;
+      } catch (e) {
+        error = String(e.message ?? e);
+      }
+      bypass[label] = { bytes, error };
+    }
+
+    // The same omission on a register that is otherwise perfectly exportable:
+    // it must still be refused, so the guard is about the missing revision and
+    // not about the rows happening to be stale.
+    const fresh = [1, 2].map((n) => confirmRow(buildRow({
+      pageNumber: n, sourceRevision: 7,
+      fields: { drawing_number: { rawText: `A-10${n}`, source: 'native' } },
+    })));
+    let freshWithRevision = null;
+    let freshWithout = null;
+    try {
+      const result = await buildRegisterWorkbook(fresh, pageCount, { sourceRevision: 7 });
+      freshWithRevision = result.bytes.length;
+    } catch (e) {
+      freshWithRevision = String(e.message ?? e);
+    }
+    try {
+      const result = await buildRegisterWorkbook(fresh, pageCount);
+      freshWithout = result.bytes.length;
+    } catch (e) {
+      freshWithout = String(e.message ?? e);
+    }
     // Confirming a stale row again does not rescue it: the stamp travels with
     // the row, so a second confirmation is still a confirmation of old values.
     const reconfirmed = rows.map((row) => confirmRow(row));
@@ -401,6 +447,9 @@ window.__register = {
       refused,
       afterReconfirm: { ready: afterReconfirm.ready, stale: afterReconfirm.stalePages },
       revisionOnRows: reconfirmed.map((r) => r.sourceRevision),
+      bypass,
+      freshWithRevision,
+      freshWithout,
     };
   },
 

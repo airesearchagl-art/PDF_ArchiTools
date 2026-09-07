@@ -317,6 +317,22 @@ try {
         stale.afterReconfirm.ready === false && stale.afterReconfirm.stale.length === 2,
         `rows still stamped ${stale.revisionOnRows.join(', ')}`);
 
+    // The bypass: a caller that never mentions the revision. Types do not
+    // survive to runtime, so this is checked as behaviour and not as a
+    // signature -- a rule that only holds while everybody compiles against the
+    // current declaration is not a rule.
+    for (const [label, result] of Object.entries(stale.bypass)) {
+        probe(`exporting with ${label} is refused`,
+            result.bytes === null && typeof result.error === 'string',
+            result.bytes === null ? result.error : `IT RETURNED ${result.bytes} BYTES`);
+    }
+    check('a register whose rows match the current revision does export',
+        typeof stale.freshWithRevision === 'number' && stale.freshWithRevision > 0,
+        `${stale.freshWithRevision} bytes`);
+    probe('and the same register is refused when the revision is left out',
+        typeof stale.freshWithout === 'string',
+        typeof stale.freshWithout === 'string' ? stale.freshWithout : `IT RETURNED ${stale.freshWithout} BYTES`);
+
     console.log('\n=== a stalled recognition does not poison the rest of the run ===');
     const scannedPage = truth.pages.find((p) => p.kind === 'scanned' && p.rotate === 0).page;
     const recovery = await page.evaluate((n) => window.__register.workerRecovery(n), scannedPage);
