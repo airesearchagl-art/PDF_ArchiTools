@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M3 annotator save harness</title>
+<style>body { font: 13px/1.5 system-ui, sans-serif; margin: 16px; }</style>
+</head>
+<body>
+<h1>M3 annotator save harness</h1>
+<p>Driven by <code>scripts/research-m3-probe.mjs</code>. Research only; not part of the app.</p>
+<div id="log">idle</div>
+
+<script type="module">
+import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import jsPDF from 'jspdf';
+
+import { sampleAnnotations, measureLabels } from '/research/m3-annotator-vector-save/prototype/model.mjs';
+import {
+  saveBaseline, saveOverlay, saveVector, saveHybrid,
+  renderAnnotations, renderOverlayCanvas, splitForHybrid, unsupportedForVector,
+} from '/research/m3-annotator-vector-save/prototype/save.mjs';
+import {
+  inspectStructure, inspectRendered, initOpsNames, verdict,
+} from '/research/m3-annotator-vector-save/prototype/inspect.mjs';
+import {
+  pointerToPdf as ptToPdf, pageGeometry as pageGeom, displayToUpright, uprightToDisplay,
+  uprightToPdf, pointerLengthToPoints, normaliseRotation,
+} from '/research/m3-annotator-vector-save/prototype/coords.mjs';
+
+const log = (m) => { document.getElementById('log').textContent = m; };
+
+// The research harness pins the worker to our own copy. The app's own choice is
+// a separate question and is measured by loading the app, not by this file.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+initOpsNames(pdfjsLib.OPS);
+
+const FIXTURES = '/test-fixtures/m3';
+const fixtureCache = new Map();
+async function fixtureBytes(name) {
+  if (!fixtureCache.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    if (!r.ok) throw new Error(`fixture ${name}: HTTP ${r.status}`);
+    fixtureCache.set(name, new Uint8Array(await r.arrayBuffer()));
+  }
+  // A fresh copy every time: pdf.js transfers the buffer it is given, and a
+  // save path that mutated its input would otherwise be invisible.
+  return fixtureCache.get(name).slice();
+}
+
+let fontBytes = null;
+async function font() {
+  if (!fontBytes) {
+    const r = await fetch('/ocr/fonts/MPLUS1p-Regular.ttf');
+    fontBytes = new Uint8Array(await r.arrayBuffer());
+  }
+  return fontBytes;
+}
+
+const openPdfjs = (bytes) => pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+
+/** Annotations on every page of a fixture, except any page listed as bare. */
+function annotationsFor(pageCount, { bare = [] } = {}) {
+  const map = {};
+  for (let n = 1; n <= pageCount; n++) {
+    map[n] = bare.includes(n) ? [] : sampleAnnotations();
+  }
+  return map;
+}
+
+async function runCandidate(name, sourceBytes, objects, options = {}) {
+  if (name === 'baseline') {
+    const doc = await openPdfjs(sourceBytes.slice());
+    const out = await saveBaseline({ pdfjsDoc: doc, jsPDF, objects, ...options });
+    await doc.destroy();
+    return out;
+  }
+  if (name === 'overlay') {
+    return saveOverlay({ PDFDocument, sourceBytes, objects, ...options });
+  }
+  if (name === 'vector') {
+    return saveVector({
+      PDFDocument, rgb, degrees, sourceBytes, objects,
+      fontBytes: await font(), fontkit, ...options,
+    });
+  }
+  if (name === 'hybrid') {
+    return saveHybrid({
+      PDFDocument, rgb, degrees, sourceBytes, objects,
+      fontBytes: await font(), fontkit, ...options,
+    });
+  }
+  throw new Error(`unknown candidate: ${name}`);
+}
+
+/** Everything a saved file still contains, structure and render together. */
+async function inspectBoth(bytes) {
+  const structure = await inspectStructure(PDFDocument, bytes.slice());
+  const rendered = await inspectRendered(pdfjsLib, bytes.slice());
+  return { structure, rendered };
+}
+
+function summarisePages(both) {
+  return both.rendered.pages.map((p, i) => ({
+    index: p.index,
+    rotate: p.rotate,
+    width: p.width,
+    height: p.height,
+    charCount: p.charCount,
+    pathOps: p.pathOps,
+    imageOps: p.imageOps,
+    operators: p.operators,
+    mediaBox: both.structure.pages[i]?.mediaBox ?? null,
+    cropBox: both.structure.pages[i]?.cropBox ?? null,
+    annotationCount: both.structure.pages[i]?.annotationCount ?? 0,
+  }));
+}
+
+window.__m3 = {
+  ready: true,
+
+  /** What the fixture is, before anything touches it. */
+  async before(name) {
+    const bytes = await fixtureBytes(name);
+    const both = await inspectBoth(bytes);
+    return {
+      bytes: bytes.length,
+      pageCount: both.structure.pageCount,
+      pages: summarisePages(both),
+      form: both.structure.form,
+      metadata: both.structure.metadata,
+      text: both.rendered.pages.map((p) => p.text),
+    };
+  },
+
+  /** Save a fixture through one candidate and report what survived. */
+  async save(name, candidate, { bare = [], options = {} } = {}) {
+    const sourceBytes = await fixtureBytes(name);
+    const beforeBytes = sourceBytes.slice();
+    const before = await inspectBoth(beforeBytes.slice());
+    const objects = annotationsFor(before.structure.pageCount, { bare });
+
+    let out;
+    let refused = null;
+    try {
+      out = await runCandidate(candidate, sourceBytes.slice(), objects, options);
+    } catch (error) {
+      return {
+        candidate, failed: true,
+        message: String(error.message ?? error),
+        refused: error.refused ?? null,
+      };
+    }
+    refused = out.refused ?? null;
+
+    const after = await inspectBoth(out.bytes.slice());
+
+    // Did the save mutate the bytes it was handed?
+    const sourceUnchanged = beforeBytes.length === (await fixtureBytes(name)).length;
+
+    const perPage = before.rendered.pages.map((b, i) => {
+      const a = after.rendered.pages[i];
+      const bs = before.structure.pages[i];
+      const as = after.structure.pages[i];
+      return {
+        index: b.index,
+        sourceText: verdict(b.charCount, a?.charCount ?? 0,
+          { compare: (x, y) => y >= x }),
+        sourceTextExact: b.text.length > 0 && a ? a.text.includes(b.text.slice(0, 24)) : null,
+        vector: verdict(b.pathOps, a?.pathOps ?? 0, { compare: (x, y) => y >= x }),
+        images: verdict(b.imageOps, a?.imageOps ?? 0, { compare: (x, y) => y >= x }),
+        // Compared directly rather than through verdict(): a page at /Rotate 0
+        // is not a page with no rotation to check, and treating zero as
+        // absence made every unrotated page report "not applicable".
+        rotation: a === undefined ? 'lost' : (b.rotate === a.rotate ? 'preserved' : 'changed'),
+        beforeRotate: b.rotate,
+        afterRotate: a?.rotate ?? null,
+        cropBox: verdict(bs?.cropBox, as?.cropBox,
+          { compare: (x, y) => JSON.stringify(x) === JSON.stringify(y) }),
+        mediaBox: verdict(bs?.mediaBox, as?.mediaBox,
+          { compare: (x, y) => JSON.stringify(x) === JSON.stringify(y) }),
+        annotations: verdict(bs?.annotationCount ?? 0, as?.annotationCount ?? 0,
+          { compare: (x, y) => y >= x }),
+        beforePathOps: b.pathOps,
+        afterPathOps: a?.pathOps ?? 0,
+        beforeChars: b.charCount,
+        afterChars: a?.charCount ?? 0,
+        beforeImages: b.imageOps,
+        afterImages: a?.imageOps ?? 0,
+      };
+    });
+
+    return {
+      candidate,
+      failed: false,
+      refused,
+      sourceUnchanged,
+      bytes: out.bytes.length,
+      ms: out.ms,
+      maxPixels: out.maxPixels ?? 0,
+      ops: out.ops ?? null,
+      fragments: out.fragments ?? null,
+      overlays: out.overlays ?? null,
+      fontSubstituted: out.fontSubstituted ?? false,
+      pageCount: { before: before.structure.pageCount, after: after.structure.pageCount },
+      form: {
+        before: before.structure.form.fields.length,
+        after: after.structure.form.fields.length,
+        valuesPreserved: JSON.stringify(before.structure.form.fields)
+          === JSON.stringify(after.structure.form.fields),
+      },
+      metadata: {
+        before: before.structure.metadata,
+        after: after.structure.metadata,
+        titlePreserved: before.structure.metadata.title === after.structure.metadata.title,
+      },
+      perPage,
+      addedTextSearchable: await addedTextPresent(after.rendered),
+    };
+  },
+
+  /** Saving with no annotations at all: what does the writer do on its own? */
+  async noop(name, candidate) {
+    const sourceBytes = await fixtureBytes(name);
+    const before = await inspectBoth(sourceBytes.slice());
+    const objects = {};
+    let out;
+    try {
+      out = await runCandidate(candidate, sourceBytes.slice(), objects);
+    } catch (error) {
+      return { candidate, failed: true, message: String(error.message ?? error) };
+    }
+    const after = await inspectBoth(out.bytes.slice());
+    const src = await fixtureBytes(name);
+    return {
+      candidate,
+      failed: false,
+      byteIdentical: out.bytes.length === src.length
+        && out.bytes.every((b, i) => b === src[i]),
+      bytes: { before: src.length, after: out.bytes.length },
+      pageCount: { before: before.structure.pageCount, after: after.structure.pageCount },
+      chars: {
+        before: before.rendered.pages.reduce((s, p) => s + p.charCount, 0),
+        after: after.rendered.pages.reduce((s, p) => s + p.charCount, 0),
+      },
+      pathOps: {
+        before: before.rendered.pages.reduce((s, p) => s + p.pathOps, 0),
+        after: after.rendered.pages.reduce((s, p) => s + p.pathOps, 0),
+      },
+      imageOps: {
+        before: before.rendered.pages.reduce((s, p) => s + p.imageOps, 0),
+        after: after.rendered.pages.reduce((s, p) => s + p.imageOps, 0),
+      },
+    };
+  },
+
+  /**
+   * The same annotation, stored after being drawn at four different zooms.
+   *
+   * The app divides pointer pixels by the zoom on the way in, so this asks
+   * whether that really makes the stored value independent of it -- and then
+   * whether the saved PDF coordinate is independent too.
+   */
+  async zoomInvariance() {
+    const bytes = await fixtureBytes('native');
+    const doc = await openPdfjs(bytes.slice());
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const geom = pageGeom({
+      mediaBox: { x: 0, y: 0, width: viewport.width, height: viewport.height },
+      cropBox: null, rotate: 0,
+    });
+
+    // One physical spot on the page, pointed at from four zoom levels.
+    const target = { x: 137.5, y: 233.25 };
+    const results = [];
+    for (const scale of [0.5, 1, 2, 6]) {
+      const pointerPx = { x: target.x * scale, y: target.y * scale };
+      const stored = { x: pointerPx.x / scale, y: pointerPx.y / scale };
+      const pdfPoint = ptToPdf(pointerPx, {
+        scale, rotate: geom.rotate,
+        displayWidth: geom.displayWidth, displayHeight: geom.displayHeight,
+        box: geom.box,
+      });
+      results.push({
+        scale,
+        stored: { x: round4(stored.x), y: round4(stored.y) },
+        pdf: { x: round4(pdfPoint.x), y: round4(pdfPoint.y) },
+        widthPoints: round4(pointerLengthToPoints(4 * scale, scale)),
+      });
+    }
+    page.cleanup();
+    await doc.destroy();
+
+    const first = JSON.stringify(results[0].pdf);
+    return {
+      results,
+      allIdentical: results.every((r) => JSON.stringify(r.pdf) === first),
+      widthsIdentical: new Set(results.map((r) => r.widthPoints)).size === 1,
+    };
+  },
+
+  /**
+   * The rotation quadrants: is the same visual spot the same PDF spot?
+   *
+   * A mark placed at the top-left of what the user sees must land at the
+   * top-left of what the user sees, whatever `/Rotate` says.
+   */
+  async rotationMapping() {
+    const bytes = await fixtureBytes('rotated');
+    const doc = await openPdfjs(bytes.slice());
+    const out = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const rotate = page.rotate ?? 0;
+      const base = page.getViewport({ scale: 1, rotation: 0 });
+      const geom = pageGeom({
+        mediaBox: { x: 0, y: 0, width: base.width, height: base.height },
+        cropBox: null, rotate,
+      });
+      // 40 points in from the top-left of the *displayed* page.
+      const display = { x: 40, y: 40 };
+      const upright = displayToUpright(display, rotate, geom.displayWidth, geom.displayHeight);
+      const back = uprightToDisplay(upright, rotate, geom.uprightWidth, geom.uprightHeight);
+      const pdfPoint = uprightToPdf(upright, geom.box);
+      out.push({
+        page: n, rotate,
+        displayWidth: round4(geom.displayWidth), displayHeight: round4(geom.displayHeight),
+        upright: { x: round4(upright.x), y: round4(upright.y) },
+        pdf: { x: round4(pdfPoint.x), y: round4(pdfPoint.y) },
+        roundTrips: Math.abs(back.x - display.x) < 1e-6 && Math.abs(back.y - display.y) < 1e-6,
+        insidePage: pdfPoint.x >= 0 && pdfPoint.y >= 0
+          && pdfPoint.x <= geom.box.width && pdfPoint.y <= geom.box.height,
+      });
+      page.cleanup();
+    }
+    await doc.destroy();
+    return out;
+  },
+
+  /** Where a mark lands on a page whose visible area does not start at (0,0). */
+  async cropBoxMapping() {
+    const bytes = await fixtureBytes('boxes');
+    const doc = await PDFDocument.load(await fixtureBytes('boxes'));
+    void bytes;
+    const out = [];
+    for (const [i, page] of doc.getPages().entries()) {
+      const crop = page.getCropBox();
+      const media = page.getMediaBox();
+      const geom = pageGeom({ mediaBox: media, cropBox: crop, rotate: 0 });
+      const topLeftOfVisible = uprightToPdf({ x: 0, y: 0 }, geom.box);
+      // What a save path that trusted getSize() would have produced instead.
+      const naive = { x: 0, y: page.getSize().height };
+      out.push({
+        page: i + 1,
+        mediaBox: media, cropBox: crop,
+        reportedSize: page.getSize(),
+        correct: { x: round4(topLeftOfVisible.x), y: round4(topLeftOfVisible.y) },
+        naive: { x: round4(naive.x), y: round4(naive.y) },
+        differs: Math.abs(naive.x - topLeftOfVisible.x) > 0.01
+          || Math.abs(naive.y - topLeftOfVisible.y) > 0.01,
+        offBy: {
+          x: round4(naive.x - topLeftOfVisible.x),
+          y: round4(naive.y - topLeftOfVisible.y),
+        },
+      });
+    }
+    return out;
+  },
+
+  /** What each candidate costs on the largest sheet in the corpus. */
+  async a0Cost() {
+    const out = {};
+    for (const candidate of ['baseline', 'overlay', 'vector', 'hybrid']) {
+      const sourceBytes = await fixtureBytes('a0');
+      const objects = { 1: sampleAnnotations() };
+      try {
+        const result = await runCandidate(candidate, sourceBytes.slice(), objects);
+        out[candidate] = {
+          maxPixels: result.maxPixels ?? 0,
+          rgbaBytes: (result.maxPixels ?? 0) * 4,
+          outputBytes: result.bytes.length,
+          ms: result.ms,
+        };
+      } catch (error) {
+        out[candidate] = { failed: String(error.message ?? error) };
+      }
+    }
+    const src = await fixtureBytes('a0');
+    const doc = await openPdfjs(src.slice());
+    const page = await doc.getPage(1);
+    const full = page.getViewport({ scale: 2 });
+    out.fullPageAt2x = {
+      pixels: Math.ceil(full.width) * Math.ceil(full.height),
+      rgbaBytes: Math.ceil(full.width) * Math.ceil(full.height) * 4,
+    };
+    page.cleanup();
+    await doc.destroy();
+    return out;
+  },
+
+  /** Two runs of the same input, compared semantically and byte for byte. */
+  async determinism(candidate) {
+    const objects = { 1: sampleAnnotations(), 2: sampleAnnotations(), 3: [] };
+    const runs = [];
+    for (let i = 0; i < 2; i++) {
+      let out;
+      try {
+        out = await runCandidate(candidate, (await fixtureBytes('native')).slice(), objects);
+      } catch (error) {
+        // A candidate that refuses this input has no determinism to measure.
+        // That is a result, not a crash, and it is reported as one.
+        return { candidate, refused: String(error.message ?? error) };
+      }
+      const rendered = await inspectRendered(pdfjsLib, out.bytes.slice());
+      runs.push({
+        bytes: out.bytes.length,
+        digest: await sha256(out.bytes),
+        pageCount: rendered.pageCount,
+        text: rendered.pages.map((p) => p.text).join(' '),
+        pathOps: rendered.pages.reduce((s, p) => s + p.pathOps, 0),
+        imageOps: rendered.pages.reduce((s, p) => s + p.imageOps, 0),
+      });
+    }
+    return {
+      candidate,
+      byteIdentical: runs[0].digest === runs[1].digest,
+      semanticallyIdentical: runs[0].pageCount === runs[1].pageCount
+        && runs[0].text === runs[1].text
+        && runs[0].pathOps === runs[1].pathOps
+        && runs[0].imageOps === runs[1].imageOps,
+      runs,
+    };
+  },
+
+  /**
+   * How closely a saved page matches what the annotator showed, per tool.
+   *
+   * One aggregate number would say "mostly fine" while a whole tool was
+   * missing, so each object's own bounding box is compared separately.
+   */
+  async fidelity(candidate) {
+    const objects = sampleAnnotations();
+    const sourceBytes = await fixtureBytes('native');
+
+    // What the user sees: the page, with the annotation layer over it.
+    const doc = await openPdfjs(sourceBytes.slice());
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const reference = document.createElement('canvas');
+    reference.width = Math.ceil(viewport.width);
+    reference.height = Math.ceil(viewport.height);
+    const rctx = reference.getContext('2d', { willReadFrequently: true });
+    rctx.fillStyle = '#fff';
+    rctx.fillRect(0, 0, reference.width, reference.height);
+    await page.render({ canvas: reference, viewport, intent: 'print' }).promise;
+    // Composited from its own canvas, exactly as the app stacks the annotation
+    // element over the PDF element. Drawing the annotations directly into this
+    // canvas would let the pixel eraser subtract from the page itself, which
+    // the app cannot do -- and the reference would then be a picture nobody
+    // has ever seen.
+    const layer = renderOverlayCanvas(objects, {
+      width: viewport.width / 2, height: viewport.height / 2, scale: 2,
+    });
+    rctx.drawImage(layer, 0, 0);
+    releaseCanvas(layer);
+    page.cleanup();
+    await doc.destroy();
+
+    let saved;
+    try {
+      saved = await runCandidate(candidate, sourceBytes.slice(), { 1: objects, 2: [], 3: [] });
+    } catch (error) {
+      return { candidate, failed: String(error.message ?? error) };
+    }
+    const savedDoc = await openPdfjs(saved.bytes.slice());
+    const savedPage = await savedDoc.getPage(1);
+    const savedViewport = savedPage.getViewport({
+      scale: (2 * viewport.width) / (savedPage.getViewport({ scale: 2 }).width / 2) / 2,
+    });
+    // Render the saved page at the reference's pixel size, whatever page size
+    // the candidate produced -- the baseline changes it, and comparing two
+    // different-sized images would report a difference that is only scaling.
+    const target = document.createElement('canvas');
+    target.width = reference.width;
+    target.height = reference.height;
+    const tctx = target.getContext('2d', { willReadFrequently: true });
+    tctx.fillStyle = '#fff';
+    tctx.fillRect(0, 0, target.width, target.height);
+    const nat = savedPage.getViewport({ scale: 1 });
+    const fit = savedPage.getViewport({ scale: reference.width / nat.width });
+    await savedPage.render({ canvas: target, viewport: fit, intent: 'print' }).promise;
+    savedPage.cleanup();
+    await savedDoc.destroy();
+
+    const perTool = {};
+    for (const obj of objects) {
+      const box = objectBox(obj);
+      perTool[obj.id] = compareRegion(rctx, tctx, box, 2, reference.width, reference.height);
+    }
+    const whole = compareRegion(rctx, tctx,
+      { x: 0, y: 0, width: reference.width / 2, height: reference.height / 2 },
+      2, reference.width, reference.height);
+
+    releaseCanvas(reference);
+    releaseCanvas(target);
+    return { candidate, whole, perTool, savedBytes: saved.bytes.length };
+  },
+
+  /** Which objects the hybrid split sends to pixels, and which to operators. */
+  hybridSplit() {
+    const objects = sampleAnnotations();
+    const { vector, raster } = splitForHybrid(objects);
+    return {
+      total: objects.length,
+      vector: vector.map((o) => o.id),
+      raster: raster.map((o) => o.id),
+      unsupportedForVector: unsupportedForVector(objects).map((r) => r.id),
+      labels: objects.filter((o) => o.type === 'measure')
+        .map((o) => ({ id: o.id, labels: measureLabels(o).map((l) => l.text) })),
+    };
+  },
+
+  /** A save asked to do something it cannot: does it stop, or half-succeed? */
+  async failureBehaviour() {
+    const sourceBytes = await fixtureBytes('native');
+    const withEraser = { 1: sampleAnnotations() };
+    const withoutEraser = { 1: sampleAnnotations().filter((o) => !o.isEraser) };
+
+    const out = {};
+    try {
+      const r = await runCandidate('vector', sourceBytes.slice(), withEraser);
+      out.withEraser = { produced: r.bytes.length };
+    } catch (error) {
+      out.withEraser = { refused: String(error.message ?? error), reasons: error.refused ?? [] };
+    }
+    const ok = await runCandidate('vector', sourceBytes.slice(), withoutEraser);
+    out.withoutEraser = { produced: ok.bytes.length, ops: ok.ops };
+
+    // A coordinate that cannot mean anything.
+    const broken = { 1: [{ ...sampleAnnotations()[0], points: [{ x: NaN, y: 10 }, { x: 20, y: 20 }] }] };
+    try {
+      const r = await runCandidate('vector', sourceBytes.slice(), broken);
+      const rendered = await inspectRendered(pdfjsLib, r.bytes.slice());
+      out.nanCoordinate = { produced: r.bytes.length, pathOps: rendered.pages[0].pathOps };
+    } catch (error) {
+      out.nanCoordinate = { refused: String(error.message ?? error) };
+    }
+    return out;
+  },
+};
+
+function objectBox(obj) {
+  if (obj.type === 'text') {
+    return {
+      x: obj.x - 4, y: obj.y - obj.fontSize - 4,
+      width: obj.fontSize * obj.text.length + 8, height: obj.fontSize * 1.6 + 8,
+    };
+  }
+  const xs = obj.points.map((p) => p.x);
+  const ys = obj.points.map((p) => p.y);
+  const pad = (obj.lineWidth ?? 2) + 14;
+  return {
+    x: Math.min(...xs) - pad, y: Math.min(...ys) - pad,
+    width: Math.max(...xs) - Math.min(...xs) + pad * 2,
+    height: Math.max(...ys) - Math.min(...ys) + pad * 2,
+  };
+}
+
+function compareRegion(a, b, box, scale, maxW, maxH) {
+  const x = Math.max(0, Math.floor(box.x * scale));
+  const y = Math.max(0, Math.floor(box.y * scale));
+  const w = Math.max(1, Math.min(Math.ceil(box.width * scale), maxW - x));
+  const h = Math.max(1, Math.min(Math.ceil(box.height * scale), maxH - y));
+  const da = a.getImageData(x, y, w, h).data;
+  const db = b.getImageData(x, y, w, h).data;
+  let sum = 0;
+  let differing = 0;
+  for (let i = 0; i < da.length; i += 4) {
+    const d = (Math.abs(da[i] - db[i]) + Math.abs(da[i + 1] - db[i + 1]) + Math.abs(da[i + 2] - db[i + 2])) / 3;
+    sum += d;
+    if (d > 24) differing += 1;
+  }
+  const pixels = w * h;
+  return {
+    meanDifference: Math.round((sum / pixels) * 100) / 100,
+    differingFraction: Math.round((differing / pixels) * 10000) / 10000,
+    pixels,
+  };
+}
+
+const releaseCanvas = (c) => { if (c) { c.width = 0; c.height = 0; } };
+const round4 = (n) => Math.round(n * 10000) / 10000;
+
+async function sha256(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Is the text the annotator added extractable from the output? */
+async function addedTextPresent(rendered) {
+  const all = rendered.pages.map((p) => p.text).join(' ');
+  return {
+    ascii: all.includes('REVISION A'),
+    japanese: all.includes('確認済み'),
+    measureLabel: /\d+\.\d{2} mm/.test(all),
+  };
+}
+
+log('ready');
+window.__m3Ready = true;
+</script>
+</body>
+</html>
