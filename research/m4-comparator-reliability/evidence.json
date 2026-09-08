@@ -1,0 +1,2031 @@
+{
+  "generated": "2026-09-09",
+  "base": "44cb82db7365e436c642f375852f22990c45a6ce",
+  "note": "Research measurements. Baseline numbers are the shipped comparator.",
+  "corpus": {
+    "base-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "identical-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "added-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 95
+    },
+    "removed-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 83
+    },
+    "offset-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "grey-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "colour-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "pale-hatch-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 209
+    },
+    "base-a3": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        842,
+        1191
+      ],
+      "rotate": 0,
+      "display": [
+        842,
+        1191
+      ],
+      "ops": 89
+    },
+    "base-a1": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        1684,
+        2384
+      ],
+      "rotate": 0,
+      "display": [
+        1684,
+        2384
+      ],
+      "ops": 89
+    },
+    "base-a0": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        2384,
+        3370
+      ],
+      "rotate": 0,
+      "display": [
+        2384,
+        3370
+      ],
+      "ops": 89
+    },
+    "landscape-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        842,
+        595
+      ],
+      "rotate": 0,
+      "display": [
+        842,
+        595
+      ],
+      "ops": 89
+    },
+    "nearly-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        598,
+        845
+      ],
+      "rotate": 0,
+      "display": [
+        598,
+        845
+      ],
+      "ops": 89
+    },
+    "same-ratio-larger": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        833,
+        1179
+      ],
+      "rotate": 0,
+      "display": [
+        833,
+        1179
+      ],
+      "ops": 89
+    },
+    "rotate-0": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "rotate-90": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 90,
+      "display": [
+        842,
+        595
+      ],
+      "ops": 89
+    },
+    "rotate-180": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 180,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "rotate-270": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 270,
+      "display": [
+        842,
+        595
+      ],
+      "ops": 89
+    },
+    "crop-origin-0": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        495,
+        741
+      ],
+      "rotate": 0,
+      "display": [
+        495,
+        741
+      ],
+      "ops": 89
+    },
+    "crop-origin-50-70": {
+      "pages": 1,
+      "view": [
+        50,
+        70,
+        545,
+        811
+      ],
+      "rotate": 0,
+      "display": [
+        495,
+        741
+      ],
+      "ops": 92
+    },
+    "mediabox-larger": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "three-pages": {
+      "pages": 3,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "two-pages": {
+      "pages": 2,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "three-pages-blank-third": {
+      "pages": 3,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    }
+  },
+  "baseline": {
+    "identical drawing": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 29,
+      "ms": 89,
+      "memory": 60864160
+    },
+    "a wall added": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 8530,
+      "inkPixels": 88483,
+      "changeRatio": 0.09640269882350282,
+      "bounds": {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 36,
+      "ms": 95,
+      "memory": 60864160
+    },
+    "a wall removed": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 8530,
+      "inkPixels": 79953,
+      "changeRatio": 0.1066876790114192,
+      "bounds": {
+        "x": 166,
+        "y": 1115,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 23,
+      "ms": 78,
+      "memory": 60864160
+    },
+    "the drawing shifted 2pt": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 32242,
+      "inkPixels": 95519,
+      "changeRatio": 0.3375454098137543,
+      "bounds": {
+        "x": 263,
+        "y": 155,
+        "width": 718,
+        "height": 1181
+      },
+      "compositeMs": 22,
+      "ms": 73,
+      "memory": 60864160
+    },
+    "A4 vs A3, same drawing": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 2480,
+      "members": 2,
+      "changePixels": 231422,
+      "inkPixels": 232811,
+      "changeRatio": 0.994033787063326,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1651,
+        "height": 2315
+      },
+      "compositeMs": 50,
+      "ms": 136,
+      "memory": 121728320
+    },
+    "A4 vs A1, same drawing": {
+      "produced": true,
+      "dropped": [],
+      "width": 3507,
+      "height": 4966,
+      "members": 2,
+      "changePixels": 645956,
+      "inkPixels": 647223,
+      "changeRatio": 0.9980424057859502,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 3320,
+        "height": 4680
+      },
+      "compositeMs": 181,
+      "ms": 461,
+      "memory": 487641336
+    },
+    "portrait vs landscape": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 198563,
+      "inkPixels": 199977,
+      "changeRatio": 0.9929291868564885,
+      "bounds": {
+        "x": 39,
+        "y": 38,
+        "width": 1651,
+        "height": 1651
+      },
+      "compositeMs": 43,
+      "ms": 111,
+      "memory": 86044252
+    },
+    "A4 vs a sheet 3pt bigger": {
+      "produced": true,
+      "dropped": [],
+      "width": 1246,
+      "height": 1760,
+      "members": 2,
+      "changePixels": 99609,
+      "inkPixels": 131166,
+      "changeRatio": 0.7594117377979049,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1168,
+        "height": 1630
+      },
+      "compositeMs": 24,
+      "ms": 76,
+      "memory": 61402880
+    },
+    "same aspect, 1.4x": {
+      "produced": true,
+      "dropped": [],
+      "width": 1736,
+      "height": 2455,
+      "members": 2,
+      "changePixels": 226733,
+      "inkPixels": 228114,
+      "changeRatio": 0.9939460094514146,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1634,
+        "height": 2291
+      },
+      "compositeMs": 43,
+      "ms": 123,
+      "memory": 119332640
+    },
+    "/Rotate 0 vs 90": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 158339,
+      "inkPixels": 159447,
+      "changeRatio": 0.9930509824581208,
+      "bounds": {
+        "x": 39,
+        "y": 39,
+        "width": 1650,
+        "height": 1650
+      },
+      "compositeMs": 39,
+      "ms": 108,
+      "memory": 86044252
+    },
+    "/Rotate 0 vs 180": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 77762,
+      "inkPixels": 119493,
+      "changeRatio": 0.6507661536659051,
+      "bounds": {
+        "x": 45,
+        "y": 101,
+        "width": 1151,
+        "height": 1552
+      },
+      "compositeMs": 23,
+      "ms": 70,
+      "memory": 60864160
+    },
+    "/Rotate 0 vs 270": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 156982,
+      "inkPixels": 158230,
+      "changeRatio": 0.9921127472666371,
+      "bounds": {
+        "x": 39,
+        "y": 39,
+        "width": 1650,
+        "height": 1650
+      },
+      "compositeMs": 43,
+      "ms": 143,
+      "memory": 86044252
+    },
+    "crop origin (0,0) vs (50,70)": {
+      "produced": true,
+      "dropped": [],
+      "width": 1031,
+      "height": 1543,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 59636,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 22,
+      "ms": 57,
+      "memory": 44543324
+    },
+    "MediaBox larger, same CropBox": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 26,
+      "ms": 76,
+      "memory": 60864160
+    },
+    "black vs grey ink": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 11492,
+      "inkPixels": 79953,
+      "changeRatio": 0.14373444398584168,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1162,
+        "height": 1624
+      },
+      "compositeMs": 23,
+      "ms": 65,
+      "memory": 60864160
+    },
+    "black vs cyan ink": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 10170,
+      "inkPixels": 79953,
+      "changeRatio": 0.12719972984128175,
+      "bounds": {
+        "x": 775,
+        "y": 1453,
+        "width": 90,
+        "height": 58
+      },
+      "compositeMs": 30,
+      "ms": 112,
+      "memory": 60864160
+    },
+    "a pale hatch added": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 43,
+      "inkPixels": 79953,
+      "changeRatio": 0.0005378159668805423,
+      "bounds": {
+        "x": 165,
+        "y": 331,
+        "width": 749,
+        "height": 42
+      },
+      "compositeMs": 29,
+      "ms": 117,
+      "memory": 60864160
+    }
+  },
+  "rotationUpright": {
+    "0 vs 90": {
+      "sameSize": true,
+      "width": 1241,
+      "height": 1754,
+      "ink": 79953,
+      "differing": 0,
+      "ratio": 0
+    },
+    "0 vs 180": {
+      "sameSize": true,
+      "width": 1241,
+      "height": 1754,
+      "ink": 79953,
+      "differing": 0,
+      "ratio": 0
+    },
+    "0 vs 270": {
+      "sameSize": true,
+      "width": 1241,
+      "height": 1754,
+      "ink": 79953,
+      "differing": 0,
+      "ratio": 0
+    }
+  },
+  "missingPage": {
+    "page 1": {
+      "production": {
+        "produced": true,
+        "dropped": [],
+        "width": 1240,
+        "height": 1753,
+        "members": 2,
+        "changePixels": 0,
+        "inkPixels": 80002,
+        "changeRatio": 0,
+        "bounds": null,
+        "compositeMs": 30,
+        "ms": 97,
+        "memory": 60864160
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "page 2": {
+      "production": {
+        "produced": true,
+        "dropped": [],
+        "width": 1240,
+        "height": 1753,
+        "members": 2,
+        "changePixels": 0,
+        "inkPixels": 80048,
+        "changeRatio": 0,
+        "bounds": null,
+        "compositeMs": 25,
+        "ms": 68,
+        "memory": 60864160
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "page 3": {
+      "production": {
+        "produced": true,
+        "dropped": [
+          "two-pages: page absent"
+        ],
+        "width": 1240,
+        "height": 1753,
+        "members": 1,
+        "changePixels": 80051,
+        "inkPixels": 80051,
+        "changeRatio": 1,
+        "bounds": null,
+        "compositeMs": 16,
+        "ms": 30,
+        "memory": 43474400
+      },
+      "strict": {
+        "status": "MISSING_PAGE",
+        "reported": [
+          "two-pages: この文書にこのページはありません"
+        ]
+      }
+    },
+    "blank page 3": {
+      "production": {
+        "produced": true,
+        "dropped": [],
+        "width": 1240,
+        "height": 1753,
+        "members": 2,
+        "changePixels": 80051,
+        "inkPixels": 80051,
+        "changeRatio": 1,
+        "bounds": {
+          "x": 39,
+          "y": 65,
+          "width": 1162,
+          "height": 1624
+        },
+        "compositeMs": 27,
+        "ms": 77,
+        "memory": 60864160
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    }
+  },
+  "renderFailure": {
+    "production": {
+      "produced": true,
+      "dropped": [
+        "added-line-a4: injected render failure"
+      ],
+      "width": 1240,
+      "height": 1753,
+      "members": 1,
+      "changePixels": 79953,
+      "inkPixels": 79953,
+      "changeRatio": 1,
+      "bounds": null,
+      "compositeMs": 19,
+      "ms": 33,
+      "memory": 43474400
+    },
+    "strict": {
+      "status": "RENDER_FAILED",
+      "reported": [
+        "added-line-a4: ページを描画できませんでした"
+      ]
+    },
+    "intact": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 8530,
+      "inkPixels": 88483,
+      "changeRatio": 0.09640269882350282,
+      "bounds": {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 35,
+      "ms": 100,
+      "memory": 60864160
+    }
+  },
+  "candidates": {
+    "identical drawing": {
+      "geometry": {
+        "identical": true,
+        "differences": [],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "reference-display-plane",
+        "mappings": [
+          {
+            "member": "identical-a4",
+            "rotate": 0,
+            "cropOrigin": {
+              "x": 0,
+              "y": 0
+            },
+            "scale": 1,
+            "rigid": true
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "a wall added": {
+      "geometry": {
+        "identical": true,
+        "differences": [],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "reference-display-plane",
+        "mappings": [
+          {
+            "member": "added-line-a4",
+            "rotate": 0,
+            "cropOrigin": {
+              "x": 0,
+              "y": 0
+            },
+            "scale": 1,
+            "rigid": true
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "/Rotate 0 vs 90": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "rotation",
+            "detail": "/Rotate 0 vs 90",
+            "recoverable": "automatic"
+          },
+          {
+            "kind": "orientation",
+            "detail": "595.3x841.9 vs 841.9x595.3",
+            "recoverable": "automatic"
+          }
+        ],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 841.89,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "reference-display-plane",
+        "mappings": [
+          {
+            "member": "rotate-90",
+            "rotate": 90,
+            "cropOrigin": {
+              "x": 0,
+              "y": 0
+            },
+            "scale": {
+              "x": 0.7070757462376319,
+              "y": 1.4142756349952963,
+              "uniform": false
+            },
+            "rigid": false
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "crop origin (0,0) vs (50,70)": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "crop-origin",
+            "detail": "(0, 0) vs (50, 70)",
+            "recoverable": "automatic"
+          }
+        ],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "reference-display-plane",
+        "mappings": [
+          {
+            "member": "crop-origin-50-70",
+            "rotate": 0,
+            "cropOrigin": {
+              "x": 50,
+              "y": 70
+            },
+            "scale": 1,
+            "rigid": true
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "MediaBox larger, same CropBox": {
+      "geometry": {
+        "identical": true,
+        "differences": [],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "reference-display-plane",
+        "mappings": [
+          {
+            "member": "mediabox-larger",
+            "rotate": 0,
+            "cropOrigin": {
+              "x": 0,
+              "y": 0
+            },
+            "scale": 1,
+            "rigid": true
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "A4 vs A3, same drawing": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+            "sameAspect": true,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 841.89,
+        "height": 1190.55,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "base-a3: 595.3x841.9pt vs 841.9x1190.5pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "base-a3: 595.3x841.9pt vs 841.9x1190.5pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "base-a3: 595.3x841.9pt vs 841.9x1190.5pt（位置合わせを指定すると比較できます）"
+        ]
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "human",
+        "appliedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "reported": [
+          "位置合わせは手動指定によるものです"
+        ]
+      }
+    },
+    "portrait vs landscape": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 841.9x595.3pt",
+            "sameAspect": false,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 841.89,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "landscape-a4: 595.3x841.9pt vs 841.9x595.3pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "landscape-a4: 595.3x841.9pt vs 841.9x595.3pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "landscape-a4: 595.3x841.9pt vs 841.9x595.3pt（位置合わせを指定すると比較できます）"
+        ]
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "human",
+        "appliedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "reported": [
+          "位置合わせは手動指定によるものです"
+        ]
+      }
+    },
+    "A4 vs a sheet 3pt bigger": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 598.3x844.9pt",
+            "sameAspect": true,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 598.28,
+        "height": 844.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "nearly-a4: 595.3x841.9pt vs 598.3x844.9pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "nearly-a4: 595.3x841.9pt vs 598.3x844.9pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "nearly-a4: 595.3x841.9pt vs 598.3x844.9pt（位置合わせを指定すると比較できます）"
+        ]
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "human",
+        "appliedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "reported": [
+          "位置合わせは手動指定によるものです"
+        ]
+      }
+    },
+    "same aspect, 1.4x": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+            "sameAspect": true,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 833.3919999999999,
+        "height": 1178.646,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "same-ratio-larger: 595.3x841.9pt vs 833.4x1178.6pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "same-ratio-larger: 595.3x841.9pt vs 833.4x1178.6pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "same-ratio-larger: 595.3x841.9pt vs 833.4x1178.6pt（位置合わせを指定すると比較できます）"
+        ]
+      },
+      "humanWithAlignment": {
+        "status": "CHANGE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "human",
+        "appliedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "reported": [
+          "位置合わせは手動指定によるものです"
+        ]
+      }
+    }
+  },
+  "dpi": {
+    "base-a4": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 595,
+        "height": 842,
+        "megapixels": 0.5,
+        "estimatedBytes": 14027720,
+        "estimatedMB": 14,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 1240,
+        "height": 1754,
+        "megapixels": 2.17,
+        "estimatedBytes": 60898880,
+        "estimatedMB": 60.9,
+        "withinBudget": true
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 300,
+        "capped": false,
+        "width": 2480,
+        "height": 3508,
+        "megapixels": 8.7,
+        "estimatedBytes": 243595520,
+        "estimatedMB": 243.6,
+        "withinBudget": true
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 600,
+        "capped": false,
+        "width": 4961,
+        "height": 7016,
+        "megapixels": 34.81,
+        "estimatedBytes": 974578528,
+        "estimatedMB": 974.6,
+        "withinBudget": false
+      }
+    },
+    "base-a3": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 842,
+        "height": 1191,
+        "megapixels": 1,
+        "estimatedBytes": 28079016,
+        "estimatedMB": 28.1,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 1754,
+        "height": 2480,
+        "megapixels": 4.35,
+        "estimatedBytes": 121797760,
+        "estimatedMB": 121.8,
+        "withinBudget": true
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 300,
+        "capped": false,
+        "width": 3508,
+        "height": 4961,
+        "megapixels": 17.4,
+        "estimatedBytes": 487289264,
+        "estimatedMB": 487.3,
+        "withinBudget": true
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 600,
+        "capped": false,
+        "width": 7016,
+        "height": 9921,
+        "megapixels": 69.61,
+        "estimatedBytes": 1948960608,
+        "estimatedMB": 1949,
+        "withinBudget": false
+      }
+    },
+    "base-a1": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 1684,
+        "height": 2384,
+        "megapixels": 4.01,
+        "estimatedBytes": 112410368,
+        "estimatedMB": 112.4,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 3508,
+        "height": 4967,
+        "megapixels": 17.42,
+        "estimatedBytes": 487878608,
+        "estimatedMB": 487.9,
+        "withinBudget": true
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 300,
+        "capped": false,
+        "width": 7016,
+        "height": 9933,
+        "megapixels": 69.69,
+        "estimatedBytes": 1951317984,
+        "estimatedMB": 1951.3,
+        "withinBudget": false
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 321,
+        "capped": true,
+        "width": 7517,
+        "height": 10643,
+        "megapixels": 80,
+        "estimatedBytes": 2240096068,
+        "estimatedMB": 2240.1,
+        "withinBudget": false
+      }
+    },
+    "base-a0": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 2384,
+        "height": 3370,
+        "megapixels": 8.03,
+        "estimatedBytes": 224954240,
+        "estimatedMB": 225,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 4967,
+        "height": 7022,
+        "megapixels": 34.88,
+        "estimatedBytes": 976591672,
+        "estimatedMB": 976.6,
+        "withinBudget": false
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 227,
+        "capped": true,
+        "width": 7522,
+        "height": 10635,
+        "megapixels": 80,
+        "estimatedBytes": 2239901160,
+        "estimatedMB": 2239.9,
+        "withinBudget": false
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 227,
+        "capped": true,
+        "width": 7522,
+        "height": 10635,
+        "megapixels": 80,
+        "estimatedBytes": 2239901160,
+        "estimatedMB": 2239.9,
+        "withinBudget": false
+      }
+    }
+  },
+  "threshold": {
+    "pixelToMm": {
+      "72": 0.706,
+      "150": 0.339,
+      "300": 0.169,
+      "600": 0.085
+    },
+    "mmToPixel": {
+      "72": 1,
+      "150": 3,
+      "300": 6,
+      "600": 12
+    }
+  },
+  "ink": {
+    "black": {
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "dark grey": {
+      "rgb": [
+        64,
+        64,
+        64
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "mid grey": {
+      "rgb": [
+        140,
+        140,
+        140
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "pale grey": {
+      "rgb": [
+        210,
+        210,
+        210
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": false
+    },
+    "cad cyan": {
+      "rgb": [
+        0,
+        158,
+        217
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "cad yellow": {
+      "rgb": [
+        255,
+        225,
+        0
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "pale yellow": {
+      "rgb": [
+        255,
+        255,
+        140
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": true
+    },
+    "near white": {
+      "rgb": [
+        245,
+        245,
+        245
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": false
+    },
+    "white": {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": false
+    }
+  },
+  "cost": {
+    "A4 150dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 25,
+      "ms": 65,
+      "memory": 60864160
+    },
+    "A4 150dpi, 2 layers, threshold 2": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 48,
+      "ms": 121,
+      "memory": 60864160
+    },
+    "A4 150dpi, 2 layers, threshold 4": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 55,
+      "ms": 113,
+      "memory": 60864160
+    },
+    "A4 300dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 2480,
+      "height": 3507,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 300848,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 135,
+      "ms": 335,
+      "memory": 243526080
+    },
+    "A4 150dpi, 4 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 4,
+      "changePixels": 8530,
+      "inkPixels": 88483,
+      "changeRatio": 0.09640269882350282,
+      "bounds": {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 64,
+      "ms": 183,
+      "memory": 95643680
+    },
+    "A3 150dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 2480,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 154247,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 73,
+      "ms": 183,
+      "memory": 121728320
+    },
+    "A1 150dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 3507,
+      "height": 4966,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 568537,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 251,
+      "ms": 628,
+      "memory": 487641336
+    }
+  },
+  "budget": {
+    "limitMB": 536.870912,
+    "cases": {
+      "A4 at 150dpi, 2 layers": {
+        "megapixels": 2.2,
+        "totalMB": 61,
+        "withinBudget": true
+      },
+      "A3 at 300dpi, 2 layers": {
+        "megapixels": 17.4,
+        "totalMB": 487,
+        "withinBudget": true
+      },
+      "A1 at 300dpi, 2 layers": {
+        "megapixels": 69.7,
+        "totalMB": 1951,
+        "withinBudget": false
+      },
+      "A1 at 300dpi, 4 layers": {
+        "megapixels": 69.7,
+        "totalMB": 3066,
+        "withinBudget": false
+      },
+      "A0 at 300dpi, 2 layers": {
+        "megapixels": 139.5,
+        "totalMB": 3906,
+        "withinBudget": false
+      },
+      "A0 at 600dpi, 2 layers": {
+        "megapixels": 558,
+        "totalMB": 15623,
+        "withinBudget": false
+      }
+    }
+  },
+  "determinism": {
+    "changePixels": [
+      8530,
+      8530
+    ],
+    "inkPixels": [
+      88483,
+      88483
+    ],
+    "bounds": [
+      {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      }
+    ],
+    "identical": true
+  }
+}

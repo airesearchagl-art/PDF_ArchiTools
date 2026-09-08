@@ -1,0 +1,482 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M4 comparator research — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * RESEARCH ONLY.
+ *
+ * The compositing measured here is the **production** code
+ * (`src/utils/pdfDiff.ts`), because measuring a rewrite of it would say nothing
+ * about what ships. The geometry policies are research prototypes.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import { renderPageToCanvas, computeMultiPdfComposite, detectChangeBounds }
+  from '/src/utils/pdfDiff.ts';
+import { pageGeometry, compareGeometry } from '/research/m4-comparator-reliability/prototype/geometry.mjs';
+import {
+  RESULT, candidateBaseline, candidateStrict, candidateNormalise, candidateHumanAlignment,
+  estimateMemory, checkBudget, pixelRadiusFor, millimetresFor, MAX_COMPARISON_BYTES,
+} from '/research/m4-comparator-reliability/prototype/candidates.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/m4-comparator';
+const docs = new Map();
+async function open(name) {
+  if (!docs.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    const data = new Uint8Array(await r.arrayBuffer());
+    docs.set(name, await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise);
+  }
+  return docs.get(name);
+}
+
+/** What a page looks like before anything is rendered. */
+async function describe(name, pageNumber = 1, label = name) {
+  const doc = await open(name);
+  if (pageNumber > doc.numPages) {
+    return { label, name, pageNumber, available: false, renderError: false };
+  }
+  const page = await doc.getPage(pageNumber);
+  const vp = page.getViewport({ scale: 1 });
+  return {
+    label, name, pageNumber, available: true, renderError: false,
+    view: page.view, rotate: page.rotate,
+    displayWidth: vp.width, displayHeight: vp.height,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Rendering, exactly as production does it
+// ---------------------------------------------------------------------------
+
+/** The caps that ship today (PdfComparator.tsx:271-272). */
+const MAX_DIM = 12000;
+const MAX_AREA = 80000000;
+
+function productionExportScale(dpi, vp) {
+  const requested = dpi / 72;
+  let safe = requested;
+  const estW = vp.width * requested;
+  const estH = vp.height * requested;
+  if (estW > MAX_DIM || estH > MAX_DIM || estW * estH > MAX_AREA) {
+    const ratioW = MAX_DIM / estW;
+    const ratioH = MAX_DIM / estH;
+    const ratioA = Math.sqrt(MAX_AREA / (estW * estH));
+    safe = requested * Math.min(ratioW, ratioH, ratioA);
+  }
+  return { requested, safe, capped: safe < requested };
+}
+
+/**
+ * Compose the way the shipped export loop does: render each member, take the
+ * largest dimensions, draw each at the top-left of a white field, composite.
+ */
+async function composeAsProduction(members, scale, threshold, { failMember = null } = {}) {
+  const started = performance.now();
+  const raw = [];
+  let maxW = 0;
+  let maxH = 0;
+  const dropped = [];
+
+  for (const m of members) {
+    if (!m.available) { dropped.push(`${m.label}: page absent`); continue; }
+    try {
+      if (failMember === m.label) throw new Error('injected render failure');
+      const doc = await open(m.name);
+      const canvas = await renderPageToCanvas(doc, m.pageNumber, scale);
+      maxW = Math.max(maxW, canvas.width);
+      maxH = Math.max(maxH, canvas.height);
+      raw.push({ canvas, color: m.color });
+    } catch (error) {
+      // Production catches here and carries on with whatever is left.
+      dropped.push(`${m.label}: ${error.message}`);
+    }
+  }
+  if (raw.length === 0 || maxW === 0) {
+    return { produced: false, dropped, ms: Math.round(performance.now() - started) };
+  }
+
+  const temp = document.createElement('canvas');
+  temp.width = maxW;
+  temp.height = maxH;
+  const ctx = temp.getContext('2d', { willReadFrequently: true });
+  const layers = [];
+  for (const layer of raw) {
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, maxW, maxH);
+    ctx.drawImage(layer.canvas, 0, 0);
+    layers.push({ data: ctx.getImageData(0, 0, maxW, maxH).data, color: layer.color });
+    layer.canvas.width = 0;
+    layer.canvas.height = 0;
+  }
+
+  const compositeStarted = performance.now();
+  const composite = computeMultiPdfComposite(layers, maxW, maxH, threshold, [0, 0, 0], 1);
+  const compositeMs = Math.round(performance.now() - compositeStarted);
+  const bounds = detectChangeBounds(layers, maxW, maxH, threshold);
+
+  // Pixels that are neither white nor black: the composite paints an unmatched
+  // layer in that layer's colour, so these are what the tool is calling a
+  // change.
+  let changePixels = 0;
+  let inkPixels = 0;
+  const d = composite.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
+    if (r > 245 && g > 245 && b > 245) continue;
+    inkPixels += 1;
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 30) changePixels += 1;
+  }
+
+  temp.width = 1;
+  temp.height = 1;
+  return {
+    produced: true,
+    dropped,
+    width: maxW,
+    height: maxH,
+    members: raw.length,
+    changePixels,
+    inkPixels,
+    changeRatio: inkPixels === 0 ? 0 : changePixels / inkPixels,
+    bounds,
+    compositeMs,
+    ms: Math.round(performance.now() - started),
+    memory: estimateMemory({ width: maxW, height: maxH, layers: raw.length }).total,
+  };
+}
+
+const RED = [1, 0, 0];
+const BLUE = [0, 0, 1];
+const member = (name, color, label = name, pageNumber = 1) =>
+  describe(name, pageNumber, label).then((m) => ({ ...m, color }));
+
+const pair = async (a, b, pageNumber = 1) => ([
+  await member(a, BLUE, a, pageNumber),
+  await member(b, RED, b, pageNumber),
+]);
+
+// ---------------------------------------------------------------------------
+// The probes
+// ---------------------------------------------------------------------------
+
+const DPI = 150;
+const SCALE = DPI / 72;
+
+window.__m4 = {
+  /** The corpus has to differ in the ways it claims to. */
+  async corpus() {
+    const out = {};
+    for (const name of [
+      'base-a4', 'identical-a4', 'added-line-a4', 'removed-line-a4', 'offset-a4',
+      'grey-line-a4', 'colour-line-a4', 'pale-hatch-a4',
+      'base-a3', 'base-a1', 'base-a0', 'landscape-a4', 'nearly-a4', 'same-ratio-larger',
+      'rotate-0', 'rotate-90', 'rotate-180', 'rotate-270',
+      'crop-origin-0', 'crop-origin-50-70', 'mediabox-larger',
+      'three-pages', 'two-pages', 'three-pages-blank-third',
+    ]) {
+      const doc = await open(name);
+      const page = await doc.getPage(1);
+      const vp = page.getViewport({ scale: 1 });
+      const ops = await page.getOperatorList();
+      out[name] = {
+        pages: doc.numPages,
+        view: page.view.map((v) => Math.round(v)),
+        rotate: page.rotate,
+        display: [Math.round(vp.width), Math.round(vp.height)],
+        ops: ops.fnArray.length,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * What the shipped comparator does with each pair.
+   *
+   * The number that matters is `changeRatio`: how much of the ink it painted in
+   * a layer colour rather than in the matched colour. On a pair whose drawing
+   * is identical, every one of those pixels is the tool reporting its own
+   * coordinate handling as a design change.
+   */
+  async baseline() {
+    const cases = {
+      'identical drawing': ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      'a wall removed': ['base-a4', 'removed-line-a4'],
+      'the drawing shifted 2pt': ['base-a4', 'offset-a4'],
+      'A4 vs A3, same drawing': ['base-a4', 'base-a3'],
+      'A4 vs A1, same drawing': ['base-a4', 'base-a1'],
+      'portrait vs landscape': ['base-a4', 'landscape-a4'],
+      'A4 vs a sheet 3pt bigger': ['base-a4', 'nearly-a4'],
+      'same aspect, 1.4x': ['base-a4', 'same-ratio-larger'],
+      '/Rotate 0 vs 90': ['rotate-0', 'rotate-90'],
+      '/Rotate 0 vs 180': ['rotate-0', 'rotate-180'],
+      '/Rotate 0 vs 270': ['rotate-0', 'rotate-270'],
+      'crop origin (0,0) vs (50,70)': ['crop-origin-0', 'crop-origin-50-70'],
+      'MediaBox larger, same CropBox': ['base-a4', 'mediabox-larger'],
+      'black vs grey ink': ['base-a4', 'grey-line-a4'],
+      'black vs cyan ink': ['base-a4', 'colour-line-a4'],
+      'a pale hatch added': ['base-a4', 'pale-hatch-a4'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      out[label] = await composeAsProduction(await pair(a, b), SCALE, 0);
+    }
+    return out;
+  },
+
+  /** Page 3 of a three-page document against a two-page one. */
+  async missingPage() {
+    const out = {};
+    for (const n of [1, 2, 3]) {
+      out[`page ${n}`] = {
+        production: await composeAsProduction(
+          await pair('three-pages', 'two-pages', n), SCALE, 0),
+        strict: candidateStrict({ pages: await pair('three-pages', 'two-pages', n) }),
+      };
+    }
+    // A page that exists and is empty is a different statement from a page that
+    // is not there, and a comparison must not turn one into the other.
+    out['blank page 3'] = {
+      production: await composeAsProduction(
+        await pair('three-pages', 'three-pages-blank-third', 3), SCALE, 0),
+      strict: candidateStrict({
+        pages: await pair('three-pages', 'three-pages-blank-third', 3),
+      }),
+    };
+    return out;
+  },
+
+  /** One member fails to render; the other does not. */
+  async renderFailure() {
+    const members = await pair('base-a4', 'added-line-a4');
+    const production = await composeAsProduction(members, SCALE, 0,
+      { failMember: 'added-line-a4' });
+    const withFailure = members.map(
+      (m) => (m.label === 'added-line-a4' ? { ...m, renderError: true } : m),
+    );
+    return {
+      production,
+      strict: candidateStrict({ pages: withFailure }),
+      // What the same pair produces when nothing fails, for contrast.
+      intact: await composeAsProduction(members, SCALE, 0),
+    };
+  },
+
+  /** What each candidate says about each geometry pair. */
+  async candidates() {
+    const cases = {
+      'identical drawing': ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      '/Rotate 0 vs 90': ['rotate-0', 'rotate-90'],
+      'crop origin (0,0) vs (50,70)': ['crop-origin-0', 'crop-origin-50-70'],
+      'MediaBox larger, same CropBox': ['base-a4', 'mediabox-larger'],
+      'A4 vs A3, same drawing': ['base-a4', 'base-a3'],
+      'portrait vs landscape': ['base-a4', 'landscape-a4'],
+      'A4 vs a sheet 3pt bigger': ['base-a4', 'nearly-a4'],
+      'same aspect, 1.4x': ['base-a4', 'same-ratio-larger'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const withAlignment = { x: 12, y: -4, rotation: 0, scale: 1 };
+      out[label] = {
+        geometry: compareGeometry(pageGeometry(pages[0]), pageGeometry(pages[1])),
+        baseline: candidateBaseline({ pages }),
+        strict: candidateStrict({ pages }),
+        normalise: candidateNormalise({ pages }),
+        human: candidateHumanAlignment({ pages }),
+        humanWithAlignment: candidateHumanAlignment({ pages, alignment: withAlignment }),
+      };
+    }
+    return out;
+  },
+
+  /**
+   * Rendering upright: does undoing /Rotate remove the difference?
+   *
+   * PDF.js applies /Rotate unless told otherwise, so the same drawing at four
+   * rotations renders to four different canvases. Asking for `rotation: 0`
+   * renders the page upright, which is what makes the comparison possible.
+   */
+  async rotationUpright() {
+    const out = {};
+    for (const angle of [90, 180, 270]) {
+      const upright = [];
+      for (const name of ['rotate-0', `rotate-${angle}`]) {
+        const doc = await open(name);
+        const page = await doc.getPage(1);
+        const vp = page.getViewport({ scale: SCALE, rotation: 0 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(vp.width);
+        canvas.height = Math.ceil(vp.height);
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        upright.push({ data: ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas });
+      }
+      const w = upright[0].canvas.width;
+      const h = upright[0].canvas.height;
+      const sameSize = w === upright[1].canvas.width && h === upright[1].canvas.height;
+      let differing = 0;
+      let ink = 0;
+      if (sameSize) {
+        const a = upright[0].data;
+        const b = upright[1].data;
+        for (let i = 0; i < a.length; i += 4) {
+          const inkA = (a[i] + a[i + 1] + a[i + 2]) / 3 < 200;
+          const inkB = (b[i] + b[i + 1] + b[i + 2]) / 3 < 200;
+          if (inkA || inkB) ink += 1;
+          if (inkA !== inkB) differing += 1;
+        }
+      }
+      for (const u of upright) { u.canvas.width = 1; u.canvas.height = 1; }
+      out[`0 vs ${angle}`] = {
+        sameSize, width: w, height: h, ink, differing,
+        ratio: ink === 0 ? 0 : differing / ink,
+      };
+    }
+    return out;
+  },
+
+  /** What the shipped caps do to a requested DPI. */
+  async dpiContract() {
+    const out = {};
+    for (const sheet of ['base-a4', 'base-a3', 'base-a1', 'base-a0']) {
+      const doc = await open(sheet);
+      const page = await doc.getPage(1);
+      const vp = page.getViewport({ scale: 1 });
+      out[sheet] = {};
+      for (const dpi of [72, 150, 300, 600]) {
+        const s = productionExportScale(dpi, vp);
+        const width = Math.round(vp.width * s.safe);
+        const height = Math.round(vp.height * s.safe);
+        const budget = checkBudget({ width, height, layers: 2 });
+        out[sheet][dpi] = {
+          requestedDpi: dpi,
+          actualDpi: Math.round(72 * s.safe),
+          capped: s.capped,
+          width,
+          height,
+          megapixels: +(width * height / 1e6).toFixed(2),
+          estimatedBytes: budget.total,
+          estimatedMB: +(budget.total / 1e6).toFixed(1),
+          withinBudget: budget.withinBudget,
+        };
+      }
+    }
+    return out;
+  },
+
+  /** What a comparison actually costs, measured rather than modelled. */
+  async cost() {
+    const rows = {};
+    for (const [label, sheet, dpi, threshold, layers] of [
+      ['A4 150dpi, 2 layers, threshold 0', 'base-a4', 150, 0, 2],
+      ['A4 150dpi, 2 layers, threshold 2', 'base-a4', 150, 2, 2],
+      ['A4 150dpi, 2 layers, threshold 4', 'base-a4', 150, 4, 2],
+      ['A4 300dpi, 2 layers, threshold 0', 'base-a4', 300, 0, 2],
+      ['A4 150dpi, 4 layers, threshold 0', 'base-a4', 150, 0, 4],
+      ['A3 150dpi, 2 layers, threshold 0', 'base-a3', 150, 0, 2],
+      ['A1 150dpi, 2 layers, threshold 0', 'base-a1', 150, 0, 2],
+    ]) {
+      const others = ['identical-a4', 'added-line-a4', 'removed-line-a4'];
+      const members = [await member(sheet, BLUE, sheet)];
+      for (let i = 1; i < layers; i++) {
+        const name = sheet === 'base-a4' ? others[(i - 1) % others.length] : sheet;
+        members.push(await member(name, RED, `${name}#${i}`));
+      }
+      rows[label] = await composeAsProduction(members, dpi / 72, threshold);
+    }
+    return rows;
+  },
+
+  /** Threshold as a physical distance rather than a pixel count. */
+  thresholdContract() {
+    const out = { pixelToMm: {}, mmToPixel: {} };
+    for (const dpi of [72, 150, 300, 600]) {
+      out.pixelToMm[dpi] = +millimetresFor(2, dpi).toFixed(3);
+      out.mmToPixel[dpi] = pixelRadiusFor(0.5, dpi);
+    }
+    return out;
+  },
+
+  /** What the shipped ink test calls ink. */
+  async inkBoundary() {
+    const swatches = {
+      black: '#000000', 'dark grey': '#404040', 'mid grey': '#8c8c8c',
+      'pale grey': '#d2d2d2', 'cad cyan': '#009ed9', 'cad yellow': '#ffe100',
+      // Bright but not dark on average: the mean is over 200 while one
+      // channel is under it, which is where the two ink tests part company.
+      'pale yellow': '#ffff8c', 'near white': '#f5f5f5', white: '#ffffff',
+    };
+    // Sized from the swatches rather than a literal: a reading taken outside the
+    // canvas comes back as transparent black, which would look like ink.
+    const canvas = document.createElement('canvas');
+    canvas.width = Object.keys(swatches).length;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const out = {};
+    let x = 0;
+    for (const [name, colour] of Object.entries(swatches)) {
+      ctx.fillStyle = colour;
+      ctx.fillRect(x, 0, 1, 1);
+      const d = ctx.getImageData(x, 0, 1, 1).data;
+      out[name] = {
+        rgb: [d[0], d[1], d[2]],
+        // computeMultiPdfComposite: the mean.
+        compositeSaysInk: (d[0] + d[1] + d[2]) / 3 < 200,
+        // detectChangeBounds: any channel.
+        boundsSaysInk: d[0] < 200 || d[1] < 200 || d[2] < 200,
+      };
+      x += 1;
+    }
+    return out;
+  },
+
+  /** Twice through, same input. */
+  async determinism() {
+    const members = await pair('base-a4', 'added-line-a4');
+    const first = await composeAsProduction(members, SCALE, 0);
+    const second = await composeAsProduction(members, SCALE, 0);
+    return {
+      changePixels: [first.changePixels, second.changePixels],
+      inkPixels: [first.inkPixels, second.inkPixels],
+      bounds: [first.bounds, second.bounds],
+      identical: first.changePixels === second.changePixels
+        && first.inkPixels === second.inkPixels
+        && JSON.stringify(first.bounds) === JSON.stringify(second.bounds),
+    };
+  },
+
+  /** The budget arithmetic, and the largest thing it refuses. */
+  budget() {
+    const cases = {};
+    for (const [label, w, h, layers] of [
+      ['A4 at 150dpi, 2 layers', 1240, 1754, 2],
+      ['A3 at 300dpi, 2 layers', 3508, 4961, 2],
+      ['A1 at 300dpi, 2 layers', 7016, 9933, 2],
+      ['A1 at 300dpi, 4 layers', 7016, 9933, 4],
+      ['A0 at 300dpi, 2 layers', 9933, 14043, 2],
+      ['A0 at 600dpi, 2 layers', 19866, 28087, 2],
+    ]) {
+      const b = checkBudget({ width: w, height: h, layers });
+      cases[label] = {
+        megapixels: +(w * h / 1e6).toFixed(1),
+        totalMB: +(b.total / 1e6).toFixed(0),
+        withinBudget: b.withinBudget,
+      };
+    }
+    return { limitMB: MAX_COMPARISON_BYTES / 1e6, cases };
+  },
+
+  RESULT,
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m4ready = true;
+</script>
