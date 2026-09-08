@@ -5,7 +5,13 @@
  * assigning `GlobalWorkerOptions.workerSrc` to unpkg at module scope — the
  * split/merge tool and the PDF processor — so opening a PDF in either of them
  * still fetched worker code from a CDN. The document never left the browser,
- * but the request did.
+ * but the request did. The comparator assigned the *local* worker at module
+ * scope, which was not a leak but was still one more place the outcome
+ * depended on evaluation order.
+ *
+ * Every production PDF.js entry point is covered here: the annotator, the
+ * comparator, split/merge's extract and merge, and the processor's monochrome
+ * and optimize.
  *
  * A source diff cannot close this. `workerSrc` is a single global that several
  * modules write to, and in a bundle they all evaluate on load with the last one
@@ -46,20 +52,93 @@ if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
 // The bundle, before anything runs
 // ---------------------------------------------------------------------------
 
+/**
+ * Is this string a PDF.js worker somewhere that is not us?
+ *
+ * Searching for `unpkg` proves the historical bug is gone and nothing more. The
+ * contract being claimed is broader — every worker comes from this app — so the
+ * check has to be broader too, or it passes a future regression to a different
+ * CDN without noticing.
+ *
+ * Deliberately not "any https:// string in the bundle": dependencies carry URLs
+ * for all sorts of reasons and that check would be noise. This targets worker
+ * URLs specifically.
+ */
+const isExternalWorkerUrl = (value) => {
+    if (typeof value !== 'string') return false;
+    if (!/^https?:\/\//i.test(value)) return false;
+    return /pdf[.\-_]?worker[^"'`\s]*\.(m?js)/i.test(value)
+        || /pdfjs-dist[^"'`\s]*\/(build|legacy)[^"'`\s]*worker/i.test(value);
+};
+
+console.log('\n=== what counts as an external worker ===');
+// The classifier before its verdict. A rule that rejected everything, or
+// nothing, would satisfy the scans below just as happily.
+const CASES = [
+    ['/pdf.worker.min.mjs', false],
+    ['./pdf.worker.min.mjs', false],
+    ['https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs', true],
+    ['https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs', true],
+    ['https://example.com/pdf.worker.min.mjs', true],
+    ['http://cdn.example.org/vendor/pdf.worker.js', true],
+    ['https://fonts.googleapis.com/css2?family=Inter', false],
+    ['https://api.example.com/v1/documents', false],
+];
+for (const [value, expected] of CASES) {
+    const got = isExternalWorkerUrl(value);
+    const label = expected ? 'rejected' : 'allowed';
+    check(`${label}: ${value.length > 58 ? `${value.slice(0, 55)}...` : value}`,
+        got === expected, got === expected ? '' : `classified as ${got ? 'external' : 'local'}`);
+}
+
 console.log('\n=== the shipped bundle ===');
 const bundle = fs.readdirSync(path.join(ROOT, 'dist', 'assets'))
     .filter((n) => n.endsWith('.js'))
     .map((n) => fs.readFileSync(path.join(ROOT, 'dist', 'assets', n), 'utf8'))
     .join('\n');
-const cdnAssignments = bundle.match(/unpkg\.com\/pdfjs-dist/g) ?? [];
-check('no PDF.js worker is pointed at a CDN anywhere in the bundle',
-    cdnAssignments.length === 0,
-    cdnAssignments.length === 0 ? '0 assignments' : `${cdnAssignments.length} left`);
+const bundleUrls = (bundle.match(/https?:\/\/[^"'`\s)]+/gi) ?? []);
+const bundleWorkers = [...new Set(bundleUrls.filter(isExternalWorkerUrl))];
+const unpkgInBundle = (bundle.match(/unpkg\.com\/pdfjs-dist/g) ?? []);
+
+probe('no PDF.js worker in the bundle points anywhere but this app',
+    bundleWorkers.length === 0,
+    bundleWorkers.length === 0
+        ? `0 of ${bundleUrls.length} URLs in the bundle are worker URLs`
+        : bundleWorkers.join(' '));
+check('and unpkg specifically is gone', unpkgInBundle.length === 0,
+    `${unpkgInBundle.length} assignments`);
+
+// Source as well as bundle: the bundle can only show what survived tree-shaking,
+// and a dead-but-present assignment is still a contract violation waiting to be
+// reached.
+const SRC = path.join(ROOT, 'src');
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (
+    e.isDirectory() ? walk(path.join(dir, e.name))
+        : (/\.(ts|tsx)$/.test(e.name) ? [path.join(dir, e.name)] : [])
+));
+const stripComments = (t) => t.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, '');
+const offenders = [];
+for (const file of walk(SRC)) {
+    const code = stripComments(fs.readFileSync(file, 'utf8'));
+    for (const url of code.match(/["'`]([^"'`]*)["'`]/g) ?? []) {
+        const inner = url.slice(1, -1);
+        if (isExternalWorkerUrl(inner)) offenders.push(`${path.relative(ROOT, file)}: ${inner}`);
+    }
+    // A template literal building a worker URL from a version, which is how the
+    // original defect was written.
+    if (/workerSrc[^;]*https?:/i.test(code)) {
+        offenders.push(`${path.relative(ROOT, file)}: workerSrc assigned an absolute URL`);
+    }
+}
+probe('no production source points a worker at an external URL',
+    offenders.length === 0,
+    offenders.length === 0 ? '0 across src/' : offenders.join(' | '));
+
 check('the worker ships with the app',
     fs.existsSync(path.join(ROOT, 'dist', WORKER.slice(1))),
     `dist${WORKER}`);
 // Static text is where this defect used to be visible, but it is not where it
-// lives: the rest of this file is the evidence that matters.
+// lives: the runtime checks below are the evidence.
 console.log('  (static only — the runtime checks below are the evidence)');
 
 // ---------------------------------------------------------------------------
@@ -193,6 +272,45 @@ try {
         localWorkerCount() > before,
         `${localWorkerCount() - before} request(s) to ${WORKER}`);
 
+    // ---- the comparator ---------------------------------------------------
+    //
+    // It already fetched the local worker before this change, from a
+    // module-scope assignment. It is driven here anyway: an app-wide contract
+    // that skips one of its members is a claim about the members it happens to
+    // check.
+    console.log('\n=== the comparator ===');
+    check('the comparator opens', await openTool('PDF比較'));
+    before = localWorkerCount();
+    const compareInput = await page.$('input[type="file"]');
+    await compareInput.uploadFile(threePager);
+    await page.waitForFunction(
+        () => [...document.querySelectorAll('canvas')].some((c) => c.width > 0),
+        { timeout: 60000 },
+    ).catch(() => {});
+    await settle(2500);
+
+    const compared = await page.evaluate(() => {
+        const canvases = [...document.querySelectorAll('canvas')].filter((c) => c.width > 0);
+        const c = canvases[0];
+        if (!c) return { canvases: 0 };
+        const { data } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+        let ink = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] > 0 && (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245)) ink += 1;
+        }
+        return { canvases: canvases.length, width: c.width, height: c.height, ink };
+    });
+    check('the document loaded and a canvas rendered',
+        compared.canvases > 0 && compared.width > 0 && compared.height > 0,
+        `${compared.canvases} canvas(es), ${compared.width}x${compared.height}`);
+    // Alpha before colour: an un-rendered canvas is transparent, not white, and
+    // a check that misses that reads (0,0,0,0) as ink.
+    check('and something was actually drawn on it',
+        compared.ink > 200, `${compared.ink} ink pixels`);
+    check('the worker came from this app',
+        localWorkerCount() > before,
+        `${localWorkerCount() - before} request(s) to ${WORKER}`);
+
     // ---- the processor: monochrome and optimize --------------------------
     for (const [label, tool] of [['モノクロ化', 'monochrome'], ['最適化', 'optimize']]) {
         console.log(`\n=== the processor: ${tool} ===`);
@@ -245,8 +363,8 @@ try {
         } catch { return false; }
     };
     const external = requests.filter(isExternal);
-    check('every worker request was same-origin', localWorkerCount() >= 4,
-        `${localWorkerCount()} request(s) to ${WORKER} across four PDF.js paths`);
+    check('every worker request was same-origin', localWorkerCount() >= 5,
+        `${localWorkerCount()} request(s) to ${WORKER} across five PDF.js paths`);
     probe('not one went to unpkg', unpkgCount() === 0,
         unpkgCount() === 0 ? '0 requests' : `${unpkgCount()} requests`);
     probe('nor anywhere else off-origin', external.length === 0,
@@ -266,16 +384,32 @@ try {
     const sourceOf = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     const strip = (t) => t.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, '');
     for (const [file, calls] of [
+        ['src/components/PdfViewer.tsx', 1],
+        ['src/components/PdfComparator.tsx', 1],
         ['src/components/PdfSplitMerge.tsx', 2],
         ['src/utils/pdf-processor.ts', 2],
-        ['src/components/PdfViewer.tsx', 1],
     ]) {
         const code = strip(sourceOf(file));
         const configured = (code.match(/configurePdfWorker\(\)/g) ?? []).length;
         check(`${file.split('/').pop()}: configures the worker at each use`,
-            configured >= calls && !/workerSrc\s*=/.test(code) && !code.includes('unpkg'),
+            configured >= calls
+            && !/workerSrc\s*=/.test(code)
+            && !(code.match(/["'`]([^"'`]*)["'`]/g) ?? [])
+                .some((q) => isExternalWorkerUrl(q.slice(1, -1))),
             `${configured} point-of-use call(s), no module-scope assignment`);
     }
+
+    // The Textifier keeps its own copy of the helper with the same contract.
+    // Unifying the two is out of scope here; that it configures locally and
+    // never externally is not.
+    const textifierHelper = stripComments(
+        fs.readFileSync(path.join(ROOT, 'src/utils/pdf-textifier/pdf-source.ts'), 'utf8'),
+    );
+    check('the Textifier helper stays local too',
+        textifierHelper.includes("'/pdf.worker.min.mjs'")
+        && !(textifierHelper.match(/["'`]([^"'`]*)["'`]/g) ?? [])
+            .some((q) => isExternalWorkerUrl(q.slice(1, -1))),
+        'its own helper, same worker, not unified here');
 
     const failed = checks.filter((c) => !c.ok);
     const probes = checks.filter((c) => c.name.startsWith('negative probe')).length;
