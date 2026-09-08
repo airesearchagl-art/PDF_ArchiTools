@@ -5,7 +5,7 @@ notice.
 
 ## The corpus is synthetic, and one drawing
 
-Twenty-four fixtures, all variations of a single generated plan: a border, a
+Thirty-one fixtures, all variations of a single generated plan: a border, a
 title block, a five-by-four grid, one labelled string, and a wall that moves.
 Real construction drawings carry dimension strings, hatch, text at several
 sizes, symbols, xrefs and scanned underlays, and they are produced by CAD
@@ -33,16 +33,21 @@ tool is calling this a change" and it is not the same as what a user would judge
 A 99.4% and a 75.9% are both "almost everything"; the gap between them is not
 meaningful.
 
-## The worst case for the threshold cost was not measured
+## The worst case is measured, but only on one shape
 
-Radius 4 measured *faster* than radius 2 (55 ms against 48), because
-`hasNeighborInAny` returns on the first ink it finds and a wider box finds one
-sooner. That makes the measured cost a best case: on a drawing where the marks
-mostly do **not** match — the case the tool exists for — the search runs to
-completion every time and the cost should grow with the box area.
+A non-matching pair is now in the corpus: 1.56 us per ink pixel against 0.59 us
+when the drawings match, at radius 3. That is the effect isolated, and isolating
+it required normalising by ink pixel — the adversarial pair is the *sparser*
+drawing, so wall-clock page times would have credited it for having less to do.
 
-That case was not constructed. The cost figures in `measurements.md` 9 should be
-read as a floor.
+What is still missing is the shape of the worst case beyond this one pair. The
+dense fixtures are short horizontal strokes; a drawing dense in a different way —
+fine hatch, dense text, a photographic underlay — could behave differently, and
+the ink fraction here (1.7-1.9%) is low for a busy construction sheet.
+
+The `pixels x radius squared x members` upper bound in `architecture.md` is
+arithmetic, not measured at scale: no comparison near the proposed budget was run
+to completion, deliberately.
 
 ## The budget is a judgement, not a discovered threshold
 
@@ -58,9 +63,26 @@ with it at 2 GB is untested here, and deliberately so.
 
 ## Cancellation and ownership are proposed, not measured
 
-Section on ownership in `architecture.md` reuses M3's shape — a mount flag and a
+The ownership section in `architecture.md` reuses M3's shape — a mount flag and a
 generation counter — and no cancellation, supersession or unmount behaviour was
-exercised in this spike. It is a proposal by analogy.
+exercised here. It is a proposal by analogy.
+
+One thing about it *is* established, by reading the code rather than by
+measurement: the composite is a synchronous double loop with no yield point, so a
+comparison in progress cannot observe a cancellation flag at all. Ownership stops
+a stale result being *published*; it does not make a long comparison stop.
+Whether the loop is chunked, replaced with a bounded lookup, or bounded before it
+starts is an open architecture decision that this spike does not settle.
+
+## The multi-member contract is measured, not chosen
+
+Four-member sets are measured — a two-against-two split is reported as a clean
+match by the shipped rule, and caught by reference-pairs — but which contract to
+adopt is a product question listed as H9. All-member consensus is described and
+**not measured**: no consensus implementation was run against the corpus.
+
+The 3- and 4-way fixtures are the same plan with the wall in one of two places. A
+real four-way revision set would differ in more ways than that.
 
 ## Automatic registration was not implemented or measured
 
@@ -83,13 +105,6 @@ count, dimensions, orientation and renderability. This spike measured the
 compositing and the geometry, not the jsPDF assembly, so **that check was not
 run**. It belongs in the implementation's gate.
 
-## Preview and export were not compared against each other
-
-Preview uses `scale * (dpi / 72)`; export uses `dpi / 72`
-(`PdfComparator.tsx:147` and `:255`). Both were read; only the export path was
-measured. Whether the two produce the same verdict at the same settings is
-unmeasured.
-
 ## Ink detection is described, not fixed
 
 The two functions disagree, and one colour that demonstrates it was found. What
@@ -97,12 +112,15 @@ the *right* ink test is — for antialiased CAD linework, for coloured layers, f
 hatch — is not answered here. A pale grey hatch is invisible to both, which is
 recorded as a current limit rather than proposed as acceptable.
 
-## Only two members were compared
+## The three pipelines were compared on paper, not driven
 
-The tool supports four slots. Everything measured here is two layers, except the
-memory arithmetic, which extends to four by calculation. Three- and four-way
-comparisons have their own question — what "matched" means when only some
-members agree — and it was not examined.
+The divergence between the preview, the export and the change report is
+established from their source and from arithmetic on their scale formulas.
+**None of the three was driven through the real UI in this spike**, so the 281 GB
+figure for the change report is what it would *ask for* — not something that was
+allocated, and not a failure that was observed. The parity requirement in
+`architecture.md` is written as a production gate precisely because it was not
+executed here.
 
 ## One machine, one browser
 

@@ -13,24 +13,41 @@ Every number is from `evidence.json`, produced by
 | **C — human alignment** | when geometry cannot be settled by arithmetic, ask for an offset rather than guessing, and carry it on the result. |
 | **D — automatic registration** | correlate the images and align by the best fit. **Not implemented** — see below. |
 
-## What each says
+## Two stages
+
+A plan says whether a comparison can be made; a verdict says what it found. The
+first version of this matrix used `CHANGE` for both, so an identical drawing came
+back as `CHANGE` — which is the kind of answer this spike exists to stop.
+
+**Plan** (all four candidates):
 
 | case | 0 | A | B | C |
 | --- | --- | --- | --- | --- |
-| the same drawing twice | CHANGE | CHANGE | CHANGE | CHANGE |
-| a wall added | CHANGE | CHANGE | CHANGE | CHANGE |
-| `/Rotate 0` vs `90` | CHANGE | CHANGE | CHANGE | CHANGE |
-| crop origin (0,0) vs (50,70) | CHANGE | CHANGE | CHANGE | CHANGE |
-| MediaBox larger, same CropBox | CHANGE | CHANGE | CHANGE | CHANGE |
-| A4 vs A3, same drawing | CHANGE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
-| portrait vs landscape | CHANGE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
-| A4 vs a sheet 3pt bigger | CHANGE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
-| same aspect, 1.4× | CHANGE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
-| page 3 absent from one | CHANGE (1 member) | **MISSING_PAGE** | MISSING_PAGE | MISSING_PAGE |
-| page 3 present but blank | CHANGE | CHANGE | CHANGE | CHANGE |
-| one member fails to render | CHANGE (1 member) | **RENDER_FAILED** | RENDER_FAILED | RENDER_FAILED |
+| the same drawing twice | READY | READY | READY | READY |
+| a wall added | READY | READY | READY | READY |
+| `/Rotate 0` vs `90` | READY | READY | READY | READY |
+| crop origin (0,0) vs (50,70) | READY | READY | READY | READY |
+| MediaBox larger, same CropBox | READY | READY | READY | READY |
+| A4 vs A3, same drawing | READY | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
+| portrait vs landscape | READY | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
+| A4 vs a sheet 3pt bigger | READY | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
+| same aspect, 1.4× | READY | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | **ALIGNMENT_REQUIRED** |
+| page 3 absent from one | READY (1 member) | **MISSING_PAGE** | MISSING_PAGE | MISSING_PAGE |
+| page 3 present but blank | READY | READY | READY | READY |
+| one member fails to render | READY (1 member) | **RENDER_FAILED** | RENDER_FAILED | RENDER_FAILED |
 
-Candidate 0 has one verdict. It has no state for *I should not answer this*.
+**Verdict**, reached only from a plan that was ready:
+
+| case | verdict | ink differing |
+| --- | --- | --- |
+| the same drawing twice | **MATCH** | 0.0% |
+| a wall added | **CHANGE** | 9.6% |
+| rotation only, rendered upright | **MATCH** | 0.0% |
+| crop origin only | **MATCH** | 0.0% |
+| a different sheet | never reached | — |
+
+Candidate 0 has one plan status and no verdict stage at all. It has no state for
+*I should not answer this*.
 
 ## The comparison
 
@@ -99,6 +116,80 @@ The measurement is what settles this. A surviving member alone reads as
 **100.0% changed**, because its ink has nothing to match against. The current
 behaviour does not degrade to a partial answer; it produces the most alarming
 possible wrong one.
+
+## 4b. What "matched" means with more than two members
+
+The shipped rule is *any other layer*, and it does not survive four members.
+
+| | any-other-layer | reference-pairs |
+| --- | --- | --- |
+| four identical | MATCH | MATCH |
+| three the same, one changed | CHANGE | CHANGE |
+| **two against two** | **MATCH** | **CHANGE** |
+| **reference and three different** | **MATCH** | **CHANGE** |
+
+Two agreeing pairs cancel: every pixel finds a partner and a disagreement about
+where a wall goes is reported as a clean match.
+
+| option | verdict |
+| --- | --- |
+| any other layer (today) | **REJECT** — measured to hide a two-against-two disagreement |
+| **two members only**, three or more refused | viable, smallest contract |
+| **reference pairs** — each member against slot 1, MATCH only if all pairs match | **recommended** |
+| all-member consensus — a location matches only when every member agrees | viable, stricter, unmeasured against real revisions |
+
+Measured: reference-pairs catches both failing cases, with the two-against-two
+pairs at `identical: 0.0%`, `wall-at-y: 19.3%`, `wall-at-y-copy: 19.3%`.
+
+**This is a product decision, not a technical one** — reference-pairs answers
+"how does each drawing differ from the reference", consensus answers "do they all
+agree" — so it goes to the Human Gate as **H9** rather than being settled here.
+
+## 4c. One engine for three paths
+
+Preview, the full export and the change report each decide independently what a
+comparison means, and they do not agree.
+
+| | render scale | capped |
+| --- | --- | --- |
+| preview | `scale * (dpi / 72)` | yes |
+| export | `dpi / 72` | yes |
+| change report | `scale * (dpi / 72)` | **no** |
+
+An A1 at zoom 6 and 600 dpi asks the change report for **10,035 Mpx, ~281 GB**.
+They also disagree about a missing page three different ways.
+
+| option | verdict |
+| --- | --- |
+| three independent pipelines | **REJECT** |
+| one planner and one comparison, three presentations | **ADOPT** |
+
+The three paths may render a result differently. None of them may independently
+skip a missing page, choose a geometry, cap a DPI, decide what ink is, compute a
+threshold, swallow a render failure, or recompute what a change is.
+
+## 4d. The cost of a physical threshold
+
+| option | verdict |
+| --- | --- |
+| no work bound | **REJECT** — the search is O(ink x radius² x members) with no ceiling |
+| a stated `MAX_WORK`, refused before rendering | **ADOPT** as the floor |
+| chunked comparison that can yield and be cancelled | **ADOPT** alongside it |
+
+Measured, per ink pixel at radius 3: **0.59 µs** when the drawings match against
+**1.56 µs** when they do not. Every earlier cost figure was taken on matching
+drawings and is a floor.
+
+A physical threshold grows the radius with the DPI, so the worst case grows with
+it too: 43 ms at 150 dpi / radius 3 against 207 ms at 300 dpi / radius 6 on the
+same non-matching pair.
+
+**Cancellation alone does not solve this.** The composite is a synchronous double
+loop that cannot observe a cancellation flag or yield to the event loop, so a
+long comparison is not abandonable as written. Either the loop is restructured to
+work in chunks, or the work is bounded before it starts, or both. That is an
+architecture decision to make before implementation, and `architecture.md`
+records it as one.
 
 ## 5. Automatic registration
 
@@ -171,9 +262,15 @@ open question rather than answered.
 
 ## Summary
 
+Every ADOPT below is a **research recommendation**, not a decision. Where the
+choice is a product question — geometry-mismatch behaviour, missing-page policy,
+over-budget behaviour, alignment persistence, export format, threshold unit, the
+512 MiB budget, the ink predicate, and the multi-member contract — the Human
+Gate chooses, and `README.md` lists them.
+
 | | |
 | --- | --- |
-| **ADOPT** | **A + B + C in that order.** Strict validation decides whether a comparison is meaningful; safe normalisation handles rotation and crop origin, which are provable; human alignment is the way forward when geometry genuinely differs. Plus: upright rendering, a physical threshold in millimetres, a stated working-set budget checked before allocation, structured results rather than only a picture, and atomic export. |
+| **RESEARCH RECOMMENDATION** | **A + B + C in that order.** Strict validation decides whether a comparison is meaningful; safe normalisation handles rotation and crop origin, which are provable; human alignment is the way forward when geometry genuinely differs. Plus: upright rendering, a physical threshold in millimetres, a stated working-set budget checked before allocation, structured results rather than only a picture, and atomic export. |
 | **REJECT** | **Candidate 0.** Not as an implementation detail — as a contract. Its single verdict is what makes a wrong answer indistinguishable from a right one. |
 | **DEFER** | **Candidate D** (automatic registration), the JPEG/PNG question, and the alignment UI. |
 

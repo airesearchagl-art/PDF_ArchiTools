@@ -362,6 +362,111 @@
         842
       ],
       "ops": 89
+    },
+    "base-a4-copy": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "wall-at-y-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "wall-at-y-a4-copy": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "dense-a": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 5400
+    },
+    "dense-b": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 5400
+    },
+    "sheet-plus-0-99": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        596,
+        843
+      ],
+      "rotate": 0,
+      "display": [
+        596,
+        843
+      ],
+      "ops": 89
+    },
+    "sheet-plus-1-01": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        596,
+        843
+      ],
+      "rotate": 0,
+      "display": [
+        596,
+        843
+      ],
+      "ops": 89
     }
   },
   "baseline": {
@@ -375,8 +480,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 29,
-      "ms": 89,
+      "compositeMs": 27,
+      "ms": 95,
       "memory": 60864160
     },
     "a wall added": {
@@ -394,7 +499,7 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 36,
+      "compositeMs": 34,
       "ms": 95,
       "memory": 60864160
     },
@@ -414,7 +519,7 @@
         "height": 50
       },
       "compositeMs": 23,
-      "ms": 78,
+      "ms": 73,
       "memory": 60864160
     },
     "the drawing shifted 2pt": {
@@ -432,8 +537,8 @@
         "width": 718,
         "height": 1181
       },
-      "compositeMs": 22,
-      "ms": 73,
+      "compositeMs": 25,
+      "ms": 75,
       "memory": 60864160
     },
     "A4 vs A3, same drawing": {
@@ -452,7 +557,7 @@
         "height": 2315
       },
       "compositeMs": 50,
-      "ms": 136,
+      "ms": 139,
       "memory": 121728320
     },
     "A4 vs A1, same drawing": {
@@ -470,8 +575,8 @@
         "width": 3320,
         "height": 4680
       },
-      "compositeMs": 181,
-      "ms": 461,
+      "compositeMs": 209,
+      "ms": 534,
       "memory": 487641336
     },
     "portrait vs landscape": {
@@ -489,8 +594,8 @@
         "width": 1651,
         "height": 1651
       },
-      "compositeMs": 43,
-      "ms": 111,
+      "compositeMs": 34,
+      "ms": 94,
       "memory": 86044252
     },
     "A4 vs a sheet 3pt bigger": {
@@ -508,8 +613,8 @@
         "width": 1168,
         "height": 1630
       },
-      "compositeMs": 24,
-      "ms": 76,
+      "compositeMs": 33,
+      "ms": 95,
       "memory": 61402880
     },
     "same aspect, 1.4x": {
@@ -527,8 +632,8 @@
         "width": 1634,
         "height": 2291
       },
-      "compositeMs": 43,
-      "ms": 123,
+      "compositeMs": 51,
+      "ms": 138,
       "memory": 119332640
     },
     "/Rotate 0 vs 90": {
@@ -546,8 +651,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 39,
-      "ms": 108,
+      "compositeMs": 41,
+      "ms": 127,
       "memory": 86044252
     },
     "/Rotate 0 vs 180": {
@@ -565,8 +670,8 @@
         "width": 1151,
         "height": 1552
       },
-      "compositeMs": 23,
-      "ms": 70,
+      "compositeMs": 25,
+      "ms": 68,
       "memory": 60864160
     },
     "/Rotate 0 vs 270": {
@@ -584,8 +689,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 43,
-      "ms": 143,
+      "compositeMs": 38,
+      "ms": 106,
       "memory": 86044252
     },
     "crop origin (0,0) vs (50,70)": {
@@ -598,8 +703,8 @@
       "inkPixels": 59636,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 22,
-      "ms": 57,
+      "compositeMs": 17,
+      "ms": 58,
       "memory": 44543324
     },
     "MediaBox larger, same CropBox": {
@@ -612,8 +717,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 26,
-      "ms": 76,
+      "compositeMs": 46,
+      "ms": 100,
       "memory": 60864160
     },
     "black vs grey ink": {
@@ -631,8 +736,8 @@
         "width": 1162,
         "height": 1624
       },
-      "compositeMs": 23,
-      "ms": 65,
+      "compositeMs": 58,
+      "ms": 109,
       "memory": 60864160
     },
     "black vs cyan ink": {
@@ -650,7 +755,7 @@
         "width": 90,
         "height": 58
       },
-      "compositeMs": 30,
+      "compositeMs": 49,
       "ms": 112,
       "memory": 60864160
     },
@@ -669,8 +774,8 @@
         "width": 749,
         "height": 42
       },
-      "compositeMs": 29,
-      "ms": 117,
+      "compositeMs": 30,
+      "ms": 92,
       "memory": 60864160
     }
   },
@@ -713,11 +818,11 @@
         "changeRatio": 0,
         "bounds": null,
         "compositeMs": 30,
-        "ms": 97,
+        "ms": 83,
         "memory": 60864160
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -737,12 +842,12 @@
         "inkPixels": 80048,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 25,
-        "ms": 68,
+        "compositeMs": 31,
+        "ms": 80,
         "memory": 60864160
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -764,8 +869,8 @@
         "inkPixels": 80051,
         "changeRatio": 1,
         "bounds": null,
-        "compositeMs": 16,
-        "ms": 30,
+        "compositeMs": 20,
+        "ms": 39,
         "memory": 43474400
       },
       "strict": {
@@ -792,11 +897,11 @@
           "height": 1624
         },
         "compositeMs": 27,
-        "ms": 77,
+        "ms": 73,
         "memory": 60864160
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -819,8 +924,8 @@
       "inkPixels": 79953,
       "changeRatio": 1,
       "bounds": null,
-      "compositeMs": 19,
-      "ms": 33,
+      "compositeMs": 26,
+      "ms": 49,
       "memory": 43474400
     },
     "strict": {
@@ -844,9 +949,353 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 35,
-      "ms": 100,
+      "compositeMs": 34,
+      "ms": 90,
       "memory": 60864160
+    }
+  },
+  "planThenVerdict": {
+    "identical": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "MATCH",
+      "ratio": 0,
+      "tolerance": 0.005
+    },
+    "a wall added": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "CHANGE",
+      "ratio": 0.09640269882350282,
+      "tolerance": 0.005
+    },
+    "rotation only": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "MATCH",
+      "ratio": 0,
+      "tolerance": 0.005
+    },
+    "crop origin only": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "MATCH",
+      "ratio": 0,
+      "tolerance": 0.005
+    },
+    "a different sheet": {
+      "plan": "GEOMETRY_MISMATCH",
+      "verdict": null,
+      "reported": [
+        "base-a3: 595.3x841.9pt vs 841.9x1190.5pt"
+      ]
+    },
+    "a different sheet, aligned by a human": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "human",
+      "verdict": "requires a comparison under that alignment"
+    }
+  },
+  "multiMember": {
+    "four identical": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0,
+        "verdict": "MATCH"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "identical-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "base-a4-copy",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "base-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          }
+        ],
+        "verdict": "MATCH"
+      }
+    },
+    "three the same, one changed": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0.09640269882350282,
+        "verdict": "CHANGE"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "identical-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "base-a4-copy",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "added-line-a4",
+            "ratio": 0.09640269882350282,
+            "verdict": "CHANGE"
+          }
+        ],
+        "verdict": "CHANGE"
+      }
+    },
+    "two against two": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0,
+        "verdict": "MATCH"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "identical-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "wall-at-y-a4",
+            "ratio": 0.19280539764700563,
+            "verdict": "CHANGE"
+          },
+          {
+            "member": "wall-at-y-a4-copy",
+            "ratio": 0.19280539764700563,
+            "verdict": "CHANGE"
+          }
+        ],
+        "verdict": "CHANGE"
+      }
+    },
+    "reference and three different": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0,
+        "verdict": "MATCH"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "added-line-a4",
+            "ratio": 0.09640269882350282,
+            "verdict": "CHANGE"
+          },
+          {
+            "member": "removed-line-a4",
+            "ratio": 0.1066876790114192,
+            "verdict": "CHANGE"
+          },
+          {
+            "member": "wall-at-y-a4",
+            "ratio": 0.19280539764700563,
+            "verdict": "CHANGE"
+          }
+        ],
+        "verdict": "CHANGE"
+      }
+    },
+    "plans": {
+      "two": "READY_TO_COMPARE",
+      "fourTwoOnly": "UNSUPPORTED",
+      "fourReferencePairs": {
+        "status": "READY_TO_COMPARE",
+        "contract": "reference-pairs",
+        "pairs": 3
+      },
+      "one": "UNSUPPORTED"
+    }
+  },
+  "geometryTolerance": {
+    "tolerancePt": 1,
+    "cases": {
+      "+0.99pt": {
+        "widths": [
+          595.28,
+          596.27
+        ],
+        "delta": 0.99,
+        "plan": "READY_TO_COMPARE"
+      },
+      "+1.01pt": {
+        "widths": [
+          595.28,
+          596.29
+        ],
+        "delta": 1.01,
+        "plan": "GEOMETRY_MISMATCH"
+      },
+      "+3.00pt": {
+        "widths": [
+          595.28,
+          598.28
+        ],
+        "delta": 3,
+        "plan": "GEOMETRY_MISMATCH"
+      }
+    }
+  },
+  "pipelines": {
+    "base-a4": {
+      "zoom 1, 300dpi": {
+        "previewScale": 4.17,
+        "previewCapped": false,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 4.17,
+        "reportCapped": false,
+        "reportPixels": 8699840,
+        "reportMegapixels": 8.7,
+        "reportWorkingSetMB": 244
+      },
+      "zoom 2, 300dpi": {
+        "previewScale": 8.33,
+        "previewCapped": false,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 8.33,
+        "reportCapped": false,
+        "reportPixels": 34806376,
+        "reportMegapixels": 34.8,
+        "reportWorkingSetMB": 975
+      },
+      "zoom 6, 600dpi": {
+        "previewScale": 12.63,
+        "previewCapped": true,
+        "exportScale": 8.33,
+        "exportCapped": false,
+        "reportScale": 50,
+        "reportCapped": false,
+        "reportPixels": 1252915580,
+        "reportMegapixels": 1252.9,
+        "reportWorkingSetMB": 35082
+      }
+    },
+    "base-a1": {
+      "zoom 1, 300dpi": {
+        "previewScale": 4.17,
+        "previewCapped": false,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 4.17,
+        "reportCapped": false,
+        "reportPixels": 69689928,
+        "reportMegapixels": 69.7,
+        "reportWorkingSetMB": 1951
+      },
+      "zoom 2, 300dpi": {
+        "previewScale": 4.46,
+        "previewCapped": true,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 8.33,
+        "reportCapped": false,
+        "reportPixels": 278759712,
+        "reportMegapixels": 278.8,
+        "reportWorkingSetMB": 7805
+      },
+      "zoom 6, 600dpi": {
+        "previewScale": 4.46,
+        "previewCapped": true,
+        "exportScale": 4.46,
+        "exportCapped": true,
+        "reportScale": 50,
+        "reportCapped": false,
+        "reportPixels": 10035076233,
+        "reportMegapixels": 10035.1,
+        "reportWorkingSetMB": 280982
+      }
+    },
+    "missingPageHandling": {
+      "preview": "skips the member (PdfComparator.tsx:173)",
+      "export": "skips the member, still adds the page (PdfComparator.tsx:316)",
+      "changeReport": "skips the whole page when fewer than 2 members render (PdfComparator.tsx:437)"
+    }
+  },
+  "adversarial": {
+    "matching, A4 150dpi, 0mm": {
+      "dpi": 150,
+      "millimetres": 0,
+      "radius": 0,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "compositeMs": 31,
+      "totalMs": 89
+    },
+    "matching, A4 150dpi, 0.5mm": {
+      "dpi": 150,
+      "millimetres": 0.5,
+      "radius": 3,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "compositeMs": 64,
+      "totalMs": 134
+    },
+    "NOT matching, A4 150dpi, 0mm": {
+      "dpi": 150,
+      "millimetres": 0,
+      "radius": 0,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 41116,
+      "changeRatio": 1,
+      "compositeMs": 37,
+      "totalMs": 124
+    },
+    "NOT matching, A4 150dpi, 0.5mm": {
+      "dpi": 150,
+      "millimetres": 0.5,
+      "radius": 3,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 41116,
+      "changeRatio": 1,
+      "compositeMs": 52,
+      "totalMs": 129
+    },
+    "NOT matching, A4 300dpi, 0mm": {
+      "dpi": 300,
+      "millimetres": 0,
+      "radius": 0,
+      "width": 2480,
+      "height": 3507,
+      "pixels": 8697360,
+      "members": 2,
+      "inkPixels": 151411,
+      "changeRatio": 1,
+      "compositeMs": 158,
+      "totalMs": 395
+    },
+    "NOT matching, A4 300dpi, 0.5mm": {
+      "dpi": 300,
+      "millimetres": 0.5,
+      "radius": 6,
+      "width": 2480,
+      "height": 3507,
+      "pixels": 8697360,
+      "members": 2,
+      "inkPixels": 151411,
+      "changeRatio": 1,
+      "compositeMs": 211,
+      "totalMs": 501
     }
   },
   "candidates": {
@@ -857,7 +1306,7 @@
         "automaticOnly": true
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -866,7 +1315,7 @@
         "reported": []
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -875,7 +1324,7 @@
         "reported": []
       },
       "normalise": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -896,7 +1345,7 @@
         "reported": []
       },
       "human": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -905,7 +1354,7 @@
         "reported": []
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -921,7 +1370,7 @@
         "automaticOnly": true
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -930,7 +1379,7 @@
         "reported": []
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -939,7 +1388,7 @@
         "reported": []
       },
       "normalise": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -960,7 +1409,7 @@
         "reported": []
       },
       "human": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -969,7 +1418,7 @@
         "reported": []
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -996,7 +1445,7 @@
         "automaticOnly": true
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 841.89,
@@ -1005,7 +1454,7 @@
         "reported": []
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1014,7 +1463,7 @@
         "reported": []
       },
       "normalise": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1039,7 +1488,7 @@
         "reported": []
       },
       "human": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1048,7 +1497,7 @@
         "reported": []
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1070,7 +1519,7 @@
         "automaticOnly": true
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 495,
@@ -1079,7 +1528,7 @@
         "reported": []
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 495,
@@ -1088,7 +1537,7 @@
         "reported": []
       },
       "normalise": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 495,
@@ -1109,7 +1558,7 @@
         "reported": []
       },
       "human": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 495,
@@ -1118,7 +1567,7 @@
         "reported": []
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 495,
@@ -1134,7 +1583,7 @@
         "automaticOnly": true
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1143,7 +1592,7 @@
         "reported": []
       },
       "strict": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1152,7 +1601,7 @@
         "reported": []
       },
       "normalise": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1173,7 +1622,7 @@
         "reported": []
       },
       "human": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1182,7 +1631,7 @@
         "reported": []
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1205,7 +1654,7 @@
         "automaticOnly": false
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 841.89,
@@ -1271,7 +1720,7 @@
         ]
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1302,7 +1751,7 @@
         "automaticOnly": false
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 841.89,
@@ -1368,7 +1817,7 @@
         ]
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1399,7 +1848,7 @@
         "automaticOnly": false
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 598.28,
@@ -1465,7 +1914,7 @@
         ]
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1496,7 +1945,7 @@
         "automaticOnly": false
       },
       "baseline": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 833.3919999999999,
@@ -1562,7 +2011,7 @@
         ]
       },
       "humanWithAlignment": {
-        "status": "CHANGE",
+        "status": "READY_TO_COMPARE",
         "members": 2,
         "droppedMembers": 0,
         "width": 595.28,
@@ -1874,8 +2323,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 25,
-      "ms": 65,
+      "compositeMs": 37,
+      "ms": 90,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 2": {
@@ -1888,8 +2337,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 48,
-      "ms": 121,
+      "compositeMs": 47,
+      "ms": 126,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 4": {
@@ -1902,8 +2351,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 55,
-      "ms": 113,
+      "compositeMs": 45,
+      "ms": 118,
       "memory": 60864160
     },
     "A4 300dpi, 2 layers, threshold 0": {
@@ -1916,8 +2365,8 @@
       "inkPixels": 300848,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 135,
-      "ms": 335,
+      "compositeMs": 146,
+      "ms": 374,
       "memory": 243526080
     },
     "A4 150dpi, 4 layers, threshold 0": {
@@ -1935,8 +2384,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 64,
-      "ms": 183,
+      "compositeMs": 59,
+      "ms": 179,
       "memory": 95643680
     },
     "A3 150dpi, 2 layers, threshold 0": {
@@ -1949,8 +2398,8 @@
       "inkPixels": 154247,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 73,
-      "ms": 183,
+      "compositeMs": 86,
+      "ms": 207,
       "memory": 121728320
     },
     "A1 150dpi, 2 layers, threshold 0": {
@@ -1963,8 +2412,8 @@
       "inkPixels": 568537,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 251,
-      "ms": 628,
+      "compositeMs": 292,
+      "ms": 730,
       "memory": 487641336
     }
   },

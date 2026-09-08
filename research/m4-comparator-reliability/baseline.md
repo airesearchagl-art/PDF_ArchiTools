@@ -138,6 +138,45 @@ The file is still named `comparison_<name>_600dpi.pdf` (`PdfComparator.tsx:389`)
 output records that it happened. An A0 requested at 600 dpi and at 300 dpi
 produce byte-comparable output at the same 227 dpi.
 
+## Four members can cancel each other out
+
+The rule is *any other layer*: a pixel is matched when any other member has ink
+near it (`pdfDiff.ts:107-118`). With two members that is agreement. With four it
+is not.
+
+| | reported |
+| --- | --- |
+| four identical | 0.0%, match |
+| three the same, one changed | 9.6%, change |
+| **A and B put a wall in one place, C and D in another** | **0.0%, match** |
+| **a reference and three documents that each differ from it** | **0.0%, match** |
+
+Both of the last two are clean reports of documents that disagree. Every pixel
+found a partner, so nothing was flagged.
+
+## Three code paths, three answers
+
+Preview, the full comparison PDF and the change report each decide for
+themselves what a comparison is.
+
+| | render scale | capped? |
+| --- | --- | --- |
+| preview (`:147`) | `scale * (dpi / 72)` | yes |
+| export (`:255`) | `dpi / 72` | yes |
+| change report (`:416`) | `scale * (dpi / 72)` | **no** |
+
+There is no `MAX_DIM` or `MAX_AREA` anywhere in `generateChangeReport`. An A1 at
+zoom 6 and 600 dpi asks it for **10,035 Mpx — about 281 GB of working set**. The
+export would have capped the same request to a scale of 4.46.
+
+They disagree about a missing page too:
+
+| | |
+| --- | --- |
+| preview | skips the member (`:173`) |
+| export | skips the member, still adds the page (`:316`) |
+| change report | **skips the whole page** when fewer than two members render (`:437`) |
+
 ## What a comparison costs
 
 Two layers, threshold 0, measured:
@@ -153,12 +192,26 @@ normalising canvas, plus the composite, plus the encoder — about **5 canvases
 for a two-layer comparison**, which is why the Annotator's 8 Mpx per-fragment
 ceiling does not transfer.
 
-A neighbourhood threshold costs roughly twice an exact one (25 ms → 48 ms at
-radius 2). It does **not** grow with the area of the box: radius 4 measured
-55 ms against radius 2's 48 ms, where the box is 3.2× larger. `hasNeighborInAny`
-returns as soon as it finds ink, so a wider search finds a match sooner on a
-drawing where most marks do match. The worst case is a drawing where they do
-not — which is the case the tool exists for.
+A neighbourhood threshold costs more than an exact one; the multiple varies
+between 1.3× and 2.2× across runs at radius 2, which is timing noise on a 30–50 ms
+workload. It does **not** grow with the area of the box, because
+`hasNeighborInAny` returns as soon as it finds ink.
+
+**That early exit is the matching case getting a discount.** On two sheets that
+share almost nothing — no border, no title block, no grid — the search runs to
+completion, and per ink pixel:
+
+| | per ink pixel |
+| --- | --- |
+| matching, 150 dpi, radius 3 | **0.59 µs** |
+| not matching, 150 dpi, radius 3 | **1.56 µs** |
+
+**2.6×.** Wall-clock page times hide this, because the adversarial pair is the
+sparser drawing and would be credited for having less to do.
+
+A physical threshold makes it worse at higher resolution rather than better,
+since the radius grows with the DPI: the same non-matching pair costs 43 ms at
+150 dpi with radius 3 and 207 ms at 300 dpi with radius 6.
 
 ## The threshold means different things at different resolutions
 

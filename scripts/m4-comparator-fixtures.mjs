@@ -47,12 +47,16 @@ function drawPlan(page, size, font, opts = {}) {
     const {
         extraLine = false, removeLine = false, offset = 0,
         grey = false, colour = null, pale = false, label = 'PLAN',
+        dense = 0, bare = false,
     } = opts;
     const ink = colour ?? (grey ? rgb(0.55, 0.55, 0.55) : rgb(0, 0, 0));
     const lw = w * 0.0025;
 
     // Border and title block: the repeated features that make automatic
-    // alignment plausible and wrong.
+    // alignment plausible and wrong. `bare` leaves them out, so two dense
+    // variants share almost no ink at all -- otherwise the shared furniture
+    // matches and the neighbourhood search exits early on it.
+    if (!bare) {
     page.drawRectangle({
         x: w * 0.05, y: h * 0.05, width: w * 0.9, height: h * 0.9,
         borderColor: ink, borderWidth: lw * 1.5,
@@ -66,14 +70,14 @@ function drawPlan(page, size, font, opts = {}) {
     });
 
     // A grid, so a shifted comparison has plenty to disagree about.
-    for (let i = 1; i < 6; i++) {
+    for (let i = 1; !bare && i < 6; i++) {
         page.drawLine({
             start: { x: w * 0.05, y: h * (0.25 + i * 0.11) },
             end: { x: w * 0.95, y: h * (0.25 + i * 0.11) },
             thickness: lw, color: ink,
         });
     }
-    for (let i = 1; i < 5; i++) {
+    for (let i = 1; !bare && i < 5; i++) {
         page.drawLine({
             start: { x: w * (0.05 + i * 0.18) + offset, y: h * 0.25 },
             end: { x: w * (0.05 + i * 0.18) + offset, y: h * 0.9 },
@@ -81,20 +85,37 @@ function drawPlan(page, size, font, opts = {}) {
         });
     }
 
+    }
+
     // The wall that a revision might move.
-    if (!removeLine) {
+    if (!bare && !removeLine) {
         page.drawLine({
             start: { x: w * 0.15, y: h * 0.35 },
             end: { x: w * 0.85, y: h * 0.35 },
             thickness: lw * 3, color: ink,
         });
     }
-    if (extraLine) {
+    if (!bare && extraLine) {
         page.drawLine({
             start: { x: w * 0.15, y: h * 0.60 },
             end: { x: w * 0.85, y: h * 0.60 },
             thickness: lw * 3, color: ink,
         });
+    }
+    if (dense) {
+        // Many short strokes whose positions depend on `dense`, so two sheets
+        // drawn with different values share almost no ink. This is the case the
+        // comparator exists for and the one its neighbourhood search cannot
+        // exit early on: nothing matches, so every pixel runs the full box.
+        for (let i = 0; i < 900; i++) {
+            const t = (i * 37 + dense * 13) % 100;
+            const u = (i * 61 + dense * 29) % 100;
+            page.drawLine({
+                start: { x: w * (0.07 + t * 0.0086), y: h * (0.27 + u * 0.006) },
+                end: { x: w * (0.07 + t * 0.0086) + w * 0.03, y: h * (0.27 + u * 0.006) },
+                thickness: lw * 1.5, color: ink,
+            });
+        }
     }
     if (pale) {
         // Hatch, faint enough to sit near any ink threshold.
@@ -217,6 +238,66 @@ await make('mediabox-larger', 'MediaBox bigger than the CropBox, same visible dr
         drawPlan(page, SHEET.A4, font);
         page.setCropBox(0, 0, SHEET.A4.w, SHEET.A4.h);
     });
+
+// ---------------------------------------------------------------------------
+// Three and four members
+// ---------------------------------------------------------------------------
+//
+// The shipped rule marks an ink pixel matched when **any other layer** has ink
+// near it. With four members that lets two agreeing pairs cancel out: A and B
+// agree about a wall in one place, C and D agree about a wall in another, and
+// every pixel finds a partner. The comparison comes back looking clean.
+//
+// `wall-at-y` is the same plan with the wall in the second position rather than
+// the first, so a two-against-two split can be built from these.
+
+await make('base-a4-copy', 'a second copy of the reference, for 3- and 4-way sets',
+    async (doc, font) => {
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font);
+    });
+await make('wall-at-y-a4', 'the wall in the second position instead of the first',
+    async (doc, font) => {
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+            { removeLine: true, extraLine: true });
+    });
+await make('wall-at-y-a4-copy', 'a second copy of that, for the two-against-two split',
+    async (doc, font) => {
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+            { removeLine: true, extraLine: true });
+    });
+
+// ---------------------------------------------------------------------------
+// Drawings that mostly do not match
+// ---------------------------------------------------------------------------
+//
+// Every threshold cost measured so far is a floor: `hasNeighborInAny` returns on
+// the first ink it finds, so a wider search finds a match *sooner* on a drawing
+// whose marks mostly agree. These two share the border and grid and almost
+// nothing else, so the search runs to completion on nearly every ink pixel --
+// which is the worst case, and the case the comparator exists for.
+
+await make('dense-a', 'a dense drawing, no shared furniture, variant A', async (doc, font) => {
+    drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+        { dense: 1, bare: true });
+});
+await make('dense-b', 'the same sheet with the marks somewhere else', async (doc, font) => {
+    drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+        { dense: 5, bare: true });
+});
+
+// ---------------------------------------------------------------------------
+// Sheets that differ by less than a point
+// ---------------------------------------------------------------------------
+//
+// The tolerance for calling two sheets the same has to be a number, and the
+// number has to be probed either side rather than asserted.
+
+for (const [name, delta] of [['sheet-plus-0-99', 0.99], ['sheet-plus-1-01', 1.01]]) {
+    await make(name, `A4 plus ${delta}pt`, async (doc, font) => {
+        const size = { w: SHEET.A4.w + delta, h: SHEET.A4.h + delta };
+        drawPlan(doc.addPage([size.w, size.h]), size, font);
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Page counts, and the difference between blank and absent

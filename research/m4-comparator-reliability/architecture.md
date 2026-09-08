@@ -28,21 +28,43 @@ Four failures, all measured:
 A comparison is an **assertion about a drawing**, not an image. The output today
 is only an image, which is why nothing downstream can distinguish these cases.
 
-The proposal is that a comparison returns a result with a status:
+It happens in **two stages**, and keeping them apart is load-bearing. A first
+version of this document used one vocabulary, and `CHANGE` ended up meaning both
+"the geometry is fine, carry on" and "the drawing differs" — so an identical
+drawing came back as `CHANGE`, which is the kind of answer this design exists to
+prevent.
+
+**The plan** says whether the comparison can be made at all:
 
 ```
-MATCH               nothing found within the stated tolerance
-CHANGE              differences found, and here they are
+READY_TO_COMPARE    the members can be compared, and here is how
 MISSING_PAGE        a member does not have this page
 GEOMETRY_MISMATCH   the pages do not describe the same sheet
 ALIGNMENT_REQUIRED  they could be compared with an alignment the tool will not invent
 RENDER_FAILED       a member could not be read
-UNSUPPORTED         the source cannot be honoured at all
+UNSUPPORTED         the request cannot be honoured at all
 CANCELLED           superseded or abandoned
 ```
 
-Each carries what the user needs to act: which member, what differs, what would
-resolve it. The image, when there is one, is one field of that result.
+**The result** says what was found, and is reachable only from a plan that was
+ready and a comparison that actually ran:
+
+```
+MATCH               nothing beyond the stated tolerance
+CHANGE              differences found, and here they are
+```
+
+Measured: identical → `READY_TO_COMPARE` → **MATCH** (0.0% of ink differing);
+a wall added → `READY_TO_COMPARE` → **CHANGE** (9.6%); a rotation-only pair →
+**MATCH** once rendered upright; a different sheet → `GEOMETRY_MISMATCH` and
+**no verdict at all**.
+
+The match tolerance is 0.5% of ink, not zero: rendering is not bit-exact and
+antialiasing puts a handful of pixels either side of every line, so a zero
+tolerance would make MATCH unreachable.
+
+Each status carries what the user needs to act: which member, what differs, what
+would resolve it. The image, when there is one, is one field of the result.
 
 ## The pipeline
 
@@ -74,6 +96,79 @@ Nothing is downloaded until every page is finished. A partial comparison that
 looks complete is the failure this design exists to prevent, and it is worse
 than no comparison at all.
 
+## One engine, three presentations
+
+The tool has three user-facing paths — the preview, the full comparison PDF, and
+the change report — and today each decides for itself what a comparison means.
+They do not agree:
+
+| | render scale | capped |
+| --- | --- | --- |
+| preview (`PdfComparator.tsx:147`) | `scale * (dpi / 72)` | yes |
+| export (`:255`) | `dpi / 72` | yes |
+| change report (`:416`) | `scale * (dpi / 72)` | **no** |
+
+`generateChangeReport` has no `MAX_DIM` or `MAX_AREA` anywhere in it. An A1 at
+zoom 6 and 600 dpi asks it for **10,035 Mpx — about 281 GB** — where the export
+would have capped the same request. They also disagree about a missing page in
+three different ways (`:173`, `:316`, `:437`).
+
+So: **one planner and one comparison, three presentations.**
+
+```
+prepareComparisonJob(members, pages, settings)
+   -> validate members and pages
+   -> resolve geometry, and normalise upright
+   -> resolve the effective DPI against the budget
+   -> bound the work
+   -> render every required member
+   -> compare
+   -> ComparisonPageResult per page
+```
+
+The preview, the export and the change report all consume that result. They may
+**render** it differently — a preview on screen, a page in a PDF, a cropped
+detail with a caption. None of them may independently:
+
+- skip a missing page
+- choose a geometry
+- cap a DPI
+- decide what counts as ink
+- compute a different threshold
+- swallow a render failure
+- recompute what a change is
+
+**An acceptance requirement for the implementation**, recorded now so it is not
+discovered later: for the same sources and settings, the preview, the export and
+the change report must report the **same status**. A missing page, a render
+failure, a geometry mismatch and an over-budget request must each produce the
+same status in all three. That is a production gate for the implementation PR,
+not something this research PR executes.
+
+## More than two members
+
+The tool has four slots and the shipped rule is *any other layer*: a pixel is
+matched when any other member has ink near it. With two members that is
+agreement. With four it is not, and the failure is silent:
+
+| | reported by the shipped rule |
+| --- | --- |
+| A and B put a wall in one place, C and D in another | **MATCH** |
+| a reference and three documents that each differ from it | **MATCH** |
+
+Every pixel finds a partner, so a genuine disagreement comes back clean.
+
+Three contracts are viable, and the choice is a product question rather than a
+technical one, so it goes to the Human Gate (**H9**):
+
+| | |
+| --- | --- |
+| **two members only** | three or more refused as `UNSUPPORTED`. The smallest honest contract. |
+| **reference pairs** | each non-reference member compared against slot 1 independently; MATCH only when every pair matches. Catches both failing cases above — measured at 19.3% per pair for the two-against-two set. |
+| **all-member consensus** | a location matches only when every member agrees. Stricter; unmeasured against real revision sets. |
+
+What is not viable is the current rule, because it can be cancelled.
+
 ## Geometry
 
 ### Rotation is not a difference
@@ -103,9 +198,15 @@ measure things.
 So a different physical sheet is **refused**, with the sizes named, and the user
 is offered alignment rather than a silent guess.
 
-Three points of tolerance — one millimetre — is the proposed limit for calling
-two sheets the same. Measured: a 3pt difference produces **75.9%** false change,
-so this is not a rounding artefact to absorb.
+**One point** is the tolerance for calling two sheets the same, applied to width
+and height independently.
+
+Not three. A 3 pt difference — about a millimetre — produces **75.9%** false
+change, so it is emphatically not a rounding artefact to absorb. A point is
+about a third of a millimetre.
+
+Probed either side: A4 + 0.99 pt is `READY_TO_COMPARE`, A4 + 1.01 pt is
+`GEOMETRY_MISMATCH`, A4 + 3.00 pt is `GEOMETRY_MISMATCH`.
 
 **Same aspect ratio is not the same sheet.** A4 proportions at 1.4× scored 99.4%
 false change, and would pass any check based on proportions alone.
@@ -171,6 +272,46 @@ The user's contract should be **millimetres**, converted to a pixel radius from
 the actual render scale. 0.5 mm becomes 1 / 3 / 6 / 12 px at 72 / 150 / 300 /
 600 dpi, and the comparison means the same thing at all of them.
 
+## The cost of comparing
+
+The composite loops the neighbourhood for every ink pixel, so the work is
+roughly `ink x (2r+1)² x members`. Two things make that sharper than the earlier
+numbers suggested.
+
+`hasNeighborInAny` returns as soon as it finds ink, so **a matching drawing gets
+a discount that a non-matching one does not**. Per ink pixel at radius 3:
+
+| | |
+| --- | --- |
+| the drawings match | **0.59 µs** |
+| the drawings do not | **1.56 µs** |
+
+**2.6×**, and the non-matching case is the one the tool exists for. Every earlier
+cost figure was taken on matching drawings and is a floor.
+
+And a physical threshold grows the radius with the resolution, so the worst case
+grows with it: the same non-matching pair costs 43 ms at 150 dpi with radius 3
+and 207 ms at 300 dpi with radius 6.
+
+Two things follow, and both are needed:
+
+**A stated work bound**, evaluated before rendering, alongside the memory
+budget. `ink x radius² x members` is not knowable exactly in advance, but
+`pixels x radius² x members` is an upper bound on it and can be checked the same
+way the working set is.
+
+**A comparison that can be abandoned.** The composite as written is a
+synchronous double loop with no yield point and no way to observe a cancellation
+flag, so **cancellation alone does not solve this** — a long comparison cannot
+currently be stopped, only waited out. Either the loop works in chunks that
+return to the event loop and check for supersession, or a precomputed dilation
+mask replaces the per-pixel neighbourhood search with a bounded lookup, or the
+work is refused before it starts. This is an architecture decision to make
+**before** implementation, not something to discover in it.
+
+Whatever is chosen, the ownership rule from M3 still applies on top: a run that
+has been superseded publishes nothing.
+
 ## The budget
 
 The Annotator's 8 Mpx ceiling does not transfer. That bounds one transparent
@@ -178,8 +319,9 @@ fragment; a comparison holds **every layer's RGBA at once**, plus a normalising
 canvas, plus the composite, plus the encoder — about five canvases for two
 layers.
 
-Proposed: bound the **working set**, at **512 MB**, computed before anything is
-allocated:
+Proposed: bound the **working set**, at **512 MiB** — a **recommendation
+requiring human approval**, not a measured threshold — computed before anything
+is allocated:
 
 ```
 layers x width x height x 4        the rendered canvases
@@ -201,10 +343,17 @@ Two functions in `pdfDiff.ts` decide what ink is, and they use different tests:
 takes any channel. A pale yellow (255,255,140) is painted as a change by the
 first and left out of the reported change area by the second.
 
-That is an inconsistency to resolve, not an algorithm to replace. Whichever test
-is chosen, both should use it. A pale grey hatch (210,210,210) is invisible to
-both, which is a stated limit of the current detector rather than something this
-spike proposes to change.
+That is an inconsistency to resolve, not an algorithm to replace, and **which
+test is right is a semantic choice for the Human Gate (H8)** rather than
+something this spike settles.
+
+Whichever is chosen, one definition must serve all four consumers: the visual
+composite, the change detection and its bounds, the MATCH/CHANGE verdict, and the
+change report. Two definitions is how a colour ends up painted as a change and
+left out of the reported change area at the same time.
+
+A pale grey hatch (210,210,210) is invisible to both. That may be consciously
+accepted, but it should be accepted rather than inherited.
 
 ## Ownership and cancellation
 

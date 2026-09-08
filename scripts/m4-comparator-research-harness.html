@@ -16,7 +16,8 @@ import { renderPageToCanvas, computeMultiPdfComposite, detectChangeBounds }
   from '/src/utils/pdfDiff.ts';
 import { pageGeometry, compareGeometry } from '/research/m4-comparator-reliability/prototype/geometry.mjs';
 import {
-  RESULT, candidateBaseline, candidateStrict, candidateNormalise, candidateHumanAlignment,
+  PLAN, RESULT, verdictFor, GEOMETRY_TOLERANCE_PT, MULTI_MEMBER, planMultiMember,
+  candidateBaseline, candidateStrict, candidateNormalise, candidateHumanAlignment,
   estimateMemory, checkBudget, pixelRadiusFor, millimetresFor, MAX_COMPARISON_BYTES,
 } from '/research/m4-comparator-reliability/prototype/candidates.mjs';
 
@@ -74,7 +75,9 @@ function productionExportScale(dpi, vp) {
  * Compose the way the shipped export loop does: render each member, take the
  * largest dimensions, draw each at the top-left of a white field, composite.
  */
-async function composeAsProduction(members, scale, threshold, { failMember = null } = {}) {
+async function composeAsProduction(
+  members, scale, threshold, { failMember = null, upright = false } = {},
+) {
   const started = performance.now();
   const raw = [];
   let maxW = 0;
@@ -86,7 +89,11 @@ async function composeAsProduction(members, scale, threshold, { failMember = nul
     try {
       if (failMember === m.label) throw new Error('injected render failure');
       const doc = await open(m.name);
-      const canvas = await renderPageToCanvas(doc, m.pageNumber, scale);
+      // `upright` renders with /Rotate undone, which is what the proposed
+      // design does and what makes a rotation-only pair comparable at all.
+      const canvas = upright
+        ? await renderUpright(doc, m.pageNumber, scale)
+        : await renderPageToCanvas(doc, m.pageNumber, scale);
       maxW = Math.max(maxW, canvas.width);
       maxH = Math.max(maxH, canvas.height);
       raw.push({ canvas, color: m.color });
@@ -149,6 +156,20 @@ async function composeAsProduction(members, scale, threshold, { failMember = nul
   };
 }
 
+/** The same page with /Rotate undone. */
+async function renderUpright(doc, pageNumber, scale) {
+  const page = await doc.getPage(pageNumber);
+  const vp = page.getViewport({ scale, rotation: 0 });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(vp.width);
+  canvas.height = Math.ceil(vp.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas;
+}
+
 const RED = [1, 0, 0];
 const BLUE = [0, 0, 1];
 const member = (name, color, label = name, pageNumber = 1) =>
@@ -177,6 +198,8 @@ window.__m4 = {
       'rotate-0', 'rotate-90', 'rotate-180', 'rotate-270',
       'crop-origin-0', 'crop-origin-50-70', 'mediabox-larger',
       'three-pages', 'two-pages', 'three-pages-blank-third',
+      'base-a4-copy', 'wall-at-y-a4', 'wall-at-y-a4-copy',
+      'dense-a', 'dense-b', 'sheet-plus-0-99', 'sheet-plus-1-01',
     ]) {
       const doc = await open(name);
       const page = await doc.getPage(1);
@@ -474,6 +497,226 @@ window.__m4 = {
     return { limitMB: MAX_COMPARISON_BYTES / 1e6, cases };
   },
 
+  /**
+   * A plan, then a verdict — the two stages kept apart.
+   *
+   * The first version of this returned CHANGE as soon as the geometry was
+   * eligible, so an identical drawing came back as CHANGE. A plan says whether
+   * the comparison can be made; only a comparison that actually ran may say
+   * MATCH or CHANGE.
+   */
+  async planThenVerdict() {
+    const cases = {
+      identical: ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      'rotation only': ['rotate-0', 'rotate-90'],
+      'crop origin only': ['crop-origin-0', 'crop-origin-50-70'],
+      'a different sheet': ['base-a4', 'base-a3'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const plan = candidateStrict({ pages });
+      if (plan.status !== PLAN.READY_TO_COMPARE) {
+        out[label] = { plan: plan.status, verdict: null, reported: plan.reported };
+        continue;
+      }
+      // Rotation is settled by rendering upright, which is what makes the plan
+      // ready in the first place; the diff has to see the same frame.
+      const composed = await composeAsProduction(pages, SCALE, 0, { upright: true });
+      const verdict = verdictFor({
+        changePixels: composed.changePixels, inkPixels: composed.inkPixels,
+      });
+      out[label] = {
+        plan: plan.status,
+        verdict: verdict.status,
+        ratio: verdict.ratio,
+        tolerance: verdict.tolerance,
+      };
+    }
+
+    // The same pair, with a human alignment supplied.
+    const mismatched = await pair('base-a4', 'base-a3');
+    const withAlignment = candidateHumanAlignment({
+      pages: mismatched, alignment: { x: 12, y: -4, rotation: 0, scale: 1 },
+    });
+    out['a different sheet, aligned by a human'] = {
+      plan: withAlignment.status,
+      alignment: withAlignment.alignment,
+      // The verdict still has to come from a comparison; the alignment only
+      // makes one possible.
+      verdict: 'requires a comparison under that alignment',
+    };
+    return out;
+  },
+
+  /**
+   * What "matched" means with more than two members.
+   *
+   * The shipped rule is *any other layer*. With four members two agreeing pairs
+   * cancel: A and B put a wall in one place, C and D put it in another, every
+   * pixel finds a partner, and the comparison comes back clean.
+   */
+  async multiMember() {
+    const sets = {
+      'four identical': ['base-a4', 'identical-a4', 'base-a4-copy', 'base-a4'],
+      'three the same, one changed': ['base-a4', 'identical-a4', 'base-a4-copy', 'added-line-a4'],
+      'two against two': ['base-a4', 'identical-a4', 'wall-at-y-a4', 'wall-at-y-a4-copy'],
+      'reference and three different': ['base-a4', 'added-line-a4', 'removed-line-a4', 'wall-at-y-a4'],
+    };
+    const colours = [[0, 0, 1], [1, 0, 0], [0, 0.6, 0], [0.8, 0, 0.8]];
+    const out = {};
+    for (const [label, names] of Object.entries(sets)) {
+      const members = [];
+      for (let i = 0; i < names.length; i++) {
+        members.push(await member(names[i], colours[i], `${names[i]}#${i}`));
+      }
+      const all = await composeAsProduction(members, SCALE, 0);
+      // The same set, but each non-reference member against slot 1 alone.
+      const pairs = [];
+      for (let i = 1; i < members.length; i++) {
+        const two = await composeAsProduction([members[0], members[i]], SCALE, 0);
+        pairs.push({
+          member: names[i],
+          ratio: two.changeRatio,
+          verdict: verdictFor({
+            changePixels: two.changePixels, inkPixels: two.inkPixels,
+          }).status,
+        });
+      }
+      out[label] = {
+        members: names.length,
+        anyOtherLayer: {
+          ratio: all.changeRatio,
+          verdict: verdictFor({
+            changePixels: all.changePixels, inkPixels: all.inkPixels,
+          }).status,
+        },
+        referencePairs: {
+          pairs,
+          // MATCH only if every pair matches -- no pair can be cancelled.
+          verdict: pairs.every((p) => p.verdict === RESULT.MATCH) ? RESULT.MATCH : RESULT.CHANGE,
+        },
+      };
+    }
+    out.plans = {
+      two: planMultiMember({ members: 2, contract: MULTI_MEMBER.TWO_ONLY }).status,
+      fourTwoOnly: planMultiMember({ members: 4, contract: MULTI_MEMBER.TWO_ONLY }).status,
+      fourReferencePairs: planMultiMember({
+        members: 4, contract: MULTI_MEMBER.REFERENCE_PAIRS,
+      }),
+      one: planMultiMember({ members: 1, contract: MULTI_MEMBER.REFERENCE_PAIRS }).status,
+    };
+    return out;
+  },
+
+  /** The tolerance for calling two sheets the same, probed either side. */
+  async geometryTolerance() {
+    const out = { tolerancePt: GEOMETRY_TOLERANCE_PT, cases: {} };
+    for (const [label, other] of [
+      ['+0.99pt', 'sheet-plus-0-99'],
+      ['+1.01pt', 'sheet-plus-1-01'],
+      ['+3.00pt', 'nearly-a4'],
+    ]) {
+      const pages = await pair('base-a4', other);
+      const g = [pageGeometry(pages[0]), pageGeometry(pages[1])];
+      out.cases[label] = {
+        widths: [g[0].physical.width, g[1].physical.width],
+        delta: +(g[1].physical.width - g[0].physical.width).toFixed(2),
+        plan: candidateStrict({ pages }).status,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * Three code paths, three answers.
+   *
+   * Preview, the full export and the change report each compute their own render
+   * scale, and only two of them cap it. The change report also drops any page
+   * where fewer than two members rendered, rather than reporting it.
+   *
+   * Arithmetic only: nothing here allocates a canvas, because the point is the
+   * size the change report would ask for.
+   */
+  async pipelineDivergence() {
+    const out = {};
+    for (const sheet of ['base-a4', 'base-a1']) {
+      const doc = await open(sheet);
+      const vp = (await doc.getPage(1)).getViewport({ scale: 1 });
+      out[sheet] = {};
+      for (const [zoom, dpi] of [[1, 300], [2, 300], [6, 600]]) {
+        const previewRequested = zoom * (dpi / 72);
+        const preview = productionExportScale(dpi * zoom, vp);
+        const exportOnly = productionExportScale(dpi, vp);
+        // PdfComparator.tsx:416 -- `scale * (dpi / 72)` with no cap at all.
+        const reportScale = previewRequested;
+        const reportW = Math.round(vp.width * reportScale);
+        const reportH = Math.round(vp.height * reportScale);
+        out[sheet][`zoom ${zoom}, ${dpi}dpi`] = {
+          previewScale: +preview.safe.toFixed(2),
+          previewCapped: preview.capped,
+          exportScale: +exportOnly.safe.toFixed(2),
+          exportCapped: exportOnly.capped,
+          reportScale: +reportScale.toFixed(2),
+          reportCapped: false,
+          reportPixels: reportW * reportH,
+          reportMegapixels: +(reportW * reportH / 1e6).toFixed(1),
+          reportWorkingSetMB: +(estimateMemory({
+            width: reportW, height: reportH, layers: 2,
+          }).total / 1e6).toFixed(0),
+        };
+      }
+    }
+    // The third divergence is not about size.
+    out.missingPageHandling = {
+      preview: 'skips the member (PdfComparator.tsx:173)',
+      export: 'skips the member, still adds the page (PdfComparator.tsx:316)',
+      changeReport: 'skips the whole page when fewer than 2 members render '
+        + '(PdfComparator.tsx:437)',
+    };
+    return out;
+  },
+
+  /**
+   * The threshold cost when the drawings do not match.
+   *
+   * Every earlier figure is a floor: `hasNeighborInAny` returns on the first ink
+   * it finds, so a wider search exits sooner when the marks agree. These two
+   * sheets share only the border and grid, so the search runs to completion on
+   * nearly every ink pixel.
+   */
+  async adversarialThreshold() {
+    const rows = {};
+    for (const [label, a, b, dpi, mm] of [
+      ['matching, A4 150dpi, 0mm', 'base-a4', 'identical-a4', 150, 0],
+      ['matching, A4 150dpi, 0.5mm', 'base-a4', 'identical-a4', 150, 0.5],
+      ['NOT matching, A4 150dpi, 0mm', 'dense-a', 'dense-b', 150, 0],
+      ['NOT matching, A4 150dpi, 0.5mm', 'dense-a', 'dense-b', 150, 0.5],
+      ['NOT matching, A4 300dpi, 0mm', 'dense-a', 'dense-b', 300, 0],
+      ['NOT matching, A4 300dpi, 0.5mm', 'dense-a', 'dense-b', 300, 0.5],
+    ]) {
+      const radius = pixelRadiusFor(mm, dpi);
+      const members = await pair(a, b);
+      const r = await composeAsProduction(members, dpi / 72, radius);
+      rows[label] = {
+        dpi,
+        millimetres: mm,
+        radius,
+        width: r.width,
+        height: r.height,
+        pixels: r.width * r.height,
+        members: r.members,
+        inkPixels: r.inkPixels,
+        changeRatio: r.changeRatio,
+        compositeMs: r.compositeMs,
+        totalMs: r.ms,
+      };
+    }
+    return rows;
+  },
+
+  PLAN,
   RESULT,
 };
 

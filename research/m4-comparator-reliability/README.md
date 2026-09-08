@@ -19,6 +19,14 @@ looks more alarming than the picture for *a wall that moved*.
 
 A reviewer cannot tell those apart.
 
+Three more, found by measuring rather than by reading:
+
+| | |
+| --- | --- |
+| one member fails to render | the survivor alone reads as **100% changed** |
+| four documents, two saying one thing and two another | reported as a **clean match** |
+| the change report's render scale | **uncapped** — an A1 at zoom 6 and 600 dpi asks for ~281 GB |
+
 ## The documents
 
 | | |
@@ -41,16 +49,19 @@ node scripts/m4-comparator-fixtures.mjs
 node scripts/m4-comparator-research-gate.mjs
 ```
 
-**65 assertions, 25 of them negative probes.** Several assert that the shipped
+**93 assertions, 37 of them negative probes.** Several assert that the shipped
 comparator gets something wrong; those are the findings, and a gate the baseline
 passed would prove nothing.
 
 No customer document is used. Every fixture is generated and none is committed.
 External HTTP(S) requests: 0.
 
-## The recommendation
+## The research recommendation
 
-**ADOPT A + B + C, in that order**, as three responsibilities rather than three
+Everything below is a **recommendation**, not a decision. The policy questions
+are listed under Human Decisions and belong to the Human Product Gate.
+
+**A + B + C, in that order**, as three responsibilities rather than three
 alternatives:
 
 - **strict validation** decides whether a comparison is meaningful at all;
@@ -60,9 +71,13 @@ alternatives:
 - **human alignment** is the way forward when the geometry genuinely differs,
   and the result carries the alignment it was made under.
 
-With: a physical threshold in millimetres, a stated working-set budget checked
-before allocation, structured results rather than only an image, and an export
-that produces no bytes until every page is complete.
+With: **two stages** — a plan that says whether a comparison can be made, then a
+verdict that says what it found, so `CHANGE` never means "carry on"; **one
+engine** behind the preview, the export and the change report, which today each
+decide independently what a comparison means; a physical threshold in
+millimetres; a stated working-set budget and a work bound, both checked before
+allocation; structured results rather than only an image; and an export that
+produces no bytes until every page is complete.
 
 **REJECT candidate 0** — not as an implementation but as a contract. Its single
 verdict is what makes a wrong answer indistinguishable from a right one.
@@ -79,18 +94,19 @@ MediaBox around the same CropBox, likewise. No work needed there.
 
 ## Human decisions needed before implementation
 
-These are not the spike's to settle:
+These are not the spike's to settle.
 
-1. **Geometry mismatch** — refuse outright, or offer human alignment?
-2. **A missing page** — fail the whole export, or include the page marked as
-   missing?
-3. **Over budget** — refuse, or offer the achievable resolution for the user to
-   accept? (Never a silent downgrade: an A0 asked at 600 dpi currently delivers
-   227 and is named `_600dpi.pdf`.)
-4. **Alignment** — should an offset, scale and rotation be saved with the
-   comparison?
-5. **Export format** — JPEG or PNG? Artefact cost is unmeasured.
-6. **Threshold unit** — millimetres or PDF points?
+| | | |
+| --- | --- | --- |
+| **H1** | geometry mismatch | refuse outright, or offer human alignment? |
+| **H2** | a missing page | fail the whole export, or include the page marked as missing? |
+| **H3** | over budget | refuse, or offer the achievable resolution to accept? Never a silent downgrade — an A0 asked at 600 dpi currently delivers 227 and is named `_600dpi.pdf`. |
+| **H4** | alignment | should an offset, scale and rotation be saved with the comparison? |
+| **H5** | export format | JPEG or PNG? Artefact cost unmeasured. |
+| **H6** | threshold unit | millimetres or PDF points? |
+| **H7** | the working-set budget | **512 MiB is a recommendation, not a measurement.** The measurements establish the shape of the cost, not where the line goes. Requires approval; never silently exceeded. |
+| **H8** | the ink predicate | the two shipped functions disagree — mean of channels versus any channel — and a pale yellow falls between them. One definition must serve the composite, the change bounds, the verdict and the change report. Whether the pale-grey hatch stays invisible is part of the same choice. |
+| **H9** | more than two members | two-only, reference-pairs, or all-member consensus? The shipped any-other-layer rule reports a two-against-two disagreement as a clean match, so it is not among the options. |
 
 ## What this does not claim
 

@@ -80,7 +80,7 @@ try {
     console.log('\n=== the corpus ===');
     const corpus = await page.evaluate(() => window.__m4.corpus());
     evidence.corpus = corpus;
-    check('every fixture was read', Object.keys(corpus).length === 24,
+    check('every fixture was read', Object.keys(corpus).length === 31,
         `${Object.keys(corpus).length} fixtures`);
     check('the four rotations differ only in the rotation',
         [0, 90, 180, 270].every((a) => corpus[`rotate-${a}`].rotate === a)
@@ -182,7 +182,7 @@ try {
         missing['page 3'].strict.reported.join('; '));
     // Blank and absent are different statements.
     check('a blank third page is compared, not refused',
-        missing['blank page 3'].strict.status === 'CHANGE'
+        missing['blank page 3'].strict.status === 'READY_TO_COMPARE'
         && missing['blank page 3'].production.produced,
         `strict: ${missing['blank page 3'].strict.status}`);
     probe('and it is distinguishable from the missing one',
@@ -207,6 +207,169 @@ try {
     check('a strict policy calls it RENDER_FAILED',
         failure.strict.status === 'RENDER_FAILED', failure.strict.reported.join('; '));
 
+    // ---- a plan, then a verdict -------------------------------------------
+    console.log('\n=== a plan, then a verdict ===');
+    const staged = await page.evaluate(() => window.__m4.planThenVerdict());
+    evidence.planThenVerdict = staged;
+    for (const [label, r] of Object.entries(staged)) {
+        console.log(`  ${label.padEnd(34)} ${String(r.plan).padEnd(18)} -> `
+            + `${r.verdict ?? r.reported?.join('; ') ?? ''}`
+            + `${r.ratio === undefined ? '' : `  ${pct(r.ratio)}`}`);
+    }
+    // The failure this replaces: CHANGE was doing double duty as "carry on".
+    check('an identical drawing is READY_TO_COMPARE and then MATCH',
+        staged.identical.plan === 'READY_TO_COMPARE' && staged.identical.verdict === 'MATCH',
+        `${pct(staged.identical.ratio)} of ink differs, tolerance `
+        + `${pct(staged.identical.tolerance)}`);
+    check('a wall added is READY_TO_COMPARE and then CHANGE',
+        staged['a wall added'].plan === 'READY_TO_COMPARE'
+        && staged['a wall added'].verdict === 'CHANGE',
+        pct(staged['a wall added'].ratio));
+    probe('a rotation-only pair reaches MATCH, not CHANGE',
+        staged['rotation only'].plan === 'READY_TO_COMPARE'
+        && staged['rotation only'].verdict === 'MATCH',
+        `${staged['rotation only'].plan} -> ${staged['rotation only'].verdict}, `
+        + `${pct(staged['rotation only'].ratio)}`);
+    probe('and a crop-origin-only pair likewise',
+        staged['crop origin only'].plan === 'READY_TO_COMPARE'
+        && staged['crop origin only'].verdict === 'MATCH',
+        `${pct(staged['crop origin only'].ratio)}`);
+    check('a different sheet never reaches a verdict at all',
+        staged['a different sheet'].plan === 'GEOMETRY_MISMATCH'
+        && staged['a different sheet'].verdict === null,
+        staged['a different sheet'].reported.join('; '));
+    check('a human alignment makes the plan ready, and nothing more',
+        staged['a different sheet, aligned by a human'].plan === 'READY_TO_COMPARE'
+        && staged['a different sheet, aligned by a human'].alignment === 'human',
+        'the verdict still has to come from a comparison');
+
+    // ---- more than two members ---------------------------------------------
+    console.log('\n=== more than two members ===');
+    const multi = await page.evaluate(() => window.__m4.multiMember());
+    evidence.multiMember = multi;
+    for (const [label, r] of Object.entries(multi)) {
+        if (label === 'plans') continue;
+        console.log(`  ${label.padEnd(30)} any-other-layer: `
+            + `${pct(r.anyOtherLayer.ratio).padStart(6)} ${r.anyOtherLayer.verdict.padEnd(6)}  `
+            + `reference-pairs: ${r.referencePairs.verdict}`);
+    }
+    check('four identical documents match under either rule',
+        multi['four identical'].anyOtherLayer.verdict === 'MATCH'
+        && multi['four identical'].referencePairs.verdict === 'MATCH');
+    check('three the same and one changed is a change under either rule',
+        multi['three the same, one changed'].anyOtherLayer.verdict === 'CHANGE'
+        && multi['three the same, one changed'].referencePairs.verdict === 'CHANGE');
+    // The one that settles the contract.
+    probe('two against two is hidden by the shipped any-other-layer rule',
+        multi['two against two'].anyOtherLayer.verdict === 'MATCH',
+        `${pct(multi['two against two'].anyOtherLayer.ratio)} — two pairs cancel, `
+        + 'and a disagreement about where a wall goes disappears');
+    probe('and is caught by comparing each member against the reference',
+        multi['two against two'].referencePairs.verdict === 'CHANGE',
+        multi['two against two'].referencePairs.pairs
+            .map((p) => `${p.member}:${pct(p.ratio)}`).join(' '));
+    check('a reference against three different documents is a change',
+        multi['reference and three different'].referencePairs.verdict === 'CHANGE');
+    check('two members are supported under every contract',
+        multi.plans.two === 'READY_TO_COMPARE');
+    probe('four members are refused under the two-only contract',
+        multi.plans.fourTwoOnly === 'UNSUPPORTED');
+    check('and produce three pairs under the reference contract',
+        multi.plans.fourReferencePairs.pairs === 3);
+    probe('one member is not a comparison', multi.plans.one === 'UNSUPPORTED');
+
+    // ---- the tolerance for calling two sheets the same ---------------------
+    console.log('\n=== how close is the same sheet ===');
+    const tol = await page.evaluate(() => window.__m4.geometryTolerance());
+    evidence.geometryTolerance = tol;
+    check('the tolerance is a stated number', tol.tolerancePt === 1,
+        `${tol.tolerancePt}pt, applied to width and height independently`);
+    check('a sheet 0.99pt bigger is the same sheet',
+        tol.cases['+0.99pt'].plan === 'READY_TO_COMPARE',
+        `delta ${tol.cases['+0.99pt'].delta}pt`);
+    probe('a sheet 1.01pt bigger is not',
+        tol.cases['+1.01pt'].plan === 'GEOMETRY_MISMATCH',
+        `delta ${tol.cases['+1.01pt'].delta}pt`);
+    probe('and 3pt is well past it, not rounding noise to absorb',
+        tol.cases['+3.00pt'].plan === 'GEOMETRY_MISMATCH',
+        `delta ${tol.cases['+3.00pt'].delta}pt, which produced 75.9% false change`);
+
+    // ---- three code paths, three answers -----------------------------------
+    console.log('\n=== three code paths, three answers ===');
+    const pipes = await page.evaluate(() => window.__m4.pipelineDivergence());
+    evidence.pipelines = pipes;
+    for (const sheet of ['base-a4', 'base-a1']) {
+        for (const [label, r] of Object.entries(pipes[sheet])) {
+            console.log(`  ${sheet.padEnd(9)} ${label.padEnd(20)} preview ${
+                String(r.previewScale).padStart(5)}${r.previewCapped ? '*' : ' '}  export ${
+                String(r.exportScale).padStart(5)}${r.exportCapped ? '*' : ' '}  report ${
+                String(r.reportScale).padStart(5)}  ${
+                String(r.reportMegapixels).padStart(7)}Mpx ${
+                String(r.reportWorkingSetMB).padStart(7)}MB`);
+        }
+    }
+    probe('preview and export do not compute the same render scale',
+        pipes['base-a4']['zoom 2, 300dpi'].previewScale
+            !== pipes['base-a4']['zoom 2, 300dpi'].exportScale,
+        `preview ${pipes['base-a4']['zoom 2, 300dpi'].previewScale}, `
+        + `export ${pipes['base-a4']['zoom 2, 300dpi'].exportScale}`);
+    // The one that is not in the brief and turned up while reading the code.
+    probe('and the change report has no cap at all',
+        pipes['base-a1']['zoom 6, 600dpi'].reportCapped === false
+        && pipes['base-a1']['zoom 6, 600dpi'].reportWorkingSetMB > 100000,
+        `an A1 at zoom 6 and 600dpi asks for `
+        + `${pipes['base-a1']['zoom 6, 600dpi'].reportMegapixels}Mpx, `
+        + `${pipes['base-a1']['zoom 6, 600dpi'].reportWorkingSetMB}MB — `
+        + 'the export would have capped it');
+    check('the three paths also disagree about a missing page',
+        new Set(Object.values(pipes.missingPageHandling)).size === 3,
+        Object.entries(pipes.missingPageHandling)
+            .map(([k, v]) => `${k}: ${v}`).join(' | '));
+
+    // ---- the threshold when nothing matches --------------------------------
+    console.log('\n=== the threshold when nothing matches ===');
+    const adv = await page.evaluate(() => window.__m4.adversarialThreshold());
+    evidence.adversarial = adv;
+    for (const [label, r] of Object.entries(adv)) {
+        console.log(`  ${label.padEnd(34)} radius ${String(r.radius).padStart(2)}  `
+            + `${String(r.width).padStart(5)}x${String(r.height).padEnd(5)} `
+            + `ink ${pct(r.inkPixels / r.pixels).padStart(6)}  change ${
+                pct(r.changeRatio).padStart(6)}  composite ${
+                String(r.compositeMs).padStart(6)}ms`);
+    }
+    check('the adversarial pair really does not match',
+        adv['NOT matching, A4 150dpi, 0mm'].changeRatio > 0.5,
+        pct(adv['NOT matching, A4 150dpi, 0mm'].changeRatio));
+    check('while the matching pair does',
+        adv['matching, A4 150dpi, 0mm'].changeRatio < 0.02,
+        pct(adv['matching, A4 150dpi, 0mm'].changeRatio));
+    check('0.5mm is a real radius at these resolutions',
+        adv['NOT matching, A4 150dpi, 0.5mm'].radius === 3
+        && adv['NOT matching, A4 300dpi, 0.5mm'].radius === 6,
+        `${adv['NOT matching, A4 150dpi, 0.5mm'].radius}px at 150dpi, `
+        + `${adv['NOT matching, A4 300dpi, 0.5mm'].radius}px at 300dpi`);
+    // The point of the whole section: the earlier numbers were a floor.
+    // Per ink pixel, not per page. The neighbourhood loop only runs on ink, and
+    // the adversarial pair is the sparser drawing -- comparing wall-clock
+    // totals would credit it for having less to do. Normalising is what
+    // isolates the effect being measured.
+    const perInk = (k) => (adv[k].compositeMs * 1000) / adv[k].inkPixels;
+    probe('per ink pixel, a non-matching drawing costs more at the same radius',
+        perInk('NOT matching, A4 150dpi, 0.5mm') > perInk('matching, A4 150dpi, 0.5mm'),
+        `${perInk('matching, A4 150dpi, 0.5mm').toFixed(2)}us/ink matching, `
+        + `${perInk('NOT matching, A4 150dpi, 0.5mm').toFixed(2)}us/ink not — `
+        + `the early exit is what the matching case is getting`);
+    probe('and a physical threshold makes it worse at higher DPI, not better',
+        adv['NOT matching, A4 300dpi, 0.5mm'].compositeMs
+            > adv['NOT matching, A4 150dpi, 0.5mm'].compositeMs * 2,
+        `150dpi radius 3: ${adv['NOT matching, A4 150dpi, 0.5mm'].compositeMs}ms, `
+        + `300dpi radius 6: ${adv['NOT matching, A4 300dpi, 0.5mm'].compositeMs}ms`);
+    check('which is the cost a work bound has to be set against',
+        adv['NOT matching, A4 300dpi, 0.5mm'].compositeMs
+            > adv['NOT matching, A4 300dpi, 0mm'].compositeMs,
+        `radius 0: ${adv['NOT matching, A4 300dpi, 0mm'].compositeMs}ms, `
+        + `radius 6: ${adv['NOT matching, A4 300dpi, 0.5mm'].compositeMs}ms`);
+
     // ---- what each candidate says -----------------------------------------
     console.log('\n=== the candidates ===');
     const candidates = await page.evaluate(() => window.__m4.candidates());
@@ -216,18 +379,21 @@ try {
             + `strict:${r.strict.status.padEnd(18)} normalise:${r.normalise.status.padEnd(18)} `
             + `human:${r.human.status}`);
     }
-    check('every candidate compares an identical drawing',
+    // Plan statuses only. Whether the drawing differs is a separate stage, and
+    // the section above is where that is decided.
+    check('every candidate is ready to compare an identical drawing',
         ['baseline', 'strict', 'normalise', 'human']
-            .every((c) => candidates['identical drawing'][c].status === 'CHANGE'));
+            .every((c) => candidates['identical drawing'][c].status === 'READY_TO_COMPARE'));
     check('and a real change',
-        ['strict', 'normalise'].every((c) => candidates['a wall added'][c].status === 'CHANGE'));
+        ['strict', 'normalise']
+            .every((c) => candidates['a wall added'][c].status === 'READY_TO_COMPARE'));
     check('a rotation is settled without asking anyone',
-        candidates['/Rotate 0 vs 90'].strict.status === 'CHANGE'
-        && candidates['/Rotate 0 vs 90'].normalise.status === 'CHANGE');
+        candidates['/Rotate 0 vs 90'].strict.status === 'READY_TO_COMPARE'
+        && candidates['/Rotate 0 vs 90'].normalise.status === 'READY_TO_COMPARE');
     check('a crop origin over the same region likewise',
-        candidates['crop origin (0,0) vs (50,70)'].strict.status === 'CHANGE');
+        candidates['crop origin (0,0) vs (50,70)'].strict.status === 'READY_TO_COMPARE');
     check('a larger MediaBox around the same CropBox likewise',
-        candidates['MediaBox larger, same CropBox'].strict.status === 'CHANGE');
+        candidates['MediaBox larger, same CropBox'].strict.status === 'READY_TO_COMPARE');
     probe('a different sheet is refused rather than compared',
         candidates['A4 vs A3, same drawing'].strict.status === 'GEOMETRY_MISMATCH'
         && candidates['A4 vs A3, same drawing'].normalise.status === 'GEOMETRY_MISMATCH',
@@ -241,13 +407,13 @@ try {
     check('the human candidate asks rather than guessing',
         candidates['A4 vs A3, same drawing'].human.status === 'ALIGNMENT_REQUIRED',
         candidates['A4 vs A3, same drawing'].human.reported.join('; '));
-    check('and compares once an alignment is supplied',
-        candidates['A4 vs A3, same drawing'].humanWithAlignment.status === 'CHANGE'
+    check('and becomes ready once an alignment is supplied',
+        candidates['A4 vs A3, same drawing'].humanWithAlignment.status === 'READY_TO_COMPARE'
         && candidates['A4 vs A3, same drawing'].humanWithAlignment.alignment === 'human',
-        'the result carries the alignment it was made under');
+        'the plan carries the alignment it was made under; the verdict still has to be earned');
     // The one the baseline gets wrong on every geometry case.
-    probe('the baseline compares all of them regardless',
-        Object.values(candidates).every((r) => r.baseline.status === 'CHANGE'),
+    probe('the baseline is ready for all of them regardless',
+        Object.values(candidates).every((r) => r.baseline.status === 'READY_TO_COMPARE'),
         'it has no state for "I should not answer this"');
 
     // ---- what a requested DPI actually delivers ---------------------------
@@ -338,8 +504,11 @@ try {
     const t0 = cost['A4 150dpi, 2 layers, threshold 0'].compositeMs;
     const t2 = cost['A4 150dpi, 2 layers, threshold 2'].compositeMs;
     const t4 = cost['A4 150dpi, 2 layers, threshold 4'].compositeMs;
-    probe('a neighbourhood threshold costs about twice an exact one',
-        t2 > t0 * 1.5 && t4 > t0 * 1.5,
+    // A ratio rather than a multiple: run-to-run variance on a 30-50ms workload
+    // is large enough to cross any fixed multiple, and the direction is the
+    // claim. The stable figure is the 300dpi adversarial pair below.
+    probe('a neighbourhood threshold costs more than an exact one',
+        t2 > t0 && t4 > t0,
         `radius 0: ${t0}ms, radius 2: ${t2}ms (${(t2 / t0).toFixed(1)}x), `
         + `radius 4: ${t4}ms (${(t4 / t0).toFixed(1)}x)`);
     // Not monotonic in the radius, and that is a property rather than noise:
