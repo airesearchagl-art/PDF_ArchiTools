@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import { Save, Upload, ArrowUp, ArrowDown, X, FileText } from 'lucide-react';
-import { GlobalWorkerOptions } from 'pdfjs-dist';
-
-// Ensure worker is set
-GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+import { configurePdfWorker } from '../utils/pdf-worker-source';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
 
@@ -46,6 +43,11 @@ export const PdfSplitMerge: React.FC = () => {
 
         try {
             const arrayBuffer = await file.arrayBuffer();
+            // Immediately before the call that reads it, not at module scope:
+            // `GlobalWorkerOptions.workerSrc` is one global and several modules
+            // in this app assign it as they load, so setting it at import time
+            // leaves which worker we fetch depending on module evaluation order.
+            configurePdfWorker();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
             const pages: ExtractPage[] = [];
@@ -126,6 +128,7 @@ export const PdfSplitMerge: React.FC = () => {
             if (file.type !== 'application/pdf') continue;
             try {
                 const arrayBuffer = await file.arrayBuffer();
+                configurePdfWorker();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 processedFiles.push({
                     id: Math.random().toString(36).substr(2, 9),

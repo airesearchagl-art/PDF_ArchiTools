@@ -9,11 +9,11 @@ const PDF_WORKER_URL = '/pdf.worker.min.mjs';
  * Point PDF.js at our own worker.
  *
  * `GlobalWorkerOptions.workerSrc` is one global, and several components in this
- * app assign it at module scope -- three of them to unpkg. In a production
- * bundle they all evaluate on load and the last one wins, which is how the
- * shipped app ended up fetching its PDF.js worker from a CDN. Setting it at the
- * point of use makes this feature's behaviour independent of import order, and
- * keeps every request same-origin.
+ * app write to it. In a production bundle they all evaluate on load and the last
+ * one wins, which is how the shipped app once ended up fetching its PDF.js
+ * worker from a CDN. Every production entry point now sets it at the point of
+ * use, which makes the behaviour independent of import order and keeps every
+ * request same-origin.
  */
 export function configurePdfWorker(): void {
     if (pdfjsLib.GlobalWorkerOptions.workerSrc !== PDF_WORKER_URL) {

@@ -26,6 +26,25 @@ interface ReleaseNote {
 const releaseHistory: ReleaseNote[] = [
     {
         date: '2026/09/08',
+        tool: 'PDF加工',
+        version: '1.3.1',
+        changes: [
+            'PDFの読み込み・表示に必要なPDF.js workerを、外部CDNから取得せずアプリ同梱のものを使用するよう修正しました。',
+            'PDFファイル自体を外部サービスへ送信する処理はありません。',
+        ],
+    },
+    {
+        date: '2026/09/08',
+        tool: 'PDF抽出・統合',
+        version: '1.1.2',
+        changes: [
+            'PDFの読み込み・ページ表示で外部CDNを使用せず、アプリ同梱のworkerを利用するよう修正しました。',
+            'この修正により、PDF表示に使うPDF.js workerについては、すべてのツールで外部CDNからの取得がなくなりました。',
+        ],
+    },
+
+    {
+        date: '2026/09/08',
         tool: 'PDF加筆',
         version: '1.2.0',
         changes: [
@@ -248,8 +267,8 @@ export function HowToUse() {
                 >
                     <p style={{ marginTop: 0 }}>
                         PDF図面に手書き感覚で加筆できるツールです。タブレットやペン入力に対応し、
-                        距離・面積の計測もできます。PDF表示に必要な処理も、アプリに同梱された
-                        workerを使用します。
+                        距離・面積の計測もできます。PDF表示・読み込みに必要な処理も、
+                        アプリに同梱されたworkerを使用します。
                     </p>
 
                     <ScreenWithBadges screenshot="annotator" />

@@ -193,7 +193,7 @@ try {
         return out;
     });
     console.log(`  ${JSON.stringify(versions)}`);
-    check('PDF加工 shows v1.3.0', versions.processor === '1.3.0', JSON.stringify(versions));
+    check('PDF加工 shows v1.3.1', versions.processor === '1.3.1', JSON.stringify(versions));
     check('PDFテキスト化 shows v1.7.0', versions.textifier === '1.7.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
@@ -356,13 +356,23 @@ try {
     console.log('\n=== release history ===');
     const historyText = await page.evaluate(() => document.querySelector('#release-history')?.innerText ?? '');
     check('更新履歴 section exists', historyText.length > 0);
-    check('the v1.5.0 Word entry leads, newest first',
-        historyText.indexOf('1.5.0') >= 0
-        && historyText.indexOf('1.5.0') < historyText.indexOf('1.4.0')
-        && historyText.indexOf('1.4.0') < historyText.indexOf('1.3.1')
-        && historyText.indexOf('1.3.1') < historyText.indexOf('1.3.0')
-        && historyText.includes('Word'),
+    // Read the dates rather than chaining `indexOf` on version strings. Two
+    // tools can reach the same version number -- PDF加工 1.3.1 and PDFテキスト化
+    // 1.3.1 both exist -- and then a bare string search finds whichever comes
+    // first, so the old chain asserted an ordering it could not actually see.
+    // The contract the section states about itself is "newest first", and that
+    // is what this checks.
+    const historyDates = [...historyText.matchAll(/(\d{4})\/(\d{2})\/(\d{2})/g)]
+        .map((m) => `${m[1]}${m[2]}${m[3]}`);
+    check('the history is in date order, newest first',
+        historyDates.length >= 4
+        && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
+        `${historyDates.length} entries, ${historyDates[0]} first`);
+    check('and the newest entries are the ones just added',
+        historyDates[0] === '20260908',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
+    check('the Word entry is still there below them',
+        historyText.includes('Word') && historyText.includes('1.5.0'));
     check('the earlier entries survive below it',
         historyText.includes('傾き') && historyText.includes('プレビュー')
         && historyText.includes('図枠一括更新') && historyText.includes('図面サイズ統一'),

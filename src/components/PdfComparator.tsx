@@ -5,9 +5,7 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Sett
 import jsPDF from 'jspdf';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
-
-// Configure PDF worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+import { configurePdfWorker } from '../utils/pdf-worker-source';
 
 // Config for the 4 slots
 const SLOTS = [
@@ -58,6 +56,11 @@ export const PdfComparator: React.FC = () => {
 
         try {
             const arrayBuffer = await file.arrayBuffer();
+            // At the point of use rather than module scope. This module already
+            // pointed at the local worker, so nothing about which file is
+            // fetched changes -- what changes is that it no longer depends on
+            // this module's assignment being the last one to run.
+            configurePdfWorker();
             const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
 
             const newFiles = [...files];

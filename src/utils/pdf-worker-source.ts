@@ -6,16 +6,21 @@ export const PDF_WORKER_URL = '/pdf.worker.min.mjs';
 /**
  * Point PDF.js at our own worker, immediately before it is used.
  *
- * `GlobalWorkerOptions.workerSrc` is a single global and several modules in this
- * app assign it at module scope, three of them to unpkg. In a production bundle
- * they all evaluate on load and the last one wins, so a feature that only sets
- * the global at import time can silently end up fetching its worker from a CDN
- * depending on import order. M1 hit exactly that and fixed it the same way.
+ * `GlobalWorkerOptions.workerSrc` is a single global that several modules in
+ * this app write to. In a production bundle they all evaluate on load and the
+ * last one wins, so a feature that only sets the global at import time has no
+ * control over which worker it actually fetches -- it depends on module
+ * evaluation order. Three of them used to assign a CDN, and the shipped app
+ * really did fetch its worker from unpkg because of it.
  *
- * Calling this right before `getDocument` makes the behaviour independent of
- * import order and keeps every request same-origin. The Textifier keeps its own
- * copy of this helper; unifying them would mean touching modules this change has
- * no business in.
+ * Every known production PDF.js entry point now calls this immediately before
+ * `getDocument`, so the outcome no longer depends on import order and every
+ * worker request is same-origin. The Textifier keeps its own copy of this
+ * helper with the same contract; unifying the two would mean touching modules
+ * this has no business in.
+ *
+ * There is deliberately no CDN fallback. If the bundled worker is missing, the
+ * right outcome is a failure, not a quiet request to somebody else's server.
  */
 export function configurePdfWorker(): void {
     if (pdfjsLib.GlobalWorkerOptions.workerSrc !== PDF_WORKER_URL) {

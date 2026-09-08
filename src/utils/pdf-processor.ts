@@ -1,8 +1,6 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
-
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+import { configurePdfWorker } from './pdf-worker-source';
 
 export interface LayerOptions {
     color: string; // hex string, e.g. "#ff0000"
@@ -62,6 +60,9 @@ export async function processLayer(file: File | Uint8Array, options: LayerOption
  */
 export async function processOptimize(file: File, options: OptimizeOptions): Promise<Uint8Array> {
     const arrayBuffer = await file.arrayBuffer();
+    // At the point of use rather than module scope: the worker source is one
+    // global shared with every other PDF.js caller in the app.
+    configurePdfWorker();
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdfDoc = await loadingTask.promise;
 
@@ -103,6 +104,7 @@ export async function processOptimize(file: File, options: OptimizeOptions): Pro
 
 export async function processMonochrome(file: File, options: MonoOptions): Promise<Uint8Array> {
     const arrayBuffer = await file.arrayBuffer();
+    configurePdfWorker();
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdfDoc = await loadingTask.promise;
 

@@ -29,9 +29,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '初期リリース'
     },
     tools: {
-        version: '1.3.0',
-        lastUpdate: '2026/09/04',
-        changelog: '図枠一括更新機能を追加'
+        version: '1.3.1',
+        lastUpdate: '2026/09/08',
+        changelog: 'PDF表示処理に必要なPDF.js workerをアプリ同梱のlocal workerへ統一'
     },
     textifier: {
         version: '1.7.0',
@@ -39,9 +39,9 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '表題欄の位置を指定して、1ページ1行の図面一覧をExcel（.xlsx）へ書き出す機能を追加'
     },
     splitMerge: {
-        version: '1.1.1',
-        lastUpdate: '2026/01/29',
-        changelog: '初期リリース'
+        version: '1.1.2',
+        lastUpdate: '2026/09/08',
+        changelog: 'PDFの読み込み・ページ表示で外部CDNを使用せず、アプリ同梱workerを利用するよう修正'
     }
 };
 

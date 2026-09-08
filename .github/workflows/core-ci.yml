@@ -149,3 +149,9 @@ jobs:
 
       - name: Annotator save through the UI
         run: node scripts/smoke-annotator-save-ui.mjs
+
+      # Every PDF.js path in the app, not just the Annotator's: which worker a
+      # feature fetches is a property of the built bundle and of module
+      # evaluation order, so it is driven through the real UI of dist/.
+      - name: PDF.js worker local-only
+        run: node scripts/smoke-pdfjs-worker-local-only.mjs
