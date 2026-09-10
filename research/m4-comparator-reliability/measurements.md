@@ -958,7 +958,7 @@ External HTTP(S) requests from the research harness: **0**. Page errors: **0**.
 
 ## 13. The gate
 
-`scripts/m4-comparator-research-gate.mjs` re-asserts **225 claims, 90 of them
+`scripts/m4-comparator-research-gate.mjs` re-asserts **229 claims, 92 of them
 negative probes**. Several are unusual: the shipped comparator is asserted to
 report changes on drawings that are identical. Those are the findings, and a gate
 in which the baseline passed everything would prove nothing about why this spike

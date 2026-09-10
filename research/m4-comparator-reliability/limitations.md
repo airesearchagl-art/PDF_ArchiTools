@@ -89,10 +89,13 @@ approval rather than a finding:
 - The projection is linear in work units, and nothing here measures a comparison
   anywhere near 12e9 units to check that it stays linear. Cache behaviour at
   that size is unknown.
-- 23 seconds is a judgement about how long a person may reasonably be asked to
-  wait, made without asking one. So is the 173-A4-page reading of the same
-  number, which is the form the Human Gate is more likely to have an opinion
-  about.
+- The judgement being asked for is **how much comparison one operation may
+  claim**, made without asking anyone. It is not a judgement about how long a
+  person waits: the projection covers the comparison kernel and excludes
+  rendering, readback, mask extraction, yields, painting, encoding and container
+  assembly. The 173-A4-page reading of the same number is the form the Human
+  Gate is more likely to have an opinion about, and it carries the same
+  caveat.
 
 The *shape* of the bound is better founded than its value: it is conservative
 about the ink fraction on purpose, and the radius-0 case demonstrates that the

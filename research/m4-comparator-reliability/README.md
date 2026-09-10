@@ -49,7 +49,7 @@ node scripts/m4-comparator-fixtures.mjs
 node scripts/m4-comparator-research-gate.mjs
 ```
 
-**225 assertions, 90 of them negative probes.** Several assert that the shipped
+**229 assertions, 92 of them negative probes.** Several assert that the shipped
 comparator gets something wrong; those are the findings, and a gate the baseline
 passed would prove nothing. It gates the write-up, not the app, and is
 deliberately **not** wired into Core CI.
@@ -81,10 +81,17 @@ independently what a comparison means; a spatial tolerance in millimetres under 
 stated policy; a **peak** working-set budget checked against an
 exact bound from an owned encoder, a **job-level** output budget, and a
 **job-level** comparison-work budget, all evaluated before allocation and all
-refusing by name rather than degrading; finished output spooled out of RAM and
-published only once every page has succeeded; a comparison that can be abandoned;
-structured results rather than only an image; and an export that produces no
-bytes until every page is complete.
+refusing by name rather than degrading; finished output bounded by whichever
+output path **H11** selects, and published only once every page has succeeded; a
+comparison that can be abandoned; structured results rather than only an image;
+and an export that produces no bytes until every page is complete.
+
+On that last point the implementation-ready path is the **memory-resident
+container**, with `MAX_OUTPUT_BYTES` and a fail-closed preflight. Browser-local
+spooling is the answer for large jobs and it is a **conditional follow-on**: it
+requires the **Output Writer Sub-Spike** before production implementation, for
+the same reason Candidate C does — the lifecycle is measured and the artifact is
+not.
 
 **C — a conditional follow-on, not part of this recommendation.** Human
 alignment is the right way forward from a refusal and it is not researched: the

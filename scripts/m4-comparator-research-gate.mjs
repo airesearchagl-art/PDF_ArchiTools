@@ -1598,6 +1598,93 @@ try {
         doc, needle, why,
     }));
 
+    // Two invariants that a literal tripwire cannot express, because what is
+    // wrong about them is the *combination*: a true sentence next to another
+    // true sentence, making a claim neither one makes alone.
+
+    /**
+     * Spooling may not be presented as the path that ships.
+     *
+     * The lifecycle is measured and the artifact is not, so H11 has the
+     * memory-resident container implementation-ready and the spool deferred.
+     * A recommendation that reads "implementation-ready … output spooled out of
+     * RAM" contradicts that, however carefully H11 itself is worded.
+     */
+    const CONDITIONAL = /DEFER|deferred|conditional|Sub-Spike|sub-spike|Historical|superseded|would be|large-job|follow-on/;
+    const scanSpoolClaims = (files) => {
+        const found = [];
+        for (const [name, text] of Object.entries(files)) {
+            const lines = text.split(/\r?\n/);
+            lines.forEach((line, i) => {
+                if (!/spool/i.test(line)) return;
+                // A window rather than a line: the claim and the qualification
+                // are rarely in the same sentence.
+                const context = lines.slice(Math.max(0, i - 4), i + 5).join('\n');
+                if (!/implementation-ready|ready to build|the M4 MVP uses|ships/i
+                    .test(context)) return;
+                if (CONDITIONAL.test(context)) return;
+                found.push(`${name}:${i + 1} — spooling presented as the current path`);
+            });
+        }
+        return found;
+    };
+    const spoolClaims = scanSpoolClaims({ 'README.md': docs['README.md'] });
+    check('the implementation-ready recommendation does not claim the spool path',
+        spoolClaims.length === 0,
+        spoolClaims.length === 0
+            ? 'H11 has the memory-resident container ready and the spool deferred, '
+              + 'and the recommendation says the same'
+            : spoolClaims.join(' | '));
+    probe('and the check fires on an unqualified spool recommendation',
+        scanSpoolClaims({
+            'synthetic.md': 'A + B — implementation-ready, with\n'
+                + 'finished output spooled out of RAM and published at the end.',
+        }).length === 1
+        && scanSpoolClaims({
+            'synthetic.md': 'A + B — implementation-ready. Spooling is a DEFER,\n'
+                + 'conditional on the Output Writer Sub-Spike.',
+        }).length === 0,
+        'the same wording passes once it is marked deferred');
+
+    /**
+     * Kernel seconds may not be read back as a user's wait.
+     *
+     * H10 projects `pairChangeMask` time on masks that already exist. A
+     * sentence that puts that figure next to "wait" without denying the reading
+     * hands back exactly the claim the rename removed.
+     */
+    const DENIED = /\bnot\b|\bnever\b|rather than|excludes|excluding|is not|no claim|kernel/i;
+    const scanWaitClaims = (files) => {
+        const found = [];
+        for (const [name, text] of Object.entries(files)) {
+            const lines = text.split(/\r?\n/);
+            lines.forEach((line, i) => {
+                if (!/\b\d{1,3} seconds?\b/.test(line)) return;
+                const context = lines.slice(Math.max(0, i - 2), i + 3).join('\n');
+                if (!/wait|wall-clock/i.test(context)) return;
+                if (DENIED.test(context) || HISTORICAL.test(context)) return;
+                found.push(`${name}:${i + 1} — kernel seconds read as a user's wait`);
+            });
+        }
+        return found;
+    };
+    const waitClaims = scanWaitClaims(docs);
+    check('no current prose equates the kernel projection with a user\'s wait',
+        waitClaims.length === 0,
+        waitClaims.length === 0
+            ? 'H10 projects comparison-kernel time, and every mention says so'
+            : waitClaims.join(' | '));
+    probe('and the check fires when a seconds figure is offered as a wait',
+        scanWaitClaims({
+            'synthetic.md': '22 seconds is a judgement about how long a person may\n'
+                + 'reasonably be asked to wait.',
+        }).length === 1
+        && scanWaitClaims({
+            'synthetic.md': '22 seconds of comparison-kernel time, which is not a\n'
+                + 'claim about how long a person waits.',
+        }).length === 0,
+        'the same figure passes once the reading is denied');
+
     const stale = scan(docs);
     check('no superseded value appears as current-state prose',
         stale.length === 0,

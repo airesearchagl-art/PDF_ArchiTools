@@ -645,8 +645,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 28,
-      "ms": 111,
+      "compositeMs": 26,
+      "ms": 98,
       "memory": 60864160
     },
     "a wall added": {
@@ -664,8 +664,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 38,
-      "ms": 101,
+      "compositeMs": 32,
+      "ms": 80,
       "memory": 60864160
     },
     "a wall removed": {
@@ -683,8 +683,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 23,
-      "ms": 79,
+      "compositeMs": 26,
+      "ms": 75,
       "memory": 60864160
     },
     "the drawing shifted 2pt": {
@@ -702,8 +702,8 @@
         "width": 718,
         "height": 1181
       },
-      "compositeMs": 27,
-      "ms": 79,
+      "compositeMs": 49,
+      "ms": 108,
       "memory": 60864160
     },
     "A4 vs A3, same drawing": {
@@ -721,8 +721,8 @@
         "width": 1651,
         "height": 2315
       },
-      "compositeMs": 49,
-      "ms": 131,
+      "compositeMs": 106,
+      "ms": 188,
       "memory": 121728320
     },
     "A4 vs A1, same drawing": {
@@ -740,8 +740,8 @@
         "width": 3320,
         "height": 4680
       },
-      "compositeMs": 216,
-      "ms": 530,
+      "compositeMs": 194,
+      "ms": 465,
       "memory": 487641336
     },
     "portrait vs landscape": {
@@ -759,8 +759,8 @@
         "width": 1651,
         "height": 1651
       },
-      "compositeMs": 47,
-      "ms": 117,
+      "compositeMs": 32,
+      "ms": 90,
       "memory": 86044252
     },
     "A4 vs a sheet 3pt bigger": {
@@ -778,8 +778,8 @@
         "width": 1168,
         "height": 1630
       },
-      "compositeMs": 29,
-      "ms": 71,
+      "compositeMs": 24,
+      "ms": 64,
       "memory": 61402880
     },
     "same aspect, 1.4x": {
@@ -797,8 +797,8 @@
         "width": 1634,
         "height": 2291
       },
-      "compositeMs": 58,
-      "ms": 144,
+      "compositeMs": 45,
+      "ms": 120,
       "memory": 119332640
     },
     "/Rotate 0 vs 90": {
@@ -816,8 +816,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 37,
-      "ms": 98,
+      "compositeMs": 32,
+      "ms": 83,
       "memory": 86044252
     },
     "/Rotate 0 vs 180": {
@@ -835,8 +835,8 @@
         "width": 1151,
         "height": 1552
       },
-      "compositeMs": 31,
-      "ms": 106,
+      "compositeMs": 24,
+      "ms": 69,
       "memory": 60864160
     },
     "/Rotate 0 vs 270": {
@@ -854,8 +854,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 32,
-      "ms": 86,
+      "compositeMs": 37,
+      "ms": 95,
       "memory": 86044252
     },
     "crop origin (0,0) vs (50,70)": {
@@ -868,8 +868,8 @@
       "inkPixels": 59636,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 24,
-      "ms": 76,
+      "compositeMs": 19,
+      "ms": 53,
       "memory": 44543324
     },
     "MediaBox larger, same CropBox": {
@@ -882,8 +882,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 23,
-      "ms": 64,
+      "compositeMs": 28,
+      "ms": 67,
       "memory": 60864160
     },
     "black vs grey ink": {
@@ -901,7 +901,7 @@
         "width": 1162,
         "height": 1624
       },
-      "compositeMs": 24,
+      "compositeMs": 28,
       "ms": 68,
       "memory": 60864160
     },
@@ -920,8 +920,8 @@
         "width": 90,
         "height": 58
       },
-      "compositeMs": 36,
-      "ms": 92,
+      "compositeMs": 34,
+      "ms": 72,
       "memory": 60864160
     },
     "a pale hatch added": {
@@ -939,8 +939,8 @@
         "width": 749,
         "height": 42
       },
-      "compositeMs": 25,
-      "ms": 72,
+      "compositeMs": 27,
+      "ms": 78,
       "memory": 60864160
     }
   },
@@ -982,8 +982,8 @@
         "inkPixels": 80002,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 32,
-        "ms": 87,
+        "compositeMs": 50,
+        "ms": 106,
         "memory": 60864160
       },
       "strict": {
@@ -1007,8 +1007,8 @@
         "inkPixels": 80048,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 27,
-        "ms": 66,
+        "compositeMs": 25,
+        "ms": 74,
         "memory": 60864160
       },
       "strict": {
@@ -1034,7 +1034,7 @@
         "inkPixels": 80051,
         "changeRatio": 1,
         "bounds": null,
-        "compositeMs": 18,
+        "compositeMs": 17,
         "ms": 30,
         "memory": 43474400
       },
@@ -1061,8 +1061,8 @@
           "width": 1162,
           "height": 1624
         },
-        "compositeMs": 36,
-        "ms": 88,
+        "compositeMs": 30,
+        "ms": 120,
         "memory": 60864160
       },
       "strict": {
@@ -1089,8 +1089,8 @@
       "inkPixels": 79953,
       "changeRatio": 1,
       "bounds": null,
-      "compositeMs": 17,
-      "ms": 32,
+      "compositeMs": 21,
+      "ms": 33,
       "memory": 43474400
     },
     "strict": {
@@ -1114,8 +1114,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 28,
-      "ms": 71,
+      "compositeMs": 32,
+      "ms": 83,
       "memory": 60864160
     }
   },
@@ -1443,7 +1443,7 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "compositeMs": 26,
-      "totalMs": 75
+      "totalMs": 86
     },
     "matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1455,8 +1455,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 46,
-      "totalMs": 111
+      "compositeMs": 44,
+      "totalMs": 115
     },
     "NOT matching, A4 150dpi, 0mm": {
       "dpi": 150,
@@ -1468,8 +1468,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 33,
-      "totalMs": 91
+      "compositeMs": 37,
+      "totalMs": 98
     },
     "NOT matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1481,8 +1481,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 38,
-      "totalMs": 108
+      "compositeMs": 39,
+      "totalMs": 109
     },
     "NOT matching, A4 300dpi, 0mm": {
       "dpi": 300,
@@ -1495,7 +1495,7 @@
       "inkPixels": 151411,
       "changeRatio": 1,
       "compositeMs": 131,
-      "totalMs": 341
+      "totalMs": 338
     },
     "NOT matching, A4 300dpi, 0.5mm": {
       "dpi": 300,
@@ -1507,8 +1507,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 195,
-      "totalMs": 496
+      "compositeMs": 186,
+      "totalMs": 570
     }
   },
   "candidates": {
@@ -2692,8 +2692,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 36,
-      "ms": 98,
+      "compositeMs": 34,
+      "ms": 102,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 2": {
@@ -2706,8 +2706,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 40,
-      "ms": 105,
+      "compositeMs": 48,
+      "ms": 128,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 4": {
@@ -2720,8 +2720,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 40,
-      "ms": 111,
+      "compositeMs": 59,
+      "ms": 144,
       "memory": 60864160
     },
     "A4 300dpi, 2 layers, threshold 0": {
@@ -2734,8 +2734,8 @@
       "inkPixels": 300848,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 131,
-      "ms": 448,
+      "compositeMs": 171,
+      "ms": 425,
       "memory": 243526080
     },
     "A4 150dpi, 4 layers, threshold 0": {
@@ -2753,8 +2753,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 55,
-      "ms": 172,
+      "compositeMs": 77,
+      "ms": 203,
       "memory": 95643680
     },
     "A3 150dpi, 2 layers, threshold 0": {
@@ -2767,8 +2767,8 @@
       "inkPixels": 154247,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 67,
-      "ms": 180,
+      "compositeMs": 86,
+      "ms": 220,
       "memory": 121728320
     },
     "A1 150dpi, 2 layers, threshold 0": {
@@ -2781,8 +2781,8 @@
       "inkPixels": 568537,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 276,
-      "ms": 692,
+      "compositeMs": 264,
+      "ms": 754,
       "memory": 487641336
     }
   },
@@ -3853,7 +3853,7 @@
         "radius": 0,
         "box": 1,
         "scanMs": 6,
-        "dilationMs": 5,
+        "dilationMs": 3,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3862,7 +3862,7 @@
         "radius": 1,
         "box": 9,
         "scanMs": 4,
-        "dilationMs": 25,
+        "dilationMs": 27,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3871,7 +3871,7 @@
         "radius": 3,
         "box": 49,
         "scanMs": 4,
-        "dilationMs": 27,
+        "dilationMs": 28,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3881,16 +3881,16 @@
       "0.25mm": {
         "radius": 1,
         "box": 9,
-        "scanMs": 25,
-        "dilationMs": 27,
+        "scanMs": 31,
+        "dilationMs": 29,
         "identical": true,
         "changePixels": 2173206
       },
       "0.5mm": {
         "radius": 3,
         "box": 49,
-        "scanMs": 66,
-        "dilationMs": 29,
+        "scanMs": 71,
+        "dilationMs": 28,
         "identical": true,
         "changePixels": 2166190
       }
@@ -4027,7 +4027,7 @@
         "bytesPerPixel": 4.001,
         "roundTripDifferingBytes": 0,
         "roundTripLossless": true,
-        "encodeMs": 58,
+        "encodeMs": 53,
         "scratchBytes": 4965,
         "browserPngBytesPerPixel": 0.0311,
         "browserJpegBytesPerPixel": 0.0359
@@ -4042,7 +4042,7 @@
         "bytesPerPixel": 4.001,
         "roundTripDifferingBytes": 0,
         "roundTripLossless": true,
-        "encodeMs": 62,
+        "encodeMs": 48,
         "scratchBytes": 4965,
         "browserPngBytesPerPixel": 0.0321,
         "browserJpegBytesPerPixel": 0.0498
@@ -4057,7 +4057,7 @@
         "bytesPerPixel": 4.001,
         "roundTripDifferingBytes": 0,
         "roundTripLossless": true,
-        "encodeMs": 105,
+        "encodeMs": 96,
         "scratchBytes": 7017,
         "browserPngBytesPerPixel": 0.0292,
         "browserJpegBytesPerPixel": 0.0266
@@ -5830,8 +5830,8 @@
         "pixels": 2176714,
         "radius": 1,
         "units": 17413712,
-        "ms": 24.9,
-        "msPerUnit": 0.0000014299076501299932
+        "ms": 25.5,
+        "msPerUnit": 0.0000014643632558066885
       },
       "A4 150dpi, 0.5mm": {
         "width": 1241,
@@ -5839,8 +5839,8 @@
         "pixels": 2176714,
         "radius": 3,
         "units": 17413712,
-        "ms": 26.2,
-        "msPerUnit": 0.0000015045614629999757
+        "ms": 25.2,
+        "msPerUnit": 0.000001447135452968341
       },
       "A4 300dpi, 0.15mm": {
         "width": 2481,
@@ -5848,8 +5848,8 @@
         "pixels": 8703348,
         "radius": 2,
         "units": 69626784,
-        "ms": 105.1,
-        "msPerUnit": 0.0000015094765830558842
+        "ms": 110.8,
+        "msPerUnit": 0.0000015913416307870799
       },
       "A3 150dpi, 0.15mm": {
         "width": 1754,
@@ -5857,8 +5857,8 @@
         "pixels": 4351674,
         "radius": 1,
         "units": 34813392,
-        "ms": 50.4,
-        "msPerUnit": 0.000001447718739917957
+        "ms": 51.8,
+        "msPerUnit": 0.0000014879331493185084
       },
       "A1 150dpi, 0.15mm": {
         "width": 3508,
@@ -5866,13 +5866,13 @@
         "pixels": 17424236,
         "radius": 1,
         "units": 139393888,
-        "ms": 259,
-        "msPerUnit": 0.0000018580441633136741
+        "ms": 264.5,
+        "msPerUnit": 0.0000018975006996002579
       }
     },
-    "worstMsPerUnit": 0.0000018580441633136741,
+    "worstMsPerUnit": 0.0000018975006996002579,
     "ceiling": 12000000000,
-    "projectedWorstSeconds": 22.3
+    "projectedWorstSeconds": 22.8
   },
   "asyncCancellation": {
     "width": 1241,
@@ -5898,7 +5898,7 @@
     "asynchronousDriver": {
       "status": "CANCELLED",
       "bands": 4,
-      "ms": 26,
+      "ms": 24,
       "reason": "cancelled",
       "cancellationObserved": true,
       "publishable": false,
