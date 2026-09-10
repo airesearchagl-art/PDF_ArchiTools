@@ -49,7 +49,7 @@ node scripts/m4-comparator-fixtures.mjs
 node scripts/m4-comparator-research-gate.mjs
 ```
 
-**135 assertions, 54 of them negative probes.** Several assert that the shipped
+**158 assertions, 63 of them negative probes.** Several assert that the shipped
 comparator gets something wrong; those are the findings, and a gate the baseline
 passed would prove nothing. It gates the write-up, not the app, and is
 deliberately **not** wired into Core CI.
@@ -116,12 +116,19 @@ These are not the spike's to settle.
 | **H2** | a missing page | fail the whole export, or include the page marked as missing? |
 | **H3** | over budget | refuse, or offer the achievable resolution to accept? Never a silent downgrade — an A0 asked at 600 dpi currently delivers 227 and is named `_600dpi.pdf`. |
 | **H4** | alignment | should an offset, scale and rotation be saved with the comparison? |
-| **H5** | export format | JPEG or PNG? Artefact cost unmeasured. |
-| **H6** | threshold unit | millimetres or PDF points? |
+| **H5** | export format | JPEG or PNG? Artefact cost unmeasured. The memory model budgets the more expensive of the two until this is answered, so no budget claim depends on it. |
+| **H6** | the spatial tolerance policy | Not just a unit. A spatial tolerance can suppress a true change — measured, a dimension changed from 1200 to 1300 becomes a MATCH at 0.3 mm — so the policy has to settle **unit** (proposed mm), **default** (proposed **0 mm**), **minimum** (0, always available), **maximum** (proposed **0.25 mm**, the largest setting at which the smallest measured true change is still reported at 150 *and* 300 dpi), **step** (proposed 0.05 mm), whether a non-zero value is an **explicit opt-in** (proposed yes), and the **disclosure** shown with it — which must not say "ignores small shifts", because measured it also makes a changed digit match. |
 | **H7** | the working-set budget | **512 MiB is a recommendation, not a measurement.** The measurements establish the shape of the cost, not where the line goes. Requires approval; never silently exceeded. |
 | **H8** | the ink predicate | the two shipped functions disagree — mean of channels versus any channel — and a pale yellow falls between them. One definition must serve the composite, the change bounds, the verdict and the change report. Whether the pale-grey hatch stays invisible is part of the same choice. |
 | **H9** | more than two members | **A: two-only** (measured) or **B: reference-pairs** (measured)? **C: all-member consensus — DEFER, requires separate research**; it is described and implemented nowhere, so it is refused rather than offered. The shipped any-other-layer rule reports a two-against-two disagreement as a clean match, so it is not among the options either. |
-| **H10** | the work ceiling | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** It is calibrated from one observation on one machine and projects to roughly 55 seconds of comparison. It is user-visible because it refuses comparisons: an A1 at 300 dpi with a 0.5 mm tolerance is over it. Requires approval; never silently degraded to fit. Separately: whether a ratio floor on MATCH is wanted at all — the research recommends **none**, having measured that 0.5% hid six of seven true changes, and that a floor is not needed for MATCH to be reachable. |
+| **H10** | the work ceiling | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** It is calibrated from one observation on one machine and projects to roughly 55 seconds of comparison. It is user-visible because it refuses comparisons: an A1 at 300 dpi with a 0.5 mm tolerance is over it. Requires approval; never silently degraded to fit. |
+
+One decision each. **The MATCH ratio floor is not on this list**: the research
+recommends none, and it is **fixed at zero for the M4 MVP** rather than offered
+as a setting. There is no control on the corpus that needs one — every control
+reaches 0 differing pixels — and six of seven true changes were hidden by the
+0.5% floor that was there. The setting that does this job, in a unit a user can
+reason about, is the spatial tolerance under H6.
 
 ## What this does not claim
 

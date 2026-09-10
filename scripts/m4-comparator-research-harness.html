@@ -23,9 +23,12 @@ import {
   candidateBaseline, candidateStrict, candidateNormalise, candidateHumanAlignment,
   assertRigidPlan,
   estimateMemory, checkBudget, pixelRadiusFor, millimetresFor, MAX_COMPARISON_BYTES,
-  INK_PREDICATES, inkMask, pairChangeMask, pairChangeMaskScan, pairChangeMaskSteps,
-  runCancellable, checkComparisonWork,
+  INK_PREDICATES, inkMask, dilateMask, pairChangeMask, pairChangeMaskScan,
+  pairChangeMaskSteps, compositeFromMasks,
+  runCancellable, runCancellableAsync, checkComparisonWork,
   MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM,
+  estimatePhaseMemory, checkPhaseBudget, EXPORT_FORMATS, BUDGETED_EXPORT_FORMAT,
+  SPATIAL_TOLERANCE_POLICY, isDefaultSpatialTolerance,
 } from '/research/m4-comparator-reliability/prototype/candidates.mjs';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -961,14 +964,17 @@ window.__m4 = {
         floorWouldHide: canonical === RESULT.CHANGE && underOldFloor === RESULT.MATCH,
       };
     }
-    // The physical tolerance, on the control and on the smallest true change.
+    // The physical tolerance, swept finely enough to find where a real change
+    // stops being visible rather than only to show that it does.
+    const sweep = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
     for (const [label, [a, b]] of Object.entries({
       'nothing changed (control)': ['small-base', 'small-base-copy'],
       'one digit of a dimension': ['small-base', 'small-digit'],
+      'a 4mm revision triangle': ['small-base', 'small-revision-mark'],
     })) {
       const pages = await pair(a, b);
       out.spatial[label] = {};
-      for (const mm of [0, 0.1, 0.25, 0.5]) {
+      for (const mm of sweep) {
         const radius = pixelRadiusFor(mm, DPI);
         const compared = await canonicalCompare(pages, SCALE, radius);
         out.spatial[label][`${mm}mm`] = {
@@ -978,7 +984,32 @@ window.__m4 = {
         };
       }
     }
+    // The same millimetres at twice the resolution. A tolerance stated in
+    // millimetres should mean the same thing; the rounding to whole pixels is
+    // where it stops doing so, and that belongs in the policy rather than in a
+    // footnote.
+    out.spatialAtHigherDpi = {};
+    const digitPages = await pair('small-base', 'small-digit');
+    for (const mm of sweep) {
+      const radius = pixelRadiusFor(mm, 300);
+      const compared = await canonicalCompare(digitPages, 300 / 72, radius);
+      out.spatialAtHigherDpi[`${mm}mm`] = {
+        radius,
+        changePixels: compared.changePixels,
+        verdict: compared.verdict,
+      };
+    }
     out.floor = MATCH_RATIO_FLOOR;
+    out.policy = SPATIAL_TOLERANCE_POLICY;
+    // The assertion the implementation gate has to carry: at the contract's
+    // default, a changed dimension is a change.
+    out.atTheDefault = {
+      millimetres: SPATIAL_TOLERANCE_POLICY.default,
+      isDefault: isDefaultSpatialTolerance(SPATIAL_TOLERANCE_POLICY.default),
+      radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.default, DPI),
+      verdict: out.spatial['one digit of a dimension']
+        [`${SPATIAL_TOLERANCE_POLICY.default}mm`].verdict,
+    };
     return out;
   },
 
@@ -1204,6 +1235,277 @@ window.__m4 = {
         // No partial verdict, by construction.
         result: stopped.result,
         stoppedEarly: stopped.bands < full.bands,
+      },
+    };
+  },
+
+  /**
+   * The picture, painted from the masks alone.
+   *
+   * The memory model rests on this: if the composite is a function of the ink
+   * masks and nothing else, then no member's RGBA has to survive the phase that
+   * extracted its mask. Asserting it byte-for-byte against the production
+   * compositor is what turns that from a design intention into a fact.
+   */
+  async compositeEquivalence() {
+    const colours = [[0, 0, 1], [1, 0, 0], [0, 0.6, 0], [0.8, 0, 0.8]];
+    const sets = {
+      'two members, exact': {
+        names: ['base-a4', 'added-line-a4'], radius: 0, matchOpacity: 1,
+      },
+      'two members, 0.5mm': {
+        names: ['base-a4', 'added-line-a4'], radius: pixelRadiusFor(0.5, DPI), matchOpacity: 1,
+      },
+      'two members, faint match colour': {
+        names: ['base-a4', 'added-line-a4'], radius: 0, matchOpacity: 0.25,
+      },
+      'four members, 0.25mm': {
+        names: ['base-a4', 'identical-a4', 'wall-at-y-a4', 'added-line-a4'],
+        radius: pixelRadiusFor(0.25, DPI), matchOpacity: 1,
+      },
+    };
+    const out = {};
+    for (const [label, spec] of Object.entries(sets)) {
+      const members = [];
+      for (let i = 0; i < spec.names.length; i++) {
+        members.push(await member(spec.names[i], colours[i], `${spec.names[i]}#${i}`));
+      }
+      const rendered = await renderMembersUpright(members, SCALE);
+      const { width, height } = rendered;
+      const layers = rendered.buffers.map((b, i) => ({ data: b.data, color: colours[i] }));
+      const production = computeMultiPdfComposite(
+        layers, width, height, spec.radius, [0, 0, 0], spec.matchOpacity,
+      );
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const dilated = masks.map((m) => dilateMask(m, width, height, spec.radius));
+      const fromMasks = compositeFromMasks({
+        masks, dilated, colors: colours.slice(0, masks.length),
+        width, height, matchColor: [0, 0, 0], matchOpacity: spec.matchOpacity,
+      });
+      let differingBytes = 0;
+      const produced = production.data;
+      for (let i = 0; i < produced.length; i++) {
+        if (produced[i] !== fromMasks[i]) differingBytes += 1;
+      }
+      out[label] = {
+        width,
+        height,
+        members: masks.length,
+        radius: spec.radius,
+        matchOpacity: spec.matchOpacity,
+        bytes: produced.length,
+        differingBytes,
+        identical: differingBytes === 0,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * What the export actually costs to hold, measured rather than assumed.
+   *
+   * `toDataURL` returns a string, so the figure that matters is the length of
+   * that string per pixel. The memory model carries an allowance; this is what
+   * it is an allowance for.
+   */
+  async exportEncoding() {
+    const rows = {};
+    for (const [label, sheet, other, dpi] of [
+      ['A4 150dpi, changed', 'base-a4', 'added-line-a4', 150],
+      ['A4 300dpi, changed', 'base-a4', 'added-line-a4', 300],
+      ['A4 150dpi, dense', 'dense-a', 'dense-b', 150],
+      ['A3 150dpi, matched', 'base-a3', 'base-a3', 150],
+    ]) {
+      const members = [
+        await member(sheet, BLUE, sheet), await member(other, RED, `${other}#1`),
+      ];
+      const rendered = await renderMembersUpright(members, dpi / 72);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const pixels = compositeFromMasks({
+        masks, dilated: masks, colors: [BLUE, RED], width, height,
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').putImageData(new ImageData(pixels, width, height), 0, 0);
+      const jpeg = canvas.toDataURL('image/jpeg');
+      const png = canvas.toDataURL('image/png');
+      canvas.width = 1;
+      canvas.height = 1;
+      const area = width * height;
+      rows[label] = {
+        width,
+        height,
+        pixels: area,
+        jpegBytes: jpeg.length,
+        pngBytes: png.length,
+        jpegBytesPerPixel: +(jpeg.length / area).toFixed(4),
+        pngBytesPerPixel: +(png.length / area).toFixed(4),
+      };
+    }
+    return {
+      modelled: EXPORT_FORMATS,
+      budgetedFormat: BUDGETED_EXPORT_FORMAT,
+      rows,
+      worstMeasured: Math.max(...Object.values(rows).flatMap(
+        (r) => [r.jpegBytesPerPixel, r.pngBytesPerPixel],
+      )),
+    };
+  },
+
+  /**
+   * The working set of the architecture that was actually selected.
+   *
+   * The shipped model counts layer canvases, normalised copies, a normalising
+   * canvas, a composite and an encoder, because that is what the shipped
+   * pipeline holds. The proposed pipeline holds masks, and the phase that peaks
+   * is not the one that used to.
+   */
+  phaseBudget() {
+    const rows = [
+      ['A4 300dpi, 2 members, 0mm', 2480, 3507, 2, 0],
+      ['A4 300dpi, 2 members, 0.5mm', 2480, 3507, 2, 6],
+      ['A3 300dpi, 2 members, 0.5mm', 3508, 4961, 2, 6],
+      ['A2 300dpi, 2 members, 0.5mm', 4961, 7016, 2, 6],
+      ['A1 300dpi, 2 members, 0.5mm', 7016, 9933, 2, 6],
+      ['A1 300dpi, 4 members, 0.5mm', 7016, 9933, 4, 6],
+      ['A0 600dpi, 2 members, 0.5mm', 19866, 28087, 2, 12],
+    ];
+    const cases = {};
+    for (const [label, width, height, members, radiusPx] of rows) {
+      const checked = checkPhaseBudget({
+        width, height, members, contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx,
+      });
+      cases[label] = {
+        pixels: checked.pixels,
+        members: checked.members,
+        radiusPx: checked.radiusPx,
+        phaseTotals: Object.fromEntries(
+          Object.entries(checked.phases).map(([k, v]) => [k, v.total]),
+        ),
+        peakPhase: checked.peakPhase,
+        peakWorkingSet: checked.peakWorkingSet,
+        peakMB: +(checked.peakWorkingSet / 1e6).toFixed(0),
+        bytesPerPixel: +checked.bytesPerPixel.toFixed(2),
+        withinBudget: checked.withinBudget,
+        refusal: checked.refusal,
+        memberProcessing: checked.memberProcessing,
+        pairProcessing: checked.pairProcessing,
+        referenceMaskReused: checked.referenceMaskReused,
+        exportFormat: checked.exportFormat,
+      };
+    }
+    // The same sheet under the shipped model, which is what the previous
+    // round's "within 512 MiB" claim was resting on.
+    const shipped = checkBudget({ width: 3508, height: 4961, layers: 2 });
+    return {
+      limit: MAX_COMPARISON_BYTES,
+      limitMB: +(MAX_COMPARISON_BYTES / 1e6).toFixed(1),
+      cases,
+      shippedModelA3: {
+        totalMB: +(shipped.total / 1e6).toFixed(1),
+        withinBudget: shipped.withinBudget,
+      },
+      byFormat: Object.fromEntries(Object.keys(EXPORT_FORMATS).map((format) => [
+        format,
+        +(estimatePhaseMemory({
+          width: 3508, height: 4961, members: 2, radiusPx: 6, exportFormat: format,
+        }).peakWorkingSet / 1e6).toFixed(1),
+      ])),
+      a3Detail: estimatePhaseMemory({
+        width: 3508, height: 4961, members: 2, radiusPx: 6,
+      }),
+    };
+  },
+
+  /**
+   * A cancellation that arrives while the comparison is running.
+   *
+   * The banded structure proves a decision point exists. It does not prove
+   * anything can reach it. Both drivers are given the *same* cancellation,
+   * scheduled from a timer while the comparison runs: the synchronous one never
+   * returns to the event loop, so the timer cannot fire and the comparison
+   * finishes and publishes; the asynchronous one yields between bands, so the
+   * timer fires and the comparison stops with nothing to publish.
+   */
+  async asyncCancellation() {
+    const pages = await pair('dense-a', 'dense-b');
+    const rendered = await renderMembersUpright(pages, SCALE);
+    const { width, height } = rendered;
+    const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+    const radius = pixelRadiusFor(0.5, DPI);
+    const band = 512;
+    const args = { a: masks[0], b: masks[1], width, height, radius, band };
+    const expected = pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+
+    // The control: uncancelled, asynchronous, and still the right answer.
+    const completed = await runCancellableAsync(pairChangeMaskSteps({ ...args }));
+
+    // A synchronous driver, given a cancellation it cannot see.
+    let syncCancelRequested = false;
+    const syncTimer = setTimeout(() => { syncCancelRequested = true; }, 0);
+    const syncStarted = performance.now();
+    const syncRun = runCancellable(
+      pairChangeMaskSteps({ ...args }), () => !syncCancelRequested,
+    );
+    const syncMs = Math.round(performance.now() - syncStarted);
+    clearTimeout(syncTimer);
+
+    // The same cancellation, against a driver that yields between bands.
+    let asyncCancelRequested = false;
+    const asyncStarted = performance.now();
+    setTimeout(() => { asyncCancelRequested = true; }, 20);
+    const asyncRun = await runCancellableAsync(pairChangeMaskSteps({ ...args }), {
+      shouldContinue: () => !asyncCancelRequested,
+    });
+    const asyncMs = Math.round(performance.now() - asyncStarted);
+
+    // Ownership: superseded by a newer run rather than cancelled by a user.
+    let generation = 1;
+    setTimeout(() => { generation = 2; }, 20);
+    const supersededRun = await runCancellableAsync(pairChangeMaskSteps({ ...args }), {
+      owner: { token: 1, current: () => generation },
+    });
+
+    return {
+      width,
+      height,
+      radius,
+      band,
+      expectedChangePixels: expected.changePixels,
+      completed: {
+        status: completed.status,
+        bands: completed.bands,
+        publishable: completed.publishable,
+        changePixels: completed.result?.changePixels ?? null,
+        matchesDirect: completed.result?.changePixels === expected.changePixels,
+      },
+      synchronousDriver: {
+        status: syncRun.status,
+        bands: syncRun.bands,
+        ms: syncMs,
+        // The timer was due long before this returned, and never ran.
+        cancellationObserved: syncRun.status === PLAN.CANCELLED,
+        cancellationFlagAtEnd: syncCancelRequested,
+        produced: syncRun.result !== null,
+      },
+      asynchronousDriver: {
+        status: asyncRun.status,
+        bands: asyncRun.bands,
+        ms: asyncMs,
+        reason: asyncRun.reason,
+        cancellationObserved: asyncRun.status === PLAN.CANCELLED,
+        publishable: asyncRun.publishable,
+        result: asyncRun.result,
+        stoppedEarly: asyncRun.bands < completed.bands,
+      },
+      supersededByOwnership: {
+        status: supersededRun.status,
+        bands: supersededRun.bands,
+        reason: supersededRun.reason,
+        publishable: supersededRun.publishable,
+        result: supersededRun.result,
       },
     };
   },

@@ -5,8 +5,10 @@ notice.
 
 ## The corpus is synthetic, and one drawing
 
-Thirty-one fixtures, all variations of a single generated plan: a border, a
-title block, a five-by-four grid, one labelled string, and a wall that moves.
+Forty-two fixtures, drawn from two generated plans: a border, a title block, a
+five-by-four grid, one labelled string and a wall that moves, plus a second base
+sheet carrying a dimension string, a symbol and the small marks a revision is
+actually made of.
 Real construction drawings carry dimension strings, hatch, text at several
 sizes, symbols, xrefs and scanned underlays, and they are produced by CAD
 exporters whose output this does not imitate.
@@ -81,31 +83,63 @@ previous shape was not a bound at all.
 
 ## The budget is a judgement, not a discovered threshold
 
-512 MiB is chosen, not found. What the measurements establish is the *shape* of
-the cost — layers x pixels x 4 bytes, about five canvases over for two layers —
-and that an A1 at 300 dpi needs 1.95 GB while passing the existing canvas caps.
-Where to draw the line is a decision about how much memory one comparison may
-claim on a machine nobody has specified.
+512 MiB is chosen, not found. Where to draw the line is a decision about how much
+memory one comparison may claim on a machine nobody has specified.
 
 Nothing over the budget was allocated, so the failure mode past it is
 **calculated, not observed**. Whether a browser fails cleanly or takes the tab
 with it at 2 GB is untested here, and deliberately so.
 
-## Ownership is proposed; only abandonability is measured
+## The phase memory model is arithmetic, and it models a design
+
+The peak working set is computed from the page size, the member count and the
+tolerance. **No comparison was run and watched to see whether the peak it
+actually reaches matches the model.** The model is a statement about which
+buffers the proposed implementation is allowed to keep alive, and an
+implementation that keeps one more is not covered by it.
+
+Two of its terms are firmer than the rest. The presentation phase rests on
+`compositeFromMasks` being byte-identical to the shipped compositor, which is
+asserted over 34.8 MB of output; and the export allowance is measured on four
+real composites rather than assumed. Everything else — that a canvas is released
+before the next member is rendered, that the reference mask survives all the
+pairs and nothing else does — is a contract the implementation has to honour,
+not a behaviour that was observed.
+
+Garbage collection is also not instantaneous. The model assumes a released
+buffer stops counting immediately; a real heap may hold two while it catches up.
+
+## Ownership is proposed; scheduling is measured, integration is not
 
 The ownership section in `architecture.md` reuses M3's shape — a mount flag and a
-generation counter — and **no supersession or unmount behaviour was exercised
-against a running comparison here**. It is a proposal by analogy.
+generation counter. In the prototype that shape works: a run superseded
+mid-flight returns `publishable: false` and no result.
 
-What is now measured is the half that made the proposal impossible. A banded
-comparison ran in 31 bands over a 1241×1754 sheet, produced the mask the direct
-form produces, and stopped after 3 bands with no verdict. That establishes that
-there is somewhere for a generation check to attach; it does not establish that
-attaching M3's check there behaves the way M3's does.
+What is measured is the *scheduling contract*: given the same cancellation, a
+synchronous driver ran to completion in 23 ms without ever seeing it and
+published a verdict, while a driver that yields to a task boundary between bands
+stopped at band 4 of 18 with nothing to publish. That is the difference between
+"there is a decision point" and "something can reach it", and the previous round
+had only established the first.
 
-The banded prototype is also a synchronous generator driven in a loop, not a
-worker yielding to an event loop. It demonstrates the *structure* — bounded
-chunks with a decision point between them — not the scheduling.
+What is **not** measured:
+
+- nothing ran inside a Web Worker, over `postMessage`;
+- no real UI supersession was exercised — no unmount, no document swap, no
+  layer toggled, no threshold moved, against a comparison that was running;
+- the yield is `setTimeout(…, 0)` on the main thread, which is a task boundary
+  but not the scheduling a production worker loop would use.
+
+The production implementation gate has to exercise the real thing.
+
+## The spatial tolerance ceiling comes from one fixture
+
+`maximum: 0.25 mm` is the largest setting at which the *dimension-digit* fixture
+is still reported as changed, at 150 and 300 dpi. That fixture happens to be the
+smallest true change in the corpus, which is why it sets the ceiling — but it is
+one change, drawn at one size, in one font. A smaller mark on a busier sheet
+would move the number, and nothing here establishes that 0.25 mm is safe for
+marks this corpus does not contain.
 
 ## The multi-member contract is measured, not chosen
 

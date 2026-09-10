@@ -111,8 +111,11 @@ applied to the mask. That is not free either, and the number is the user's:
 the page cannot tell a hairline everywhere from a wall in one place; a stated
 distance can, and it can be argued about in units a drawing office already uses.
 
-If a noise floor is wanted anyway, it is a product decision with a corpus behind
-it — Human Gate **H10** — not a default.
+The research recommendation is **no ratio floor at all**, and it is **fixed at
+zero for the M4 MVP** rather than left as a setting: the corpus shows a floor
+has no control it is needed for and six revisions it hides. What replaces it is
+the spatial tolerance below, which is a stated distance under a stated policy
+(**H6**) rather than a share of the page.
 
 Each status carries what the user needs to act: which member, what differs, what
 would resolve it. The image, when there is one, is one field of the result.
@@ -401,7 +404,7 @@ Proposed: compute the cost before rendering, and if it does not fit, either
 refuse or tell the user what will fit and let them accept it. Never deliver a
 different resolution under the requested name.
 
-## The threshold
+## The threshold, and the policy it needs
 
 A pixel radius means a different physical distance at every resolution:
 
@@ -412,7 +415,46 @@ A pixel radius means a different physical distance at every resolution:
 
 The user's contract should be **millimetres**, converted to a pixel radius from
 the actual render scale. 0.5 mm becomes 1 / 3 / 6 / 12 px at 72 / 150 / 300 /
-600 dpi, and the comparison means the same thing at all of them.
+600 dpi.
+
+A unit is not the whole of the decision, though, and treating it as one would
+put back what removing the ratio floor took out. **The spatial tolerance can
+suppress a true semantic change.** Measured, changed pixels for a dimension
+string reading 1200 against one reading 1300:
+
+| | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** |
+| 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** |
+
+At 0.3 mm the two dimensions agree. That is not a rendering detail with a unit
+attached; it is a setting that turns a revised drawing into an unrevised one, so
+**H6** is a policy rather than a choice of unit:
+
+| | proposed | why |
+| --- | --- | --- |
+| unit | mm | the drawing office's unit; a pixel radius means a different distance at every DPI |
+| **default** | **0 mm** | a comparison nobody configured must report every difference it can see |
+| minimum | 0 mm | and zero is always available, at every resolution |
+| **maximum** | **0.25 mm** | the largest setting at which the smallest measured true change is still reported, at 150 **and** 300 dpi. One step past it the changed digit is already invisible at 150 dpi |
+| step | 0.05 mm | fine enough to be useful; see the caveat below |
+| opt-in | explicit | a non-zero tolerance is something the user chose, not something the tool assumed |
+| disclosure | required | see below |
+
+**The wording matters and is part of the contract.** "Ignores small shifts" is
+not what this does — measured, it also makes a changed digit and a swapped
+symbol match. The disclosure has to say that a non-zero tolerance may report a
+changed dimension or symbol as unchanged.
+
+**A caveat the policy has to carry:** millimetres are converted to a *whole*
+pixel radius, so the same setting is not exactly the same distance at every
+resolution. 0.05 mm rounds to 0 px at 150 dpi and 1 px at 300 dpi, which is why
+the digit survives 0.05 mm at 150 dpi untouched and loses half its differing
+pixels at 300 dpi. Below about 0.1 mm the setting is finer than the render, and
+the policy should say so rather than imply a precision it does not have.
+
+The implementation gate carries one assertion from this: **at the default
+settings, a dimension changed from 1200 to 1300 reports CHANGE.**
 
 ## The cost of comparing
 
@@ -529,11 +571,45 @@ grows 25 ms → 65 ms as the box goes from 9 to 49 while the dilation stays at
 28 ms.
 
 *Bands.* Every phase runs over a band of rows or columns and returns control
-between bands. Measured: 31 bands over a 1241×1754 comparison, the banded result
-identical to the direct one, and a cancellation observed after 3 of the 31 with
-**no verdict produced at all**. Half a change mask is not a smaller change; it
-is a different drawing, so a cancelled comparison returns `CANCELLED` and
-nothing else.
+between bands. The banded result is identical to the direct one, and a cancelled
+comparison returns `CANCELLED` and nothing else — half a change mask is not a
+smaller change; it is a different drawing.
+
+Bands alone are only half of it, and the half that is easy to mistake for the
+whole. A decision point between bands is worth nothing if nothing can reach it:
+a driver that never returns to the event loop leaves every click, settings
+change and `postMessage` sitting in a queue until it has finished. A Web Worker
+does not fix that by itself — one long synchronous message handler cannot
+process the next message either.
+
+**The production scheduling contract:**
+
+```
+    process one bounded band
+      -> yield to a task boundary          queued work is delivered here
+      -> read cancellation / generation    updated by that queued work
+      -> verify ownership
+      -> continue, or stop with no result
+```
+
+Measured, with the *same* cancellation scheduled from a timer against both
+drivers on the same comparison:
+
+| | | |
+| --- | --- | --- |
+| uncancelled, banded, asynchronous | `READY_TO_COMPARE` in 18 bands | the same mask as the direct computation |
+| **synchronous driver** | ran to completion in 23 ms | the timer never fired; **the cancellation was never seen and a verdict was published** |
+| **asynchronous driver** | `CANCELLED` at band 4 of 18 | the same cancellation, observed at a band boundary |
+| superseded by a newer generation | `CANCELLED` | `publishable: false`, no result |
+
+The yield is `setTimeout(…, 0)` rather than a microtask, deliberately: a
+microtask drains before the task queue is touched, so awaiting one proves
+nothing. Timers are one task source served in order, so a cancellation scheduled
+before the yield is guaranteed to have run by the time it resolves.
+
+Ownership is re-read between bands **and** immediately before publishing, since
+a run can be superseded by the last thing that happened while its final band was
+running.
 
 Whatever is chosen, the ownership rule from M3 still applies on top: a run that
 has been superseded publishes nothing.
@@ -541,13 +617,13 @@ has been superseded publishes nothing.
 ## The budget
 
 The Annotator's 8 Mpx ceiling does not transfer. That bounds one transparent
-fragment; a comparison holds **every layer's RGBA at once**, plus a normalising
-canvas, plus the composite, plus the encoder — about five canvases for two
-layers.
+fragment; a comparison holds several full-page buffers at once.
 
-Proposed: bound the **working set**, at **512 MiB** — a **recommendation
+Proposed: bound the **peak working set**, at **512 MiB** — a **recommendation
 requiring human approval**, not a measured threshold — computed before anything
-is allocated:
+is allocated.
+
+### The shipped pipeline holds every layer's RGBA at once
 
 ```
 layers x width x height x 4        the rendered canvases
@@ -557,10 +633,80 @@ layers x width x height x 4        the rendered canvases
 + width x height x 4               the encoder
 ```
 
-Measured against it: A3 at 300 dpi with two layers fits at 487 MB; A1 at 300 dpi
-does not, at 1951 MB; A0 at 600 dpi needs 15.6 GB. The number is a judgement
-about how much one comparison may claim, not a threshold found in the data, and
-it is recorded as one.
+That is the right model for the **baseline**, and it is what the baseline
+measurements in `measurements.md` §10 are taken against: A3 at 300 dpi with two
+layers is 487 MB, A1 at 300 dpi is 1951 MB, A0 at 600 dpi is 15.6 GB.
+
+### The proposed pipeline does not
+
+Keeping that model while adopting the mask architecture would have left the
+budget claim resting on buffers the design no longer allocates — and omitting
+the masks, the dilation scratch and the change mask, which it does. So the model
+is rebuilt around the phases, and the ceiling is checked against the **peak**:
+
+```
+peakWorkingSet = max over phases of (buffers live during that phase)
+```
+
+| phase | live |
+| --- | --- |
+| 1 render | one member's canvas (4/px), the pixels read back from it (4/px), the masks of the members already done (1/px each) |
+| 2 mask extraction | that readback (4/px), every member's mask (1/px each) |
+| 3 dilation | the masks, the reference's dilation, the other member's dilation, one scratch band, two running-sum indices |
+| 4 comparison | the masks, two dilations, the semantic change mask |
+| 5 presentation | the masks, every member's dilation, the composite (4/px), the encoder's bitmap (4/px), the data URL |
+
+Two parts of that are a **contract**, not an implementation detail, because a
+different choice gives a different peak:
+
+- members are rendered **serially**, so only one member's canvas and readback
+  are ever live;
+- under `reference-pairs` the pairs are processed **serially**, and the
+  reference's mask and dilation are computed once and reused across every pair.
+
+The load-bearing fact is phase 5. `compositeFromMasks` is asserted **byte-for-
+byte identical** to the shipped compositor — over 34.8 MB of output across two
+and four members, with and without a neighbourhood radius, and with a partly
+transparent match colour — because the shipped compositor starts each pixel
+white and multiplies in a *flat* colour wherever the ink predicate is true. It
+never reads the source pixel's intensity. So no member's RGBA survives phase 2,
+and four bytes per pixel per member stop being co-resident with anything.
+
+Measured, at a 0.5 mm tolerance with two members:
+
+| | peak | at | |
+| --- | --- | --- | --- |
+| A4 at 300 dpi | 106 MB | presentation | within |
+| A3 at 300 dpi | **211 MB** | presentation | within |
+| A2 at 300 dpi | 423 MB | presentation | within |
+| A1 at 300 dpi | 847 MB | presentation | **refused** |
+| A1 at 300 dpi, four members | 1125 MB | presentation | **refused** |
+| A0 at 600 dpi | 6779 MB | presentation | **refused** |
+
+The A3 case is the one that had to be re-derived rather than carried over: under
+the shipped model it was 487 MB, just inside the ceiling, and simply adding the
+four mask buffers to that number would have pushed it to about 557 MB and out.
+Under the model that matches the selected architecture it is 211 MB, because the
+two layer canvases and two normalised copies it used to hold are gone. The
+previous round's "within 512 MiB" claim was not wrong about A3; it was resting
+on the wrong pipeline.
+
+A tolerance of zero allocates no dilation buffers at all: 10.15 bytes per pixel
+against 12.15 at 0.5 mm.
+
+### The export
+
+`toDataURL` returns a string, so what is held is base64 text. Measured on real
+composites: 0.025–0.050 bytes per pixel across JPEG and PNG, at two sheet sizes
+and on both a sparse and a dense drawing. The model allows **0.15** — about
+three times the worst measurement — and the gate asserts that no measurement
+exceeds the allowance, so the assumption checks itself.
+
+Which format ships is **H5**. The planner budgets the more expensive of the two
+until that is answered, so no budget claim depends on the open decision.
+
+The 512 MiB itself is a judgement about how much one comparison may claim, not a
+threshold found in the data, and it is recorded as one: **H7**.
 
 ## Ink
 
@@ -588,17 +734,25 @@ visibility, the threshold or the DPI while one runs, or leave the tool entirely.
 
 The M3 annotator settled this with a mount flag plus a generation counter,
 captured at the start and re-checked immediately before anything is published.
-The same shape applies here, with more things that can invalidate a run. That
-*ownership* half is **proposed** for reuse and not measured: no supersession
-behaviour was exercised against a running comparison in this spike.
+The same shape applies here, with more things that can invalidate a run.
 
-The *abandonability* half is now measured, because it is the half the shipped
-loop makes impossible. A banded comparison was run to completion in 31 bands
-over a 1241×1754 sheet, produced the same mask as the direct one, and was
-stopped after 3 of those 31 with no verdict of any kind returned. A generation
-check between bands is where the M3 rule attaches; without bands there is
-nowhere to attach it, which is why the algorithm choice above is a prerequisite
-for cancellation rather than an optimisation of it.
+What is measured, and what is not:
+
+| | |
+| --- | --- |
+| band/chunk structure | **measured** — 18 bands over a 1241×1754 comparison, same mask as the direct form |
+| the attachment point for a cancellation | **measured** — a decision point between every pair of bands |
+| **asynchronous scheduling** | **measured** — a cancellation scheduled from a separate task is observed at band 4 of 18, while the same cancellation against a synchronous driver is never seen at all |
+| generation/ownership, in the prototype | **measured** — a run superseded mid-flight returns `publishable: false` and no result |
+| generation/ownership, against the real UI | **not measured** — no unmount, no document swap, no settings change was exercised |
+| inside a Worker, over `postMessage` | **not measured** — the prototype yields on the main thread |
+
+So: the *scheduling contract* is established and the *integration* is not. The
+production implementation gate must exercise real supersession — a document
+changed, a layer toggled, the threshold moved, the tab left — against a
+comparison that is actually running. Without bands there is nowhere for any of
+that to attach, which is why the algorithm choice above is a prerequisite for
+cancellation rather than an optimisation of it.
 
 ## What this does not promise
 

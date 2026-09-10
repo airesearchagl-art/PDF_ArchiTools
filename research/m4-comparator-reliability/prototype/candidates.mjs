@@ -135,6 +135,64 @@ export function pairChangeMask({ a, b, width, height, radius = 0 }) {
 }
 
 /**
+ * The picture, painted from the masks alone.
+ *
+ * This is what makes the memory model below possible, and it is a property of
+ * the shipped compositor rather than a simplification of it:
+ * `computeMultiPdfComposite` starts each pixel white and multiplies in a *flat*
+ * colour wherever `isInk` is true. It never reads the source pixel's intensity.
+ * So the composite is a function of the ink masks, the dilated masks, the layer
+ * colours, the match colour and the match opacity — and of nothing else.
+ *
+ * The consequence: once every member's mask has been extracted, no member's
+ * RGBA is needed again, by the verdict or by the picture. Four bytes per pixel
+ * per member stop being co-resident with anything.
+ *
+ * Asserted byte-for-byte against the production compositor rather than argued.
+ */
+export function compositeFromMasks({
+    masks, dilated, colors, width, height,
+    matchColor = [0, 0, 0], matchOpacity = 1,
+}) {
+    const out = new Uint8ClampedArray(width * height * 4);
+    const members = masks.length;
+    for (let p = 0; p < width * height; p++) {
+        let r = 255;
+        let g = 255;
+        let b = 255;
+        for (let l = 0; l < members; l++) {
+            if (!masks[l][p]) continue;
+            let isMatch = false;
+            for (let k = 0; k < members; k++) {
+                if (k === l) continue;
+                if (dilated[k][p]) { isMatch = true; break; }
+            }
+            const inkR = isMatch ? matchColor[0] : colors[l][0];
+            const inkG = isMatch ? matchColor[1] : colors[l][1];
+            const inkB = isMatch ? matchColor[2] : colors[l][2];
+            if (isMatch && matchOpacity < 1.0) {
+                const matchedR = r * inkR;
+                const matchedG = g * inkG;
+                const matchedB = b * inkB;
+                r = r * (1 - matchOpacity) + matchedR * matchOpacity;
+                g = g * (1 - matchOpacity) + matchedG * matchOpacity;
+                b = b * (1 - matchOpacity) + matchedB * matchOpacity;
+            } else {
+                r *= inkR;
+                g *= inkG;
+                b *= inkB;
+            }
+        }
+        const i = p * 4;
+        out[i] = r;
+        out[i + 1] = g;
+        out[i + 2] = b;
+        out[i + 3] = 255;
+    }
+    return out;
+}
+
+/**
  * The same mask, computed the way the shipped comparator computes it.
  *
  * Kept only so the separable version can be shown to produce the identical
@@ -260,6 +318,84 @@ export function runCancellable(steps, shouldContinue = () => true) {
     return { status: PLAN.READY_TO_COMPARE, bands, result: step.value };
 }
 
+/**
+ * A real task boundary.
+ *
+ * `setTimeout(…, 0)` rather than a microtask or a `MessageChannel` message,
+ * deliberately. A microtask drains before the task queue is touched, so
+ * awaiting one proves nothing: nothing a user did can have been delivered yet.
+ * Timers are one task source and are served in the order they became due, so a
+ * cancellation scheduled *before* this yield is guaranteed to have run by the
+ * time it resolves. That determinism is the whole point of the probe.
+ */
+export function taskBoundary() {
+    return new Promise((resolve) => { setTimeout(resolve, 0); });
+}
+
+/**
+ * The banded comparison, driven so that a cancellation can actually arrive.
+ *
+ * `runCancellable` above proves a *decision point* exists between bands. It
+ * does not prove that anything can reach that decision point: it never returns
+ * to the event loop, so a click, a settings change or a `postMessage` that
+ * arrives while it runs is still sitting in a queue when it finishes. A Web
+ * Worker has the same problem — one long synchronous message handler that never
+ * yields cannot process the next message.
+ *
+ * The production scheduling contract, and what this implements:
+ *
+ *     process one bounded band
+ *       -> yield to a task boundary        (queued work is delivered here)
+ *       -> read cancellation / generation  (updated by that queued work)
+ *       -> verify ownership
+ *       -> continue, or stop with no result
+ *
+ * `owner` carries the M3 rule: a token captured at the start and re-read
+ * between bands *and* immediately before publishing. A superseded run returns
+ * nothing to publish, which is a different statement from a cancelled one only
+ * in why it stopped.
+ */
+export async function runCancellableAsync(steps, {
+    shouldContinue = () => true,
+    yieldToTask = taskBoundary,
+    owner = null,
+} = {}) {
+    const superseded = () => owner !== null && owner.current() !== owner.token;
+    let bands = 0;
+    let step = steps.next();
+    while (!step.done) {
+        bands += 1;
+        await yieldToTask();
+        if (!shouldContinue(step.value, bands)) {
+            steps.return(undefined);
+            return {
+                status: PLAN.CANCELLED, bands, result: null,
+                reason: 'cancelled', publishable: false,
+            };
+        }
+        if (superseded()) {
+            steps.return(undefined);
+            return {
+                status: PLAN.CANCELLED, bands, result: null,
+                reason: 'superseded', publishable: false,
+            };
+        }
+        step = steps.next();
+    }
+    // Re-checked immediately before publishing, not only during: a run can be
+    // superseded by the last thing that happened while its final band ran.
+    if (superseded()) {
+        return {
+            status: PLAN.CANCELLED, bands, result: null,
+            reason: 'superseded at publish', publishable: false,
+        };
+    }
+    return {
+        status: PLAN.READY_TO_COMPARE, bands, result: step.value,
+        reason: 'completed', publishable: true,
+    };
+}
+
 // ---------------------------------------------------------------------------
 // The verdict
 // ---------------------------------------------------------------------------
@@ -382,6 +518,220 @@ export function checkBudget({ width, height, layers, limit = MAX_COMPARISON_BYTE
         limit,
         withinBudget: estimate.total <= limit,
     };
+}
+
+// ---------------------------------------------------------------------------
+// The working set of the proposed architecture
+// ---------------------------------------------------------------------------
+
+/**
+ * What the export costs to hold, per format.
+ *
+ * `toDataURL` returns a string, so what is held is the base64 text rather than
+ * the encoded bytes. These are **measured** on real composites at two sizes by
+ * the research gate, which also asserts that the measurement stays under the
+ * allowance modelled here — an assumption that checks itself is worth more than
+ * one that is merely stated.
+ *
+ * Which format ships is **H5**. Until that is answered the planner uses the
+ * more expensive of the two, so no budget claim depends on the open decision.
+ */
+export const EXPORT_FORMATS = {
+    jpeg: { label: 'JPEG', dataUrlBytesPerPixel: 0.15 },
+    png: { label: 'PNG', dataUrlBytesPerPixel: 0.15 },
+};
+
+/** The conservative choice while H5 is open. */
+export const BUDGETED_EXPORT_FORMAT = 'png';
+
+/**
+ * The working set, phase by phase, for the architecture that was selected.
+ *
+ * `estimateMemory` above models the **shipped** pipeline, where every member's
+ * RGBA is held at once because the compositor is handed all of them. That is
+ * the right model for the baseline and the wrong one for the proposal, and
+ * keeping the old model while adopting the new architecture would have left the
+ * budget claim resting on buffers the design no longer allocates — and omitting
+ * the ones it does.
+ *
+ * The proposed pipeline is five phases, and buffers do not outlive the phase
+ * that needs them:
+ *
+ *     1  render          one member's canvas, and the pixels read back from it
+ *     2  mask extraction that readback becomes a 1-byte-per-pixel ink mask
+ *     3  dilation        the spatial tolerance, applied to the masks
+ *     4  comparison      the semantic change mask, and the verdict
+ *     5  presentation    the picture, painted from the masks alone
+ *
+ * The load-bearing fact is phase 5: `compositeFromMasks` is asserted to produce
+ * the identical image to the shipped compositor, so no member RGBA survives
+ * phase 2. What is co-resident at the peak is masks, not canvases.
+ *
+ * Members are rendered **serially**, and under `reference-pairs` the pairs are
+ * processed **serially** with the reference mask and its dilation computed once
+ * and reused across every pair. Both are part of the contract, not an
+ * implementation detail: a parallel implementation has a different peak and
+ * would need this recomputed.
+ */
+export function estimatePhaseMemory({
+    width, height, members,
+    contract = MULTI_MEMBER.REFERENCE_PAIRS,
+    radiusPx = 0,
+    exportFormat = BUDGETED_EXPORT_FORMAT,
+    materialiseChangeMask = true,
+}) {
+    const pixels = width * height;
+    const rgba = pixels * 4;
+    const mask = pixels;
+    const dilating = radiusPx > 0;
+    // Two Int32 running-sum arrays, one per axis. Small, and counted anyway.
+    const dilationIndex = dilating ? (width + 1) * 4 + (height + 1) * 4 : 0;
+    const format = EXPORT_FORMATS[exportFormat] ?? EXPORT_FORMATS[BUDGETED_EXPORT_FORMAT];
+    const dataUrl = Math.ceil(pixels * format.dataUrlBytesPerPixel);
+
+    const phases = {
+        // The canvas, the pixels read back from it, and the masks of the
+        // members already done.
+        render: {
+            live: {
+                memberCanvas: rgba,
+                pixelReadback: rgba,
+                masksAlreadyExtracted: mask * Math.max(0, members - 1),
+            },
+        },
+        // The canvas is released; the readback is still live while it is read.
+        'mask-extraction': {
+            live: { pixelReadback: rgba, masks: mask * members },
+        },
+        // The reference's dilation is computed once and reused, so only the
+        // other member's dilation and one scratch band are transient.
+        dilation: {
+            live: {
+                masks: mask * members,
+                dilatedReference: dilating ? mask : 0,
+                dilatedOther: dilating ? mask : 0,
+                dilationScratch: dilating ? mask : 0,
+                dilationIndex,
+            },
+        },
+        comparison: {
+            live: {
+                masks: mask * members,
+                dilated: dilating ? mask * 2 : 0,
+                changeMask: materialiseChangeMask ? mask : 0,
+            },
+        },
+        // The picture needs every member's mask and every member's dilation,
+        // because a member is painted matched or unmatched against all others.
+        presentation: {
+            live: {
+                masks: mask * members,
+                dilated: dilating ? mask * members : 0,
+                composite: rgba,
+                encoderScratch: rgba,
+                dataUrl,
+            },
+        },
+    };
+
+    let peakPhase = null;
+    let peakWorkingSet = 0;
+    for (const [name, phase] of Object.entries(phases)) {
+        phase.total = Object.values(phase.live).reduce((n, v) => n + v, 0);
+        if (phase.total > peakWorkingSet) {
+            peakWorkingSet = phase.total;
+            peakPhase = name;
+        }
+    }
+
+    return {
+        pixels,
+        members,
+        contract,
+        radiusPx,
+        exportFormat,
+        memberProcessing: 'serial',
+        pairProcessing: contract === MULTI_MEMBER.REFERENCE_PAIRS ? 'serial' : 'single',
+        referenceMaskReused: contract === MULTI_MEMBER.REFERENCE_PAIRS,
+        phases,
+        peakPhase,
+        peakWorkingSet,
+        bytesPerPixel: peakWorkingSet / pixels,
+    };
+}
+
+/**
+ * The peak, checked before the expensive buffers are allocated.
+ *
+ * Phase 1 is where the first 4-bytes-per-pixel canvas appears, so the check has
+ * to happen before it — which is possible precisely because every term above is
+ * arithmetic on the page size, the member count and the tolerance.
+ */
+export function checkPhaseBudget(job, { limit = MAX_COMPARISON_BYTES } = {}) {
+    const estimate = estimatePhaseMemory(job);
+    const withinBudget = estimate.peakWorkingSet <= limit;
+    return {
+        ...estimate,
+        limit,
+        withinBudget,
+        refusal: withinBudget ? null : {
+            status: PLAN.OVER_MEMORY_BUDGET,
+            reason: `${(estimate.peakWorkingSet / 1e6).toFixed(0)} MB at the `
+                + `${estimate.peakPhase} phase, against a ceiling of `
+                + `${(limit / 1e6).toFixed(0)} MB`,
+        },
+    };
+}
+
+// ---------------------------------------------------------------------------
+// The spatial tolerance, as a product contract
+// ---------------------------------------------------------------------------
+
+/**
+ * How far apart two marks may be and still be the same mark.
+ *
+ * Removing the ratio floor did not remove the way a comparison can be made to
+ * say MATCH about a drawing that changed. It moved it here. Measured on the
+ * dimension-string fixture, changed pixels for 1200 against 1300:
+ *
+ *              0    0.05  0.1   0.15  0.2   0.25  0.3   0.4   0.5  mm
+ *     150 dpi  51   51    14    14    14    14     0     0     0
+ *     300 dpi  186  96    96    49    49    18     1     0     0
+ *
+ * So this is not a rendering detail with a unit attached. It is a setting that
+ * can turn a changed dimension into an unchanged one, and it needs a product
+ * contract rather than a default someone picked.
+ *
+ * **Default zero.** A comparison a user has not configured must report every
+ * difference it can see. A non-zero tolerance is an explicit opt-in, and the
+ * words offered with it must not say "ignores small shifts" — measured, it also
+ * makes a changed digit match.
+ *
+ * Everything here is the research recommendation for **H6**, not a decision.
+ */
+export const SPATIAL_TOLERANCE_POLICY = {
+    unit: 'mm',
+    default: 0,
+    minimum: 0,
+    /**
+     * 0.25 mm: the largest setting in the corpus at which the smallest measured
+     * true change is still reported, at both 150 and 300 dpi. One step past it
+     * the changed digit is already invisible at 150 dpi. A ceiling above that
+     * would be offering a setting whose measured effect is to hide revisions.
+     */
+    maximum: 0.25,
+    step: 0.05,
+    zeroAlwaysAvailable: true,
+    requiresExplicitOptIn: true,
+    meaningShownToTheUser:
+        '同じ位置とみなす距離（mm）。0 は完全一致のみを一致とみなします。',
+    disclosureWhenNonZero:
+        '位置ずれだけでなく、寸法値や記号の変更も一致と判定される場合があります。',
+};
+
+/** True when the comparison is running at the contract's default. */
+export function isDefaultSpatialTolerance(millimetres) {
+    return millimetres === SPATIAL_TOLERANCE_POLICY.default;
 }
 
 // ---------------------------------------------------------------------------

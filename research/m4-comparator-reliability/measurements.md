@@ -312,19 +312,31 @@ pixels, as do the identical, rotation-only and crop-origin controls elsewhere in
 this document.
 
 The alternative to a ratio floor is the physical tolerance applied to the mask,
-and it is measured on the same pairs rather than assumed to be free:
+and it is measured on the same pairs rather than assumed to be free. Changed
+pixels, swept finely enough to find where a real change stops being visible:
 
-| tolerance | radius at 150 dpi | control | one digit changed |
-| --- | --- | --- | --- |
-| 0 mm | 0 px | 0 px, MATCH | 51 px, **CHANGE** |
-| 0.1 mm | 1 px | 0 px, MATCH | 14 px, **CHANGE** |
-| 0.25 mm | 1 px | 0 px, MATCH | 14 px, **CHANGE** |
-| 0.5 mm | 3 px | 0 px, MATCH | **0 px, MATCH** |
+| tolerance | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| *control, 150 dpi* | *0* | *0* | *0* | *0* | *0* | *0* | *0* | *0* | *0* |
+| one digit changed, 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** |
+| one digit changed, 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** |
+| a 4 mm revision triangle, 150 dpi | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 |
 
-The control needs no tolerance at any setting, and a half-millimetre erases the
-changed digit outright. That trade belongs to the user in millimetres, which is
-a unit a drawing office already calibrates in; it does not belong to a share of
-the page chosen by a developer.
+Three things follow, and all three belong in the H6 policy rather than in a
+footnote:
+
+- The control needs no tolerance **at any setting** — a redraw of the same sheet
+  differs by 0 pixels throughout. So the tolerance is not there to absorb render
+  variance; there is none to absorb.
+- A changed dimension disappears at **0.3 mm** at 150 dpi. A 4 mm revision
+  triangle survives the whole range. The setting does not erode changes evenly —
+  it erodes the small ones, which are the ones hardest to catch by eye.
+- The same millimetres are not the same radius at every resolution: 0.05 mm
+  rounds to 0 px at 150 dpi and 1 px at 300. Below about 0.1 mm the setting is
+  finer than the render.
+
+That trade belongs to the user in millimetres, under a stated policy — not to a
+share of the page chosen by a developer, and not to a unit with no bounds.
 
 ## 4g. The same comparison, painted three ways
 
@@ -503,6 +515,80 @@ research harness never attempted an A0 at 600 dpi.
 Two layers against four at the same size: 1951 MB against 3066 MB — the layer
 count matters, which is why a per-canvas bound understates it.
 
+## 10a. The working set of the proposed architecture
+
+Section 10 measures the **shipped** pipeline, which hands every layer's RGBA to
+the compositor at once. The proposed pipeline does not, so it needs its own
+model — and the previous round's "within 512 MiB" claim was taken against the
+wrong one.
+
+### The picture is a function of the masks
+
+The shipped compositor starts each pixel white and multiplies in a *flat* colour
+wherever the ink predicate is true; it never reads the source pixel's intensity.
+So the composite can be painted from the ink masks and the dilated masks alone.
+Asserted rather than argued:
+
+| | members | radius | match opacity | bytes compared | differing |
+| --- | --- | --- | --- | --- | --- |
+| two members, exact | 2 | 0 | 1 | 8,706,856 | **0** |
+| two members, 0.5 mm | 2 | 3 | 1 | 8,706,856 | **0** |
+| two members, faint match colour | 2 | 0 | 0.25 | 8,706,856 | **0** |
+| four members, 0.25 mm | 4 | 1 | 1 | 8,706,856 | **0** |
+
+**34.8 MB of output, byte-identical.** The consequence is the whole memory
+model: no member's RGBA survives the phase that extracted its mask.
+
+### The export, measured
+
+`toDataURL` returns a string, so what is held is base64 text.
+
+| | pixels | JPEG | PNG |
+| --- | --- | --- | --- |
+| A4 150 dpi, changed | 2.2 Mpx | 0.036 B/px | 0.031 B/px |
+| A4 300 dpi, changed | 8.7 Mpx | 0.025 B/px | 0.028 B/px |
+| A4 150 dpi, dense | 2.2 Mpx | **0.050 B/px** | 0.032 B/px |
+| A3 150 dpi, matched | 4.4 Mpx | 0.027 B/px | 0.029 B/px |
+
+The model allows **0.15 B/px**, about three times the worst measurement, and the
+gate asserts that no measurement exceeds the allowance. The more expensive of
+the two formats is budgeted while **H5** is open.
+
+### The peak, phase by phase
+
+`peakWorkingSet = max over phases`, not a sum. Members are rendered serially;
+under reference-pairs the pairs are processed serially with the reference mask
+and its dilation computed once and reused.
+
+A3 at 300 dpi, two members, 0.5 mm — 17.4 Mpx:
+
+| phase | live |
+| --- | --- |
+| render | 157 MB |
+| mask extraction | 104 MB |
+| dilation | 87 MB |
+| comparison | 87 MB |
+| **presentation** | **211 MB** |
+
+| at 0.5 mm, two members unless stated | B/px | peak | |
+| --- | --- | --- | --- |
+| A4 300 dpi, 0 mm | 10.15 | 88 MB | within |
+| A4 300 dpi | 12.15 | 106 MB | within |
+| A3 300 dpi | 12.15 | **211 MB** | within |
+| A2 300 dpi | 12.15 | 423 MB | within |
+| A1 300 dpi | 12.15 | 847 MB | **refused** |
+| A1 300 dpi, four members | 16.15 | 1125 MB | **refused** |
+| A0 600 dpi | 12.15 | 6779 MB | **refused** |
+
+The A3 row is the one that had to be re-derived. Under the shipped model it is
+487 MB, just inside the 537 MB ceiling; adding the four mask buffers to *that*
+figure would have put it at about 557 MB and outside. Under the model that
+matches the selected architecture it is 211 MB, because the two layer canvases
+and two normalised copies are no longer held. The old claim was not wrong about
+A3 — it was resting on the wrong pipeline.
+
+A tolerance of zero allocates no dilation buffers: 10.15 B/px against 12.15.
+
 ## 10b. The work budget
 
 A second ceiling, and a separate one: an A4 at 300 dpi is 244 MB of working set
@@ -586,17 +672,32 @@ The dilation is flat in the radius; the scan is not. And it is exact rather than
 approximate — the change masks are identical in every row of both tables, which
 is what makes it a substitution rather than a different comparison.
 
-Banded execution, on the same pair at 0.5 mm:
+Banded execution, on the same pair at 0.5 mm, 512-row bands:
 
-| | |
-| --- | --- |
-| bands over a 1241×1754 comparison | **31** |
-| banded result against the direct one | identical |
-| cancelled after | **3 of 31 bands** |
-| verdict returned when cancelled | **none** |
+| | | |
+| --- | --- | --- |
+| uncancelled, banded, asynchronous | `READY_TO_COMPARE` in **18 bands** | 41,116 change pixels — the same as the direct computation |
+| **synchronous driver**, cancellation scheduled from a timer | ran to completion in **23 ms** | the timer never fired; the cancellation was **never observed** and a verdict was produced |
+| **asynchronous driver**, the same cancellation | `CANCELLED` at **band 4 of 18**, 26 ms | `publishable: false`, `result: null` |
+| superseded by a newer generation mid-flight | `CANCELLED` | `publishable: false`, `result: null` |
+
+The second row is the point of the section. Bands give a cancellation somewhere
+to be *noticed*; they do not give it a way to *arrive*. A driver that never
+returns to the event loop leaves the timer — or the click, or the `postMessage`
+— in a queue until the comparison has already finished and published.
+
+The yield is `setTimeout(…, 0)` rather than a microtask, deliberately: a
+microtask drains before the task queue is touched, so awaiting one would prove
+nothing. Timers are one task source served in order, so a cancellation scheduled
+before the yield has certainly run by the time it resolves.
 
 A cancelled comparison returns `CANCELLED` and nothing else. Half a change mask
 is not a smaller change; it is a different drawing.
+
+What this does **not** establish: nothing here ran inside a Web Worker over
+`postMessage`, and no real UI supersession — an unmount, a document swap, a
+threshold moved — was exercised. Those belong to the production implementation
+gate.
 
 ## 11. The same input twice
 
@@ -608,7 +709,7 @@ External HTTP(S) requests from the research harness: **0**. Page errors: **0**.
 
 ## 13. The gate
 
-`scripts/m4-comparator-research-gate.mjs` re-asserts **135 claims, 54 of them
+`scripts/m4-comparator-research-gate.mjs` re-asserts **158 claims, 63 of them
 negative probes**. Several are unusual: the shipped comparator is asserted to
 report changes on drawings that are identical. Those are the findings, and a gate
 in which the baseline passed everything would prove nothing about why this spike

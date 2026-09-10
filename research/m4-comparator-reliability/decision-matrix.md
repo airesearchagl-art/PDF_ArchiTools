@@ -219,6 +219,8 @@ threshold, swallow a render failure, or recompute what a change is.
 | a typed `OVER_WORK_BUDGET` refusal that names the numbers | **ADOPT** |
 | separable dilation, so the bound does not carry `(2r+1)²` | **ADOPT** as the comparison algorithm |
 | banded execution with a generation check between bands | **ADOPT** alongside it |
+| a synchronous driver over those bands | **REJECT** — measured: the decision point exists and nothing can reach it |
+| yield to a task boundary between bands, then read cancellation and ownership | **ADOPT** as the scheduling contract |
 
 Measured, per ink pixel at radius 3: **0.59 µs** when the drawings match against
 **1.56 µs** when they do not. Every earlier cost figure was taken on matching
@@ -250,12 +252,20 @@ long comparison is not abandonable as written. Both halves of the replacement
 are now prototyped and measured: the separable dilation produces the *identical*
 change mask at every radius tried while removing `(2r+1)²` from the bound
 (23,694,575,520 units against 557,519,424 for the same A1), and banded execution
-ran a 1241×1754 comparison in 31 bands and was stopped after 3 of them with no
-verdict produced. It is not free — on a sparse drawing the nested scan is faster
-(4 ms against 23 ms) because it exits on the first ink it finds — but its cost is
-a property of the sheet rather than of the drawing, which is what a ceiling
-checked before rendering needs. On ink that matches nothing, the scan goes
-25 ms → 65 ms as the box widens from 9 to 49 while the dilation stays at 28 ms.
+ran a 1241×1754 comparison in 18 bands with the same mask as the direct form. It
+is not free — on a sparse drawing the nested scan is faster (4 ms against 23 ms)
+because it exits on the first ink it finds — but its cost is a property of the
+sheet rather than of the drawing, which is what a ceiling checked before
+rendering needs. On ink that matches nothing, the scan goes 25 ms → 65 ms as the
+box widens from 9 to 49 while the dilation stays at 28 ms.
+
+**Bands are only half of it.** A decision point between bands is worth nothing
+if nothing can reach it. Given the *same* cancellation, scheduled from a timer:
+the synchronous driver ran to completion in 23 ms, never saw it, and published a
+verdict; the driver that yields to a task boundary between bands stopped at band
+4 of 18 with `publishable: false` and no result. A run superseded by a newer
+generation does the same. That is the scheduling contract, and it is why "banded"
+on its own was not enough to claim abandonability.
 
 ## 5b. Candidate C, and what it would take to build it
 
@@ -305,9 +315,36 @@ evidence, not something to fold into this one.
 | pixel radius (today) | **REJECT** — 0.339 mm at 150 dpi, 0.085 mm at 600 |
 | millimetres, converted per render | **ADOPT** |
 | PDF points | acceptable; mm is the drawing office's unit |
+| a unit, and no further policy | **REJECT** — the setting can hide a revision, so it needs one |
 
-Measured: 0.5 mm converts to 1 / 3 / 6 / 12 px at 72 / 150 / 300 / 600 dpi. The
-setting stays the same and the comparison means the same thing.
+Measured: 0.5 mm converts to 1 / 3 / 6 / 12 px at 72 / 150 / 300 / 600 dpi.
+
+The unit is the smaller half of this decision. A spatial tolerance suppresses
+true semantic changes, measured on a dimension string reading 1200 against one
+reading 1300:
+
+| | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** |
+| 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** |
+
+So **H6 is a Spatial Tolerance Policy**, not a choice of unit:
+
+| | proposed | |
+| --- | --- | --- |
+| unit | mm | **ADOPT** |
+| default | **0 mm** | **ADOPT** — an unconfigured comparison reports every difference it can see |
+| minimum | 0 mm, always available | **ADOPT** |
+| maximum | **0.25 mm** | **ADOPT** — the largest setting at which the smallest measured true change is still reported, at 150 and 300 dpi |
+| step | 0.05 mm | **ADOPT**, with the caveat below |
+| non-zero tolerance | explicit opt-in | **ADOPT** |
+| disclosure when non-zero | required | **ADOPT** — it must not say "ignores small shifts"; measured, it also makes a changed digit match |
+
+Two things the policy has to carry rather than leave implied. Millimetres round
+to whole pixels, so 0.05 mm is 0 px at 150 dpi and 1 px at 300 — below about
+0.1 mm the setting is finer than the render. And the implementation gate carries
+one assertion from all of this: **at the default settings, 1200 → 1300 reports
+CHANGE.**
 
 ## 6b. What MATCH is allowed to rest on
 
@@ -316,8 +353,8 @@ setting stays the same and the comparison means the same thing.
 | a change count taken from the painted composite | **REJECT** — makes the verdict a property of the palette |
 | a canonical ink mask plus a physical spatial tolerance | **ADOPT** — the verdict is computed before anything is painted |
 | a 0.5% global ratio floor | **REJECT** — unmeasured, and measured to hide real revisions |
-| no ratio floor at all | **ADOPT** |
-| a ratio floor with a corpus behind it | **DEFER** to the Human Gate as **H10** |
+| no ratio floor at all | **ADOPT**, and **fixed at zero for the M4 MVP** rather than left as a setting |
+| a ratio floor as a configurable option | **REJECT for M4** — there is no control it is needed for and six revisions it hides; the spatial tolerance under H6 is the setting that does this job, in a unit a user can reason about |
 
 The floor introduced in the previous round was justified on the grounds that a
 zero floor would make MATCH unreachable. The corpus does not support that: every
@@ -363,24 +400,66 @@ Never a silent downgrade. Measured: A0 at 300 dpi and at 600 dpi both deliver
 
 | option | verdict |
 | --- | --- |
-| reuse the Annotator's 8 Mpx | **REJECT** — that bounds one fragment; this holds every layer at once |
+| reuse the Annotator's 8 Mpx | **REJECT** — that bounds one fragment; this holds several full-page buffers |
 | bound one canvas | **REJECT** — understates a 2-layer comparison ~5× |
 | bound the whole working set | **ADOPT** |
+| model the *shipped* pipeline's buffers | **REJECT for the proposal** — right for the baseline, wrong for the architecture that was selected |
+| model the selected pipeline phase by phase, and bound `max(phase)` | **ADOPT** |
 
-Proposed: **512 MiB** (536,870,912 bytes), checked before allocation. Measured against it:
+Proposed: **512 MiB** (536,870,912 bytes), checked before the first canvas is
+allocated.
 
-| | pixels | working set | |
-| --- | --- | --- | --- |
-| A4 300 dpi, 2 layers | 8.7 Mpx | 244 MB | within |
-| A3 300 dpi, 2 layers | 17.4 Mpx | 487 MB | within |
-| A1 300 dpi, 2 layers | 69.7 Mpx | 1951 MB | **over** |
-| A1 300 dpi, 4 layers | 69.7 Mpx | 3066 MB | **over** |
-| A0 600 dpi, 2 layers | 558 Mpx | 15623 MB | **over** |
+The shipped pipeline holds every layer's RGBA at once, which is what the
+baseline table in `measurements.md` §10 measures: A3 at 300 dpi with two layers
+is 487 MB, A1 at 300 dpi is 1951 MB, A0 at 600 dpi is 15.6 GB.
 
-The number is a judgement about how much memory one comparison may claim, not a
-threshold discovered in the data, and it is written down as one. What the data
-does establish is the *shape*: the cost is layers × pixels × 4 bytes, several
-times over.
+The proposed pipeline does not, and modelling it as though it did would have
+left the claim resting on buffers it no longer allocates while omitting the
+masks it does. Five phases, `peak = max(phase)`:
+
+| phase | live |
+| --- | --- |
+| 1 render | one member's canvas (4/px) + its readback (4/px) + masks already extracted (1/px each) |
+| 2 mask extraction | the readback (4/px) + every mask (1/px each) |
+| 3 dilation | masks + reference dilation + other dilation + one scratch band + two indices |
+| 4 comparison | masks + two dilations + the change mask |
+| 5 presentation | masks + every dilation + composite (4/px) + encoder bitmap (4/px) + data URL |
+
+Members serial; under reference-pairs, pairs serial with the reference mask and
+its dilation computed once and reused. Both are part of the contract — a
+parallel implementation has a different peak.
+
+Phase 5 is load-bearing and is asserted rather than assumed: `compositeFromMasks`
+is **byte-identical** to the shipped compositor across 34.8 MB of output, at two
+and four members, with and without a radius, and with a partly transparent match
+colour. So no member's RGBA survives phase 2.
+
+Measured at 0.5 mm with two members:
+
+| | peak | |
+| --- | --- | --- |
+| A4 300 dpi | 106 MB | within |
+| A3 300 dpi | **211 MB** | within |
+| A2 300 dpi | 423 MB | within |
+| A1 300 dpi | 847 MB | **refused** |
+| A1 300 dpi, four members | 1125 MB | **refused** |
+| A0 600 dpi | 6779 MB | **refused** |
+
+A3 is the case that had to be re-derived. Under the shipped model it was 487 MB,
+just inside the ceiling; adding the four mask buffers to that figure would have
+put it at about 557 MB and outside it. Under the model that matches the selected
+architecture it is 211 MB, because the layer canvases and normalised copies are
+gone. The old claim was not wrong about A3 — it was resting on the wrong
+pipeline.
+
+The export is measured, not assumed: 0.025–0.050 bytes per pixel of data-URL
+text across JPEG and PNG, two sheet sizes, sparse and dense. The model allows
+0.15 and the gate asserts no measurement exceeds it. The more expensive format
+is budgeted while **H5** is open, so no budget claim depends on that decision.
+
+The 512 MiB itself is a judgement about how much memory one comparison may
+claim, not a threshold discovered in the data, and it is written down as one:
+**H7**.
 
 ## 9. Export format
 
