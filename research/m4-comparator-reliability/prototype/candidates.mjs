@@ -525,24 +525,58 @@ export function checkBudget({ width, height, layers, limit = MAX_COMPARISON_BYTE
 // ---------------------------------------------------------------------------
 
 /**
- * What the export costs to hold, per format.
+ * A **content-independent** upper bound on the encoded image.
  *
- * `toDataURL` returns a string, so what is held is the base64 text rather than
- * the encoded bytes. These are **measured** on real composites at two sizes by
- * the research gate, which also asserts that the measurement stays under the
- * allowance modelled here — an assumption that checks itself is worth more than
- * one that is merely stated.
+ * The previous version of this allowed 0.15 bytes per pixel, derived from four
+ * measured composites. That is a compression *ratio*, and a fail-closed memory
+ * gate may not rest on one: the drawings in the corpus compress well, a scanned
+ * or hatched sheet need not, and the gate would be admitting a job it cannot
+ * hold on the strength of how the fixtures happened to encode. A bound has to
+ * hold for a document nobody has seen.
  *
- * Which format ships is **H5**. Until that is answered the planner uses the
- * more expensive of the two, so no budget claim depends on the open decision.
+ * So it is derived rather than measured, from PNG's worst case:
+ *
+ *   - the raster is one filter byte per row plus RGBA per pixel;
+ *   - DEFLATE's worst case is a *stored* block — the payload unchanged, plus
+ *     5 bytes of block header per 65,535 bytes;
+ *   - zlib adds a 2-byte header and a 4-byte Adler-32;
+ *   - the PNG container adds a signature, IHDR, IDAT framing and IEND.
+ *
+ * That is an upper bound, not an estimate: no image of these dimensions can
+ * encode larger. JPEG has no comparable provable worst case, which is a reason
+ * to prefer PNG for M4 and is fed to **H5** as such; if JPEG is chosen, this
+ * allowance has to be re-derived for it rather than assumed to carry over.
+ *
+ * The measured ratios stay in the evidence as **performance** evidence. They
+ * are not the safety proof.
  */
-export const EXPORT_FORMATS = {
-    jpeg: { label: 'JPEG', dataUrlBytesPerPixel: 0.15 },
-    png: { label: 'PNG', dataUrlBytesPerPixel: 0.15 },
+export function encodedImageUpperBound({ width, height }) {
+    const raster = height * (1 + width * 4);
+    const deflateStored = raster + 5 * Math.ceil(raster / 65535) + 6;
+    // Signature, IHDR, IEND and IDAT framing, generously.
+    return deflateStored + 4096;
+}
+
+/**
+ * How the encoded bytes leave the canvas, and what that costs to hold.
+ *
+ * `toDataURL` returns a **string**: the encoded bytes, then base64 at 4/3 the
+ * size, then whatever the engine charges per character — and the encoded buffer
+ * is still live while the string is built. `toBlob` hands back the bytes and
+ * nothing else.
+ *
+ * At an upper bound of about four bytes per pixel for the encoded output, the
+ * data-URL path costs roughly two and a half times what the blob path does, for
+ * an artefact that is then usually turned straight back into bytes. The
+ * recommendation is **`toBlob`**, and the budget is taken on it.
+ */
+export const EXPORT_STRATEGIES = {
+    blob: { label: 'canvas.toBlob()', base64: false, bytesPerCharacter: 0 },
+    dataUrl: { label: 'canvas.toDataURL()', base64: true, bytesPerCharacter: 2 },
 };
 
-/** The conservative choice while H5 is open. */
-export const BUDGETED_EXPORT_FORMAT = 'png';
+/** The recommended path, and the one the budget is taken on. */
+export const BUDGETED_EXPORT_STRATEGY = 'blob';
 
 /**
  * The working set, phase by phase, for the architecture that was selected.
@@ -577,7 +611,7 @@ export function estimatePhaseMemory({
     width, height, members,
     contract = MULTI_MEMBER.REFERENCE_PAIRS,
     radiusPx = 0,
-    exportFormat = BUDGETED_EXPORT_FORMAT,
+    exportStrategy = BUDGETED_EXPORT_STRATEGY,
     materialiseChangeMask = true,
 }) {
     const pixels = width * height;
@@ -586,8 +620,13 @@ export function estimatePhaseMemory({
     const dilating = radiusPx > 0;
     // Two Int32 running-sum arrays, one per axis. Small, and counted anyway.
     const dilationIndex = dilating ? (width + 1) * 4 + (height + 1) * 4 : 0;
-    const format = EXPORT_FORMATS[exportFormat] ?? EXPORT_FORMATS[BUDGETED_EXPORT_FORMAT];
-    const dataUrl = Math.ceil(pixels * format.dataUrlBytesPerPixel);
+    const strategy = EXPORT_STRATEGIES[exportStrategy]
+        ?? EXPORT_STRATEGIES[BUDGETED_EXPORT_STRATEGY];
+    const encodedOutput = encodedImageUpperBound({ width, height });
+    // The encoded bytes are still live while the string is built from them.
+    const encodedString = strategy.base64
+        ? Math.ceil(encodedOutput * 4 / 3) * strategy.bytesPerCharacter
+        : 0;
 
     const phases = {
         // The canvas, the pixels read back from it, and the masks of the
@@ -629,7 +668,8 @@ export function estimatePhaseMemory({
                 dilated: dilating ? mask * members : 0,
                 composite: rgba,
                 encoderScratch: rgba,
-                dataUrl,
+                encodedOutput,
+                encodedString,
             },
         },
     };
@@ -649,7 +689,8 @@ export function estimatePhaseMemory({
         members,
         contract,
         radiusPx,
-        exportFormat,
+        exportStrategy,
+        encodedOutputIsUpperBound: true,
         memberProcessing: 'serial',
         pairProcessing: contract === MULTI_MEMBER.REFERENCE_PAIRS ? 'serial' : 'single',
         referenceMaskReused: contract === MULTI_MEMBER.REFERENCE_PAIRS,
@@ -692,15 +733,24 @@ export function checkPhaseBudget(job, { limit = MAX_COMPARISON_BYTES } = {}) {
  *
  * Removing the ratio floor did not remove the way a comparison can be made to
  * say MATCH about a drawing that changed. It moved it here. Measured on the
- * dimension-string fixture, changed pixels for 1200 against 1300:
+ * dimension-string fixture, changed pixels for 1200 against 1300, at every
+ * resolution the Comparator offers:
  *
  *              0    0.05  0.1   0.15  0.2   0.25  0.3   0.4   0.5  mm
- *     150 dpi  51   51    14    14    14    14     0     0     0
- *     300 dpi  186  96    96    49    49    18     1     0     0
+ *      72 dpi   10   10    10    10     0     0     0     0     0
+ *     150 dpi   51   51    14    14    14    14     0     0     0
+ *     300 dpi  186   96    96    49    49    18     1     0     0
+ *     450 dpi  401  248   166   113    73    73    38     0     0
  *
  * So this is not a rendering detail with a unit attached. It is a setting that
  * can turn a changed dimension into an unchanged one, and it needs a product
  * contract rather than a default someone picked.
+ *
+ * **72 dpi is the resolution that sets the ceiling**, and it would have been
+ * missed by sweeping only the middle of the range: a millimetre is fewer pixels
+ * there, so the same setting is a coarser search *and* the mark it is searching
+ * for is smaller. The change survives to 0.15 mm at 72 dpi, 0.25 mm at 150 and
+ * 0.3 mm at 300 and 450.
  *
  * **Default zero.** A comparison a user has not configured must report every
  * difference it can see. A non-zero tolerance is an explicit opt-in, and the
@@ -714,19 +764,34 @@ export const SPATIAL_TOLERANCE_POLICY = {
     default: 0,
     minimum: 0,
     /**
-     * 0.25 mm: the largest setting in the corpus at which the smallest measured
-     * true change is still reported, at both 150 and 300 dpi. One step past it
-     * the changed digit is already invisible at 150 dpi. A ceiling above that
-     * would be offering a setting whose measured effect is to hide revisions.
+     * 0.15 mm: the **minimum** safe bound across every supported resolution,
+     * not the average and not the one the middle of the range would allow.
+     * 72 dpi loses the changed digit at 0.2 mm, so a ceiling of 0.25 mm — which
+     * the 150/300 dpi sweep alone would have justified — would have shipped a
+     * setting that silently hides a revision at the resolution most likely to
+     * be left on for a quick check.
+     *
+     * The alternative was a DPI-dependent ceiling. Rejected: it would mean the
+     * same number in the same box meaning different things depending on a
+     * separate setting, which is the defect this whole spike is about.
      */
-    maximum: 0.25,
+    maximum: 0.15,
     step: 0.05,
     zeroAlwaysAvailable: true,
     requiresExplicitOptIn: true,
+    /** The resolutions the shipped Comparator offers. The bound holds at all of them. */
+    supportedDpi: [72, 150, 300, 450],
     meaningShownToTheUser:
         '同じ位置とみなす距離（mm）。0 は完全一致のみを一致とみなします。',
+    /**
+     * This must not say "ignores small shifts". Measured, a non-zero tolerance
+     * also makes a changed digit, a swapped symbol and an altered shape match —
+     * it is not a positional-noise filter, and describing it as one would let a
+     * user turn it on expecting something it does not do.
+     */
     disclosureWhenNonZero:
-        '位置ずれだけでなく、寸法値や記号の変更も一致と判定される場合があります。',
+        '位置ずれだけでなく、寸法値・文字・記号・形状の変更も'
+        + '「一致」と判定される場合があります。',
 };
 
 /** True when the comparison is running at the contract's default. */
@@ -874,10 +939,17 @@ export function estimateComparisonWork({
 }
 
 /**
- * The work ceiling.
+ * The work ceiling, for **the whole job**.
  *
  * **12,000,000,000 work units — a recommendation requiring human approval, not
  * a measured threshold.** It is user-visible, because it refuses comparisons.
+ *
+ * One ceiling, applied to the total, rather than one per page. A per-page
+ * ceiling bounds nothing a user actually asks for: an export of a hundred pages
+ * that each pass comfortably is a hundred times the work, and the "about 55
+ * seconds" below would be about an hour and a half. Applied to the job, the
+ * number means what it says — and a single page is bounded by it as a
+ * consequence, since one page is a job of one.
  *
  * Where it comes from: the highest measured cost per work unit on the corpus is
  * the A4 300 dpi radius-0 pair, at 158 ms for 34,789,440 units — 4.5e-6 ms per
@@ -930,6 +1002,102 @@ export function checkComparisonWork(job, { limit = MAX_COMPARISON_WORK_UNITS } =
             status: PLAN.OVER_WORK_BUDGET,
             reason: `${estimate.units.toLocaleString('en-US')} work units against a `
                 + `ceiling of ${limit.toLocaleString('en-US')}`,
+        },
+    };
+}
+
+/**
+ * What the whole operation costs, not what one page costs.
+ *
+ * Memory is a **peak**: pages are rendered one after another, so a two-hundred
+ * page export never holds more than one page's buffers and the page-level model
+ * is the right one. Work is **cumulative**: two hundred pages that each pass the
+ * ceiling comfortably are two hundred times the work, and a ceiling checked per
+ * page would wave that through. The export and the change report both run over
+ * ranges, so this is not a hypothetical.
+ *
+ * Pages that cannot be compared — a page one document does not have, a page
+ * that failed to render, a page whose geometry was refused — are **kept in the
+ * plan** with zero work and the reason recorded. Dropping them from the
+ * estimate would make the job look cheaper for the same reason the shipped
+ * comparator makes a missing page look like agreement: by not mentioning it.
+ *
+ * Only pages that were actually requested are costed. An export of pages 3-5
+ * pays for three pages.
+ */
+export function estimateJobWork({
+    pages,
+    algorithm = COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
+    limit = MAX_COMPARISON_WORK_UNITS,
+}) {
+    const costed = [];
+    let jobWorkUnits = 0;
+    let representable = true;
+
+    for (const page of pages) {
+        if (page.comparable === false) {
+            costed.push({
+                label: page.label,
+                comparable: false,
+                reason: page.reason ?? 'not comparable',
+                units: 0,
+            });
+            continue;
+        }
+        const estimate = estimateComparisonWork({ ...page, algorithm });
+        costed.push({
+            label: page.label,
+            comparable: true,
+            reason: null,
+            units: estimate.units,
+            groups: estimate.groups,
+            pixels: estimate.pixels,
+            representable: estimate.representable,
+            withinPageCeiling: estimate.representable && estimate.units <= limit,
+        });
+        if (!estimate.representable) { representable = false; continue; }
+        jobWorkUnits = safeSum(jobWorkUnits, estimate.units);
+        if (jobWorkUnits === null) { representable = false; jobWorkUnits = 0; }
+    }
+
+    const comparablePages = costed.filter((p) => p.comparable).length;
+    const skippedPages = costed.filter((p) => !p.comparable);
+    if (!representable) {
+        return {
+            pages: costed,
+            comparablePages,
+            skippedPages,
+            jobWorkUnits: null,
+            representable: false,
+            limit,
+            withinBudget: false,
+            refusal: {
+                status: PLAN.OVER_WORK_BUDGET,
+                reason: 'the work this job would do is not representable',
+            },
+        };
+    }
+
+    const withinBudget = jobWorkUnits <= limit;
+    // Which page pushed it over, when no single page did.
+    const overOnItsOwn = costed.find((p) => p.comparable && p.withinPageCeiling === false);
+    return {
+        pages: costed,
+        comparablePages,
+        skippedPages,
+        jobWorkUnits,
+        representable: true,
+        limit,
+        withinBudget,
+        refusal: withinBudget ? null : {
+            status: PLAN.OVER_WORK_BUDGET,
+            reason: overOnItsOwn
+                ? `${overOnItsOwn.label} alone is `
+                    + `${overOnItsOwn.units.toLocaleString('en-US')} work units, over a `
+                    + `ceiling of ${limit.toLocaleString('en-US')}`
+                : `${comparablePages} pages total `
+                    + `${jobWorkUnits.toLocaleString('en-US')} work units, over a `
+                    + `ceiling of ${limit.toLocaleString('en-US')}; no single page is`,
         },
     };
 }

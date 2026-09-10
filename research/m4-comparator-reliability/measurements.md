@@ -315,28 +315,49 @@ The alternative to a ratio floor is the physical tolerance applied to the mask,
 and it is measured on the same pairs rather than assumed to be free. Changed
 pixels, swept finely enough to find where a real change stops being visible:
 
-| tolerance | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| *control, 150 dpi* | *0* | *0* | *0* | *0* | *0* | *0* | *0* | *0* | *0* |
-| one digit changed, 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** |
-| one digit changed, 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** |
-| a 4 mm revision triangle, 150 dpi | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 |
+The sweep is run at **every resolution the shipped Comparator offers** —
+`PdfComparator.tsx:805-808` gives 72, 150, 300 and 450 DPI. Changed pixels for
+the dimension string, and the largest tolerance at which the change is still
+reported:
 
-Three things follow, and all three belong in the H6 policy rather than in a
+| dpi | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm | safe to |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **72** | 10 | 10 | 10 | 10 | **0** | **0** | **0** | **0** | **0** | **0.15 mm** |
+| 150 | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** | 0.25 mm |
+| 300 | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** | 0.3 mm |
+| 450 | 401 | 248 | 166 | 113 | 73 | 73 | 38 | **0** | **0** | 0.3 mm |
+
+The whole-pixel rounding behind it:
+
+| dpi | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 72 | 0 | 0 | 0 | 1 | 1 | 1 | 1 | 1 |
+| 150 | 0 | 1 | 1 | 1 | 1 | 2 | 2 | 3 |
+| 300 | 1 | 1 | 2 | 2 | 3 | 4 | 5 | 6 |
+| 450 | 1 | 2 | 3 | 4 | 4 | 5 | 7 | 9 |
+
+And the same sweep on a swapped symbol — a circle changed to a square — at
+72 dpi: 112 differing pixels at 0 mm, **32** from 0.2 mm on. The setting does
+not only move marks around; it erases shape changes too.
+
+Four things follow, and all four belong in the H6 policy rather than in a
 footnote:
 
-- The control needs no tolerance **at any setting** — a redraw of the same sheet
-  differs by 0 pixels throughout. So the tolerance is not there to absorb render
-  variance; there is none to absorb.
-- A changed dimension disappears at **0.3 mm** at 150 dpi. A 4 mm revision
-  triangle survives the whole range. The setting does not erode changes evenly —
-  it erodes the small ones, which are the ones hardest to catch by eye.
-- The same millimetres are not the same radius at every resolution: 0.05 mm
-  rounds to 0 px at 150 dpi and 1 px at 300. Below about 0.1 mm the setting is
-  finer than the render.
+- The control needs no tolerance **at any setting or any resolution** — a redraw
+  of the same sheet differs by 0 pixels throughout. The tolerance is not there
+  to absorb render variance; there is none to absorb.
+- **72 dpi is the weakest**, at 0.15 mm, and it would have been missed by
+  sweeping the middle of the range. A millimetre is fewer pixels there *and* the
+  mark is smaller, so the digit is gone by 0.2 mm while 150 dpi still sees it.
+- The setting does not erode changes evenly. A 4 mm revision triangle survives
+  the whole range at 150 dpi; the digit and the symbol do not. It erodes the
+  small ones, which are the ones hardest to catch by eye.
+- The same millimetres are not the same radius at every resolution. Below about
+  0.1 mm the setting is finer than the render at 72 and 150 dpi.
 
 That trade belongs to the user in millimetres, under a stated policy — not to a
-share of the page chosen by a developer, and not to a unit with no bounds.
+share of the page chosen by a developer, and not to a unit with no bounds. The
+maximum is the **minimum** safe bound across the four, **0.15 mm**.
 
 ## 4g. The same comparison, painted three ways
 
@@ -539,9 +560,9 @@ Asserted rather than argued:
 **34.8 MB of output, byte-identical.** The consequence is the whole memory
 model: no member's RGBA survives the phase that extracted its mask.
 
-### The export, measured
+### The export: measured, and separately bounded
 
-`toDataURL` returns a string, so what is held is base64 text.
+The measurements. These are **performance** evidence:
 
 | | pixels | JPEG | PNG |
 | --- | --- | --- | --- |
@@ -550,9 +571,26 @@ model: no member's RGBA survives the phase that extracted its mask.
 | A4 150 dpi, dense | 2.2 Mpx | **0.050 B/px** | 0.032 B/px |
 | A3 150 dpi, matched | 4.4 Mpx | 0.027 B/px | 0.029 B/px |
 
-The model allows **0.15 B/px**, about three times the worst measurement, and the
-gate asserts that no measurement exceeds the allowance. The more expensive of
-the two formats is budgeted while **H5** is open.
+They are **not** the safety proof, and an earlier version of this model used
+them as one: an allowance of 0.15 B/px, three times the worst measurement. That
+is a compression ratio, and these drawings compress to about a fortieth of it.
+A scanned sheet or a photographic underlay need not, and a fail-closed gate that
+rests on a ratio is admitting a job it cannot hold.
+
+The bound is derived instead, from PNG's worst case — one filter byte per row
+plus RGBA, DEFLATE stored blocks at 5 bytes of header per 65,535, zlib's header
+and Adler-32, and container overhead:
+
+| | derived bound | worst measured |
+| --- | --- | --- |
+| any image, per pixel | **4.003 B/px** | 0.050 B/px |
+| A4 at 300 dpi | 34.9 MB | 0.22 MB |
+| the same as a data URL | **93.0 MB** | — |
+
+The last row is why `toBlob` is the recommendation: base64 is 4/3 the bytes at
+two bytes a character, and the encoded buffer is still live while the string is
+built. JPEG has no comparable provable worst case — a reason to prefer PNG, fed
+to **H5**.
 
 ### The peak, phase by phase
 
@@ -568,26 +606,31 @@ A3 at 300 dpi, two members, 0.5 mm — 17.4 Mpx:
 | mask extraction | 104 MB |
 | dilation | 87 MB |
 | comparison | 87 MB |
-| **presentation** | **211 MB** |
+| **presentation** | **278 MB** |
 
 | at 0.5 mm, two members unless stated | B/px | peak | |
 | --- | --- | --- | --- |
-| A4 300 dpi, 0 mm | 10.15 | 88 MB | within |
-| A4 300 dpi | 12.15 | 106 MB | within |
-| A3 300 dpi | 12.15 | **211 MB** | within |
-| A2 300 dpi | 12.15 | 423 MB | within |
-| A1 300 dpi | 12.15 | 847 MB | **refused** |
-| A1 300 dpi, four members | 16.15 | 1125 MB | **refused** |
-| A0 600 dpi | 12.15 | 6779 MB | **refused** |
+| A4 300 dpi, 0 mm | 14 | 122 MB | within |
+| A4 300 dpi | 16 | 139 MB | within |
+| A3 300 dpi | 16 | **278 MB** | within |
+| A2 300 dpi | 16 | **557 MB** | **refused** |
+| A1 300 dpi | 16 | 1115 MB | **refused** |
+| A1 300 dpi, four members | 20 | 1394 MB | **refused** |
+| A0 600 dpi | 16 | 8928 MB | **refused** |
 
-The A3 row is the one that had to be re-derived. Under the shipped model it is
-487 MB, just inside the 537 MB ceiling; adding the four mask buffers to *that*
-figure would have put it at about 557 MB and outside. Under the model that
-matches the selected architecture it is 211 MB, because the two layer canvases
-and two normalised copies are no longer held. The old claim was not wrong about
-A3 — it was resting on the wrong pipeline.
+Two rows moved when the compression assumption came out. A3 is 278 MB rather
+than 211 MB, still within but on a derived margin. **A2 at 300 dpi is now
+refused at 557 MB** where the ratio-based model called it 423 MB — a comparison
+a user can ask for, admitted by an allowance that happened to fit the fixtures.
 
-A tolerance of zero allocates no dilation buffers: 10.15 B/px against 12.15.
+For contrast, the shipped model puts A3 at 487 MB — inside the 537 MB ceiling,
+counting the wrong buffers; adding the four mask buffers to *that* figure would
+have given about 557 MB and refused it. Neither number described the
+architecture that was chosen.
+
+Keeping `toDataURL` instead of `toBlob` would put A3 at **464 MB**.
+
+A tolerance of zero allocates no dilation buffers: 14 B/px against 16.
 
 ## 10b. The work budget
 
@@ -644,6 +687,32 @@ Refusals are typed and named, never quieter comparisons:
 Every estimate records its requested and effective settings together, and
 `degraded` is false on all of them, so a silent downgrade could not pass
 unremarked.
+
+### The ceiling is on the job, not the page
+
+Memory is a peak and pages are serial, so the page model above is right for it.
+Work accumulates, and the export and the change report both run over ranges:
+
+| job | pages | work units | |
+| --- | --- | --- | --- |
+| one A4 page at 300 dpi, 0.5 mm | 1 | 2,957,102,400 | within |
+| three of them | 3 | 8,871,307,200 | within |
+| **five of them** | 5 | **14,785,512,000** | **refused** |
+| one A1 page at 300 dpi, 0.5 mm | 1 | 23,694,575,520 | **refused** |
+| four members, reference-pairs, 0.1 mm, three pages | 3 | 1,565,524,800 | within |
+| an export of two pages of a longer document | 2 | 5,914,204,800 | within |
+
+The third row is the gap a per-page ceiling leaves open: every one of those five
+pages is 2.96e9 units, comfortably inside a 12e9 ceiling, and together they are
+over it. The refusal says so — *"5 pages total 14,785,512,000 work units, over a
+ceiling of 12,000,000,000; no single page is"* — rather than naming a page that
+is not at fault.
+
+Pages that cannot be compared stay in the plan at zero work with the reason
+recorded (`MISSING_PAGE`, `RENDER_FAILED`), so a job of three pages where two
+are uncomparable reports one comparable page rather than quietly costing one.
+Reference-pairs are costed on every requested page, not once. An export range
+costs only the pages it asked for.
 
 ## 10c. Stopping a comparison that has started
 
@@ -709,7 +778,7 @@ External HTTP(S) requests from the research harness: **0**. Page errors: **0**.
 
 ## 13. The gate
 
-`scripts/m4-comparator-research-gate.mjs` re-asserts **158 claims, 63 of them
+`scripts/m4-comparator-research-gate.mjs` re-asserts **179 claims, 74 of them
 negative probes**. Several are unusual: the shipped comparator is asserted to
 report changes on drawings that are identical. Those are the findings, and a gate
 in which the baseline passed everything would prove nothing about why this spike

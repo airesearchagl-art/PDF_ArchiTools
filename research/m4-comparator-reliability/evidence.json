@@ -646,7 +646,7 @@
       "changeRatio": 0,
       "bounds": null,
       "compositeMs": 27,
-      "ms": 102,
+      "ms": 104,
       "memory": 60864160
     },
     "a wall added": {
@@ -664,8 +664,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 32,
-      "ms": 92,
+      "compositeMs": 34,
+      "ms": 96,
       "memory": 60864160
     },
     "a wall removed": {
@@ -683,7 +683,7 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 22,
+      "compositeMs": 23,
       "ms": 77,
       "memory": 60864160
     },
@@ -702,8 +702,8 @@
         "width": 718,
         "height": 1181
       },
-      "compositeMs": 44,
-      "ms": 90,
+      "compositeMs": 24,
+      "ms": 69,
       "memory": 60864160
     },
     "A4 vs A3, same drawing": {
@@ -721,8 +721,8 @@
         "width": 1651,
         "height": 2315
       },
-      "compositeMs": 88,
-      "ms": 245,
+      "compositeMs": 51,
+      "ms": 138,
       "memory": 121728320
     },
     "A4 vs A1, same drawing": {
@@ -740,8 +740,8 @@
         "width": 3320,
         "height": 4680
       },
-      "compositeMs": 206,
-      "ms": 798,
+      "compositeMs": 189,
+      "ms": 461,
       "memory": 487641336
     },
     "portrait vs landscape": {
@@ -759,8 +759,8 @@
         "width": 1651,
         "height": 1651
       },
-      "compositeMs": 32,
-      "ms": 110,
+      "compositeMs": 38,
+      "ms": 105,
       "memory": 86044252
     },
     "A4 vs a sheet 3pt bigger": {
@@ -778,8 +778,8 @@
         "width": 1168,
         "height": 1630
       },
-      "compositeMs": 28,
-      "ms": 79,
+      "compositeMs": 23,
+      "ms": 72,
       "memory": 61402880
     },
     "same aspect, 1.4x": {
@@ -797,8 +797,8 @@
         "width": 1634,
         "height": 2291
       },
-      "compositeMs": 52,
-      "ms": 145,
+      "compositeMs": 47,
+      "ms": 128,
       "memory": 119332640
     },
     "/Rotate 0 vs 90": {
@@ -816,8 +816,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 32,
-      "ms": 93,
+      "compositeMs": 34,
+      "ms": 95,
       "memory": 86044252
     },
     "/Rotate 0 vs 180": {
@@ -835,8 +835,8 @@
         "width": 1151,
         "height": 1552
       },
-      "compositeMs": 24,
-      "ms": 75,
+      "compositeMs": 22,
+      "ms": 60,
       "memory": 60864160
     },
     "/Rotate 0 vs 270": {
@@ -854,8 +854,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 36,
-      "ms": 92,
+      "compositeMs": 46,
+      "ms": 141,
       "memory": 86044252
     },
     "crop origin (0,0) vs (50,70)": {
@@ -868,8 +868,8 @@
       "inkPixels": 59636,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 16,
-      "ms": 52,
+      "compositeMs": 21,
+      "ms": 66,
       "memory": 44543324
     },
     "MediaBox larger, same CropBox": {
@@ -882,8 +882,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 24,
-      "ms": 66,
+      "compositeMs": 35,
+      "ms": 126,
       "memory": 60864160
     },
     "black vs grey ink": {
@@ -901,8 +901,8 @@
         "width": 1162,
         "height": 1624
       },
-      "compositeMs": 35,
-      "ms": 122,
+      "compositeMs": 22,
+      "ms": 130,
       "memory": 60864160
     },
     "black vs cyan ink": {
@@ -920,8 +920,8 @@
         "width": 90,
         "height": 58
       },
-      "compositeMs": 36,
-      "ms": 84,
+      "compositeMs": 35,
+      "ms": 106,
       "memory": 60864160
     },
     "a pale hatch added": {
@@ -939,8 +939,8 @@
         "width": 749,
         "height": 42
       },
-      "compositeMs": 31,
-      "ms": 70,
+      "compositeMs": 28,
+      "ms": 76,
       "memory": 60864160
     }
   },
@@ -982,8 +982,8 @@
         "inkPixels": 80002,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 32,
-        "ms": 91,
+        "compositeMs": 29,
+        "ms": 89,
         "memory": 60864160
       },
       "strict": {
@@ -1007,8 +1007,8 @@
         "inkPixels": 80048,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 26,
-        "ms": 81,
+        "compositeMs": 27,
+        "ms": 74,
         "memory": 60864160
       },
       "strict": {
@@ -1034,8 +1034,8 @@
         "inkPixels": 80051,
         "changeRatio": 1,
         "bounds": null,
-        "compositeMs": 18,
-        "ms": 32,
+        "compositeMs": 19,
+        "ms": 33,
         "memory": 43474400
       },
       "strict": {
@@ -1061,8 +1061,8 @@
           "width": 1162,
           "height": 1624
         },
-        "compositeMs": 27,
-        "ms": 64,
+        "compositeMs": 24,
+        "ms": 67,
         "memory": 60864160
       },
       "strict": {
@@ -1089,8 +1089,8 @@
       "inkPixels": 79953,
       "changeRatio": 1,
       "bounds": null,
-      "compositeMs": 27,
-      "ms": 46,
+      "compositeMs": 23,
+      "ms": 40,
       "memory": 43474400
     },
     "strict": {
@@ -1114,8 +1114,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 28,
-      "ms": 84,
+      "compositeMs": 24,
+      "ms": 80,
       "memory": 60864160
     }
   },
@@ -1442,8 +1442,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 29,
-      "totalMs": 86
+      "compositeMs": 69,
+      "totalMs": 126
     },
     "matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1455,8 +1455,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 60,
-      "totalMs": 141
+      "compositeMs": 54,
+      "totalMs": 118
     },
     "NOT matching, A4 150dpi, 0mm": {
       "dpi": 150,
@@ -1468,8 +1468,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 40,
-      "totalMs": 136
+      "compositeMs": 28,
+      "totalMs": 121
     },
     "NOT matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1481,7 +1481,7 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 41,
+      "compositeMs": 44,
       "totalMs": 123
     },
     "NOT matching, A4 300dpi, 0mm": {
@@ -1494,8 +1494,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 154,
-      "totalMs": 387
+      "compositeMs": 135,
+      "totalMs": 338
     },
     "NOT matching, A4 300dpi, 0.5mm": {
       "dpi": 300,
@@ -1507,8 +1507,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 226,
-      "totalMs": 528
+      "compositeMs": 211,
+      "totalMs": 506
     }
   },
   "candidates": {
@@ -2692,8 +2692,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 45,
-      "ms": 99,
+      "compositeMs": 35,
+      "ms": 97,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 2": {
@@ -2706,8 +2706,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 52,
-      "ms": 123,
+      "compositeMs": 40,
+      "ms": 114,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 4": {
@@ -2720,8 +2720,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 56,
-      "ms": 122,
+      "compositeMs": 51,
+      "ms": 130,
       "memory": 60864160
     },
     "A4 300dpi, 2 layers, threshold 0": {
@@ -2734,8 +2734,8 @@
       "inkPixels": 300848,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 175,
-      "ms": 384,
+      "compositeMs": 149,
+      "ms": 478,
       "memory": 243526080
     },
     "A4 150dpi, 4 layers, threshold 0": {
@@ -2753,8 +2753,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 76,
-      "ms": 193,
+      "compositeMs": 58,
+      "ms": 184,
       "memory": 95643680
     },
     "A3 150dpi, 2 layers, threshold 0": {
@@ -2767,8 +2767,8 @@
       "inkPixels": 154247,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 88,
-      "ms": 204,
+      "compositeMs": 78,
+      "ms": 203,
       "memory": 121728320
     },
     "A1 150dpi, 2 layers, threshold 0": {
@@ -2781,8 +2781,8 @@
       "inkPixels": 568537,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 267,
-      "ms": 656,
+      "compositeMs": 286,
+      "ms": 752,
       "memory": 487641336
     }
   },
@@ -3485,12 +3485,18 @@
       "unit": "mm",
       "default": 0,
       "minimum": 0,
-      "maximum": 0.25,
+      "maximum": 0.15,
       "step": 0.05,
       "zeroAlwaysAvailable": true,
       "requiresExplicitOptIn": true,
+      "supportedDpi": [
+        72,
+        150,
+        300,
+        450
+      ],
       "meaningShownToTheUser": "同じ位置とみなす距離（mm）。0 は完全一致のみを一致とみなします。",
-      "disclosureWhenNonZero": "位置ずれだけでなく、寸法値や記号の変更も一致と判定される場合があります。"
+      "disclosureWhenNonZero": "位置ずれだけでなく、寸法値・文字・記号・形状の変更も「一致」と判定される場合があります。"
     },
     "atTheDefault": {
       "millimetres": 0,
@@ -3831,8 +3837,8 @@
       "0mm": {
         "radius": 0,
         "box": 1,
-        "scanMs": 5,
-        "dilationMs": 3,
+        "scanMs": 7,
+        "dilationMs": 4,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3849,8 +3855,8 @@
       "0.5mm": {
         "radius": 3,
         "box": 49,
-        "scanMs": 4,
-        "dilationMs": 25,
+        "scanMs": 6,
+        "dilationMs": 24,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3860,15 +3866,15 @@
       "0.25mm": {
         "radius": 1,
         "box": 9,
-        "scanMs": 23,
-        "dilationMs": 28,
+        "scanMs": 26,
+        "dilationMs": 26,
         "identical": true,
         "changePixels": 2173206
       },
       "0.5mm": {
         "radius": 3,
         "box": 49,
-        "scanMs": 65,
+        "scanMs": 74,
         "dilationMs": 28,
         "identical": true,
         "changePixels": 2166190
@@ -3930,17 +3936,19 @@
     }
   },
   "exportEncoding": {
-    "modelled": {
-      "jpeg": {
-        "label": "JPEG",
-        "dataUrlBytesPerPixel": 0.15
+    "strategies": {
+      "blob": {
+        "label": "canvas.toBlob()",
+        "base64": false,
+        "bytesPerCharacter": 0
       },
-      "png": {
-        "label": "PNG",
-        "dataUrlBytesPerPixel": 0.15
+      "dataUrl": {
+        "label": "canvas.toDataURL()",
+        "base64": true,
+        "bytesPerCharacter": 2
       }
     },
-    "budgetedFormat": "png",
+    "budgetedStrategy": "blob",
     "rows": {
       "A4 150dpi, changed": {
         "width": 1241,
@@ -3979,7 +3987,38 @@
         "pngBytesPerPixel": 0.0292
       }
     },
-    "worstMeasured": 0.0498
+    "bounds": {
+      "A4 150dpi, changed": {
+        "upperBound": 8713377,
+        "upperBoundBytesPerPixel": 4.003,
+        "measuredWorst": 78207,
+        "dataUrlBound": 23235672,
+        "measuredUnderBound": true
+      },
+      "A4 300dpi, changed": {
+        "upperBound": 34823662,
+        "upperBoundBytesPerPixel": 4.001,
+        "measuredWorst": 243126,
+        "dataUrlBound": 92863100,
+        "measuredUnderBound": true
+      },
+      "A4 150dpi, dense": {
+        "upperBound": 8713377,
+        "upperBoundBytesPerPixel": 4.003,
+        "measuredWorst": 108371,
+        "dataUrlBound": 23235672,
+        "measuredUnderBound": true
+      },
+      "A3 150dpi, matched": {
+        "upperBound": 17414609,
+        "upperBoundBytesPerPixel": 4.002,
+        "measuredWorst": 126882,
+        "dataUrlBound": 46438958,
+        "measuredUnderBound": true
+      }
+    },
+    "worstMeasured": 0.0498,
+    "boundIsDerivedNotMeasured": true
   },
   "phaseBudget": {
     "limit": 536870912,
@@ -3994,18 +4033,27 @@
           "mask-extraction": 52184160,
           "dilation": 17394720,
           "comparison": 26092080,
-          "presentation": 88278204
+          "presentation": 121773304
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 88278204,
-        "peakMB": 88,
-        "bytesPerPixel": 10.15,
+        "peakWorkingSet": 121773304,
+        "peakMB": 122,
+        "bytesPerPixel": 14,
         "withinBudget": true,
         "refusal": null,
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 17394720,
+          "dilated": 0,
+          "composite": 34789440,
+          "encoderScratch": 34789440,
+          "encodedOutput": 34799704,
+          "encodedString": 0
+        }
       },
       "A4 300dpi, 2 members, 0.5mm": {
         "pixels": 8697360,
@@ -4016,18 +4064,27 @@
           "mask-extraction": 52184160,
           "dilation": 43510756,
           "comparison": 43486800,
-          "presentation": 105672924
+          "presentation": 139168024
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 105672924,
-        "peakMB": 106,
-        "bytesPerPixel": 12.15,
+        "peakWorkingSet": 139168024,
+        "peakMB": 139,
+        "bytesPerPixel": 16,
         "withinBudget": true,
         "refusal": null,
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 17394720,
+          "dilated": 17394720,
+          "composite": 34789440,
+          "encoderScratch": 34789440,
+          "encodedOutput": 34799704,
+          "encodedString": 0
+        }
       },
       "A3 300dpi, 2 members, 0.5mm": {
         "pixels": 17403188,
@@ -4038,18 +4095,27 @@
           "mask-extraction": 104419128,
           "dilation": 87049824,
           "comparison": 87015940,
-          "presentation": 211448735
+          "presentation": 278465386
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 211448735,
-        "peakMB": 211,
-        "bytesPerPixel": 12.15,
+        "peakWorkingSet": 278465386,
+        "peakMB": 278,
+        "bytesPerPixel": 16,
         "withinBudget": true,
         "refusal": null,
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 34806376,
+          "dilated": 34806376,
+          "composite": 69612752,
+          "encoderScratch": 69612752,
+          "encodedOutput": 69627130,
+          "encodedString": 0
+        }
       },
       "A2 300dpi, 2 members, 0.5mm": {
         "pixels": 34806376,
@@ -4060,18 +4126,30 @@
           "mask-extraction": 208838256,
           "dilation": 174079796,
           "comparison": 174031880,
-          "presentation": 422897469
+          "presentation": 556923759
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 422897469,
-        "peakMB": 423,
-        "bytesPerPixel": 12.15,
-        "withinBudget": true,
-        "refusal": null,
+        "peakWorkingSet": 556923759,
+        "peakMB": 557,
+        "bytesPerPixel": 16,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "557 MB at the presentation phase, against a ceiling of 537 MB"
+        },
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 69612752,
+          "dilated": 69612752,
+          "composite": 139225504,
+          "encoderScratch": 139225504,
+          "encodedOutput": 139247247,
+          "encodedString": 0
+        }
       },
       "A1 300dpi, 2 members, 0.5mm": {
         "pixels": 69689928,
@@ -4082,21 +4160,30 @@
           "mask-extraction": 418139568,
           "dilation": 348517444,
           "comparison": 348449640,
-          "presentation": 846732626
+          "presentation": 1115074153
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 846732626,
-        "peakMB": 847,
-        "bytesPerPixel": 12.15,
+        "peakWorkingSet": 1115074153,
+        "peakMB": 1115,
+        "bytesPerPixel": 16,
         "withinBudget": false,
         "refusal": {
           "status": "OVER_MEMORY_BUDGET",
-          "reason": "847 MB at the presentation phase, against a ceiling of 537 MB"
+          "reason": "1115 MB at the presentation phase, against a ceiling of 537 MB"
         },
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 139379856,
+          "dilated": 139379856,
+          "composite": 278759712,
+          "encoderScratch": 278759712,
+          "encodedOutput": 278795017,
+          "encodedString": 0
+        }
       },
       "A1 300dpi, 4 members, 0.5mm": {
         "pixels": 69689928,
@@ -4107,21 +4194,30 @@
           "mask-extraction": 557519424,
           "dilation": 487897300,
           "comparison": 487829496,
-          "presentation": 1125492338
+          "presentation": 1393833865
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 1125492338,
-        "peakMB": 1125,
-        "bytesPerPixel": 16.15,
+        "peakWorkingSet": 1393833865,
+        "peakMB": 1394,
+        "bytesPerPixel": 20,
         "withinBudget": false,
         "refusal": {
           "status": "OVER_MEMORY_BUDGET",
-          "reason": "1125 MB at the presentation phase, against a ceiling of 537 MB"
+          "reason": "1394 MB at the presentation phase, against a ceiling of 537 MB"
         },
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 278759712,
+          "dilated": 278759712,
+          "composite": 278759712,
+          "encoderScratch": 278759712,
+          "encodedOutput": 278795017,
+          "encodedString": 0
+        }
       },
       "A0 600dpi, 2 members, 0.5mm": {
         "pixels": 557976342,
@@ -4132,37 +4228,47 @@
           "mask-extraction": 3347858052,
           "dilation": 2790073530,
           "comparison": 2789881710,
-          "presentation": 6779412556
+          "presentation": 8927823951
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 6779412556,
-        "peakMB": 6779,
-        "bytesPerPixel": 12.15,
+        "peakWorkingSet": 8927823951,
+        "peakMB": 8928,
+        "bytesPerPixel": 16,
         "withinBudget": false,
         "refusal": {
           "status": "OVER_MEMORY_BUDGET",
-          "reason": "6779 MB at the presentation phase, against a ceiling of 537 MB"
+          "reason": "8928 MB at the presentation phase, against a ceiling of 537 MB"
         },
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
-        "exportFormat": "png"
+        "exportStrategy": "blob",
+        "encodedOutputIsUpperBound": true,
+        "presentationLive": {
+          "masks": 1115952684,
+          "dilated": 1115952684,
+          "composite": 2231905368,
+          "encoderScratch": 2231905368,
+          "encodedOutput": 2232107847,
+          "encodedString": 0
+        }
       }
     },
     "shippedModelA3": {
       "totalMB": 487.3,
       "withinBudget": true
     },
-    "byFormat": {
-      "jpeg": 211.4,
-      "png": 211.4
+    "byStrategy": {
+      "blob": 278.5,
+      "dataUrl": 464.1
     },
     "a3Detail": {
       "pixels": 17403188,
       "members": 2,
       "contract": "reference-pairs",
       "radiusPx": 6,
-      "exportFormat": "png",
+      "exportStrategy": "blob",
+      "encodedOutputIsUpperBound": true,
       "memberProcessing": "serial",
       "pairProcessing": "serial",
       "referenceMaskReused": true,
@@ -4206,14 +4312,837 @@
             "dilated": 34806376,
             "composite": 69612752,
             "encoderScratch": 69612752,
-            "dataUrl": 2610479
+            "encodedOutput": 69627130,
+            "encodedString": 0
           },
-          "total": 211448735
+          "total": 278465386
         }
       },
       "peakPhase": "presentation",
-      "peakWorkingSet": 211448735,
-      "bytesPerPixel": 12.15000004596859
+      "peakWorkingSet": 278465386,
+      "bytesPerPixel": 16.000826170469455
+    }
+  },
+  "spatialToleranceAcrossDpi": {
+    "supportedDpi": [
+      72,
+      150,
+      300,
+      450
+    ],
+    "sweep": [
+      0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.4,
+      0.5
+    ],
+    "rounding": {
+      "72": {
+        "0mm": 0,
+        "0.05mm": 0,
+        "0.1mm": 0,
+        "0.15mm": 0,
+        "0.2mm": 1,
+        "0.25mm": 1,
+        "0.3mm": 1,
+        "0.4mm": 1,
+        "0.5mm": 1
+      },
+      "150": {
+        "0mm": 0,
+        "0.05mm": 0,
+        "0.1mm": 1,
+        "0.15mm": 1,
+        "0.2mm": 1,
+        "0.25mm": 1,
+        "0.3mm": 2,
+        "0.4mm": 2,
+        "0.5mm": 3
+      },
+      "300": {
+        "0mm": 0,
+        "0.05mm": 1,
+        "0.1mm": 1,
+        "0.15mm": 2,
+        "0.2mm": 2,
+        "0.25mm": 3,
+        "0.3mm": 4,
+        "0.4mm": 5,
+        "0.5mm": 6
+      },
+      "450": {
+        "0mm": 0,
+        "0.05mm": 1,
+        "0.1mm": 2,
+        "0.15mm": 3,
+        "0.2mm": 4,
+        "0.25mm": 4,
+        "0.3mm": 5,
+        "0.4mm": 7,
+        "0.5mm": 9
+      }
+    },
+    "changed": {
+      "72": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "150": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 51,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 51,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "300": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 186,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 96,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 96,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 2,
+          "changePixels": 49,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 2,
+          "changePixels": 49,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 3,
+          "changePixels": 18,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 4,
+          "changePixels": 1,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 5,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 6,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "450": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 401,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 248,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 2,
+          "changePixels": 166,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 3,
+          "changePixels": 113,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 4,
+          "changePixels": 73,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 4,
+          "changePixels": 73,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 5,
+          "changePixels": 38,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 7,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 9,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      }
+    },
+    "control": {
+      "72": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "150": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "300": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 4,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 5,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 6,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "450": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 4,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 4,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 5,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 7,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 9,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      }
+    },
+    "symbol": {
+      "72": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        }
+      },
+      "150": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 394,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 394,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 117,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 117,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 46,
+          "verdict": "CHANGE"
+        }
+      },
+      "300": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 1435,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 1122,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 1122,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 2,
+          "changePixels": 866,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 2,
+          "changePixels": 866,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 3,
+          "changePixels": 632,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 4,
+          "changePixels": 430,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 5,
+          "changePixels": 274,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 6,
+          "changePixels": 158,
+          "verdict": "CHANGE"
+        }
+      },
+      "450": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 3126,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 2648,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 2,
+          "changePixels": 2239,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 3,
+          "changePixels": 1871,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 4,
+          "changePixels": 1526,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 4,
+          "changePixels": 1526,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 5,
+          "changePixels": 1201,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 7,
+          "changePixels": 682,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 9,
+          "changePixels": 325,
+          "verdict": "CHANGE"
+        }
+      }
+    },
+    "largestSafeMm": {
+      "72": {
+        "contiguous": 0.15,
+        "anywhere": 0.15
+      },
+      "150": {
+        "contiguous": 0.25,
+        "anywhere": 0.25
+      },
+      "300": {
+        "contiguous": 0.3,
+        "anywhere": 0.3
+      },
+      "450": {
+        "contiguous": 0.3,
+        "anywhere": 0.3
+      }
+    },
+    "atDefault": {
+      "72": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 596,
+        "height": 842
+      },
+      "150": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 1241,
+        "height": 1754
+      },
+      "300": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 2481,
+        "height": 3508
+      },
+      "450": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 3721,
+        "height": 5262
+      }
+    },
+    "minimumSafeAcrossDpi": 0.15,
+    "policyMaximum": 0.15,
+    "policyMaximumIsSafeEverywhere": true
+  },
+  "jobWork": {
+    "limit": 12000000000,
+    "jobs": {
+      "one page, below the ceiling": {
+        "requestedPages": 1,
+        "comparablePages": 1,
+        "skipped": [],
+        "perPageUnits": [
+          2957102400
+        ],
+        "jobWorkUnits": 2957102400,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "three pages, total below": {
+        "requestedPages": 3,
+        "comparablePages": 3,
+        "skipped": [],
+        "perPageUnits": [
+          2957102400,
+          2957102400,
+          2957102400
+        ],
+        "jobWorkUnits": 8871307200,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "five pages, each below, the total above": {
+        "requestedPages": 5,
+        "comparablePages": 5,
+        "skipped": [],
+        "perPageUnits": [
+          2957102400,
+          2957102400,
+          2957102400,
+          2957102400,
+          2957102400
+        ],
+        "jobWorkUnits": 14785512000,
+        "representable": true,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_WORK_BUDGET",
+          "reason": "5 pages total 14,785,512,000 work units, over a ceiling of 12,000,000,000; no single page is"
+        },
+        "everyPageWithinPageCeiling": true
+      },
+      "one page over on its own": {
+        "requestedPages": 1,
+        "comparablePages": 1,
+        "skipped": [],
+        "perPageUnits": [
+          23694575520
+        ],
+        "jobWorkUnits": 23694575520,
+        "representable": true,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_WORK_BUDGET",
+          "reason": "page 1 alone is 23,694,575,520 work units, over a ceiling of 12,000,000,000"
+        },
+        "everyPageWithinPageCeiling": false
+      },
+      "reference-pairs over three pages": {
+        "requestedPages": 3,
+        "comparablePages": 3,
+        "skipped": [],
+        "perPageUnits": [
+          521841600,
+          521841600,
+          521841600
+        ],
+        "jobWorkUnits": 1565524800,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "a page that cannot be compared is still in the plan": {
+        "requestedPages": 3,
+        "comparablePages": 1,
+        "skipped": [
+          "page 2: MISSING_PAGE",
+          "page 3: RENDER_FAILED"
+        ],
+        "perPageUnits": [
+          2957102400,
+          0,
+          0
+        ],
+        "jobWorkUnits": 2957102400,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "an export range costs only the pages asked for": {
+        "requestedPages": 2,
+        "comparablePages": 2,
+        "skipped": [],
+        "perPageUnits": [
+          2957102400,
+          2957102400
+        ],
+        "jobWorkUnits": 5914204800,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "arithmetic outside the safe-integer range": {
+        "requestedPages": 1,
+        "comparablePages": 1,
+        "skipped": [],
+        "perPageUnits": [
+          null
+        ],
+        "jobWorkUnits": null,
+        "representable": false,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_WORK_BUDGET",
+          "reason": "the work this job would do is not representable"
+        },
+        "everyPageWithinPageCeiling": false
+      }
     }
   },
   "asyncCancellation": {
@@ -4232,7 +5161,7 @@
     "synchronousDriver": {
       "status": "READY_TO_COMPARE",
       "bands": 18,
-      "ms": 26,
+      "ms": 25,
       "cancellationObserved": false,
       "cancellationFlagAtEnd": false,
       "produced": true
@@ -4240,7 +5169,7 @@
     "asynchronousDriver": {
       "status": "CANCELLED",
       "bands": 4,
-      "ms": 25,
+      "ms": 28,
       "reason": "cancelled",
       "cancellationObserved": true,
       "publishable": false,

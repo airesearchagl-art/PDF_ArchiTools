@@ -49,7 +49,7 @@ node scripts/m4-comparator-fixtures.mjs
 node scripts/m4-comparator-research-gate.mjs
 ```
 
-**158 assertions, 63 of them negative probes.** Several assert that the shipped
+**179 assertions, 74 of them negative probes.** Several assert that the shipped
 comparator gets something wrong; those are the findings, and a gate the baseline
 passed would prove nothing. It gates the write-up, not the app, and is
 deliberately **not** wired into Core CI.
@@ -77,9 +77,10 @@ verdict that says what it found, so `CHANGE` never means "carry on"; a verdict
 computed from a **canonical ink mask with no ratio floor**, before anything is
 painted, so the answer is not a property of the palette; **one engine** behind
 the preview, the export and the change report, which today each decide
-independently what a comparison means; a physical threshold in millimetres; a
-working-set budget **and** a work budget, both checked before allocation and both
-refusing by name rather than degrading; a comparison that can be abandoned;
+independently what a comparison means; a spatial tolerance in millimetres under a
+stated policy; a **peak** working-set budget checked against a derived,
+content-independent bound and a **job-level** work budget, both evaluated before
+allocation and both refusing by name rather than degrading; a comparison that can be abandoned;
 structured results rather than only an image; and an export that produces no
 bytes until every page is complete.
 
@@ -116,12 +117,12 @@ These are not the spike's to settle.
 | **H2** | a missing page | fail the whole export, or include the page marked as missing? |
 | **H3** | over budget | refuse, or offer the achievable resolution to accept? Never a silent downgrade — an A0 asked at 600 dpi currently delivers 227 and is named `_600dpi.pdf`. |
 | **H4** | alignment | should an offset, scale and rotation be saved with the comparison? |
-| **H5** | export format | JPEG or PNG? Artefact cost unmeasured. The memory model budgets the more expensive of the two until this is answered, so no budget claim depends on it. |
-| **H6** | the spatial tolerance policy | Not just a unit. A spatial tolerance can suppress a true change — measured, a dimension changed from 1200 to 1300 becomes a MATCH at 0.3 mm — so the policy has to settle **unit** (proposed mm), **default** (proposed **0 mm**), **minimum** (0, always available), **maximum** (proposed **0.25 mm**, the largest setting at which the smallest measured true change is still reported at 150 *and* 300 dpi), **step** (proposed 0.05 mm), whether a non-zero value is an **explicit opt-in** (proposed yes), and the **disclosure** shown with it — which must not say "ignores small shifts", because measured it also makes a changed digit match. |
+| **H5** | export format | JPEG or PNG? Artefact cost unmeasured. The memory bound is derived from **PNG**, which has a provable worst case; JPEG has none, which is a reason to prefer PNG and is offered as such. If JPEG is chosen the allowance must be re-derived for it. Separately, the research recommends `canvas.toBlob` over `toDataURL` either way: base64 in the peak working set costs 464 MB against 278 MB on an A3 at 300 dpi. |
+| **H6** | the spatial tolerance policy | Not just a unit. A spatial tolerance can suppress a true change — measured at all four supported resolutions, a dimension changed from 1200 to 1300 becomes a MATCH at **0.2 mm at 72 dpi** and at 0.3 mm at 150 — so the policy has to settle **unit** (proposed mm), **default** (proposed **0 mm**), **minimum** (0, always available), **maximum** (proposed **0.15 mm**: the *minimum* safe bound across 72/150/300/450 dpi, not what the middle of the range would allow), **step** (proposed 0.05 mm), whether a non-zero value is an **explicit opt-in** (proposed yes), and the **disclosure** shown with it — which must not say "ignores small shifts", because measured it also erases a changed digit and a swapped symbol. A DPI-dependent maximum is rejected: the same number in the same box would mean different things depending on another setting. |
 | **H7** | the working-set budget | **512 MiB is a recommendation, not a measurement.** The measurements establish the shape of the cost, not where the line goes. Requires approval; never silently exceeded. |
 | **H8** | the ink predicate | the two shipped functions disagree — mean of channels versus any channel — and a pale yellow falls between them. One definition must serve the composite, the change bounds, the verdict and the change report. Whether the pale-grey hatch stays invisible is part of the same choice. |
 | **H9** | more than two members | **A: two-only** (measured) or **B: reference-pairs** (measured)? **C: all-member consensus — DEFER, requires separate research**; it is described and implemented nowhere, so it is refused rather than offered. The shipped any-other-layer rule reports a two-against-two disagreement as a clean match, so it is not among the options either. |
-| **H10** | the work ceiling | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** It is calibrated from one observation on one machine and projects to roughly 55 seconds of comparison. It is user-visible because it refuses comparisons: an A1 at 300 dpi with a 0.5 mm tolerance is over it. Requires approval; never silently degraded to fit. |
+| **H10** | the work ceiling, **for the whole job** | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** One ceiling on the total, not one per page: the export and the change report run over ranges, and five A4 pages that each pass comfortably are 14.79e9 units together and refused. Calibrated from one observation on one machine, projecting to roughly 55 seconds for the operation. User-visible, because it refuses comparisons. Requires approval; never silently degraded to fit. |
 
 One decision each. **The MATCH ratio floor is not on this list**: the research
 recommends none, and it is **fixed at zero for the M4 MVP** rather than offered

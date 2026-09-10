@@ -27,7 +27,8 @@ import {
   pairChangeMaskSteps, compositeFromMasks,
   runCancellable, runCancellableAsync, checkComparisonWork,
   MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM,
-  estimatePhaseMemory, checkPhaseBudget, EXPORT_FORMATS, BUDGETED_EXPORT_FORMAT,
+  estimatePhaseMemory, checkPhaseBudget, EXPORT_STRATEGIES, BUDGETED_EXPORT_STRATEGY,
+  encodedImageUpperBound, estimateJobWork,
   SPATIAL_TOLERANCE_POLICY, isDefaultSpatialTolerance,
 } from '/research/m4-comparator-reliability/prototype/candidates.mjs';
 
@@ -1344,14 +1345,177 @@ window.__m4 = {
         pngBytesPerPixel: +(png.length / area).toFixed(4),
       };
     }
+    // The measurements above are **performance** evidence. The bound below is
+    // the safety proof, and it is derived rather than measured: no image of
+    // these dimensions can encode larger, whatever it contains.
+    const bounds = {};
+    for (const [label, r] of Object.entries(rows)) {
+      const bound = encodedImageUpperBound({ width: r.width, height: r.height });
+      bounds[label] = {
+        upperBound: bound,
+        upperBoundBytesPerPixel: +(bound / r.pixels).toFixed(3),
+        measuredWorst: Math.max(r.jpegBytes, r.pngBytes),
+        // As a data URL the same bytes cost base64 on top, twice over in a
+        // two-byte string. This is why the recommendation is toBlob.
+        dataUrlBound: Math.ceil(bound * 4 / 3) * EXPORT_STRATEGIES.dataUrl.bytesPerCharacter,
+        measuredUnderBound: Math.max(r.jpegBytes, r.pngBytes) < bound,
+      };
+    }
     return {
-      modelled: EXPORT_FORMATS,
-      budgetedFormat: BUDGETED_EXPORT_FORMAT,
+      strategies: EXPORT_STRATEGIES,
+      budgetedStrategy: BUDGETED_EXPORT_STRATEGY,
       rows,
+      bounds,
       worstMeasured: Math.max(...Object.values(rows).flatMap(
         (r) => [r.jpegBytesPerPixel, r.pngBytesPerPixel],
       )),
+      boundIsDerivedNotMeasured: true,
     };
+  },
+
+  /**
+   * The spatial tolerance, at every resolution the Comparator actually offers.
+   *
+   * `PdfComparator.tsx` offers 72, 150, 300 and 450 DPI. A maximum justified on
+   * two of those is not a maximum for the product: millimetres round to a whole
+   * pixel radius, so the same setting is a different search at each one, and
+   * the resolution where the smallest true change disappears first is the one
+   * that has to set the ceiling.
+   */
+  async spatialToleranceAcrossDpi() {
+    const uprightMasks = async (members, scale) => {
+      const rendered = await renderMembersUpright(members, scale);
+      const { width, height } = rendered;
+      return {
+        width,
+        height,
+        masks: rendered.buffers.map((b) => inkMask(b.data, width, height)),
+      };
+    };
+    const sweep = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
+    const changedPair = await pair('small-base', 'small-digit');
+    const controlPair = await pair('small-base', 'small-base-copy');
+    const symbolPair = await pair('small-base', 'small-symbol');
+
+    const out = {
+      supportedDpi: SPATIAL_TOLERANCE_POLICY.supportedDpi,
+      sweep,
+      rounding: {},
+      changed: {},
+      control: {},
+      symbol: {},
+      largestSafeMm: {},
+      atDefault: {},
+    };
+    for (const dpi of SPATIAL_TOLERANCE_POLICY.supportedDpi) {
+      const scale = dpi / 72;
+      const changed = await uprightMasks(changedPair, scale);
+      const control = await uprightMasks(controlPair, scale);
+      const symbol = await uprightMasks(symbolPair, scale);
+      out.rounding[dpi] = {};
+      out.changed[dpi] = {};
+      out.control[dpi] = {};
+      out.symbol[dpi] = {};
+      let largestSafe = null;
+      for (const mm of sweep) {
+        const radius = pixelRadiusFor(mm, dpi);
+        out.rounding[dpi][`${mm}mm`] = radius;
+        for (const [key, set] of [['changed', changed], ['control', control],
+          ['symbol', symbol]]) {
+          const m = pairChangeMask({
+            a: set.masks[0], b: set.masks[1],
+            width: set.width, height: set.height, radius,
+          });
+          out[key][dpi][`${mm}mm`] = {
+            radius,
+            changePixels: m.changePixels,
+            verdict: canonicalVerdict(m).status,
+          };
+        }
+        if (out.changed[dpi][`${mm}mm`].verdict === RESULT.CHANGE) largestSafe = mm;
+      }
+      // The largest setting at which the smallest measured true change is still
+      // reported at this resolution. Only contiguous from zero counts: a
+      // setting that works again above one that does not is not a safe range.
+      let contiguous = null;
+      for (const mm of sweep) {
+        if (out.changed[dpi][`${mm}mm`].verdict !== RESULT.CHANGE) break;
+        contiguous = mm;
+      }
+      out.largestSafeMm[dpi] = { contiguous, anywhere: largestSafe };
+      out.atDefault[dpi] = {
+        millimetres: SPATIAL_TOLERANCE_POLICY.default,
+        radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.default, dpi),
+        changed: out.changed[dpi][`${SPATIAL_TOLERANCE_POLICY.default}mm`].verdict,
+        control: out.control[dpi][`${SPATIAL_TOLERANCE_POLICY.default}mm`].verdict,
+        width: changed.width,
+        height: changed.height,
+      };
+    }
+    const safe = Object.values(out.largestSafeMm).map((r) => r.contiguous);
+    out.minimumSafeAcrossDpi = safe.every((v) => v === null)
+      ? null : Math.min(...safe.map((v) => (v === null ? 0 : v)));
+    out.policyMaximum = SPATIAL_TOLERANCE_POLICY.maximum;
+    out.policyMaximumIsSafeEverywhere = Object.entries(out.changed).every(
+      ([, rows]) => Object.entries(rows)
+        .filter(([mm]) => parseFloat(mm) <= SPATIAL_TOLERANCE_POLICY.maximum)
+        .every(([, r]) => r.verdict === RESULT.CHANGE),
+    );
+    return out;
+  },
+
+  /**
+   * What the whole operation costs, not what one page costs.
+   *
+   * Memory is a peak and pages are serial, so the page-level model is right for
+   * it. Work accumulates: an export of a range runs every page, and a ceiling
+   * checked per page would pass a job that is a hundred times over it.
+   */
+  jobWork() {
+    const A4 = [2480, 3507];
+    const A1 = [7016, 9933];
+    const page = (label, [width, height], members, radiusPx, extra = {}) => ({
+      label, width, height, members,
+      contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx, ...extra,
+    });
+    const repeat = (n, make) => Array.from({ length: n }, (_, i) => make(i + 1));
+    const jobs = {
+      'one page, below the ceiling': [page('page 1', A4, 2, 6)],
+      'three pages, total below': repeat(3, (n) => page(`page ${n}`, A4, 2, 6)),
+      'five pages, each below, the total above':
+        repeat(5, (n) => page(`page ${n}`, A4, 2, 6)),
+      'one page over on its own': [page('page 1', A1, 2, 6)],
+      'reference-pairs over three pages':
+        repeat(3, (n) => page(`page ${n}`, A4, 4, 1)),
+      'a page that cannot be compared is still in the plan': [
+        page('page 1', A4, 2, 6),
+        page('page 2', A4, 2, 6, { comparable: false, reason: 'MISSING_PAGE' }),
+        page('page 3', A4, 2, 6, { comparable: false, reason: 'RENDER_FAILED' }),
+      ],
+      'an export range costs only the pages asked for':
+        repeat(2, (n) => page(`page ${n + 2}`, A4, 2, 6)),
+      'arithmetic outside the safe-integer range': [
+        page('page 1', [2000000, 2000000], 4, 5000),
+      ],
+    };
+    const out = {};
+    for (const [label, pages] of Object.entries(jobs)) {
+      const job = estimateJobWork({ pages });
+      out[label] = {
+        requestedPages: pages.length,
+        comparablePages: job.comparablePages,
+        skipped: job.skippedPages.map((p) => `${p.label}: ${p.reason}`),
+        perPageUnits: job.pages.map((p) => p.units),
+        jobWorkUnits: job.jobWorkUnits,
+        representable: job.representable,
+        withinBudget: job.withinBudget,
+        refusal: job.refusal,
+        everyPageWithinPageCeiling: job.pages
+          .filter((p) => p.comparable)
+          .every((p) => p.withinPageCeiling === true),
+      };
+    }
+    return { limit: MAX_COMPARISON_WORK_UNITS, jobs: out };
   },
 
   /**
@@ -1393,7 +1557,9 @@ window.__m4 = {
         memberProcessing: checked.memberProcessing,
         pairProcessing: checked.pairProcessing,
         referenceMaskReused: checked.referenceMaskReused,
-        exportFormat: checked.exportFormat,
+        exportStrategy: checked.exportStrategy,
+        encodedOutputIsUpperBound: checked.encodedOutputIsUpperBound,
+        presentationLive: checked.phases.presentation.live,
       };
     }
     // The same sheet under the shipped model, which is what the previous
@@ -1407,10 +1573,10 @@ window.__m4 = {
         totalMB: +(shipped.total / 1e6).toFixed(1),
         withinBudget: shipped.withinBudget,
       },
-      byFormat: Object.fromEntries(Object.keys(EXPORT_FORMATS).map((format) => [
-        format,
+      byStrategy: Object.fromEntries(Object.keys(EXPORT_STRATEGIES).map((strategy) => [
+        strategy,
         +(estimatePhaseMemory({
-          width: 3508, height: 4961, members: 2, radiusPx: 6, exportFormat: format,
+          width: 3508, height: 4961, members: 2, radiusPx: 6, exportStrategy: strategy,
         }).peakWorkingSet / 1e6).toFixed(1),
       ])),
       a3Detail: estimatePhaseMemory({

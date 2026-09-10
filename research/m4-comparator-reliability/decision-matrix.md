@@ -215,6 +215,10 @@ threshold, swallow a render failure, or recompute what a change is.
 | `pixels x radius² x members` as the bound | **REJECT** — zero at radius 0, and leaves the contract out |
 | `pixels x sourceMembers x (1 + comparedOtherMembers x (2r+1)²)`, summed over the contract's groups | **ADOPT** |
 | `MAX_COMPARISON_WORK_UNITS = 12,000,000,000`, checked before allocation | **ADOPT as a recommendation requiring human approval** — H10 |
+| the ceiling applied **per page** | **REJECT** — the export and the change report run over ranges; a hundred pages that each pass are a hundred times the work |
+| the ceiling applied to the **whole job**, summed over every requested page and pair | **ADOPT** — measured: five A4 pages at 300 dpi and 0.5 mm are 2.96e9 each and 14.79e9 together, which is refused |
+| a page that cannot be compared dropped from the estimate | **REJECT** — it makes the job look cheaper by not mentioning it |
+| that page kept in the plan at zero work, with the reason | **ADOPT** |
 | silently reducing DPI or tolerance to fit | **REJECT** — this is the `_600dpi.pdf` failure again |
 | a typed `OVER_WORK_BUDGET` refusal that names the numbers | **ADOPT** |
 | separable dilation, so the bound does not carry `(2r+1)²` | **ADOPT** as the comparison algorithm |
@@ -321,12 +325,14 @@ Measured: 0.5 mm converts to 1 / 3 / 6 / 12 px at 72 / 150 / 300 / 600 dpi.
 
 The unit is the smaller half of this decision. A spatial tolerance suppresses
 true semantic changes, measured on a dimension string reading 1200 against one
-reading 1300:
+reading 1300, at **every resolution the Comparator offers**:
 
-| | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** |
-| 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** |
+| | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm | safe to |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **72 dpi** | 10 | 10 | 10 | 10 | **0** | **0** | **0** | **0** | **0** | **0.15 mm** |
+| 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** | 0.25 mm |
+| 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** | 0.3 mm |
+| 450 dpi | 401 | 248 | 166 | 113 | 73 | 73 | 38 | **0** | **0** | 0.3 mm |
 
 So **H6 is a Spatial Tolerance Policy**, not a choice of unit:
 
@@ -335,16 +341,24 @@ So **H6 is a Spatial Tolerance Policy**, not a choice of unit:
 | unit | mm | **ADOPT** |
 | default | **0 mm** | **ADOPT** — an unconfigured comparison reports every difference it can see |
 | minimum | 0 mm, always available | **ADOPT** |
-| maximum | **0.25 mm** | **ADOPT** — the largest setting at which the smallest measured true change is still reported, at 150 and 300 dpi |
+| maximum | **0.15 mm** | **ADOPT** — the *minimum* safe bound across all four supported resolutions |
+| a DPI-dependent maximum | | **REJECT** — the same number in the same box would mean different things depending on another setting |
 | step | 0.05 mm | **ADOPT**, with the caveat below |
 | non-zero tolerance | explicit opt-in | **ADOPT** |
-| disclosure when non-zero | required | **ADOPT** — it must not say "ignores small shifts"; measured, it also makes a changed digit match |
+| disclosure when non-zero | required | **ADOPT** — it must not say "ignores small shifts"; measured, it also erases a changed digit and a swapped symbol |
+
+**72 dpi is what sets the ceiling.** A millimetre is fewer pixels there and the
+mark is smaller, so the digit is gone by 0.2 mm. A maximum of 0.25 mm — which
+sweeping only 150 and 300 dpi would have justified — would have shipped a
+setting that hides a revision at the resolution most likely to be left on for a
+quick check.
 
 Two things the policy has to carry rather than leave implied. Millimetres round
-to whole pixels, so 0.05 mm is 0 px at 150 dpi and 1 px at 300 — below about
-0.1 mm the setting is finer than the render. And the implementation gate carries
-one assertion from all of this: **at the default settings, 1200 → 1300 reports
-CHANGE.**
+to whole pixels: 0.05 mm is 0 px at 72 and 150 dpi and 1 px at 300 and 450, so
+below about 0.1 mm the setting is finer than the render at the lower half of the
+range. And the implementation gate carries one assertion from all of this: **at
+the default settings, 1200 → 1300 reports CHANGE — at 72, 150, 300 and 450
+dpi.**
 
 ## 6b. What MATCH is allowed to rest on
 
@@ -434,28 +448,42 @@ is **byte-identical** to the shipped compositor across 34.8 MB of output, at two
 and four members, with and without a radius, and with a partly transparent match
 colour. So no member's RGBA survives phase 2.
 
+### The encoded output
+
+| option | verdict |
+| --- | --- |
+| a measured compression ratio (0.15 B/px) as the allowance | **REJECT** — a ratio an unseen drawing can exceed cannot gate a fail-closed budget |
+| a derived, content-independent upper bound | **ADOPT** — PNG worst case: filter byte per row, RGBA, DEFLATE stored blocks, zlib and container overhead, about **4.003 B/px** |
+| `canvas.toDataURL()` in the peak | **REJECT** — base64 at 4/3, two bytes per character, co-resident with the bytes it encodes |
+| `canvas.toBlob()` | **ADOPT** — and the budget is taken on it |
+| carrying the PNG bound over to JPEG unexamined | **REJECT** — JPEG has no comparable provable worst case; a reason to prefer PNG, fed to **H5** |
+
+The four measured export ratios remain in the evidence as **performance**
+evidence. They are not the safety proof.
+
+### What that permits
+
 Measured at 0.5 mm with two members:
 
 | | peak | |
 | --- | --- | --- |
-| A4 300 dpi | 106 MB | within |
-| A3 300 dpi | **211 MB** | within |
-| A2 300 dpi | 423 MB | within |
-| A1 300 dpi | 847 MB | **refused** |
-| A1 300 dpi, four members | 1125 MB | **refused** |
-| A0 600 dpi | 6779 MB | **refused** |
+| A4 300 dpi | 139 MB | within |
+| A3 300 dpi | **278 MB** | within |
+| A2 300 dpi | **557 MB** | **refused** |
+| A1 300 dpi | 1115 MB | **refused** |
+| A1 300 dpi, four members | 1394 MB | **refused** |
+| A0 600 dpi | 8928 MB | **refused** |
 
-A3 is the case that had to be re-derived. Under the shipped model it was 487 MB,
-just inside the ceiling; adding the four mask buffers to that figure would have
-put it at about 557 MB and outside it. Under the model that matches the selected
-architecture it is 211 MB, because the layer canvases and normalised copies are
-gone. The old claim was not wrong about A3 — it was resting on the wrong
-pipeline.
+Two rows moved when the compression assumption came out, and both are why it
+came out. A3 is 278 MB rather than 211 MB — still within, but on a margin that
+is derived rather than borrowed from the fixtures. **A2 at 300 dpi is now
+refused at 557 MB**, where the ratio-based model called it 423 MB and admitted a
+job it could not be sure of holding.
 
-The export is measured, not assumed: 0.025–0.050 bytes per pixel of data-URL
-text across JPEG and PNG, two sheet sizes, sparse and dense. The model allows
-0.15 and the gate asserts no measurement exceeds it. The more expensive format
-is budgeted while **H5** is open, so no budget claim depends on that decision.
+For contrast, the shipped model puts A3 at 487 MB — inside the ceiling, counting
+the wrong buffers; adding the four mask buffers to that figure would have given
+about 557 MB and refused it. Neither number described the architecture that was
+chosen.
 
 The 512 MiB itself is a judgement about how much memory one comparison may
 claim, not a threshold discovered in the data, and it is written down as one:

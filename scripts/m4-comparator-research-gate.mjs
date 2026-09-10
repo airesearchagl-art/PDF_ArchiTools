@@ -871,16 +871,29 @@ try {
             String(r.jpegBytesPerPixel).padStart(7)} B/px  png ${
             String(r.pngBytesPerPixel).padStart(7)} B/px`);
     }
-    check('the modelled export allowance is not exceeded by any measurement',
-        Object.values(encoding.rows).every((r) => (
-            r.jpegBytesPerPixel <= encoding.modelled.jpeg.dataUrlBytesPerPixel
-            && r.pngBytesPerPixel <= encoding.modelled.png.dataUrlBytesPerPixel
-        )),
-        `worst measured ${encoding.worstMeasured} B/px against an allowance of `
-        + `${encoding.modelled.png.dataUrlBytesPerPixel}`);
-    check('and the budget is taken on the more expensive format while H5 is open',
-        encoding.budgetedFormat === 'png',
-        'no budget claim depends on the export-format decision');
+    // The measurements above are performance evidence. The bound is derived.
+    check('the memory bound on the encoded image is derived, not measured',
+        encoding.boundIsDerivedNotMeasured === true
+        && Object.values(encoding.bounds).every(
+            (b) => b.upperBoundBytesPerPixel > 4 && b.upperBoundBytesPerPixel < 4.1,
+        ),
+        'PNG worst case: one filter byte per row, RGBA, DEFLATE stored blocks, '
+        + 'zlib and container overhead — about 4 bytes per pixel, whatever the '
+        + 'image contains');
+    probe('the measured ratios are far under it, and are not the safety proof',
+        Object.values(encoding.bounds).every((b) => b.measuredUnderBound),
+        `worst measured ${encoding.worstMeasured} B/px against a derived bound of `
+        + `~${Object.values(encoding.bounds)[0].upperBoundBytesPerPixel} B/px — a `
+        + 'compression ratio an unseen drawing can exceed, so it may not gate memory');
+    probe('and a data URL costs multiples of the bytes it encodes',
+        Object.values(encoding.bounds).every((b) => b.dataUrlBound > b.upperBound * 2),
+        `${(Object.values(encoding.bounds)[0].upperBound / 1e6).toFixed(0)}MB of bytes `
+        + `becomes ${(Object.values(encoding.bounds)[0].dataUrlBound / 1e6).toFixed(0)}MB `
+        + 'of base64 in a two-byte string, still co-resident with the bytes');
+    check('so the budget is taken on the blob path',
+        encoding.budgetedStrategy === 'blob',
+        `${encoding.strategies.blob.label} rather than `
+        + `${encoding.strategies.dataUrl.label}`);
 
     // ---- the working set of the selected architecture -----------------------
     console.log('\n=== the working set, phase by phase ===');
@@ -906,6 +919,15 @@ try {
         Object.values(phased.cases).every((r) => r.memberProcessing === 'serial'
             && r.pairProcessing === 'serial' && r.referenceMaskReused === true),
         'members serial, reference pairs serial, reference mask and dilation reused');
+    check('and the encoded output is charged as an upper bound, not a ratio',
+        Object.values(phased.cases).every((r) => r.encodedOutputIsUpperBound === true
+            && r.exportStrategy === 'blob'
+            && r.presentationLive.encodedString === 0),
+        'no base64 string in the peak, and no compression assumption under it');
+    probe('keeping the data URL would cost more than the blob path',
+        phased.byStrategy.dataUrl > phased.byStrategy.blob * 1.5,
+        `A3 at 300 dpi: ${phased.byStrategy.blob}MB via toBlob against `
+        + `${phased.byStrategy.dataUrl}MB via toDataURL`);
     // The claim the previous round could not support.
     probe('the A3 boundary case is re-derived under the new model, not carried over',
         a3.withinBudget === true
@@ -968,12 +990,10 @@ try {
             .every(([, r]) => r.verdict === 'CHANGE'),
         `${permitted.length} settings up to ${policy.maximum}mm, CHANGE at 150 and `
         + '300 dpi');
-    const beyond = Object.entries(small.spatial['one digit of a dimension'])
-        .find(([mm]) => parseFloat(mm) > policy.maximum);
-    probe('and the next setting past the ceiling is already invisible',
-        beyond !== undefined && beyond[1].verdict === 'MATCH',
-        `${beyond?.[0]} reports ${beyond?.[1].changePixels} changed pixels at 150 dpi `
-        + `— which is why the ceiling is ${policy.maximum}mm`);
+    probe('and a wide enough tolerance hides it outright',
+        small.spatial['one digit of a dimension']['0.3mm'].verdict === 'MATCH',
+        '0.3mm at 150 dpi reports 0 changed pixels — the ceiling exists for this, '
+        + 'and where it goes is settled across every supported resolution below');
     probe('and the same millimetres do not mean the same radius at every resolution',
         small.spatial['one digit of a dimension']['0.05mm'].radius
         !== small.spatialAtHigherDpi['0.05mm'].radius,
@@ -984,6 +1004,126 @@ try {
         Object.values(small.spatial['nothing changed (control)'])
             .every((r) => r.changePixels === 0),
         'a redraw of the same sheet differs by 0 pixels at every setting');
+
+    // ---- the tolerance at every resolution the product offers ---------------
+    console.log('\n=== the tolerance at 72, 150, 300 and 450 dpi ===');
+    const acrossDpi = await page.evaluate(() => window.__m4.spatialToleranceAcrossDpi());
+    evidence.spatialToleranceAcrossDpi = acrossDpi;
+    for (const dpi of acrossDpi.supportedDpi) {
+        console.log(`  ${String(dpi).padStart(3)}dpi radius  `
+            + acrossDpi.sweep.map((mm) => `${mm}:${acrossDpi.rounding[dpi][`${mm}mm`]}`)
+                .join(' '));
+        console.log(`         digit   `
+            + acrossDpi.sweep.map((mm) => String(
+                acrossDpi.changed[dpi][`${mm}mm`].changePixels).padStart(5)).join(' ')
+            + `   safe to ${acrossDpi.largestSafeMm[dpi].contiguous}mm`);
+        console.log(`         symbol  `
+            + acrossDpi.sweep.map((mm) => String(
+                acrossDpi.symbol[dpi][`${mm}mm`].changePixels).padStart(5)).join(' '));
+        console.log(`         control `
+            + acrossDpi.sweep.map((mm) => String(
+                acrossDpi.control[dpi][`${mm}mm`].changePixels).padStart(5)).join(' '));
+    }
+    check('the sweep covers every resolution the Comparator offers',
+        acrossDpi.supportedDpi.join(',') === '72,150,300,450',
+        'PdfComparator.tsx:805-808 offers 72, 150, 300 and 450 DPI');
+    // The assertion the implementation gate carries, at every resolution.
+    check('at the default tolerance a changed dimension is a change, at every dpi',
+        acrossDpi.supportedDpi.every((dpi) => acrossDpi.atDefault[dpi].changed === 'CHANGE'
+            && acrossDpi.atDefault[dpi].radius === 0),
+        acrossDpi.supportedDpi.map((dpi) => `${dpi}dpi:${
+            acrossDpi.changed[dpi]['0mm'].changePixels}px`).join(' '));
+    check('and the control is a match at every resolution and every setting',
+        acrossDpi.supportedDpi.every((dpi) => Object.values(acrossDpi.control[dpi])
+            .every((r) => r.changePixels === 0)),
+        'a redraw of the same sheet differs by 0 pixels throughout');
+    // The number the ceiling has to come from.
+    probe('the resolution where a real change disappears first is the weakest one',
+        acrossDpi.minimumSafeAcrossDpi
+            < Math.max(...acrossDpi.supportedDpi.map(
+                (dpi) => acrossDpi.largestSafeMm[dpi].contiguous ?? 0,
+            )),
+        acrossDpi.supportedDpi.map((dpi) => `${dpi}dpi safe to `
+            + `${acrossDpi.largestSafeMm[dpi].contiguous}mm`).join(', '));
+    check('the policy maximum is the minimum safe bound across all of them',
+        acrossDpi.policyMaximum === acrossDpi.minimumSafeAcrossDpi
+        && acrossDpi.policyMaximumIsSafeEverywhere === true,
+        `maximum ${acrossDpi.policyMaximum}mm, safe at all of `
+        + `${acrossDpi.supportedDpi.join('/')} dpi`);
+    // What sweeping only the middle of the range would have shipped.
+    probe('one step past the ceiling the change is already hidden at 72 dpi',
+        acrossDpi.changed[72]['0.2mm'].verdict === 'MATCH'
+        && acrossDpi.changed[150]['0.2mm'].verdict === 'CHANGE',
+        '0.2mm: 0 changed pixels at 72 dpi, 14 at 150 — a ceiling justified on '
+        + '150/300 dpi alone would have hidden a revision at 72');
+    probe('and the same tolerance erases a swapped symbol too, not only a digit',
+        acrossDpi.symbol[72]['0.5mm'].changePixels
+        < acrossDpi.symbol[72]['0mm'].changePixels,
+        `a circle swapped for a square: ${acrossDpi.symbol[72]['0mm'].changePixels}px `
+        + `at 0mm, ${acrossDpi.symbol[72]['0.5mm'].changePixels}px at 0.5mm — this is `
+        + 'not a positional-noise filter');
+    check('integer-pixel rounding is recorded for every supported resolution',
+        acrossDpi.supportedDpi.every((dpi) => acrossDpi.sweep
+            .every((mm) => Number.isInteger(acrossDpi.rounding[dpi][`${mm}mm`]))),
+        acrossDpi.supportedDpi.map((dpi) => `${dpi}dpi: 0.05mm -> `
+            + `${acrossDpi.rounding[dpi]['0.05mm']}px`).join(', '));
+    probe('the disclosure names what a non-zero tolerance actually hides',
+        /寸法値|文字|記号|形状/.test(small.policy.disclosureWhenNonZero)
+        && !/^位置ずれのみ/.test(small.policy.disclosureWhenNonZero),
+        small.policy.disclosureWhenNonZero);
+
+    // ---- the work of a whole job, not of one page --------------------------
+    console.log('\n=== the work a whole job would do ===');
+    const jobs = await page.evaluate(() => window.__m4.jobWork());
+    evidence.jobWork = jobs;
+    for (const [label, r] of Object.entries(jobs.jobs)) {
+        console.log(`  ${label.padEnd(48)} ${String(r.comparablePages)}/${
+            r.requestedPages} pages  ${
+            (r.jobWorkUnits === null ? 'unrepresentable'
+                : r.jobWorkUnits.toLocaleString('en-US')).padStart(16)} units  ${
+            r.withinBudget ? 'within' : 'REFUSED'}`);
+    }
+    check('one page under the ceiling is ready',
+        jobs.jobs['one page, below the ceiling'].withinBudget === true);
+    check('and several pages whose total is under it',
+        jobs.jobs['three pages, total below'].withinBudget === true
+        && jobs.jobs['three pages, total below'].jobWorkUnits
+            === jobs.jobs['one page, below the ceiling'].jobWorkUnits * 3,
+        `${jobs.jobs['three pages, total below'].jobWorkUnits.toLocaleString('en-US')} `
+        + 'units, exactly three times one page');
+    // The gap a per-page ceiling leaves open.
+    probe('pages that each pass on their own can be refused as a job',
+        jobs.jobs['five pages, each below, the total above'].withinBudget === false
+        && jobs.jobs['five pages, each below, the total above']
+            .everyPageWithinPageCeiling === true,
+        jobs.jobs['five pages, each below, the total above'].refusal.reason);
+    probe('and a single page over the ceiling is named as the reason',
+        jobs.jobs['one page over on its own'].withinBudget === false
+        && jobs.jobs['one page over on its own'].refusal.reason.includes('alone is'),
+        jobs.jobs['one page over on its own'].refusal.reason);
+    check('reference-pairs are costed per page, not once',
+        jobs.jobs['reference-pairs over three pages'].jobWorkUnits
+            === jobs.jobs['reference-pairs over three pages'].perPageUnits[0] * 3,
+        `${jobs.jobs['reference-pairs over three pages'].perPageUnits[0]
+            .toLocaleString('en-US')} units per page, three pages`);
+    // A page left out of the estimate is a page the user was not told about.
+    probe('a page that cannot be compared stays in the plan at zero work',
+        jobs.jobs['a page that cannot be compared is still in the plan']
+            .skipped.length === 2
+        && jobs.jobs['a page that cannot be compared is still in the plan']
+            .comparablePages === 1,
+        jobs.jobs['a page that cannot be compared is still in the plan']
+            .skipped.join(', '));
+    check('an export range costs only the pages it asked for',
+        jobs.jobs['an export range costs only the pages asked for']
+            .requestedPages === 2
+        && jobs.jobs['an export range costs only the pages asked for'].jobWorkUnits
+            === jobs.jobs['one page, below the ceiling'].jobWorkUnits * 2);
+    probe('and a job whose arithmetic leaves the safe-integer range is refused',
+        jobs.jobs['arithmetic outside the safe-integer range'].representable === false
+        && jobs.jobs['arithmetic outside the safe-integer range'].refusal.status
+            === 'OVER_WORK_BUDGET',
+        jobs.jobs['arithmetic outside the safe-integer range'].refusal.reason);
 
     // ---- a cancellation that arrives while the comparison runs --------------
     console.log('\n=== a cancellation that arrives mid-comparison ===');

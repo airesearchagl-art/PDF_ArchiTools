@@ -419,42 +419,57 @@ the actual render scale. 0.5 mm becomes 1 / 3 / 6 / 12 px at 72 / 150 / 300 /
 
 A unit is not the whole of the decision, though, and treating it as one would
 put back what removing the ratio floor took out. **The spatial tolerance can
-suppress a true semantic change.** Measured, changed pixels for a dimension
-string reading 1200 against one reading 1300:
+suppress a true semantic change.** Measured at every resolution the Comparator
+offers — `PdfComparator.tsx` gives 72, 150, 300 and 450 DPI — changed pixels for
+a dimension string reading 1200 against one reading 1300:
 
-| | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** |
-| 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** |
+| | 0 | 0.05 | 0.1 | 0.15 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 mm | safe to |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **72 dpi** | 10 | 10 | 10 | 10 | **0** | **0** | **0** | **0** | **0** | **0.15 mm** |
+| 150 dpi | 51 | 51 | 14 | 14 | 14 | 14 | **0** | **0** | **0** | 0.25 mm |
+| 300 dpi | 186 | 96 | 96 | 49 | 49 | 18 | 1 | **0** | **0** | 0.3 mm |
+| 450 dpi | 401 | 248 | 166 | 113 | 73 | 73 | 38 | **0** | **0** | 0.3 mm |
 
-At 0.3 mm the two dimensions agree. That is not a rendering detail with a unit
-attached; it is a setting that turns a revised drawing into an unrevised one, so
-**H6** is a policy rather than a choice of unit:
+**72 dpi sets the ceiling, and sweeping only the middle of the range would have
+missed it.** A millimetre is fewer pixels there, so the same setting is a
+coarser search *and* the mark it is looking for is smaller: the digit is gone by
+0.2 mm. A maximum of 0.25 mm — which the 150/300 dpi evidence alone would have
+justified — would have shipped a setting that silently hides a revision at the
+resolution most likely to be left on for a quick check.
+
+So **H6** is a policy rather than a choice of unit:
 
 | | proposed | why |
 | --- | --- | --- |
 | unit | mm | the drawing office's unit; a pixel radius means a different distance at every DPI |
 | **default** | **0 mm** | a comparison nobody configured must report every difference it can see |
 | minimum | 0 mm | and zero is always available, at every resolution |
-| **maximum** | **0.25 mm** | the largest setting at which the smallest measured true change is still reported, at 150 **and** 300 dpi. One step past it the changed digit is already invisible at 150 dpi |
+| **maximum** | **0.15 mm** | the **minimum** safe bound across all four supported resolutions, not the average and not what the middle of the range would allow |
 | step | 0.05 mm | fine enough to be useful; see the caveat below |
 | opt-in | explicit | a non-zero tolerance is something the user chose, not something the tool assumed |
 | disclosure | required | see below |
 
+A DPI-dependent ceiling was the alternative and is rejected: the same number in
+the same box would mean different things depending on a separate setting, which
+is the class of defect this whole spike is about.
+
 **The wording matters and is part of the contract.** "Ignores small shifts" is
-not what this does — measured, it also makes a changed digit and a swapped
-symbol match. The disclosure has to say that a non-zero tolerance may report a
-changed dimension or symbol as unchanged.
+not what this does — measured, it also erases a changed digit and a swapped
+symbol (a circle changed to a square goes from 112 differing pixels to 32 at
+72 dpi). The disclosure has to say that a non-zero tolerance may report a
+changed **dimension, character, symbol or shape** as unchanged, not merely that
+it absorbs positional noise.
 
 **A caveat the policy has to carry:** millimetres are converted to a *whole*
-pixel radius, so the same setting is not exactly the same distance at every
-resolution. 0.05 mm rounds to 0 px at 150 dpi and 1 px at 300 dpi, which is why
-the digit survives 0.05 mm at 150 dpi untouched and loses half its differing
-pixels at 300 dpi. Below about 0.1 mm the setting is finer than the render, and
-the policy should say so rather than imply a precision it does not have.
+pixel radius, so the same setting is not exactly the same search at every
+resolution. 0.05 mm rounds to 0 px at 72 and 150 dpi and 1 px at 300 and 450.
+Below about 0.1 mm the setting is finer than the render at the lower half of the
+range, and the policy should say so rather than imply a precision it does not
+have.
 
 The implementation gate carries one assertion from this: **at the default
-settings, a dimension changed from 1200 to 1300 reports CHANGE.**
+settings, a dimension changed from 1200 to 1300 reports CHANGE — at 72, 150, 300
+and 450 dpi.**
 
 ## The cost of comparing
 
@@ -510,15 +525,51 @@ drawing costs a fraction of this — 0.9% of the measured A4 is ink. But the ink
 fraction is not knowable before rendering, and a scanned dark sheet can be ink
 nearly everywhere. A bound that holds only for sparse drawings is not a bound.
 
+### The ceiling applies to the job, not to the page
+
+Memory is a **peak** and pages are rendered one after another, so the phase
+model above is the right shape for it: a two-hundred-page export never holds
+more than one page's buffers.
+
+Work is **cumulative**, and the export and the change report both run over
+ranges. A ceiling checked per page bounds nothing a user actually asks for —
+a hundred pages that each pass comfortably are a hundred times the work, and
+"about 55 seconds" becomes an hour and a half.
+
+```
+    pageWork[i]  = estimateComparisonWork(page[i])
+    jobWorkUnits = sum of pageWork[i].units over every requested page and pair
+    jobWorkUnits > MAX_COMPARISON_WORK_UNITS  ->  OVER_WORK_BUDGET
+```
+
+Accumulated with the same safe-integer arithmetic, decided before rendering
+starts, and costing only the pages the user asked for — an export of pages 3–5
+pays for three pages. Under `reference-pairs`, every required pair on every
+requested page is counted.
+
+A page that cannot be compared — one document has no such page, a member failed
+to render, the geometry was refused — **stays in the plan** at zero work with
+the reason recorded. Dropping it from the estimate would make the job look
+cheaper by not mentioning it, which is the shipped comparator's failure in a
+different place.
+
+Measured: five A4 pages at 300 dpi and 0.5 mm are 2,957,102,400 units each —
+every one comfortably inside — and 14,785,512,000 together, which is refused.
+A per-page ceiling would have run all five.
+
 The ceiling: **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` — a recommendation
 requiring human approval, not a measured threshold.** It is user-visible,
 because it refuses comparisons. Where it comes from: the highest measured cost
 per work unit on the corpus is the A4 300 dpi radius-0 pair, 158 ms for
 34,789,440 units — 4.5 × 10⁻⁶ ms per unit, and the case where the bound is
 *tightest*, so it is the pessimistic calibration. Twelve billion units at that
-rate projects to about **55 seconds** on the measured machine.
+rate projects to about **55 seconds** on the measured machine — for the whole
+operation, which is what makes that number mean anything. A single page is
+bounded by the same figure as a consequence, since one page is a job of one.
 
-| at a 0.5 mm tolerance, two members | work units | |
+One page, at a 0.5 mm tolerance with two members unless stated:
+
+| | work units | as a job of one |
 | --- | --- | --- |
 | A4 at 300 dpi | 2,957,102,400 | within |
 | A3 at 300 dpi | 5,917,083,920 | within |
@@ -672,38 +723,66 @@ white and multiplies in a *flat* colour wherever the ink predicate is true. It
 never reads the source pixel's intensity. So no member's RGBA survives phase 2,
 and four bytes per pixel per member stop being co-resident with anything.
 
-Measured, at a 0.5 mm tolerance with two members:
+### The export cannot be budgeted on a compression ratio
+
+An earlier version of this allowed **0.15 bytes per pixel** for the encoded
+output, derived from four measured composites. That is a compression *ratio*,
+and a fail-closed memory gate may not rest on one. The drawings in this corpus
+compress to about a fortieth of that allowance; a scanned sheet, a photographic
+underlay or a dense hatch need not. The gate would then be admitting a job it
+cannot hold, on the strength of how the fixtures happened to encode.
+
+So the allowance is **derived**, from PNG's worst case:
+
+```
+    raster        = height x (1 + width x 4)      one filter byte per row, RGBA
+    deflate worst = raster + 5 x ceil(raster / 65535) + 6    stored blocks, zlib
+    + container overhead                          signature, IHDR, IDAT, IEND
+```
+
+About **4.003 bytes per pixel**, and it is an upper bound rather than an
+estimate: no image of those dimensions can encode larger, whatever it contains.
+The four measured ratios stay in the evidence as **performance** evidence; they
+are not the safety proof.
+
+JPEG has no comparable provable worst case. That is a reason to prefer **PNG**
+for M4 and is fed to **H5** as one; if JPEG is chosen, the allowance has to be
+re-derived for it rather than assumed to carry over.
+
+**And the bytes should not become a string.** `toDataURL` returns base64 — 4/3
+the encoded size, at two bytes per character in the engine — while the encoded
+buffer is still live. At an upper bound of four bytes per pixel that is the
+difference between 278 MB and 464 MB for an A3 at 300 dpi, for an artefact that
+is usually turned straight back into bytes. **`canvas.toBlob` is the recommended
+path, and the budget is taken on it.**
+
+### What that permits
+
+At a 0.5 mm tolerance with two members:
 
 | | peak | at | |
 | --- | --- | --- | --- |
-| A4 at 300 dpi | 106 MB | presentation | within |
-| A3 at 300 dpi | **211 MB** | presentation | within |
-| A2 at 300 dpi | 423 MB | presentation | within |
-| A1 at 300 dpi | 847 MB | presentation | **refused** |
-| A1 at 300 dpi, four members | 1125 MB | presentation | **refused** |
-| A0 at 600 dpi | 6779 MB | presentation | **refused** |
+| A4 at 300 dpi | 139 MB | presentation | within |
+| A3 at 300 dpi | **278 MB** | presentation | within |
+| A2 at 300 dpi | 557 MB | presentation | **refused** |
+| A1 at 300 dpi | 1115 MB | presentation | **refused** |
+| A1 at 300 dpi, four members | 1394 MB | presentation | **refused** |
+| A0 at 600 dpi | 8928 MB | presentation | **refused** |
 
-The A3 case is the one that had to be re-derived rather than carried over: under
-the shipped model it was 487 MB, just inside the ceiling, and simply adding the
-four mask buffers to that number would have pushed it to about 557 MB and out.
-Under the model that matches the selected architecture it is 211 MB, because the
-two layer canvases and two normalised copies it used to hold are gone. The
-previous round's "within 512 MiB" claim was not wrong about A3; it was resting
-on the wrong pipeline.
+Two rows moved when the compression assumption was removed, and both are the
+point of removing it. A3 at 300 dpi is 278 MB rather than 211 MB — still within,
+but the margin is now real rather than borrowed from the fixtures. **A2 at
+300 dpi is now refused at 557 MB** where the ratio-based model called it 423 MB
+and let it through. That is a comparison a user can ask for, and under the old
+model the gate would have admitted a job it could not be sure of holding.
 
-A tolerance of zero allocates no dilation buffers at all: 10.15 bytes per pixel
-against 12.15 at 0.5 mm.
+For contrast, the shipped model puts A3 at 300 dpi at 487 MB — inside the
+ceiling, but counting the wrong buffers. Adding the four mask buffers to that
+figure would have given about 557 MB and refused it. Neither number was
+describing the architecture that was chosen.
 
-### The export
-
-`toDataURL` returns a string, so what is held is base64 text. Measured on real
-composites: 0.025–0.050 bytes per pixel across JPEG and PNG, at two sheet sizes
-and on both a sparse and a dense drawing. The model allows **0.15** — about
-three times the worst measurement — and the gate asserts that no measurement
-exceeds the allowance, so the assumption checks itself.
-
-Which format ships is **H5**. The planner budgets the more expensive of the two
-until that is answered, so no budget claim depends on the open decision.
+A tolerance of zero allocates no dilation buffers at all: 14 bytes per pixel
+against 16 at 0.5 mm.
 
 The 512 MiB itself is a judgement about how much one comparison may claim, not a
 threshold found in the data, and it is recorded as one: **H7**.

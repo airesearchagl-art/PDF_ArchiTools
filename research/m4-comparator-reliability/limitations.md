@@ -81,6 +81,14 @@ The *shape* of the bound is better founded than its value: it is conservative
 about the ink fraction on purpose, and the radius-0 case demonstrates that the
 previous shape was not a bound at all.
 
+The job-level accumulation is arithmetic as well. **No multi-page job was
+actually run** — not five pages, not an export range, not a change report over a
+document. What is established is that the sum is computed, that pages which
+cannot be compared stay in the plan, and that a job whose pages individually
+pass can be refused. Whether five pages take five times as long in practice is
+not measured, and page-to-page variation in ink fraction means it probably does
+not.
+
 ## The budget is a judgement, not a discovered threshold
 
 512 MiB is chosen, not found. Where to draw the line is a decision about how much
@@ -134,12 +142,31 @@ The production implementation gate has to exercise the real thing.
 
 ## The spatial tolerance ceiling comes from one fixture
 
-`maximum: 0.25 mm` is the largest setting at which the *dimension-digit* fixture
-is still reported as changed, at 150 and 300 dpi. That fixture happens to be the
-smallest true change in the corpus, which is why it sets the ceiling — but it is
-one change, drawn at one size, in one font. A smaller mark on a busier sheet
-would move the number, and nothing here establishes that 0.25 mm is safe for
-marks this corpus does not contain.
+`maximum: 0.15 mm` is the **minimum** across 72, 150, 300 and 450 dpi of the
+largest setting at which the *dimension-digit* fixture is still reported as
+changed. Sweeping all four resolutions is what caught it: 150 and 300 dpi alone
+would have justified 0.25 mm, and 72 dpi loses the change at 0.2 mm.
+
+It is still one change, drawn at one size, in one font, on a sheet this corpus
+generated. A smaller mark — a hairline leader, a 2 mm symbol, text at 1.8 mm cap
+height — would move the number, and nothing here establishes that 0.15 mm is
+safe for marks the corpus does not contain. The ceiling is a floor under the
+problem, not a proof about drawings in general.
+
+## The encoded-output bound is PNG's, and only PNG's
+
+`encodedImageUpperBound` is derived from PNG: one filter byte per row, RGBA,
+DEFLATE's stored-block worst case, zlib and container overhead. That is a
+genuine upper bound for PNG and it is not a measurement.
+
+**JPEG has no comparable provable worst case here.** The bound is not shown to
+hold for it, and if H5 chooses JPEG it has to be re-derived rather than assumed
+to carry over. The four measured export ratios are performance evidence and are
+explicitly not the safety proof.
+
+The bound also assumes the encoder does not hold more than one working bitmap
+beyond the canvas. `toBlob` is asynchronous and its internals are the browser's;
+nothing here observed what Chrome actually allocates during encoding.
 
 ## The multi-member contract is measured, not chosen
 
