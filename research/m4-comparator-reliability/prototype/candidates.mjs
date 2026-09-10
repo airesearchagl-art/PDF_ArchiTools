@@ -35,6 +35,10 @@ export const PLAN = {
     OVER_MEMORY_BUDGET: 'OVER_MEMORY_BUDGET',
     /** The work the comparison would do is over the ceiling. */
     OVER_WORK_BUDGET: 'OVER_WORK_BUDGET',
+    /** The finished output the operation would hold is over the ceiling. */
+    OVER_OUTPUT_BUDGET: 'OVER_OUTPUT_BUDGET',
+    /** The temporary bytes the operation needs will not fit in storage. */
+    OVER_STORAGE_CAPACITY: 'OVER_STORAGE_CAPACITY',
 };
 
 export const RESULT = {
@@ -1013,11 +1017,92 @@ export const OUTPUT_SINK = {
     SPOOL: 'spool',
 };
 
-/** The recommended sink, and the one the budget is taken on. */
-export const M4_OUTPUT_SINK = OUTPUT_SINK.SPOOL;
+/**
+ * The two paths, and what each one is ready for.
+ *
+ * The spool prototype establishes real properties — browser-local staging, no
+ * external service, nothing published on a cancellation or a supersession,
+ * cleanup on the measured paths — and it does **not** establish a comparison
+ * PDF. The parts are concatenated into one file to prove the lifecycle; a
+ * container has structure, and `jsPDF` as used today builds the whole document
+ * in memory. Presenting the spool path as ready to build would be the Candidate
+ * C mistake again: a plan claiming a thing it has no contract for.
+ */
+export const OUTPUT_PATHS = {
+    [OUTPUT_SINK.MEMORY]: {
+        implementationReady: true,
+        ceiling: 'MAX_OUTPUT_BYTES, checked in preflight',
+        establishes: [
+            'the container that ships today',
+            'an explicit output ceiling',
+            'atomic publish, since nothing exists until save()',
+        ],
+        missing: [],
+    },
+    [OUTPUT_SINK.SPOOL]: {
+        implementationReady: false,
+        requires: 'output-writer-sub-spike',
+        establishes: [
+            'browser-local staging with no external service',
+            'bounded chunked write and bounded chunked read',
+            'no artifact after a cancellation',
+            'no artifact after a supersession',
+            'run-scoped namespaces and ownership-aware cleanup',
+        ],
+        missing: [
+            'a real comparison PDF assembled from the spool',
+            'a bounded streaming container writer',
+            'storage-quota preflight against a real quota',
+            'crash and tab-close orphan recovery',
+            'reopen validation: page count, dimensions, orientation',
+            'production integration',
+        ],
+    },
+};
 
-/** What a spooling writer may hold in RAM at once. */
+/**
+ * The recommended M4 MVP sink.
+ *
+ * **Memory**, and deliberately the smaller feature. It is the path that can be
+ * built now: an explicit ceiling, a fail-closed preflight, and a container that
+ * already exists. The spool is the answer for large jobs and it needs an Output
+ * Writer Sub-Spike first.
+ */
+export const M4_OUTPUT_SINK = OUTPUT_SINK.MEMORY;
+
+/** The sink the large-job path would use, once the sub-spike is done. */
+export const DEFERRED_OUTPUT_SINK = OUTPUT_SINK.SPOOL;
+
+/** What a spooling writer may hold in RAM at once, writing *to* the spool. */
 export const MAX_SPOOL_CHUNK_BYTES = 4 * 1024 * 1024;
+
+/**
+ * And reading back *from* it.
+ *
+ * A separate constant because it bounds a separate allocation, and because the
+ * first version of the prototype bounded only the write side: it staged in
+ * 4 MiB chunks and then assembled with `file.arrayBuffer()`, pulling a whole
+ * 8.7 MB part into RAM at once. The measurement said "publish ≤ 4 MiB" because
+ * it was measuring the wrong side of the same file.
+ */
+export const MAX_PUBLISH_CHUNK_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The ceiling on finished output, for a container that stays in RAM.
+ *
+ * **256 MiB — a recommendation requiring human approval.** It exists so that a
+ * refusal can name the output rather than a total the user cannot decompose:
+ * "this comparison would produce more finished output than one operation may
+ * hold" is actionable in a way that "over the working-set budget" is not.
+ *
+ * What it means depends entirely on **H5**, which is the dependency to see
+ * before choosing here. Under the owned encoder's exact 4.001 bytes per pixel
+ * an A4 visual at 300 dpi is 34.8 MB, so 256 MiB is about **seven visuals** —
+ * seven pages of a two-member comparison, or two pages of a four-member one.
+ * Under a compressing encoder the same ceiling would hold hundreds, and the
+ * bound would no longer be exact. The trade is the decision.
+ */
+export const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
 
 /**
  * The pair-result lifetime contract.
@@ -1075,21 +1160,28 @@ export function estimateOutputState({
         return {
             ...base,
             representable: true,
-            // The bytes are on disk. RAM holds one write chunk.
+            // The bytes are on disk. RAM holds one write chunk while staging
+            // and one read chunk while assembling — never a whole part.
             retainedInRam: MAX_SPOOL_CHUNK_BYTES,
+            publishReadChunk: MAX_PUBLISH_CHUNK_BYTES,
+            retainedPerCompletedPage: 0,
             spooledBytes: totalEncodedBytes,
         };
     }
     // Everything resident: the encoded images the container is holding, plus
     // the container's own assembled copy. A data-URL handoff pays base64 on
     // top of that, at two bytes a character, which is what ships.
-    const held = encodeAsDataUrl
-        ? Math.ceil(totalEncodedBytes * 4 / 3) * 2
-        : totalEncodedBytes;
+    const perVisualHeld = encodeAsDataUrl
+        ? Math.ceil(perVisualBytes * 4 / 3) * 2
+        : perVisualBytes;
+    const held = perVisualHeld * visuals;
     return {
         ...base,
         representable: true,
         retainedInRam: held + totalEncodedBytes,
+        // What one finished page costs to keep while the next one is compared.
+        retainedPerCompletedPage: perVisualHeld * pairsPerPage,
+        publishReadChunk: 0,
         spooledBytes: 0,
         encodeAsDataUrl,
     };
@@ -1115,25 +1207,65 @@ export function estimateJobMemory({
     const output = estimateOutputState({
         pages, members, contract, width, height, sink, encodeAsDataUrl,
     });
-    const publish = output.representable
-        ? output.retainedInRam
-        : null;
-    const jobPeak = publish === null ? null : Math.max(perPage.peakWorkingSet, publish);
+    if (!output.representable) {
+        return {
+            pages,
+            perPagePeak: perPage.peakWorkingSet,
+            perPagePeakPhase: perPage.peakPhase,
+            output,
+            duringLastPage: null,
+            publishPhase: null,
+            jobPeak: null,
+            peakPhase: null,
+            representable: false,
+        };
+    }
+    // The output of every finished page is live *while* the next one is being
+    // compared, so these are not alternatives to be maximised over — they
+    // overlap. Taking max() of the page peak and the publish peak, as an
+    // earlier version did, understates a memory-resident job by the whole of
+    // its finished output.
+    const duringLastPage = perPage.peakWorkingSet
+        + output.retainedPerCompletedPage * Math.max(0, pages - 1);
+    const publish = output.retainedInRam
+        + (output.publishReadChunk ?? 0);
+    const jobPeak = Math.max(duringLastPage, publish);
     return {
         pages,
         perPagePeak: perPage.peakWorkingSet,
         perPagePeakPhase: perPage.peakPhase,
         output,
+        duringLastPage,
         publishPhase: publish,
         jobPeak,
-        peakPhase: publish !== null && publish > perPage.peakWorkingSet
-            ? 'publish' : perPage.peakPhase,
-        representable: output.representable,
+        peakPhase: publish >= duringLastPage ? 'publish' : 'the last page',
+        representable: true,
     };
 }
 
-export function checkJobMemory(job, { limit = MAX_COMPARISON_BYTES } = {}) {
+export function checkJobMemory(job, {
+    limit = MAX_COMPARISON_BYTES,
+    outputLimit = MAX_OUTPUT_BYTES,
+} = {}) {
     const estimate = estimateJobMemory(job);
+    if (estimate.representable && estimate.output.sink === OUTPUT_SINK.MEMORY
+        && estimate.output.totalEncodedBytes > outputLimit) {
+        // Named as an output refusal rather than a total, because that is the
+        // thing the user can do something about.
+        return {
+            ...estimate,
+            limit,
+            outputLimit,
+            withinBudget: false,
+            refusal: {
+                status: PLAN.OVER_OUTPUT_BUDGET,
+                reason: `${estimate.output.visuals} visual(s) totalling `
+                    + `${(estimate.output.totalEncodedBytes / 1e6).toFixed(0)} MB of `
+                    + `finished output, against a ceiling of `
+                    + `${(outputLimit / 1e6).toFixed(0)} MB`,
+            },
+        };
+    }
     if (!estimate.representable) {
         return {
             ...estimate,
@@ -1157,6 +1289,113 @@ export function checkJobMemory(job, { limit = MAX_COMPARISON_BYTES } = {}) {
                 + `against a ceiling of ${(limit / 1e6).toFixed(0)} MB`,
         },
     };
+}
+
+/**
+ * Storage is a third budget, and it is not RAM.
+ *
+ * A spooled 200-page four-member job is **20.9 GB of temporary bytes**. The
+ * previous round reported that row as "within" because the *RAM* peak was
+ * 4 MiB, which is true and is not the whole sentence: nothing had asked
+ * whether 20.9 GB would fit anywhere. A budget that answers a question nobody
+ * asked reads like a budget that answered this one.
+ *
+ * `totalEncodedBytes` is known before anything is rendered, so the check can be
+ * a preflight like the others. What it can compare against is whatever the
+ * browser will say — `navigator.storage.estimate()` is advisory, may be
+ * quantised for privacy, and may be absent entirely. So there are three
+ * outcomes and only one of them is "fits":
+ */
+export const STORAGE_VERDICT = {
+    WITHIN: 'within',
+    INSUFFICIENT: 'insufficient',
+    /** No quota could be read. Not the same as room, and not the same as none. */
+    UNKNOWN: 'unknown',
+};
+
+/**
+ * How much of a reported quota one operation may claim.
+ *
+ * Half, because the quota is shared with everything else the origin has stored
+ * and a comparison that fills it is a comparison that breaks the next one.
+ */
+export const STORAGE_HEADROOM = 0.5;
+
+export function checkStorageCapacity({
+    requiredBytes,
+    quotaBytes = null,
+    usageBytes = 0,
+    headroom = STORAGE_HEADROOM,
+}) {
+    if (quotaBytes === null || !Number.isFinite(quotaBytes)) {
+        return {
+            requiredBytes,
+            verdict: STORAGE_VERDICT.UNKNOWN,
+            availableBytes: null,
+            refusal: null,
+            reported: `${(requiredBytes / 1e9).toFixed(1)} GB of temporary output `
+                + 'required; the browser reported no storage estimate',
+        };
+    }
+    const availableBytes = Math.max(0, (quotaBytes - usageBytes) * headroom);
+    if (requiredBytes > availableBytes) {
+        return {
+            requiredBytes,
+            availableBytes,
+            quotaBytes,
+            usageBytes,
+            verdict: STORAGE_VERDICT.INSUFFICIENT,
+            refusal: {
+                status: PLAN.OVER_STORAGE_CAPACITY,
+                reason: `${(requiredBytes / 1e9).toFixed(1)} GB of temporary output `
+                    + `against ${(availableBytes / 1e9).toFixed(1)} GB this origin `
+                    + 'may claim',
+            },
+        };
+    }
+    return {
+        requiredBytes,
+        availableBytes,
+        quotaBytes,
+        usageBytes,
+        verdict: STORAGE_VERDICT.WITHIN,
+        refusal: null,
+    };
+}
+
+/**
+ * Two tabs, two runs, one origin.
+ *
+ * The prototype's first spool used a fixed `m4-spool` and cleaned it at start.
+ * That is fine for one run and wrong for two: the second tab deletes the
+ * first's staged pages, and whichever publishes last publishes over the other.
+ * Nothing about the atomic-publish contract survives that.
+ *
+ * So temporary space is **run-scoped**, and cleanup is **ownership-aware**: a
+ * run removes its own namespace and nothing else. Abandoned namespaces are a
+ * recovery problem, not a start-up problem — a later run may sweep them, but
+ * only ones no live run claims.
+ */
+export function spoolNamespace({ runId, generation }) {
+    return `m4-spool-${runId}-g${generation}`;
+}
+
+export function ownsNamespace(name, { runId }) {
+    return name.startsWith(`m4-spool-${runId}-`);
+}
+
+/**
+ * Which abandoned namespaces a recovery pass may remove.
+ *
+ * Never one a live run claims, however old it looks: a long comparison is
+ * indistinguishable from an abandoned one by age alone.
+ */
+export function reclaimableNamespaces(names, { liveRunIds }) {
+    const live = new Set(liveRunIds);
+    return names.filter((name) => {
+        const match = /^m4-spool-([^-]+)-g\d+$/.exec(name);
+        return match !== null && !live.has(match[1]);
+    });
 }
 
 /**
@@ -1449,7 +1688,7 @@ export function estimateComparisonWork({
  *
  * Measured, under the dilation: the worst cost per unit over five sizes and
  * radii is 1.9e-6 ms — an A1 at 150 dpi, 139,393,888 units in 263 ms. Twelve
- * billion units at that rate is about **23 seconds of comparison-kernel time**
+ * billion units at that rate is about **22 seconds of comparison-kernel time**
  * for the whole job. Not 23 seconds of waiting.
  *
  * What that is, in work a user can picture: **about 173 A4 pages at 300 dpi and

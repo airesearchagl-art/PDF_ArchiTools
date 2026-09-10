@@ -203,15 +203,15 @@ completion, and per ink pixel:
 
 | | per ink pixel |
 | --- | --- |
-| matching, 150 dpi, radius 3 | **0.59 µs** |
-| not matching, 150 dpi, radius 3 | **1.56 µs** |
+| matching, 150 dpi, radius 3 | **0.73 µs** |
+| not matching, 150 dpi, radius 3 | **1.09 µs** |
 
-**2.6×.** Wall-clock page times hide this, because the adversarial pair is the
+**1.5×.** Wall-clock page times hide this, because the adversarial pair is the
 sparser drawing and would be credited for having less to do.
 
 A physical threshold makes it worse at higher resolution rather than better,
-since the radius grows with the DPI: the same non-matching pair costs 43 ms at
-150 dpi with radius 3 and 207 ms at 300 dpi with radius 6.
+since the radius grows with the DPI: the same non-matching pair costs 45 ms at
+150 dpi with radius 3 and 217 ms at 300 dpi with radius 6.
 
 ## The threshold means different things at different resolutions
 

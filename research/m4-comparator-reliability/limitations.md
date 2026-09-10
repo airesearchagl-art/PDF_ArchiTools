@@ -49,7 +49,7 @@ does.
 
 ## The worst case is measured, but only on one shape
 
-A non-matching pair is now in the corpus: 1.56 us per ink pixel against 0.59 us
+A non-matching pair is now in the corpus: 1.09 us per ink pixel against 0.73 us
 when the drawings match, at radius 3. That is the effect isolated, and isolating
 it required normalising by ink pixel — the adversarial pair is the *sparser*
 drawing, so wall-clock page times would have credited it for having less to do.
@@ -71,7 +71,7 @@ assembly and the final artifact — several of which are, on the evidence
 elsewhere in this document, larger than the comparison itself. A single A4 page
 renders in tens of milliseconds and encodes in more.
 
-So "about 23 seconds" is **comparison-kernel** time and no claim is made about
+So "about 22 seconds" is **comparison-kernel** time and no claim is made about
 how long a person waits. If H10 is wanted as a wall-clock bound, it needs an
 end-to-end calibration from render through publish, which this research has not
 done.
@@ -80,7 +80,7 @@ done.
 
 `MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is calibrated against
 `separable-dilation`, the algorithm the planner is bound to, from the worst of
-five measured cost-per-unit figures and projected linearly to about 23 seconds.
+five measured cost-per-unit figures and projected linearly to about 22 seconds.
 Three things about that are weak, and are why it is a recommendation requiring
 approval rather than a finding:
 
@@ -142,23 +142,45 @@ not a behaviour that was observed.
 Garbage collection is also not instantaneous. The model assumes a released
 buffer stops counting immediately; a real heap may hold two while it catches up.
 
-## The output sink is prototyped, not integrated
+## The spool path is prototyped, and it is not implementation-ready
 
-The spool, the atomic publish and the discard-on-cancel behaviour are measured
-against a browser-local sink in the research harness. What is **not** measured:
+What the prototype does establish: browser-local staging with no new dependency
+and no external service; bounded chunks on the way in **and** on the way back
+out; nothing published after a cancellation; nothing published after a
+supersession; run-scoped namespaces so two tabs cannot delete each other's
+staged output; and ownership-aware cleanup.
 
-- no comparison PDF was assembled from a spool. The parts are concatenated into
-  one file to prove the lifecycle; a real container has structure, and `jsPDF`
-  as used today builds the whole document in memory, so a streaming writer is a
-  requirement the research states rather than a component it built.
-- storage quota is not handled. A browser can refuse a write, and 20.9 GB of
-  spooled output for a 200-page four-member job is a number the quota will have
-  an opinion about. Nothing here asked it.
+What it does not, which is why the spool path is **conditional on an Output
+Writer Sub-Spike** rather than ready to build:
+
+- **no comparison PDF was assembled from a spool.** The parts are concatenated
+  into one file to prove the lifecycle. A container has structure, and `jsPDF`
+  as used today builds the whole document in memory, so a bounded streaming
+  writer is a requirement this research states rather than a component it built.
+- no reopen validation: nothing checked page count, dimensions or orientation
+  on a produced artifact, because there is no produced artifact to check.
+- storage quota is checked as arithmetic against a reported estimate, not
+  against a browser that actually refused a write. `navigator.storage.estimate`
+  is advisory and may be quantised; a quota that says 1.2 TB is not a promise.
+- no crash or tab-close was simulated. The recovery rule — reclaim only
+  namespaces no live run claims — is stated and unit-checked, not exercised
+  against a real abandoned run.
 - the spool is written and read on the main thread in the prototype.
-- no crash or tab-close was simulated, so nothing establishes that an abandoned
-  spool is cleaned up on the *next* run rather than only on this one.
 
-The 4 MiB chunk is chosen, not derived.
+The 4 MiB write chunk and the 4 MiB publish chunk are chosen, not derived.
+
+## The RAM-bounded MVP is small, and that is the trade
+
+The recommended M4 sink is the memory-resident container, because it is the one
+that can be built now. Under the owned encoder's exact 4.001 bytes per pixel
+that accepts **7 A4 pages at 300 dpi with two members** before the output
+ceiling refuses — two pages of a four-member comparison. A drawing set is
+larger than that.
+
+This is the H5 decision arriving in H11's clothing: the exact bound and the
+small job are the same choice. A compressing encoder would accept hundreds of
+pages and give up the exact size guarantee. Neither option is free and the
+research does not pick between them.
 
 ## Ownership is proposed; scheduling is measured, integration is not
 

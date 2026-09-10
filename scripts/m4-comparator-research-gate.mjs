@@ -1274,6 +1274,33 @@ try {
             === output.cases['5 pages, 4 members, spooled'].publishPhaseMB,
         `${output.cases['200 pages, 4 members, spooled'].spooledMB}MB spooled for 200 `
         + `pages, and the publish phase holds ${output.spoolChunkBytes / 1e6}MB either way`);
+    check('finished pages stay live while the next one is compared',
+        output.cases['5 pages, 2 members, in RAM'].duringLastPageMB
+        > output.cases['5 pages, 2 members, in RAM'].perPagePeakMB
+        && output.cases['5 pages, 2 members, in RAM'].retainedPerCompletedPageMB > 0,
+        `${output.cases['5 pages, 2 members, in RAM'].perPagePeakMB}MB for the page `
+        + `plus ${output.cases['5 pages, 2 members, in RAM'].retainedPerCompletedPageMB}`
+        + 'MB per finished page — they overlap, so the job peak is not a max() of '
+        + 'the two phases');
+    check('the output has its own ceiling, and the refusal names it',
+        output.cases['5 pages, 4 members, in RAM'].refusal.status
+            === 'OVER_OUTPUT_BUDGET'
+        && output.outputLimit === 256 * 1024 * 1024,
+        `${(output.outputLimit / 1e6).toFixed(0)}MB, so a refusal can say "too much `
+        + 'finished output" rather than "over the total"');
+    // H11, classified rather than assumed.
+    check('the recommended M4 sink is the one that can be built now',
+        output.selectedSink === 'memory'
+        && output.paths.memory.implementationReady === true,
+        `the RAM-bounded path accepts ${output.mvpPagesAtA4300} A4 pages at 300 dpi `
+        + 'with two members, under the owned encoder');
+    probe('and the spool path is conditional on an Output Writer Sub-Spike',
+        output.paths.spool.implementationReady === false
+        && output.paths.spool.requires === 'output-writer-sub-spike'
+        && output.paths.spool.missing.some(
+            (m) => m.includes('comparison PDF')) === true,
+        `${output.paths.spool.missing.length} things it does not establish, starting `
+        + `with "${output.paths.spool.missing[0]}"`);
     check('the artifact says which pair each visual is',
         output.shape.length === 3
         && output.shape[0].title === 'p3: reference vs member 2'
@@ -1287,47 +1314,122 @@ try {
     check('a browser-local sink is available, with no new dependency',
         publish.available === true,
         `${(publish.perVisualBytes / 1e6).toFixed(1)}MB per visual at `
-        + `${publish.width}x${publish.height}, written in `
-        + `${publish.chunkBytes / 1e6}MB chunks`);
+        + `${publish.width}x${publish.height}, staged in `
+        + `${publish.writeChunkBytes / 1e6}MB chunks and read back in `
+        + `${publish.publishChunkBytes / 1e6}MB chunks`);
     for (const [label, r] of Object.entries({
         completed: publish.completed,
         'cancelled midway': publish.cancelledMidway,
         'superseded before publish': publish.supersededBeforePublish,
     })) {
-        console.log(`  ${label.padEnd(26)} staged ${r.stagedPages}/${r.pages} pages  `
-            + `spooled ${(r.spooledBytes / 1e6).toFixed(1)}MB  peak in RAM ${
-                (r.peakRetainedBytes / 1e6).toFixed(1)}MB  `
-            + `published ${r.published}  artifact ${r.finalExists ? 'exists' : 'absent'}`
-            + `  spool ${r.spoolRemains ? 'REMAINS' : 'removed'}`);
+        console.log(`  ${label.padEnd(26)} staged ${r.stagedParts}/${r.pages}  `
+            + `spooled ${(r.spooledBytes / 1e6).toFixed(1)}MB  write peak ${
+                (r.spoolWritePeakBytes / 1e6).toFixed(1)}MB  read peak ${
+                (r.publishReadPeakBytes / 1e6).toFixed(1)}MB  `
+            + `published ${r.published}  artifact ${
+                r.finalExists ? 'exists' : 'absent'}  dirs left ${r.dirsLeft.length}`);
     }
-    check('a completed run publishes one artifact of every staged page',
+    check('a completed run publishes one artifact of every staged part',
         publish.completed.published === true && publish.completed.finalExists === true
         && publish.completed.finalSize
             === publish.perVisualBytes * publish.completed.pages,
-        `${publish.completed.pages} pages, `
+        `${publish.completed.pages} parts, `
         + `${(publish.completed.finalSize / 1e6).toFixed(1)}MB`);
-    check('and only a bounded chunk is ever live while it writes',
-        publish.completed.peakRetainedBytes <= publish.chunkBytes,
-        `${(publish.completed.peakRetainedBytes / 1e6).toFixed(1)}MB against a `
-        + `${publish.chunkBytes / 1e6}MB chunk, on `
-        + `${(publish.completed.spooledBytes / 1e6).toFixed(1)}MB of output`);
+    // The bound the previous round measured on the wrong side of the file.
+    check('a staged part is larger than the publish chunk, so the read is really bounded',
+        publish.partLargerThanChunk === true,
+        `${(publish.perVisualBytes / 1e6).toFixed(1)}MB part against a `
+        + `${publish.publishChunkBytes / 1e6}MB chunk — a whole-file `
+        + '`arrayBuffer()` could not hide inside the bound');
+    probe('the publish-side read never holds a whole part',
+        publish.completed.publishReadPeakBytes <= publish.publishChunkBytes
+        && publish.completed.publishReadPeakBytes < publish.perVisualBytes,
+        `${(publish.completed.publishReadPeakBytes / 1e6).toFixed(1)}MB live while `
+        + `assembling ${(publish.completed.spooledBytes / 1e6).toFixed(1)}MB`);
+    check('and the write side and the read side are bounded separately',
+        publish.completed.spoolWritePeakBytes <= publish.writeChunkBytes
+        && publish.completed.publishReadPeakBytes <= publish.publishChunkBytes,
+        `write ${(publish.completed.spoolWritePeakBytes / 1e6).toFixed(1)}MB, `
+        + `read ${(publish.completed.publishReadPeakBytes / 1e6).toFixed(1)}MB`);
+    probe('the publish peak does not grow with the number of finished parts',
+        publish.publishPeakByParts.one === publish.publishPeakByParts.five
+        && publish.publishPeakByParts.fiveSize > publish.publishPeakByParts.oneSize * 4,
+        `${(publish.publishPeakByParts.one / 1e6).toFixed(1)}MB for one part and for `
+        + `five, on ${(publish.publishPeakByParts.oneSize / 1e6).toFixed(1)}MB and `
+        + `${(publish.publishPeakByParts.fiveSize / 1e6).toFixed(1)}MB of output`);
     // The failure this contract exists to prevent.
-    probe('a cancelled run leaves no artifact, though pages were already staged',
-        publish.cancelledMidway.stagedPages > 0
+    probe('a cancelled run leaves no artifact, though parts were already staged',
+        publish.cancelledMidway.stagedParts > 0
         && publish.cancelledMidway.published === false
         && publish.cancelledMidway.finalExists === false,
-        `${publish.cancelledMidway.stagedPages} of `
-        + `${publish.cancelledMidway.pages} pages were on disk and nothing was published`);
+        `${publish.cancelledMidway.stagedParts} of `
+        + `${publish.cancelledMidway.pages} parts were on disk and nothing was published`);
     probe('a run superseded before publishing leaves none either',
-        publish.supersededBeforePublish.stagedPages
+        publish.supersededBeforePublish.stagedParts
             === publish.supersededBeforePublish.pages
         && publish.supersededBeforePublish.published === false
         && publish.supersededBeforePublish.finalExists === false,
-        'every page finished, the generation moved, and the artifact was never made');
-    check('and the spool is discarded in every case',
+        'every part finished, the generation moved, and the artifact was never made');
+    check('and a run removes its own temporary space in every case',
         [publish.completed, publish.cancelledMidway, publish.supersededBeforePublish]
-            .every((r) => r.spoolRemains === false),
+            .every((r) => r.dirsLeft.length === 0),
         'no temporary output survives a run, published or not');
+
+    // ---- two tabs, one origin ----------------------------------------------
+    console.log('\n=== two runs at once ===');
+    const isolation = publish.isolation;
+    console.log(`  run ${isolation.abandonedRun} staged and stopped; run `
+        + `${isolation.publishingRun} staged and published`);
+    console.log(`  ${isolation.abandonedRun}'s spool ${
+        isolation.abandonedSurvived ? 'survived' : 'WAS DELETED'}, parts ${
+        isolation.abandonedPartsIntact ? 'intact' : 'DAMAGED'}; ${
+        isolation.publishingRun} published ${
+        (isolation.secondFinalSize / 1e6).toFixed(1)}MB`);
+    // A fixed name plus a clean-at-start is the shape this replaces.
+    probe('one run does not delete another live run\'s staged output',
+        isolation.abandonedSurvived === true
+        && isolation.abandonedPartsIntact === true
+        && isolation.secondPublished === true,
+        'run-scoped namespaces, and cleanup that only removes what it owns');
+    check('and a recovery pass may not reclaim a namespace a live run claims',
+        isolation.reclaimableWhileLive.length === 0
+        && isolation.reclaimableOnceReleased.length === 1,
+        `nothing reclaimable while ${isolation.abandonedRun} is live, `
+        + `${isolation.reclaimableOnceReleased.length} once it is not`);
+
+    // ---- storage is a third budget -----------------------------------------
+    console.log('\n=== storage capacity ===');
+    const storage = output.storage;
+    for (const [label, r] of Object.entries(storage)) {
+        console.log(`  ${label.padEnd(32)} needs ${
+            (r.requiredBytes / 1e9).toFixed(2)}GB  unknown-quota:${
+            r.unknownQuota.verdict}  2GB-quota:${
+            r.againstTwoGigabytes.verdict}  1TB-quota:${r.againstOneTerabyte.verdict}`);
+    }
+    if (publish.storage) {
+        console.log(`  this browser reported quota ${
+            (publish.storage.quotaBytes / 1e9).toFixed(1)}GB, usage ${
+            (publish.storage.usageBytes / 1e6).toFixed(1)}MB, headroom `
+            + `${publish.storage.headroom}`);
+    }
+    check('a spooled job states what it needs on disk, before rendering',
+        storage['200 pages, 4 members, spooled'].requiredBytes > 20e9,
+        `${(storage['200 pages, 4 members, spooled'].requiredBytes / 1e9).toFixed(1)}GB `
+        + 'of temporary output, known from the page count and the sheet size alone');
+    // "Within" on RAM is not "within" on disk, and the previous round said so
+    // by omission.
+    probe('and 20.9 GB is refused against a 2 GB quota, not called within',
+        storage['200 pages, 4 members, spooled'].againstTwoGigabytes.verdict
+            === 'insufficient'
+        && storage['200 pages, 4 members, spooled'].againstTwoGigabytes.refusal.status
+            === 'OVER_STORAGE_CAPACITY',
+        storage['200 pages, 4 members, spooled'].againstTwoGigabytes.refusal.reason);
+    check('a quota that cannot be read is unknown, not room',
+        storage['200 pages, 4 members, spooled'].unknownQuota.verdict === 'unknown'
+        && storage['200 pages, 4 members, spooled'].unknownQuota.refusal === null,
+        storage['200 pages, 4 members, spooled'].unknownQuota.reported);
+    check('and a quota with room says so',
+        storage['5 pages, 4 members, spooled'].againstOneTerabyte.verdict === 'within');
 
     // ---- the ceiling, calibrated against the algorithm that ships -----------
     console.log('\n=== what a work unit costs under the selected algorithm ===');
@@ -1431,6 +1533,12 @@ try {
         ['| CHANGE | CHANGE | CHANGE | CHANGE |',
             'the candidate table from before plan and verdict were separated'],
         ["every member's dilation", 'the all-member presentation'],
+        // Rounded and semantic forms of the same superseded values, because a
+        // literal-only tripwire catches "2,957,102,400 units" and waves
+        // "three billion neighbourhood reads" straight through.
+        ['234 MB', 'the shipped-model working set, not the phase model'],
+        ['three billion', 'per-page work under the rejected scan, rounded'],
+        ['neighbourhood reads', 'the rejected scan, described rather than counted'],
     ];
     const scan = (files) => {
         const found = [];
@@ -1457,6 +1565,39 @@ try {
         documents: DOCS,
         supersededValues: SUPERSEDED.map(([needle, why]) => ({ needle, why })),
     };
+    // Positive assertions, because a tripwire only says what must not be there.
+    // These say what must be.
+    const REQUIRED = [
+        ['architecture.md', 'separable-dilation', 'the selected algorithm, named'],
+        ['architecture.md', '69,578,880', 'the current A4 300 dpi work figure'],
+        ['architecture.md', 'comparison-kernel', 'what H10 actually bounds'],
+        ['decision-matrix.md', 'separable-dilation', 'the selected algorithm, named'],
+        ['measurements.md', '69,578,880', 'the current A4 300 dpi work figure'],
+        ['measurements.md', 'comparison-kernel', 'what H10 actually bounds'],
+        ['limitations.md', 'Output Writer Sub-Spike',
+            'the spool path is conditional until that spike is done'],
+        ['limitations.md', 'no comparison PDF was assembled',
+            'the spool prototype does not claim a container'],
+        ['README.md', 'H11', 'the output sink decision is on the Human Gate'],
+    ];
+    // Whitespace-normalised: a required statement broken across two lines is
+    // still there, and a contract assertion that a line wrap can defeat is not
+    // one worth having.
+    const flat = Object.fromEntries(
+        Object.entries(docs).map(([name, text]) => [name, text.replace(/\s+/g, ' ')]),
+    );
+    const absent = REQUIRED
+        .filter(([doc, needle]) => !flat[doc].includes(needle.replace(/\s+/g, ' ')))
+        .map(([doc, needle, why]) => `${doc} lacks "${needle}" — ${why}`);
+    check('the current contract is stated where it has to be',
+        absent.length === 0,
+        absent.length === 0
+            ? `${REQUIRED.length} required statements across ${DOCS.length} documents`
+            : absent.join(' | '));
+    evidence.documentContract.required = REQUIRED.map(([doc, needle, why]) => ({
+        doc, needle, why,
+    }));
+
     const stale = scan(docs);
     check('no superseded value appears as current-state prose',
         stale.length === 0,

@@ -30,8 +30,11 @@ import {
   MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM, M4_PLANNER_ALGORITHM,
   estimateComparisonWork,
   estimatePhaseMemory, checkPhaseBudget, EXPORT_STRATEGIES, BUDGETED_EXPORT_STRATEGY,
-  OUTPUT_SINK, M4_OUTPUT_SINK, MAX_SPOOL_CHUNK_BYTES,
+  OUTPUT_SINK, M4_OUTPUT_SINK, DEFERRED_OUTPUT_SINK, OUTPUT_PATHS,
+  MAX_SPOOL_CHUNK_BYTES, MAX_PUBLISH_CHUNK_BYTES, MAX_OUTPUT_BYTES,
   PAIR_RESULT_LIFETIME, checkJobMemory, pairResultShape,
+  STORAGE_VERDICT, STORAGE_HEADROOM, checkStorageCapacity,
+  spoolNamespace, ownsNamespace, reclaimableNamespaces,
   PNG_STORED_CONTRACT, pngStoredSize, encodePngStored, encoderScratchUpperBound,
   estimateJobWork,
   SPATIAL_TOLERANCE_POLICY, isDefaultSpatialTolerance,
@@ -535,7 +538,12 @@ window.__m4 = {
         const name = sheet === 'base-a4' ? others[(i - 1) % others.length] : sheet;
         members.push(await member(name, RED, `${name}#${i}`));
       }
-      rows[label] = await composeAsProduction(members, dpi / 72, threshold);
+      // Twice, keeping the faster: the neighbourhood rows are a 30-50 ms
+      // workload and one scheduling hiccup is larger than the effect being
+      // measured. The stable figure is the 300 dpi adversarial pair below.
+      const first = await composeAsProduction(members, dpi / 72, threshold);
+      const second = await composeAsProduction(members, dpi / 72, threshold);
+      rows[label] = first.compositeMs <= second.compositeMs ? first : second;
     }
     return rows;
   },
@@ -831,7 +839,11 @@ window.__m4 = {
     ]) {
       const radius = pixelRadiusFor(mm, dpi);
       const members = await pair(a, b);
-      const r = await composeAsProduction(members, dpi / 72, radius);
+      // Best of two, for the same reason as section 9: the effect being
+      // measured is smaller than a scheduling hiccup on a single run.
+      const first = await composeAsProduction(members, dpi / 72, radius);
+      const second = await composeAsProduction(members, dpi / 72, radius);
+      const r = first.compositeMs <= second.compositeMs ? first : second;
       rows[label] = {
         dpi,
         millimetres: mm,
@@ -1520,19 +1532,57 @@ window.__m4 = {
         totalOutputMB: +(checked.output.totalEncodedBytes / 1e6).toFixed(0),
         spooledMB: +(checked.output.spooledBytes / 1e6).toFixed(0),
         perPagePeakMB: +(checked.perPagePeak / 1e6).toFixed(0),
+        duringLastPageMB: +(checked.duringLastPage / 1e6).toFixed(0),
         publishPhaseMB: +(checked.publishPhase / 1e6).toFixed(0),
         jobPeakMB: +(checked.jobPeak / 1e6).toFixed(0),
         peakPhase: checked.peakPhase,
         withinBudget: checked.withinBudget,
         refusal: checked.refusal,
+        retainedPerCompletedPageMB:
+          +(checked.output.retainedPerCompletedPage / 1e6).toFixed(1),
       };
+    }
+    // Storage is a third budget and it is not RAM. The spooled rows above are
+    // "within" on RAM and say nothing at all about whether 20.9 GB fits.
+    const storage = {};
+    for (const [label, pages] of [['5 pages, 4 members, spooled', 5],
+      ['200 pages, 4 members, spooled', 200]]) {
+      const required = cases[label].totalOutputMB * 1e6;
+      storage[label] = {
+        requiredBytes: required,
+        unknownQuota: checkStorageCapacity({ requiredBytes: required }),
+        againstTwoGigabytes: checkStorageCapacity({
+          requiredBytes: required, quotaBytes: 2e9, usageBytes: 0,
+        }),
+        againstOneTerabyte: checkStorageCapacity({
+          requiredBytes: required, quotaBytes: 1e12, usageBytes: 0,
+        }),
+      };
+    }
+    // How large a job the RAM-bounded MVP actually accepts, found rather than
+    // asserted: the largest page count that passes every preflight.
+    let mvpPages = 0;
+    for (let n = 1; n <= 64; n += 1) {
+      const checked = checkJobMemory({
+        pages: n, members: 2, contract: MULTI_MEMBER.TWO_ONLY,
+        width: A4[0], height: A4[1], radiusPx: 6, sink: OUTPUT_SINK.MEMORY,
+      });
+      if (!checked.withinBudget) break;
+      mvpPages = n;
     }
     return {
       limit: MAX_COMPARISON_BYTES,
+      outputLimit: MAX_OUTPUT_BYTES,
+      mvpPagesAtA4300: mvpPages,
       spoolChunkBytes: MAX_SPOOL_CHUNK_BYTES,
+      publishChunkBytes: MAX_PUBLISH_CHUNK_BYTES,
       selectedSink: M4_OUTPUT_SINK,
+      deferredSink: DEFERRED_OUTPUT_SINK,
+      paths: OUTPUT_PATHS,
       shippedSink: OUTPUT_SINK.MEMORY,
       lifetime: PAIR_RESULT_LIFETIME,
+      storage,
+      storageVerdicts: STORAGE_VERDICT,
       cases,
       // One source page, four members: what the artifact contains and in what
       // order, so a person can tell the pairs apart.
@@ -1556,11 +1606,20 @@ window.__m4 = {
       return { available: false };
     }
     const root = await navigator.storage.getDirectory();
-    const clean = async () => {
-      for (const name of ['m4-spool', 'm4-final.bin']) {
+    const listDirs = async () => {
+      const names = [];
+      for await (const [name, handle] of root.entries()) {
+        if (handle.kind === 'directory') names.push(name);
+      }
+      return names.sort();
+    };
+    const removeAll = async () => {
+      const names = [];
+      for await (const [name] of root.entries()) names.push(name);
+      for (const name of names) {
         try {
           await root.removeEntry(name, { recursive: true });
-        } catch { /* absent */ }
+        } catch { /* gone */ }
       }
     };
     const exists = async (name) => {
@@ -1571,23 +1630,14 @@ window.__m4 = {
         return false;
       }
     };
-    const spoolNames = async () => {
-      try {
-        const dir = await root.getDirectoryHandle('m4-spool');
-        const names = [];
-        for await (const key of dir.keys()) names.push(key);
-        return names.sort();
-      } catch {
-        return null;
-      }
-    };
 
-    // A real encoded visual, small enough to run several of.
+    // A real encoded visual, deliberately larger than one chunk so that a
+    // whole-file read on the publish side could not hide inside the bound.
     const members = [
       await member('base-a4', BLUE, 'base-a4'),
       await member('added-line-a4', RED, 'added-line-a4'),
     ];
-    const rendered = await renderMembersUpright(members, 72 / 72);
+    const rendered = await renderMembersUpright(members, SCALE);
     const { width, height } = rendered;
     const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
     const visual = encodePngStored({
@@ -1598,73 +1648,164 @@ window.__m4 = {
       height,
     });
 
-    /**
-     * The sink. Bytes go out of RAM as they are produced; the final artifact
-     * is assembled from the spool and only then becomes visible.
-     */
-    const run = async ({ pages, stopAfter = null, supersedeBefore = false }) => {
-      await clean();
-      const dir = await root.getDirectoryHandle('m4-spool', { create: true });
-      let generation = 1;
+    /** Stage a run's parts: bounded going in, into a namespace only it owns. */
+    const stage = async ({ runId, generation, pages, stopAfter = null }) => {
+      const dir = await root.getDirectoryHandle(
+        spoolNamespace({ runId, generation }), { create: true },
+      );
       let spooled = 0;
-      let peakRetained = 0;
+      let writePeak = 0;
       let cancelled = false;
-      for (let p = 1; p <= pages; p++) {
+      for (let p = 1; p <= pages; p += 1) {
         if (stopAfter !== null && p > stopAfter) { cancelled = true; break; }
-        const handle = await dir.getFileHandle(`page-${p}.png`, { create: true });
+        const handle = await dir.getFileHandle(`part-${p}.png`, { create: true });
         const writable = await handle.createWritable();
-        // Written in bounded chunks; only a chunk is ever live.
-        for (let offset = 0; offset < visual.length; offset += MAX_SPOOL_CHUNK_BYTES) {
-          const chunk = visual.subarray(offset, offset + MAX_SPOOL_CHUNK_BYTES);
-          peakRetained = Math.max(peakRetained, chunk.length);
+        for (let at = 0; at < visual.length; at += MAX_SPOOL_CHUNK_BYTES) {
+          const chunk = visual.subarray(at, at + MAX_SPOOL_CHUNK_BYTES);
+          writePeak = Math.max(writePeak, chunk.length);
           await writable.write(chunk);
         }
         await writable.close();
         spooled += visual.length;
-        // The visual is released here; nothing accumulates a list of them.
       }
-      if (supersedeBefore) generation = 2;
+      const names = [];
+      for await (const key of dir.keys()) names.push(key);
+      return { dir, spooled, writePeak, cancelled, staged: names.sort() };
+    };
 
-      const stagedBefore = await spoolNames();
-      let published = false;
-      if (!cancelled && generation === 1) {
-        const finalHandle = await root.getFileHandle('m4-final.bin', { create: true });
-        const writable = await finalHandle.createWritable();
-        for (const name of stagedBefore) {
-          const file = await (await dir.getFileHandle(name)).getFile();
-          await writable.write(await file.arrayBuffer());
+    /**
+     * Assemble by reading the spool back in bounded slices.
+     *
+     * `file.arrayBuffer()` would pull a whole part into RAM at once, which is
+     * what the previous version did while reporting a 4 MiB bound: it was
+     * measuring the write side of the same file.
+     */
+    const assemble = async ({ dir, staged, finalName }) => {
+      const finalHandle = await root.getFileHandle(finalName, { create: true });
+      const writable = await finalHandle.createWritable();
+      let readPeak = 0;
+      for (const name of staged) {
+        const file = await (await dir.getFileHandle(name)).getFile();
+        for (let at = 0; at < file.size; at += MAX_PUBLISH_CHUNK_BYTES) {
+          const end = Math.min(file.size, at + MAX_PUBLISH_CHUNK_BYTES);
+          const bytes = new Uint8Array(await file.slice(at, end).arrayBuffer());
+          readPeak = Math.max(readPeak, bytes.length);
+          await writable.write(bytes);
         }
-        await writable.close();
+      }
+      await writable.close();
+      return readPeak;
+    };
+
+    const run = async ({
+      runId, pages, stopAfter = null, supersedeBefore = false, finalName,
+    }) => {
+      let generation = 1;
+      const staged = await stage({ runId, generation, pages, stopAfter });
+      if (supersedeBefore) generation = 2;
+      let published = false;
+      let readPeak = 0;
+      if (!staged.cancelled && generation === 1) {
+        readPeak = await assemble({ dir: staged.dir, staged: staged.staged, finalName });
         published = true;
       }
-      // Whatever happened, the spool goes.
-      await root.removeEntry('m4-spool', { recursive: true });
-      const finalExists = await exists('m4-final.bin');
+      // Ownership-aware: this run removes its own namespace and nothing else.
+      const before = await listDirs();
+      for (const name of before) {
+        if (ownsNamespace(name, { runId })) {
+          await root.removeEntry(name, { recursive: true });
+        }
+      }
+      const finalExists = await exists(finalName);
       const finalSize = finalExists
-        ? (await (await root.getFileHandle('m4-final.bin')).getFile()).size : 0;
-      const result = {
+        ? (await (await root.getFileHandle(finalName)).getFile()).size : 0;
+      return {
+        runId,
         pages,
-        stagedPages: stagedBefore ? stagedBefore.length : 0,
-        spooledBytes: spooled,
-        peakRetainedBytes: peakRetained,
+        stagedParts: staged.staged.length,
+        spooledBytes: staged.spooled,
+        spoolWritePeakBytes: staged.writePeak,
+        publishReadPeakBytes: readPeak,
         published,
         finalExists,
         finalSize,
-        spoolRemains: (await spoolNames()) !== null,
+        dirsLeft: await listDirs(),
       };
-      await clean();
-      return result;
     };
+
+    await removeAll();
+    const completed = await run({ runId: 'a1', pages: 3, finalName: 'final-a1.bin' });
+    await removeAll();
+    const cancelledMidway = await run({
+      runId: 'a2', pages: 3, stopAfter: 2, finalName: 'final-a2.bin',
+    });
+    await removeAll();
+    const supersededBeforePublish = await run({
+      runId: 'a3', pages: 3, supersedeBefore: true, finalName: 'final-a3.bin',
+    });
+    await removeAll();
+    // Does the publish peak grow with the number of finished parts?
+    const onePart = await run({ runId: 'a4', pages: 1, finalName: 'final-a4.bin' });
+    await removeAll();
+    const fiveParts = await run({ runId: 'a5', pages: 5, finalName: 'final-a5.bin' });
+    await removeAll();
+
+    // Two runs at once: one stages and stops, the other stages and publishes.
+    const abandoned = await stage({ runId: 'b1', generation: 1, pages: 2 });
+    const second = await run({ runId: 'b2', pages: 2, finalName: 'final-b2.bin' });
+    const dirsAfterSecond = await listDirs();
+    const abandonedName = spoolNamespace({ runId: 'b1', generation: 1 });
+    const abandonedSurvived = dirsAfterSecond.includes(abandonedName);
+    let abandonedPartsIntact = false;
+    try {
+      const dir = await root.getDirectoryHandle(abandonedName);
+      const names = [];
+      for await (const key of dir.keys()) names.push(key);
+      abandonedPartsIntact = names.length === abandoned.staged.length;
+    } catch { /* gone */ }
+    const reclaimableWhileLive = reclaimableNamespaces(dirsAfterSecond, {
+      liveRunIds: ['b1'],
+    });
+    const reclaimableOnceReleased = reclaimableNamespaces(dirsAfterSecond, {
+      liveRunIds: [],
+    });
+    await removeAll();
+
+    const quota = typeof navigator.storage.estimate === 'function'
+      ? await navigator.storage.estimate() : null;
 
     return {
       available: true,
       perVisualBytes: visual.length,
       width,
       height,
-      chunkBytes: MAX_SPOOL_CHUNK_BYTES,
-      completed: await run({ pages: 3 }),
-      cancelledMidway: await run({ pages: 3, stopAfter: 2 }),
-      supersededBeforePublish: await run({ pages: 3, supersedeBefore: true }),
+      writeChunkBytes: MAX_SPOOL_CHUNK_BYTES,
+      publishChunkBytes: MAX_PUBLISH_CHUNK_BYTES,
+      partLargerThanChunk: visual.length > MAX_PUBLISH_CHUNK_BYTES,
+      completed,
+      cancelledMidway,
+      supersededBeforePublish,
+      publishPeakByParts: {
+        one: onePart.publishReadPeakBytes,
+        five: fiveParts.publishReadPeakBytes,
+        oneSize: onePart.finalSize,
+        fiveSize: fiveParts.finalSize,
+      },
+      isolation: {
+        abandonedRun: 'b1',
+        publishingRun: 'b2',
+        abandonedSurvived,
+        abandonedPartsIntact,
+        secondPublished: second.published,
+        secondFinalSize: second.finalSize,
+        reclaimableWhileLive,
+        reclaimableOnceReleased,
+      },
+      storage: quota === null ? null : {
+        quotaBytes: quota.quota ?? null,
+        usageBytes: quota.usage ?? 0,
+        headroom: STORAGE_HEADROOM,
+      },
     };
   },
 
@@ -1692,11 +1833,16 @@ window.__m4 = {
       const { width, height } = rendered;
       const masks = rendered.buffers.map((m) => inkMask(m.data, width, height));
       const radius = pixelRadiusFor(mm, dpi);
-      // Warm, then measure.
+      // Warm, then take the best of three. The ceiling's wall-clock reading is
+      // derived from the worst of these rows, so noise here would push the
+      // whole calibration in one direction.
       pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
-      const started = performance.now();
-      pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
-      const ms = performance.now() - started;
+      let ms = Infinity;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const started = performance.now();
+        pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+        ms = Math.min(ms, performance.now() - started);
+      }
       const work = estimateComparisonWork({
         width, height, members: 2, contract: MULTI_MEMBER.TWO_ONLY,
         radiusPx: radius, algorithm: M4_PLANNER_ALGORITHM,

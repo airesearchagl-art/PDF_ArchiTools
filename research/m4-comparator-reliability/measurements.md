@@ -515,19 +515,20 @@ Measured, two layers unless stated:
 
 | | canvas | total | composite | working set |
 | --- | --- | --- | --- | --- |
-| A4 150 dpi, threshold 0 | 1240x1753 | 88 ms | 25 ms | 61 MB |
-| A4 150 dpi, threshold 2 | 1240x1753 | — | 48 ms | 61 MB |
-| A4 150 dpi, threshold 4 | 1240x1753 | — | 55 ms | 61 MB |
-| A4 300 dpi, threshold 0 | 2480x3507 | — | 98 ms | 244 MB |
-| A4 150 dpi, 4 layers | 1240x1753 | — | — | 122 MB |
-| A3 150 dpi, threshold 0 | 1753x2480 | 183 ms | 73 ms | 122 MB |
-| A1 150 dpi, threshold 0 | 3507x4966 | 628 ms | 251 ms | 488 MB |
+| A4 150 dpi, threshold 0 | 1240x1753 | — | 37 ms | 61 MB |
+| A4 150 dpi, threshold 2 | 1240x1753 | — | 43 ms | 61 MB |
+| A4 150 dpi, threshold 4 | 1240x1753 | — | 44 ms | 61 MB |
+| A4 300 dpi, threshold 0 | 2480x3507 | — | 147 ms | 244 MB |
+| A4 150 dpi, 4 layers | 1240x1753 | — | 59 ms | 122 MB |
+| A3 150 dpi, threshold 0 | 1753x2480 | — | 72 ms | 122 MB |
+| A1 150 dpi, threshold 0 | 3507x4966 | — | 290 ms | 488 MB |
 
-A neighbourhood threshold costs more than an exact one, and run-to-run variance
-on a 30–50 ms workload is large enough that the multiple is not stable: measured
-between 1.3x and 2.2x across runs at radius 2. It does **not** scale with the
-area of the search box — radius 4 is a 3.2x larger box than radius 2 and cost
-about the same — because `hasNeighborInAny` returns as soon as it finds ink.
+Each row is the faster of two runs: the effect being measured is smaller than a
+scheduling hiccup on a 30-50 ms workload, and a single reading is not evidence
+of anything. A neighbourhood threshold costs more than an exact one, and it does
+**not** scale with the area of the search box — radius 4 is a 3.2x larger box
+than radius 2 and cost about the same — because `hasNeighborInAny` returns as
+soon as it finds ink.
 
 That early exit is what section 9b removes.
 
@@ -539,12 +540,12 @@ converted to a pixel radius per resolution.
 
 | | radius | canvas | ink | change | composite |
 | --- | --- | --- | --- | --- | --- |
-| matching, A4 150 dpi | 0 | 1240x1753 | 3.7% | 0.0% | 31 ms |
-| matching, A4 150 dpi | 3 | 1240x1753 | 3.7% | 0.0% | 61 ms |
-| **not matching**, A4 150 dpi | 0 | 1240x1753 | 1.9% | **100.0%** | 46 ms |
-| **not matching**, A4 150 dpi | 3 | 1240x1753 | 1.9% | **100.0%** | 43 ms |
+| matching, A4 150 dpi | 0 | 1240x1753 | 3.7% | 0.0% | 28 ms |
+| matching, A4 150 dpi | 3 | 1240x1753 | 3.7% | 0.0% | 58 ms |
+| **not matching**, A4 150 dpi | 0 | 1240x1753 | 1.9% | **100.0%** | 37 ms |
+| **not matching**, A4 150 dpi | 3 | 1240x1753 | 1.9% | **100.0%** | 45 ms |
 | **not matching**, A4 300 dpi | 0 | 2480x3507 | 1.7% | **100.0%** | 150 ms |
-| **not matching**, A4 300 dpi | 6 | 2480x3507 | 1.7% | **100.0%** | 207 ms |
+| **not matching**, A4 300 dpi | 6 | 2480x3507 | 1.7% | **100.0%** | 217 ms |
 
 Wall-clock totals mislead here: the adversarial pair is the *sparser* drawing, so
 comparing page times would credit it for having less to do. **Per ink pixel** is
@@ -552,15 +553,15 @@ the measure that isolates the effect:
 
 | | per ink pixel |
 | --- | --- |
-| matching, 150 dpi, radius 3 | **0.59 us** |
-| not matching, 150 dpi, radius 3 | **1.56 us** |
+| matching, 150 dpi, radius 3 | **0.73 us** |
+| not matching, 150 dpi, radius 3 | **1.09 us** |
 
-**2.6x**, and that is the number a work bound has to be set against. Every
+**1.5x**, and that is the number a work bound has to be set against. Every
 figure in section 9 was taken on matching drawings and is therefore a floor.
 
 A physical threshold makes this worse rather than better at higher resolution,
-because the radius grows with the DPI: 43 ms at 150 dpi with radius 3 against
-207 ms at 300 dpi with radius 6, on the same drawing.
+because the radius grows with the DPI: 45 ms at 150 dpi with radius 3 against
+217 ms at 300 dpi with radius 6, on the same drawing.
 
 ## 10. The working set
 
@@ -692,8 +693,9 @@ holds two dilations at a time rather than one per member.
 
 ## 10b. The work budget
 
-A second ceiling, and a separate one: an A4 at 300 dpi is 244 MB of working set
-— comfortable — and, at a half-millimetre tolerance, three billion pixel reads.
+A second ceiling, and a separate one: an A4 at 300 dpi with two members is
+139 MB of working set under the phase model — comfortable — and 69,578,880
+comparison-work units under the selected algorithm.
 
 A work unit is one pixel read. Per compared group:
 
@@ -769,13 +771,13 @@ Calibrated on the algorithm that ships:
 
 | | pixels | radius | units | ms | ms/unit |
 | --- | --- | --- | --- | --- | --- |
-| A4 150 dpi, 0.15 mm | 2.18 M | 1 | 17,413,712 | 25.9 | 1.49e-6 |
-| A4 150 dpi, 0.5 mm | 2.18 M | 3 | 17,413,712 | 26.3 | 1.51e-6 |
-| A4 300 dpi, 0.15 mm | 8.70 M | 2 | 69,626,784 | 123.8 | 1.78e-6 |
-| A3 150 dpi, 0.15 mm | 4.35 M | 1 | 34,813,392 | 56.9 | 1.63e-6 |
-| **A1 150 dpi, 0.15 mm** | 17.42 M | 1 | 139,393,888 | 262.7 | **1.88e-6** |
+| A4 150 dpi, 0.15 mm | 2.18 M | 1 | 17,413,712 | 23.8 | 1.37e-6 |
+| A4 150 dpi, 0.5 mm | 2.18 M | 3 | 17,413,712 | 23.4 | 1.34e-6 |
+| A4 300 dpi, 0.15 mm | 8.70 M | 2 | 69,626,784 | 103.8 | 1.49e-6 |
+| A3 150 dpi, 0.15 mm | 4.35 M | 1 | 34,813,392 | 51.1 | 1.47e-6 |
+| **A1 150 dpi, 0.15 mm** | 17.42 M | 1 | 139,393,888 | 255.9 | **1.84e-6** |
 
-**12e9 units is about 23 seconds** at the worst of those, for the whole job —
+**12e9 units is about 22 seconds** at the worst of those, for the whole job —
 of **comparison-kernel** time — `pairChangeMask` on masks that already exist,
 excluding rendering, readback, mask extraction, yields, painting, encoding and
 container assembly. Not a claim about how long a user waits. In work a person
@@ -808,17 +810,60 @@ hundred.
 
 ### Publishing nothing until everything has succeeded
 
-Three-page runs against a browser-local sink, with a real encoded visual
-(2.0 MB at 596×842):
+Three-part runs against a browser-local sink, with a real encoded visual of
+**8.7 MB** — deliberately larger than the 4.2 MB chunk, so that a whole-file
+read on either side could not hide inside the bound:
 
-| | staged | spooled | peak in RAM | published | artifact | spool |
+| | staged | spooled | write peak | read peak | published | artifact |
 | --- | --- | --- | --- | --- | --- | --- |
-| completed | 3 of 3 | 6.0 MB | 2.0 MB | yes | **exists**, 6.0 MB | removed |
-| **cancelled midway** | 2 of 3 | 4.0 MB | 2.0 MB | no | **absent** | removed |
-| **superseded before publish** | 3 of 3 | 6.0 MB | 2.0 MB | no | **absent** | removed |
+| completed | 3 of 3 | 26.1 MB | 4.2 MB | **4.2 MB** | yes | **exists**, 26.1 MB |
+| **cancelled midway** | 2 of 3 | 17.4 MB | 4.2 MB | — | no | **absent** |
+| **superseded before publish** | 3 of 3 | 26.1 MB | 4.2 MB | — | no | **absent** |
 
-Two pages of finished output already on disk and no artifact produced. The peak
-held in RAM never exceeds the 4 MiB write chunk, whatever the output totals.
+Two parts of finished output already on disk and no artifact produced.
+
+The read peak is the column the previous round did not have. Its first version
+staged in 4 MiB chunks and then assembled with `file.arrayBuffer()`, pulling a
+whole part into RAM while reporting a 4 MiB bound — it was measuring the write
+side of the same file. Both sides are bounded now and measured separately, and
+the assembly peak does not grow with the job: **4.2 MB for one part and for
+five**, on 8.7 MB and 43.5 MB of output.
+
+### Two runs at once
+
+A fixed temporary name with a clean-at-start is fine for one run and wrong for
+two. Measured, with run `b1` staging two parts and stopping, and run `b2`
+staging and publishing beside it:
+
+| | |
+| --- | --- |
+| `b1`'s namespace after `b2` finished | **survived** |
+| `b1`'s staged parts | **intact** |
+| `b2` published | yes, 17.4 MB of its own parts |
+| reclaimable while `b1` is live | **0** |
+| reclaimable once `b1` is released | 1 |
+
+Age cannot distinguish an abandoned run from a slow one, so a recovery pass
+reclaims only namespaces that no live run claims.
+
+### Storage capacity is a third budget
+
+`totalEncodedBytes` is known before rendering, so it is a preflight like the
+others. What it compares against is advisory, so there are three outcomes:
+
+| | required | no readable quota | 2 GB quota | 1 TB quota |
+| --- | --- | --- | --- | --- |
+| 5 pages, 4 members, spooled | 0.52 GB | **unknown** | within | within |
+| 200 pages, 4 members, spooled | **20.88 GB** | **unknown** | **insufficient** | within |
+
+An earlier round reported the 20.9 GB row as "within" because the *RAM* peak was
+4 MiB. That was true and it was not the whole sentence. `unknown` is now a
+distinct outcome from `within`: a quota that cannot be read is not room. Half
+the reported free space is the headroom, because the quota is shared with
+everything else the origin has stored.
+
+This browser reported a 1.2 TB quota at 0 MB usage, which is why the fixed
+2 GB and 1 TB comparisons above are in the table rather than the live figure.
 
 ### The ceiling is on the job, not the page
 
@@ -913,7 +958,7 @@ External HTTP(S) requests from the research harness: **0**. Page errors: **0**.
 
 ## 13. The gate
 
-`scripts/m4-comparator-research-gate.mjs` re-asserts **211 claims, 85 of them
+`scripts/m4-comparator-research-gate.mjs` re-asserts **225 claims, 90 of them
 negative probes**. Several are unusual: the shipped comparator is asserted to
 report changes on drawings that are identical. Those are the findings, and a gate
 in which the baseline passed everything would prove nothing about why this spike

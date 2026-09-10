@@ -241,12 +241,12 @@ threshold, swallow a render failure, or recompute what a change is.
 | a synchronous driver over those bands | **REJECT** — measured: the decision point exists and nothing can reach it |
 | yield to a task boundary between bands, then read cancellation and ownership | **ADOPT** as the scheduling contract |
 
-Measured, per ink pixel at radius 3: **0.59 µs** when the drawings match against
-**1.56 µs** when they do not. Every earlier cost figure was taken on matching
+Measured, per ink pixel at radius 3: **0.73 µs** when the drawings match against
+**1.09 µs** when they do not. Every earlier cost figure was taken on matching
 drawings and is a floor.
 
 A physical threshold grows the radius with the DPI, so the worst case grows with
-it too: 43 ms at 150 dpi / radius 3 against 207 ms at 300 dpi / radius 6 on the
+it too: 45 ms at 150 dpi / radius 3 against 217 ms at 300 dpi / radius 6 on the
 same non-matching pair.
 
 **The previous bound was not one.** `pixels x radius² x members` is zero at
@@ -259,7 +259,7 @@ conservative about the ink fraction, which is not knowable before rendering.
 
 Where 12e9 comes from, **under the selected algorithm**: the worst measured cost
 per unit over five sizes and radii is 1.9e-6 ms — an A1 at 150 dpi, 139,393,888
-units in 263 ms. 12e9 units at that rate is about **23 seconds** for the whole
+units in 263 ms. 12e9 units at that rate is about **22 seconds** for the whole
 job of **comparison-kernel** time — what `pairChangeMask` costs on masks that
 already exist, not what a user waits.
 
@@ -281,11 +281,11 @@ are now prototyped and measured: the separable dilation produces the *identical*
 change mask at every radius tried while removing `(2r+1)²` from the bound
 (23,694,575,520 units against 557,519,424 for the same A1), and banded execution
 ran a 1241×1754 comparison in 18 bands with the same mask as the direct form. It
-is not free — on a sparse drawing the nested scan is faster (4 ms against 23 ms)
+is not free — on a sparse drawing the nested scan is faster (6 ms against 26 ms)
 because it exits on the first ink it finds — but its cost is a property of the
 sheet rather than of the drawing, which is what a ceiling checked before
-rendering needs. On ink that matches nothing, the scan goes 25 ms → 65 ms as the
-box widens from 9 to 49 while the dilation stays at 28 ms.
+rendering needs. On ink that matches nothing, the scan goes 28 ms → 71 ms as the
+box widens from 9 to 49 while the dilation stays at 29 ms.
 
 **Bands are only half of it.** A decision point between bands is worth nothing
 if nothing can reach it. Given the *same* cancellation, scheduled from a timer:
@@ -526,9 +526,16 @@ every page succeeds, and reference-pairs makes *n − 1* visuals per source page
 | --- | --- |
 | retain every finished visual in RAM until the save | **REJECT** — measured: 5 pages × 4 members is 1044 MB at publish while each page peaks at 157 MB |
 | hand them over as base64 data URLs, which is what ships | **REJECT** — the same job becomes 1914 MB; `jsPDF.addImage` is handed one per page |
-| encode, append to a browser-local sink, release | **ADOPT** — the publish phase holds one 4 MiB chunk for 5 pages or for 200 |
+| encode, append to a sink, release | **ADOPT** — the lifetime, whichever sink |
 | assemble and publish only after every page succeeds | **ADOPT** |
-| an explicit `MAX_OUTPUT_BYTES` with fail-closed preflight | acceptable **only** if the container must stay memory-resident, which `jsPDF` today forces |
+| bound only the write side of a spool | **REJECT** — measured: staging in 4 MiB chunks and then assembling with `file.arrayBuffer()` pulls a whole 8.7 MB part into RAM while reporting a 4 MiB bound |
+| bound the write side **and** the read side, separately | **ADOPT** — 4.2 MB staging, 4.2 MB assembling, on a 26.1 MB artifact, and the assembly peak is the same for one part as for five |
+| a fixed temporary name, cleaned at start | **REJECT** — the second tab deletes the first's staged pages |
+| run- and generation-scoped namespaces, ownership-aware cleanup | **ADOPT** — a recovery pass may reclaim an abandoned namespace only if no live run claims it |
+| treat storage capacity as covered by the RAM budget | **REJECT** — 20.9 GB of spool is "within" on RAM and says nothing about disk |
+| a storage preflight with three outcomes: within / insufficient / **unknown** | **ADOPT** — a quota that cannot be read is not room |
+| **an explicit `MAX_OUTPUT_BYTES` with fail-closed preflight, memory-resident container** | **ADOPT as the M4 MVP** — the path that can be built now |
+| **the spool path** | **DEFER** — conditional on an **Output Writer Sub-Spike**; the prototype establishes the lifecycle and not the artifact |
 | a new external or cloud service | **REJECT** — out of scope and out of the trust boundary |
 
 Measured atomicity, on three-page runs: completed publishes a 6.0 MB artifact;
@@ -540,8 +547,15 @@ The artifact shape is stated rather than incidental — one source page becomes
 *n − 1* pair results in slot order, each naming its members, identically in the
 preview, the comparison PDF and the change report.
 
-Which sink ships decides how large a drawing set the tool accepts, so it is a
-product decision: **H11**.
+The MVP is small, and the smallness is the same decision as H5: under the owned
+encoder's 4.001 B/px, 256 MiB of output is about **7 A4 pages at 300 dpi with
+two members**. A compressing encoder would accept hundreds and give up the exact
+size guarantee.
+
+So the dependency is ordered, and both go to the Human Gate:
+**H5 (encoder) → the output-byte contract → H11 (sink, and accepted job size)**.
+If H11 chooses the spool, stop before production implementation and run the
+Output Writer Sub-Spike.
 
 The 512 MiB itself is a judgement about how much memory one comparison may
 claim, not a threshold discovered in the data, and it is written down as one:

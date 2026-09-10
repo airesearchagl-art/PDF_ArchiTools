@@ -48,9 +48,10 @@ UNSUPPORTED         the request cannot be honoured at all
 CANCELLED           superseded or abandoned
 ```
 
-The two budget statuses are separate because the two ceilings are: an A4 at
-300 dpi is comfortable on memory and, at a half-millimetre tolerance, three
-billion neighbourhood reads.
+The budget statuses are separate because the ceilings are. An A4 at 300 dpi
+with two members is 139 MB of working set, 69,578,880 comparison-work units and
+35 MB of finished output; each is checked against its own ceiling, and passing
+one says nothing about the others.
 
 **The result** says what was found, and is reachable only from a plan that was
 ready and a comparison that actually ran:
@@ -516,23 +517,23 @@ a discount that a non-matching one does not**. Per ink pixel at radius 3:
 
 | | |
 | --- | --- |
-| the drawings match | **0.59 µs** |
-| the drawings do not | **1.56 µs** |
+| the drawings match | **0.73 µs** |
+| the drawings do not | **1.09 µs** |
 
-**2.6×**, and the non-matching case is the one the tool exists for. Every earlier
+**1.5×**, and the non-matching case is the one the tool exists for. Every earlier
 cost figure was taken on matching drawings and is a floor.
 
 And a physical threshold grows the radius with the resolution, so the worst case
-grows with it: the same non-matching pair costs 43 ms at 150 dpi with radius 3
-and 207 ms at 300 dpi with radius 6.
+grows with it: the same non-matching pair costs 45 ms at 150 dpi with radius 3
+and 217 ms at 300 dpi with radius 6.
 
 Two things follow, and both are needed.
 
 ### A stated work bound
 
 Evaluated before rendering, alongside the memory budget, and separate from it.
-An A4 at 300 dpi is 234 MB of working set — comfortable — and, at a
-half-millimetre tolerance, three billion neighbourhood reads. Passing one
+An A4 at 300 dpi with two members is 139 MB of working set — comfortable — and
+69,578,880 comparison-work units under the selected algorithm. Passing one
 ceiling says nothing about the other.
 
 `pixels x radius² x members` was proposed for this and **is not an upper bound
@@ -625,7 +626,7 @@ refuses comparisons.
 
 Calibrated against the selected algorithm: the worst cost per unit over five
 sizes and radii is **1.9 × 10⁻⁶ ms** — an A1 at 150 dpi, 139,393,888 units in
-263 ms. Twelve billion units at that rate is about **23 seconds** for the whole
+263 ms. Twelve billion units at that rate is about **22 seconds** for the whole
 job — **comparison-kernel** seconds, not seconds of waiting; see below.
 
 In work a person can picture, that is **about 173 A4 pages at 300 dpi and a
@@ -695,13 +696,13 @@ dilating — refused under one algorithm and comfortably within the ceiling unde
 the other.
 
 It is not free, and the measurement says so plainly: on a sparse drawing the
-nested scan is *faster*, because it exits on the first ink it finds — 4 ms
-against 23 ms on the 0.9%-ink A4. The dilation's cost is O(pixels) whatever the
+nested scan is *faster*, because it exits on the first ink it finds — 6 ms
+against 26 ms on the 0.9%-ink A4. The dilation's cost is O(pixels) whatever the
 drawing does. What it buys is that its cost is a property of the *sheet* rather
 than of the *drawing*, which is what a ceiling checked before rendering needs.
 On the case a bound has to cover — ink everywhere, matching nothing — the scan
-grows 25 ms → 65 ms as the box goes from 9 to 49 while the dilation stays at
-28 ms.
+grows 28 ms → 71 ms as the box goes from 9 to 49 while the dilation stays at
+29 ms.
 
 *Bands.* Every phase runs over a band of rows or columns and returns control
 between bands. The banded result is identical to the direct one, and a cancelled
@@ -945,10 +946,60 @@ one result and disagreeing about ordering would make them three answers again:
     p3: reference vs member 4
 ```
 
-Whether the sink is a spool or an explicit `MAX_OUTPUT_BYTES` with a fail-closed
-preflight — the latter only if the container really must stay memory-resident,
-which `jsPDF` today forces — is a product decision, because it decides how large
-a drawing set the tool will accept. **H11.**
+**A publish-side bound, separate from the write-side one.** The first version
+of this staged in 4 MiB chunks and then assembled with `file.arrayBuffer()`,
+pulling a whole 8.7 MB part into RAM while reporting a 4 MiB bound — it was
+measuring the write side of the same file. Both sides are bounded now, and
+measured separately: staging peaks at 4.2 MB, assembly peaks at 4.2 MB on a
+26.1 MB artifact, and the assembly peak is the same for one part as for five.
+
+**Run-scoped temporary space.** A fixed name plus a clean-at-start is fine for
+one run and wrong for two: the second tab deletes the first's staged pages.
+Namespaces carry the run and the generation, cleanup removes only what the run
+owns, and a recovery pass may reclaim an abandoned namespace only if no live run
+claims it — age alone cannot distinguish an abandoned run from a slow one.
+Measured: a run that stages and stops keeps its parts intact while another run
+stages and publishes beside it.
+
+**Storage is a third budget, and it is not RAM.** A spooled 200-page four-member
+job is 20.9 GB of temporary bytes. `totalEncodedBytes` is known before anything
+is rendered, so it is a preflight like the others — but what it can be compared
+against is advisory, so there are three outcomes and only one is "fits":
+`within`, `insufficient` (a typed `OVER_STORAGE_CAPACITY` refusal), and
+**`unknown`**, which is not the same as room. Measured: 20.9 GB against a 2 GB
+quota is refused; against a 1 TB quota it is within; with no readable quota it
+is unknown and says so.
+
+### Which sink, and what each one is ready for
+
+| | ready | |
+| --- | --- | --- |
+| **memory-resident container** | **yes** | an explicit `MAX_OUTPUT_BYTES`, a fail-closed preflight, and a container that already exists |
+| **browser-local spool** | **no** | **conditional on an Output Writer Sub-Spike** |
+
+The spool prototype establishes the lifecycle and not the artifact: no
+comparison PDF was assembled from a spool, because a container has structure and
+`jsPDF` as used today builds the whole document in memory. Presenting it as
+ready to build would be the Candidate C mistake again — a plan claiming
+something it has no contract for.
+
+So the **recommended M4 MVP is the memory-resident path**, and it is small:
+under the owned encoder's 4.001 bytes per pixel, `MAX_OUTPUT_BYTES` of 256 MiB
+is about **7 A4 pages at 300 dpi with two members**, or two pages of a
+four-member comparison.
+
+That smallness is not a separate problem. **H5 determines the output-byte
+contract, and the output-byte contract determines H11**: the exact bound and the
+small job are the same choice, and a compressing encoder would accept hundreds
+of pages while giving up the exact size guarantee. The two decisions have to be
+taken together, in that order.
+
+If H11 chooses the spool, **stop before M4 production implementation and run the
+Output Writer Sub-Spike**: a bounded streaming container writer, deterministic
+pair and page ordering carried into the artifact, reopen validation of page
+count and dimensions and orientation, storage-quota preflight against a real
+refusal, crash and tab-close orphan recovery, and browser-local only. No new
+dependency without human approval.
 
 The 512 MiB itself is a judgement about how much one comparison may claim, not a
 threshold found in the data, and it is recorded as one: **H7**.
