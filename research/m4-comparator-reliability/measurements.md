@@ -410,24 +410,37 @@ dilations rather than one per member.
 
 ## 5. What each candidate says
 
-| case | baseline | strict | normalise | human |
-| --- | --- | --- | --- | --- |
-| the same drawing twice | CHANGE | CHANGE | CHANGE | CHANGE |
-| a wall added | CHANGE | CHANGE | CHANGE | CHANGE |
-| `/Rotate 0` vs `90` | CHANGE | CHANGE | CHANGE | CHANGE |
-| crop origin (0,0) vs (50,70) | CHANGE | CHANGE | CHANGE | CHANGE |
-| MediaBox larger, same CropBox | CHANGE | CHANGE | CHANGE | CHANGE |
-| A4 vs A3 | CHANGE | GEOMETRY_MISMATCH | GEOMETRY_MISMATCH | ALIGNMENT_REQUIRED |
-| portrait vs landscape | CHANGE | GEOMETRY_MISMATCH | GEOMETRY_MISMATCH | ALIGNMENT_REQUIRED |
-| A4 vs a sheet 3pt bigger | CHANGE | GEOMETRY_MISMATCH | GEOMETRY_MISMATCH | ALIGNMENT_REQUIRED |
-| same aspect, 1.4x | CHANGE | GEOMETRY_MISMATCH | GEOMETRY_MISMATCH | ALIGNMENT_REQUIRED |
+**Plan statuses.** Whether the drawing differs is the second stage and lives in
+§4b; nothing in this table is a verdict.
+
+| case | baseline | strict | normalise | human | human + alignment |
+| --- | --- | --- | --- | --- | --- |
+| the same drawing twice | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE |
+| a wall added | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE |
+| `/Rotate 0` vs `90` | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE |
+| crop origin (0,0) vs (50,70) | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE |
+| MediaBox larger, same CropBox | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE | READY_TO_COMPARE |
+| A4 vs A3 | READY_TO_COMPARE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | ALIGNMENT_REQUIRED | **UNSUPPORTED** |
+| portrait vs landscape | READY_TO_COMPARE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | ALIGNMENT_REQUIRED | **UNSUPPORTED** |
+| A4 vs a sheet 3pt bigger | READY_TO_COMPARE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | ALIGNMENT_REQUIRED | **UNSUPPORTED** |
+| same aspect, 1.4x | READY_TO_COMPARE | **GEOMETRY_MISMATCH** | **GEOMETRY_MISMATCH** | ALIGNMENT_REQUIRED | **UNSUPPORTED** |
+
+The baseline column is the finding: one status, whatever it is given. It has no
+state for *I should not answer this*.
 
 The refusals name what differs:
 `base-a3: 595.3x841.9pt vs 841.9x1190.5pt`,
 `nearly-a4: 595.3x841.9pt vs 598.3x844.9pt`.
 
-With an alignment supplied, the human candidate returns `CHANGE` and the result
-carries `alignment: 'human'`.
+The last column changed in the second round and is the current contract:
+supplying `{ x, y, rotation, scale }` returns **`UNSUPPORTED`** with
+`requires: alignment-architecture-sub-spike`, because recording that object is
+not the same as defining it. See §4b.
+
+> **Historical, superseded.** An earlier version of this table reported every
+> ready case as `CHANGE`, because the prototype had one vocabulary for the plan
+> and the verdict — so an identical drawing came back as `CHANGE`. That is the
+> failure §4b exists to record, and the row values above replace it.
 
 ## 6. Requested DPI against delivered DPI
 
@@ -763,10 +776,49 @@ Calibrated on the algorithm that ships:
 | **A1 150 dpi, 0.15 mm** | 17.42 M | 1 | 139,393,888 | 262.7 | **1.88e-6** |
 
 **12e9 units is about 23 seconds** at the worst of those, for the whole job —
-not the 55 seconds the scan-based reading gave. In work a person can picture:
+of **comparison-kernel** time — `pairChangeMask` on masks that already exist,
+excluding rendering, readback, mask extraction, yields, painting, encoding and
+container assembly. Not a claim about how long a user waits. In work a person
+can picture:
 about **173 A4 pages at 300 dpi and 0.5 mm**. Under this algorithm no single
 sheet in the corpus reaches the ceiling — an A1 at 300 dpi is 5% of it — so on
 one page the memory budget refuses first.
+
+### Where the finished output lives
+
+The phase model above bounds one page. Nothing is published until every page
+succeeds, and reference-pairs makes *n − 1* visuals per source page, so the
+operation needs its own bound. A4 at 300 dpi, 0.5 mm, four members:
+
+| | visuals | output | page peak | at publish | job peak | |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 page, 2 members, in RAM | 1 | 35 MB | 139 MB | 70 MB | 139 MB | within |
+| 5 pages, 2 members, in RAM | 5 | 174 MB | 139 MB | 348 MB | 348 MB | within |
+| **5 pages, 4 members, in RAM** | 15 | 522 MB | **157 MB** | 1044 MB | **1044 MB** | **refused** |
+| 5 pages, 4 members, as data URLs | 15 | 522 MB | 157 MB | 1914 MB | 1914 MB | **refused** |
+| 5 pages, 4 members, spooled | 15 | 522 MB | 157 MB | **4 MB** | 157 MB | within |
+| 200 pages, 4 members, spooled | 600 | 20.9 GB | 157 MB | **4 MB** | 157 MB | within |
+
+Every page in the third row passes its own check at 157 MB and the operation is
+1044 MB. The fourth row is the shipped shape: `jsPDF.addImage` takes a base64
+data URL per page and the document holds them all until `save()`.
+
+Spooling makes the publish phase constant: 4 MiB for five pages or for two
+hundred.
+
+### Publishing nothing until everything has succeeded
+
+Three-page runs against a browser-local sink, with a real encoded visual
+(2.0 MB at 596×842):
+
+| | staged | spooled | peak in RAM | published | artifact | spool |
+| --- | --- | --- | --- | --- | --- | --- |
+| completed | 3 of 3 | 6.0 MB | 2.0 MB | yes | **exists**, 6.0 MB | removed |
+| **cancelled midway** | 2 of 3 | 4.0 MB | 2.0 MB | no | **absent** | removed |
+| **superseded before publish** | 3 of 3 | 6.0 MB | 2.0 MB | no | **absent** | removed |
+
+Two pages of finished output already on disk and no artifact produced. The peak
+held in RAM never exceeds the 4 MiB write chunk, whatever the output totals.
 
 ### The ceiling is on the job, not the page
 
@@ -861,7 +913,7 @@ External HTTP(S) requests from the research harness: **0**. Page errors: **0**.
 
 ## 13. The gate
 
-`scripts/m4-comparator-research-gate.mjs` re-asserts **197 claims, 80 of them
+`scripts/m4-comparator-research-gate.mjs` re-asserts **211 claims, 85 of them
 negative probes**. Several are unusual: the shipped comparator is asserted to
 report changes on drawings that are identical. Those are the findings, and a gate
 in which the baseline passed everything would prove nothing about why this spike

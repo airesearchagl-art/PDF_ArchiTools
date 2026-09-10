@@ -30,6 +30,8 @@ import {
   MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM, M4_PLANNER_ALGORITHM,
   estimateComparisonWork,
   estimatePhaseMemory, checkPhaseBudget, EXPORT_STRATEGIES, BUDGETED_EXPORT_STRATEGY,
+  OUTPUT_SINK, M4_OUTPUT_SINK, MAX_SPOOL_CHUNK_BYTES,
+  PAIR_RESULT_LIFETIME, checkJobMemory, pairResultShape,
   PNG_STORED_CONTRACT, pngStoredSize, encodePngStored, encoderScratchUpperBound,
   estimateJobWork,
   SPATIAL_TOLERANCE_POLICY, isDefaultSpatialTolerance,
@@ -1479,6 +1481,190 @@ window.__m4 = {
       budgetedStrategy: BUDGETED_EXPORT_STRATEGY,
       rows,
       boundIsExactNotEstimated: true,
+    };
+  },
+
+  /**
+   * What the whole operation's output costs, and where it lives.
+   *
+   * The phase model bounds one page. It does not bound the operation: nothing
+   * is published until every page has succeeded, and reference-pairs makes
+   * n − 1 visuals per source page. Five A4 pages at 300 dpi with four members
+   * is about half a gigabyte of finished output while every individual page
+   * passes its own check.
+   */
+  outputBudget() {
+    const A4 = [2480, 3507];
+    const cases = {};
+    for (const [label, pages, members, contract, sink, dataUrl] of [
+      ['1 page, 2 members, in RAM', 1, 2, MULTI_MEMBER.TWO_ONLY, 'memory', false],
+      ['5 pages, 2 members, in RAM', 5, 2, MULTI_MEMBER.TWO_ONLY, 'memory', false],
+      ['5 pages, 4 members, in RAM', 5, 4, MULTI_MEMBER.REFERENCE_PAIRS, 'memory', false],
+      ['5 pages, 4 members, as data URLs', 5, 4, MULTI_MEMBER.REFERENCE_PAIRS,
+        'memory', true],
+      ['5 pages, 4 members, spooled', 5, 4, MULTI_MEMBER.REFERENCE_PAIRS, 'spool', false],
+      ['200 pages, 4 members, spooled', 200, 4, MULTI_MEMBER.REFERENCE_PAIRS,
+        'spool', false],
+    ]) {
+      const checked = checkJobMemory({
+        pages, members, contract, width: A4[0], height: A4[1], radiusPx: 6,
+        sink, encodeAsDataUrl: dataUrl,
+      });
+      cases[label] = {
+        pages,
+        members,
+        sink,
+        pairsPerPage: checked.output.pairsPerPage,
+        visuals: checked.output.visuals,
+        perVisualMB: +(checked.output.perVisualBytes / 1e6).toFixed(1),
+        totalOutputMB: +(checked.output.totalEncodedBytes / 1e6).toFixed(0),
+        spooledMB: +(checked.output.spooledBytes / 1e6).toFixed(0),
+        perPagePeakMB: +(checked.perPagePeak / 1e6).toFixed(0),
+        publishPhaseMB: +(checked.publishPhase / 1e6).toFixed(0),
+        jobPeakMB: +(checked.jobPeak / 1e6).toFixed(0),
+        peakPhase: checked.peakPhase,
+        withinBudget: checked.withinBudget,
+        refusal: checked.refusal,
+      };
+    }
+    return {
+      limit: MAX_COMPARISON_BYTES,
+      spoolChunkBytes: MAX_SPOOL_CHUNK_BYTES,
+      selectedSink: M4_OUTPUT_SINK,
+      shippedSink: OUTPUT_SINK.MEMORY,
+      lifetime: PAIR_RESULT_LIFETIME,
+      cases,
+      // One source page, four members: what the artifact contains and in what
+      // order, so a person can tell the pairs apart.
+      shape: pairResultShape({
+        page: 3, members: 4,
+        labels: ['reference', 'member 2', 'member 3', 'member 4'],
+      }),
+    };
+  },
+
+  /**
+   * Publishing nothing until everything has succeeded.
+   *
+   * The bytes are spooled to browser-local storage — no new dependency, no
+   * external service — and the final artifact only exists once every page is
+   * done. A cancellation, a supersession or a failure part-way through has to
+   * leave nothing behind that could be mistaken for a finished comparison.
+   */
+  async atomicPublish() {
+    if (!navigator.storage || typeof navigator.storage.getDirectory !== 'function') {
+      return { available: false };
+    }
+    const root = await navigator.storage.getDirectory();
+    const clean = async () => {
+      for (const name of ['m4-spool', 'm4-final.bin']) {
+        try {
+          await root.removeEntry(name, { recursive: true });
+        } catch { /* absent */ }
+      }
+    };
+    const exists = async (name) => {
+      try {
+        await root.getFileHandle(name);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const spoolNames = async () => {
+      try {
+        const dir = await root.getDirectoryHandle('m4-spool');
+        const names = [];
+        for await (const key of dir.keys()) names.push(key);
+        return names.sort();
+      } catch {
+        return null;
+      }
+    };
+
+    // A real encoded visual, small enough to run several of.
+    const members = [
+      await member('base-a4', BLUE, 'base-a4'),
+      await member('added-line-a4', RED, 'added-line-a4'),
+    ];
+    const rendered = await renderMembersUpright(members, 72 / 72);
+    const { width, height } = rendered;
+    const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+    const visual = encodePngStored({
+      pixels: compositeFromMasks({
+        masks, dilated: masks, colors: [BLUE, RED], width, height,
+      }),
+      width,
+      height,
+    });
+
+    /**
+     * The sink. Bytes go out of RAM as they are produced; the final artifact
+     * is assembled from the spool and only then becomes visible.
+     */
+    const run = async ({ pages, stopAfter = null, supersedeBefore = false }) => {
+      await clean();
+      const dir = await root.getDirectoryHandle('m4-spool', { create: true });
+      let generation = 1;
+      let spooled = 0;
+      let peakRetained = 0;
+      let cancelled = false;
+      for (let p = 1; p <= pages; p++) {
+        if (stopAfter !== null && p > stopAfter) { cancelled = true; break; }
+        const handle = await dir.getFileHandle(`page-${p}.png`, { create: true });
+        const writable = await handle.createWritable();
+        // Written in bounded chunks; only a chunk is ever live.
+        for (let offset = 0; offset < visual.length; offset += MAX_SPOOL_CHUNK_BYTES) {
+          const chunk = visual.subarray(offset, offset + MAX_SPOOL_CHUNK_BYTES);
+          peakRetained = Math.max(peakRetained, chunk.length);
+          await writable.write(chunk);
+        }
+        await writable.close();
+        spooled += visual.length;
+        // The visual is released here; nothing accumulates a list of them.
+      }
+      if (supersedeBefore) generation = 2;
+
+      const stagedBefore = await spoolNames();
+      let published = false;
+      if (!cancelled && generation === 1) {
+        const finalHandle = await root.getFileHandle('m4-final.bin', { create: true });
+        const writable = await finalHandle.createWritable();
+        for (const name of stagedBefore) {
+          const file = await (await dir.getFileHandle(name)).getFile();
+          await writable.write(await file.arrayBuffer());
+        }
+        await writable.close();
+        published = true;
+      }
+      // Whatever happened, the spool goes.
+      await root.removeEntry('m4-spool', { recursive: true });
+      const finalExists = await exists('m4-final.bin');
+      const finalSize = finalExists
+        ? (await (await root.getFileHandle('m4-final.bin')).getFile()).size : 0;
+      const result = {
+        pages,
+        stagedPages: stagedBefore ? stagedBefore.length : 0,
+        spooledBytes: spooled,
+        peakRetainedBytes: peakRetained,
+        published,
+        finalExists,
+        finalSize,
+        spoolRemains: (await spoolNames()) !== null,
+      };
+      await clean();
+      return result;
+    };
+
+    return {
+      available: true,
+      perVisualBytes: visual.length,
+      width,
+      height,
+      chunkBytes: MAX_SPOOL_CHUNK_BYTES,
+      completed: await run({ pages: 3 }),
+      cancelledMidway: await run({ pages: 3, stopAfter: 2 }),
+      supersededBeforePublish: await run({ pages: 3, supersedeBefore: true }),
     };
   },
 

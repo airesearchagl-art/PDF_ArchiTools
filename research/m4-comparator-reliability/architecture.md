@@ -587,9 +587,11 @@ the reason recorded. Dropping it from the estimate would make the job look
 cheaper by not mentioning it, which is the shipped comparator's failure in a
 different place.
 
-Measured: five A4 pages at 300 dpi and 0.5 mm are 2,957,102,400 units each —
-every one comfortably inside — and 14,785,512,000 together, which is refused.
-A per-page ceiling would have run all five.
+Measured, under the selected algorithm: an A4 page at 300 dpi and 0.5 mm is
+69,578,880 units, comfortably inside the ceiling, and **173 of them are
+12,037,146,240 together, which is refused**. A per-page ceiling would have run
+all 173. The page count is derived from the ceiling rather than written down, so
+it stays this case if the ceiling is recalibrated.
 
 ### A unit is not a unit until the algorithm is named
 
@@ -624,7 +626,7 @@ refuses comparisons.
 Calibrated against the selected algorithm: the worst cost per unit over five
 sizes and radii is **1.9 × 10⁻⁶ ms** — an A1 at 150 dpi, 139,393,888 units in
 263 ms. Twelve billion units at that rate is about **23 seconds** for the whole
-job, not the 55 seconds the scan-based reading gave.
+job — **comparison-kernel** seconds, not seconds of waiting; see below.
 
 In work a person can picture, that is **about 173 A4 pages at 300 dpi and a
 0.5 mm tolerance**. And under this algorithm no *single* sheet in the corpus
@@ -657,11 +659,19 @@ the requested and the effective settings together so that a downgrade could not
 happen unremarked. Arithmetic that would leave the safe-integer range is a
 refusal too, rather than a number that has quietly lost its low bits.
 
-Fifty-five seconds is a long time to wait, which is why this is a ceiling on
-*refusal* rather than a target: a job under it must be interruptible, and one
-over it is refused before a canvas is allocated. The number is a judgement about
-how much of a person's afternoon one comparison may claim, and the machine it
-was calibrated on is one machine. Human Gate **H10**.
+**Kernel seconds are not wall-clock seconds.** What was measured is
+`pairChangeMask` on masks that already exist. It excludes PDF.js rendering, the
+RGBA readback, mask extraction, the task-boundary yields, painting the pair
+visuals, PNG encoding, container assembly and the final artifact. So H10 bounds
+the *comparison*, not the wait, and reading a user-facing duration off it would
+be claiming something this research did not measure. Bounding total wall-clock
+would need an end-to-end calibration from render through publish — a separate
+exercise, and the two meanings must not be mixed under one number.
+
+It is a ceiling on *refusal* rather than a target: a job under it must be
+interruptible, and one over it is refused before a canvas is allocated. The
+number is a judgement about how much comparison one operation may claim, on one
+machine. Human Gate **H10**.
 
 ### A comparison that can be abandoned
 
@@ -777,7 +787,8 @@ peakWorkingSet = max over phases of (buffers live during that phase)
 | 2 mask extraction | that readback (4/px), every member's mask (1/px each) |
 | 3 dilation | the masks, the reference's dilation, the other member's dilation, one scratch band, two running-sum indices |
 | 4 comparison | the masks, two dilations, the semantic change mask |
-| 5 presentation | the masks, every member's dilation, the composite (4/px), the encoder's bitmap (4/px), the data URL |
+| 5 presentation | the masks, **two** dilations — the reference's and the current member's — the composite (4/px), one row of encoder scratch, the encoded bytes and the handoff copy |
+| 6 publish | one write chunk, and whatever finished output the sink still holds |
 
 Two parts of that are a **contract**, not an implementation detail, because a
 different choice gives a different peak:
@@ -797,7 +808,8 @@ and four bytes per pixel per member stop being co-resident with anything.
 
 ### The encoder has to be one this architecture controls
 
-Two rounds got the encoding allowance wrong in two different ways.
+Two earlier versions got the encoding allowance wrong in two different ways,
+and both are superseded.
 
 First it was **0.15 bytes per pixel**, from four measured composites — a
 compression *ratio*, which a fail-closed gate may not rest on, because a scanned
@@ -870,6 +882,73 @@ A tolerance of zero allocates no dilation buffers at all: 14 bytes per pixel
 against 16 at 0.5 mm. Four members cost 18 rather than 16, not 20 — because the
 pairwise presentation below holds two dilations at a time rather than one per
 member.
+
+### The phase model bounds a page. It does not bound the operation.
+
+Two commitments this design already made turn the finished output into its own
+problem. Nothing is published until every requested page has succeeded. And
+under `reference-pairs`, one source page produces *n − 1* visuals.
+
+At A4 300 dpi the owned encoder writes 34.8 MB per visual, so four members are
+about 104 MB of finished output per source page. Measured:
+
+| | visuals | output | page peak | at publish | job peak | |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 page, 2 members, in RAM | 1 | 35 MB | 139 MB | 70 MB | 139 MB | within |
+| 5 pages, 2 members, in RAM | 5 | 174 MB | 139 MB | 348 MB | 348 MB | within |
+| **5 pages, 4 members, in RAM** | 15 | 522 MB | **157 MB** | 1044 MB | **1044 MB** | **refused** |
+| 5 pages, 4 members, as data URLs | 15 | 522 MB | 157 MB | 1914 MB | 1914 MB | **refused** |
+| 5 pages, 4 members, spooled | 15 | 522 MB | 157 MB | **4 MB** | 157 MB | within |
+| 200 pages, 4 members, spooled | 600 | 20.9 GB | 157 MB | **4 MB** | 157 MB | within |
+
+The third row is the point: **every page passes its own check at 157 MB and the
+operation is 1044 MB.** The work ceiling does not catch it either — 12e9 units
+is about 173 A4 pages and this fails at five. And the fourth row is what ships:
+`jsPDF.addImage` is handed a base64 data URL per page and the document holds
+them all until `save()`.
+
+So where finished bytes live is part of the architecture, in four parts.
+
+**A pair-result lifetime.** Nothing accumulates a list of finished images:
+
+```
+    compare pair -> paint visual -> encode -> append to the sink -> release
+```
+
+**A sink that is not RAM.** Each encoded visual is written to browser-local
+storage and released; only a bounded write chunk — 4 MiB — is ever live. No new
+dependency and no external service. The publish phase then costs the same for
+200 pages as for five, which is the property that makes an export of a drawing
+set possible at all.
+
+**An atomic publish.** The final artifact is assembled from the spool and only
+exists once every page has succeeded. Measured, on three-page runs:
+
+| | staged | published | artifact | spool |
+| --- | --- | --- | --- | --- |
+| completed | 3 of 3 | yes | **exists**, 6.0 MB | removed |
+| **cancelled midway** | 2 of 3 | no | **absent** | removed |
+| **superseded before publish** | 3 of 3 | no | **absent** | removed |
+
+Two pages of finished output on disk and no artifact: that is the whole point.
+A partial comparison that looks complete is the failure this design exists to
+prevent, and the temporary data is discarded whether the run published or not.
+
+**A stated artifact shape.** One source page becomes *n − 1* pair results, in
+slot order, each naming its members — the same shape in the preview, the
+comparison PDF and the change report, because they are three presentations of
+one result and disagreeing about ordering would make them three answers again:
+
+```
+    p3: reference vs member 2
+    p3: reference vs member 3
+    p3: reference vs member 4
+```
+
+Whether the sink is a spool or an explicit `MAX_OUTPUT_BYTES` with a fail-closed
+preflight — the latter only if the container really must stay memory-resident,
+which `jsPDF` today forces — is a product decision, because it decides how large
+a drawing set the tool will accept. **H11.**
 
 The 512 MiB itself is a judgement about how much one comparison may claim, not a
 threshold found in the data, and it is recorded as one: **H7**.

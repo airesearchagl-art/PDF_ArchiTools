@@ -646,7 +646,7 @@
       "changeRatio": 0,
       "bounds": null,
       "compositeMs": 26,
-      "ms": 90,
+      "ms": 100,
       "memory": 60864160
     },
     "a wall added": {
@@ -664,8 +664,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 32,
-      "ms": 80,
+      "compositeMs": 35,
+      "ms": 83,
       "memory": 60864160
     },
     "a wall removed": {
@@ -683,8 +683,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 22,
-      "ms": 71,
+      "compositeMs": 28,
+      "ms": 87,
       "memory": 60864160
     },
     "the drawing shifted 2pt": {
@@ -703,7 +703,7 @@
         "height": 1181
       },
       "compositeMs": 22,
-      "ms": 76,
+      "ms": 67,
       "memory": 60864160
     },
     "A4 vs A3, same drawing": {
@@ -721,8 +721,8 @@
         "width": 1651,
         "height": 2315
       },
-      "compositeMs": 50,
-      "ms": 132,
+      "compositeMs": 47,
+      "ms": 136,
       "memory": 121728320
     },
     "A4 vs A1, same drawing": {
@@ -740,8 +740,8 @@
         "width": 3320,
         "height": 4680
       },
-      "compositeMs": 187,
-      "ms": 482,
+      "compositeMs": 184,
+      "ms": 445,
       "memory": 487641336
     },
     "portrait vs landscape": {
@@ -759,8 +759,8 @@
         "width": 1651,
         "height": 1651
       },
-      "compositeMs": 34,
-      "ms": 88,
+      "compositeMs": 35,
+      "ms": 100,
       "memory": 86044252
     },
     "A4 vs a sheet 3pt bigger": {
@@ -778,8 +778,8 @@
         "width": 1168,
         "height": 1630
       },
-      "compositeMs": 22,
-      "ms": 97,
+      "compositeMs": 25,
+      "ms": 69,
       "memory": 61402880
     },
     "same aspect, 1.4x": {
@@ -797,8 +797,8 @@
         "width": 1634,
         "height": 2291
       },
-      "compositeMs": 46,
-      "ms": 180,
+      "compositeMs": 45,
+      "ms": 116,
       "memory": 119332640
     },
     "/Rotate 0 vs 90": {
@@ -817,7 +817,7 @@
         "height": 1650
       },
       "compositeMs": 32,
-      "ms": 104,
+      "ms": 86,
       "memory": 86044252
     },
     "/Rotate 0 vs 180": {
@@ -835,8 +835,8 @@
         "width": 1151,
         "height": 1552
       },
-      "compositeMs": 22,
-      "ms": 60,
+      "compositeMs": 26,
+      "ms": 90,
       "memory": 60864160
     },
     "/Rotate 0 vs 270": {
@@ -854,8 +854,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 31,
-      "ms": 86,
+      "compositeMs": 35,
+      "ms": 99,
       "memory": 86044252
     },
     "crop origin (0,0) vs (50,70)": {
@@ -868,8 +868,8 @@
       "inkPixels": 59636,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 16,
-      "ms": 46,
+      "compositeMs": 20,
+      "ms": 67,
       "memory": 44543324
     },
     "MediaBox larger, same CropBox": {
@@ -882,8 +882,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 26,
-      "ms": 68,
+      "compositeMs": 25,
+      "ms": 76,
       "memory": 60864160
     },
     "black vs grey ink": {
@@ -901,8 +901,8 @@
         "width": 1162,
         "height": 1624
       },
-      "compositeMs": 23,
-      "ms": 65,
+      "compositeMs": 29,
+      "ms": 86,
       "memory": 60864160
     },
     "black vs cyan ink": {
@@ -920,8 +920,8 @@
         "width": 90,
         "height": 58
       },
-      "compositeMs": 30,
-      "ms": 84,
+      "compositeMs": 29,
+      "ms": 64,
       "memory": 60864160
     },
     "a pale hatch added": {
@@ -939,8 +939,8 @@
         "width": 749,
         "height": 42
       },
-      "compositeMs": 25,
-      "ms": 101,
+      "compositeMs": 28,
+      "ms": 82,
       "memory": 60864160
     }
   },
@@ -982,7 +982,7 @@
         "inkPixels": 80002,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 29,
+        "compositeMs": 28,
         "ms": 79,
         "memory": 60864160
       },
@@ -1007,8 +1007,8 @@
         "inkPixels": 80048,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 25,
-        "ms": 73,
+        "compositeMs": 46,
+        "ms": 89,
         "memory": 60864160
       },
       "strict": {
@@ -1034,8 +1034,8 @@
         "inkPixels": 80051,
         "changeRatio": 1,
         "bounds": null,
-        "compositeMs": 16,
-        "ms": 29,
+        "compositeMs": 27,
+        "ms": 40,
         "memory": 43474400
       },
       "strict": {
@@ -1061,8 +1061,8 @@
           "width": 1162,
           "height": 1624
         },
-        "compositeMs": 27,
-        "ms": 77,
+        "compositeMs": 33,
+        "ms": 85,
         "memory": 60864160
       },
       "strict": {
@@ -1115,7 +1115,7 @@
         "height": 50
       },
       "compositeMs": 25,
-      "ms": 63,
+      "ms": 72,
       "memory": 60864160
     }
   },
@@ -1442,8 +1442,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 46,
-      "totalMs": 96
+      "compositeMs": 41,
+      "totalMs": 94
     },
     "matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1455,8 +1455,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 47,
-      "totalMs": 111
+      "compositeMs": 46,
+      "totalMs": 104
     },
     "NOT matching, A4 150dpi, 0mm": {
       "dpi": 150,
@@ -1468,8 +1468,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 35,
-      "totalMs": 120
+      "compositeMs": 36,
+      "totalMs": 133
     },
     "NOT matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1481,8 +1481,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 49,
-      "totalMs": 114
+      "compositeMs": 39,
+      "totalMs": 123
     },
     "NOT matching, A4 300dpi, 0mm": {
       "dpi": 300,
@@ -1494,8 +1494,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 124,
-      "totalMs": 314
+      "compositeMs": 131,
+      "totalMs": 332
     },
     "NOT matching, A4 300dpi, 0.5mm": {
       "dpi": 300,
@@ -1507,8 +1507,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 182,
-      "totalMs": 431
+      "compositeMs": 200,
+      "totalMs": 469
     }
   },
   "candidates": {
@@ -2693,7 +2693,7 @@
       "changeRatio": 0,
       "bounds": null,
       "compositeMs": 34,
-      "ms": 78,
+      "ms": 84,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 2": {
@@ -2706,8 +2706,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 43,
-      "ms": 109,
+      "compositeMs": 60,
+      "ms": 135,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 4": {
@@ -2720,8 +2720,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 41,
-      "ms": 113,
+      "compositeMs": 47,
+      "ms": 124,
       "memory": 60864160
     },
     "A4 300dpi, 2 layers, threshold 0": {
@@ -2734,8 +2734,8 @@
       "inkPixels": 300848,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 139,
-      "ms": 347,
+      "compositeMs": 147,
+      "ms": 345,
       "memory": 243526080
     },
     "A4 150dpi, 4 layers, threshold 0": {
@@ -2753,8 +2753,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 65,
-      "ms": 175,
+      "compositeMs": 56,
+      "ms": 180,
       "memory": 95643680
     },
     "A3 150dpi, 2 layers, threshold 0": {
@@ -2767,8 +2767,8 @@
       "inkPixels": 154247,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 85,
-      "ms": 203,
+      "compositeMs": 79,
+      "ms": 202,
       "memory": 121728320
     },
     "A1 150dpi, 2 layers, threshold 0": {
@@ -2781,8 +2781,8 @@
       "inkPixels": 568537,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 279,
-      "ms": 648,
+      "compositeMs": 264,
+      "ms": 722,
       "memory": 487641336
     }
   },
@@ -3852,8 +3852,8 @@
       "0mm": {
         "radius": 0,
         "box": 1,
-        "scanMs": 7,
-        "dilationMs": 4,
+        "scanMs": 5,
+        "dilationMs": 3,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3861,8 +3861,8 @@
       "0.25mm": {
         "radius": 1,
         "box": 9,
-        "scanMs": 5,
-        "dilationMs": 27,
+        "scanMs": 4,
+        "dilationMs": 26,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3871,7 +3871,7 @@
         "radius": 3,
         "box": 49,
         "scanMs": 5,
-        "dilationMs": 27,
+        "dilationMs": 26,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3881,16 +3881,16 @@
       "0.25mm": {
         "radius": 1,
         "box": 9,
-        "scanMs": 27,
-        "dilationMs": 29,
+        "scanMs": 24,
+        "dilationMs": 26,
         "identical": true,
         "changePixels": 2173206
       },
       "0.5mm": {
         "radius": 3,
         "box": 49,
-        "scanMs": 74,
-        "dilationMs": 28,
+        "scanMs": 80,
+        "dilationMs": 27,
         "identical": true,
         "changePixels": 2166190
       }
@@ -4042,7 +4042,7 @@
         "bytesPerPixel": 4.001,
         "roundTripDifferingBytes": 0,
         "roundTripLossless": true,
-        "encodeMs": 48,
+        "encodeMs": 64,
         "scratchBytes": 4965,
         "browserPngBytesPerPixel": 0.0321,
         "browserJpegBytesPerPixel": 0.0498
@@ -4057,7 +4057,7 @@
         "bytesPerPixel": 4.001,
         "roundTripDifferingBytes": 0,
         "roundTripLossless": true,
-        "encodeMs": 92,
+        "encodeMs": 124,
         "scratchBytes": 7017,
         "browserPngBytesPerPixel": 0.0292,
         "browserJpegBytesPerPixel": 0.0266
@@ -5504,6 +5504,183 @@
       "reason": "no comparison algorithm was selected, so no work bound exists"
     }
   },
+  "outputBudget": {
+    "limit": 536870912,
+    "spoolChunkBytes": 4194304,
+    "selectedSink": "spool",
+    "shippedSink": "memory",
+    "lifetime": [
+      "compare pair",
+      "paint visual",
+      "encode",
+      "append to sink",
+      "release RGBA and encoded bytes"
+    ],
+    "cases": {
+      "1 page, 2 members, in RAM": {
+        "pages": 1,
+        "members": 2,
+        "sink": "memory",
+        "pairsPerPage": 1,
+        "visuals": 1,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 35,
+        "spooledMB": 0,
+        "perPagePeakMB": 139,
+        "publishPhaseMB": 70,
+        "jobPeakMB": 139,
+        "peakPhase": "presentation",
+        "withinBudget": true,
+        "refusal": null
+      },
+      "5 pages, 2 members, in RAM": {
+        "pages": 5,
+        "members": 2,
+        "sink": "memory",
+        "pairsPerPage": 1,
+        "visuals": 5,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 174,
+        "spooledMB": 0,
+        "perPagePeakMB": 139,
+        "publishPhaseMB": 348,
+        "jobPeakMB": 348,
+        "peakPhase": "publish",
+        "withinBudget": true,
+        "refusal": null
+      },
+      "5 pages, 4 members, in RAM": {
+        "pages": 5,
+        "members": 4,
+        "sink": "memory",
+        "pairsPerPage": 3,
+        "visuals": 15,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 522,
+        "spooledMB": 0,
+        "perPagePeakMB": 157,
+        "publishPhaseMB": 1044,
+        "jobPeakMB": 1044,
+        "peakPhase": "publish",
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "1044 MB at the publish phase across 5 page(s), against a ceiling of 537 MB"
+        }
+      },
+      "5 pages, 4 members, as data URLs": {
+        "pages": 5,
+        "members": 4,
+        "sink": "memory",
+        "pairsPerPage": 3,
+        "visuals": 15,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 522,
+        "spooledMB": 0,
+        "perPagePeakMB": 157,
+        "publishPhaseMB": 1914,
+        "jobPeakMB": 1914,
+        "peakPhase": "publish",
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "1914 MB at the publish phase across 5 page(s), against a ceiling of 537 MB"
+        }
+      },
+      "5 pages, 4 members, spooled": {
+        "pages": 5,
+        "members": 4,
+        "sink": "spool",
+        "pairsPerPage": 3,
+        "visuals": 15,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 522,
+        "spooledMB": 522,
+        "perPagePeakMB": 157,
+        "publishPhaseMB": 4,
+        "jobPeakMB": 157,
+        "peakPhase": "presentation",
+        "withinBudget": true,
+        "refusal": null
+      },
+      "200 pages, 4 members, spooled": {
+        "pages": 200,
+        "members": 4,
+        "sink": "spool",
+        "pairsPerPage": 3,
+        "visuals": 600,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 20878,
+        "spooledMB": 20878,
+        "perPagePeakMB": 157,
+        "publishPhaseMB": 4,
+        "jobPeakMB": 157,
+        "peakPhase": "presentation",
+        "withinBudget": true,
+        "refusal": null
+      }
+    },
+    "shape": [
+      {
+        "page": 3,
+        "index": 0,
+        "reference": "reference",
+        "member": "member 2",
+        "title": "p3: reference vs member 2"
+      },
+      {
+        "page": 3,
+        "index": 1,
+        "reference": "reference",
+        "member": "member 3",
+        "title": "p3: reference vs member 3"
+      },
+      {
+        "page": 3,
+        "index": 2,
+        "reference": "reference",
+        "member": "member 4",
+        "title": "p3: reference vs member 4"
+      }
+    ]
+  },
+  "atomicPublish": {
+    "available": true,
+    "perVisualBytes": 2008400,
+    "width": 596,
+    "height": 842,
+    "chunkBytes": 4194304,
+    "completed": {
+      "pages": 3,
+      "stagedPages": 3,
+      "spooledBytes": 6025200,
+      "peakRetainedBytes": 2008400,
+      "published": true,
+      "finalExists": true,
+      "finalSize": 6025200,
+      "spoolRemains": false
+    },
+    "cancelledMidway": {
+      "pages": 3,
+      "stagedPages": 2,
+      "spooledBytes": 4016800,
+      "peakRetainedBytes": 2008400,
+      "published": false,
+      "finalExists": false,
+      "finalSize": 0,
+      "spoolRemains": false
+    },
+    "supersededBeforePublish": {
+      "pages": 3,
+      "stagedPages": 3,
+      "spooledBytes": 6025200,
+      "peakRetainedBytes": 2008400,
+      "published": false,
+      "finalExists": false,
+      "finalSize": 0,
+      "spoolRemains": false
+    }
+  },
   "calibration": {
     "algorithm": "separable-dilation",
     "rows": {
@@ -5513,8 +5690,8 @@
         "pixels": 2176714,
         "radius": 1,
         "units": 17413712,
-        "ms": 27.6,
-        "msPerUnit": 0.000001584957876958693
+        "ms": 25.2,
+        "msPerUnit": 0.0000014471354525404836
       },
       "A4 150dpi, 0.5mm": {
         "width": 1241,
@@ -5522,8 +5699,8 @@
         "pixels": 2176714,
         "radius": 3,
         "units": 17413712,
-        "ms": 25.9,
-        "msPerUnit": 0.000001487333659733771
+        "ms": 26.1,
+        "msPerUnit": 0.0000014988188614833836
       },
       "A4 300dpi, 0.15mm": {
         "width": 2481,
@@ -5531,8 +5708,8 @@
         "pixels": 8703348,
         "radius": 2,
         "units": 69626784,
-        "ms": 119.2,
-        "msPerUnit": 0.0000017119848590957417
+        "ms": 121,
+        "msPerUnit": 0.0000017378369795163885
       },
       "A3 150dpi, 0.15mm": {
         "width": 1754,
@@ -5540,8 +5717,8 @@
         "pixels": 4351674,
         "radius": 1,
         "units": 34813392,
-        "ms": 53.3,
-        "msPerUnit": 0.0000015310200165792454
+        "ms": 54.3,
+        "msPerUnit": 0.0000015597445949670847
       },
       "A1 150dpi, 0.15mm": {
         "width": 3508,
@@ -5549,13 +5726,13 @@
         "pixels": 17424236,
         "radius": 1,
         "units": 139393888,
-        "ms": 255,
-        "msPerUnit": 0.000001829348500559795
+        "ms": 268,
+        "msPerUnit": 0.0000019226094045099022
       }
     },
-    "worstMsPerUnit": 0.000001829348500559795,
+    "worstMsPerUnit": 0.0000019226094045099022,
     "ceiling": 12000000000,
-    "projectedWorstSeconds": 22
+    "projectedWorstSeconds": 23.1
   },
   "asyncCancellation": {
     "width": 1241,
@@ -5573,7 +5750,7 @@
     "synchronousDriver": {
       "status": "READY_TO_COMPARE",
       "bands": 18,
-      "ms": 28,
+      "ms": 26,
       "cancellationObserved": false,
       "cancellationFlagAtEnd": false,
       "produced": true
@@ -5581,7 +5758,7 @@
     "asynchronousDriver": {
       "status": "CANCELLED",
       "bands": 4,
-      "ms": 24,
+      "ms": 25,
       "reason": "cancelled",
       "cancellationObserved": true,
       "publishable": false,
@@ -5595,5 +5772,61 @@
       "publishable": false,
       "result": null
     }
+  },
+  "documentContract": {
+    "documents": [
+      "README.md",
+      "architecture.md",
+      "baseline.md",
+      "decision-matrix.md",
+      "limitations.md",
+      "measurements.md"
+    ],
+    "supersededValues": [
+      {
+        "needle": "14,785,512,000",
+        "why": "the five-page job example, costed under the rejected scan"
+      },
+      {
+        "needle": "2,957,102,400 units",
+        "why": "per-page work under the rejected scan"
+      },
+      {
+        "needle": "55 seconds",
+        "why": "H10 before it was calibrated against the selected algorithm"
+      },
+      {
+        "needle": "Match tolerance 0.5%",
+        "why": "the MATCH ratio floor, now fixed at zero"
+      },
+      {
+        "needle": "tolerance = 0.005",
+        "why": "the MATCH ratio floor, now fixed at zero"
+      },
+      {
+        "needle": "0.15 bytes per pixel",
+        "why": "the encoding allowance taken from a compression ratio"
+      },
+      {
+        "needle": "encodedImageUpperBound",
+        "why": "the bound that described an encoder nobody controls"
+      },
+      {
+        "needle": "dataUrlBytesPerPixel",
+        "why": "the measured-ratio allowance"
+      },
+      {
+        "needle": "**0.25 mm**",
+        "why": "the tolerance ceiling from before the 72 dpi sweep"
+      },
+      {
+        "needle": "| CHANGE | CHANGE | CHANGE | CHANGE |",
+        "why": "the candidate table from before plan and verdict were separated"
+      },
+      {
+        "needle": "every member's dilation",
+        "why": "the all-member presentation"
+      }
+    ]
   }
 }

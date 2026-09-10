@@ -1233,6 +1233,102 @@ try {
             === 'OVER_WORK_BUDGET',
         jobs.jobs['arithmetic outside the safe-integer range'].refusal.reason);
 
+    // ---- what the whole operation's output costs ----------------------------
+    console.log('\n=== where the finished bytes live ===');
+    const output = await page.evaluate(() => window.__m4.outputBudget());
+    evidence.outputBudget = output;
+    for (const [label, r] of Object.entries(output.cases)) {
+        console.log(`  ${label.padEnd(34)} ${String(r.visuals).padStart(3)} visuals  `
+            + `output ${String(r.totalOutputMB).padStart(6)}MB  page peak ${
+                String(r.perPagePeakMB).padStart(4)}MB  publish ${
+                String(r.publishPhaseMB).padStart(6)}MB  job ${
+                String(r.jobPeakMB).padStart(6)}MB at ${r.peakPhase.padEnd(12)} ${
+                r.withinBudget ? 'within' : 'REFUSED'}`);
+    }
+    check('the pair-result lifetime is stated, and releases each visual',
+        output.lifetime.length === 5
+        && output.lifetime[output.lifetime.length - 1].startsWith('release'),
+        output.lifetime.join(' -> '));
+    check('one source page under reference-pairs is n-1 visuals',
+        output.cases['5 pages, 4 members, in RAM'].pairsPerPage === 3
+        && output.cases['5 pages, 4 members, in RAM'].visuals === 15,
+        `${output.cases['5 pages, 4 members, in RAM'].perVisualMB}MB each, `
+        + `${output.cases['5 pages, 4 members, in RAM'].totalOutputMB}MB of output`);
+    // The gap the per-page model leaves open.
+    probe('pages that each fit can still be an operation that does not',
+        output.cases['5 pages, 4 members, in RAM'].withinBudget === false
+        && output.cases['5 pages, 4 members, in RAM'].perPagePeakMB
+            < output.limit / 1e6
+        && output.cases['5 pages, 4 members, in RAM'].peakPhase === 'publish',
+        output.cases['5 pages, 4 members, in RAM'].refusal.reason);
+    probe('and the shipped data-URL handoff makes it worse again',
+        output.cases['5 pages, 4 members, as data URLs'].jobPeakMB
+        > output.cases['5 pages, 4 members, in RAM'].jobPeakMB,
+        `${output.cases['5 pages, 4 members, in RAM'].jobPeakMB}MB held as bytes, `
+        + `${output.cases['5 pages, 4 members, as data URLs'].jobPeakMB}MB as base64 `
+        + '— which is what `jsPDF.addImage` is handed today');
+    check('spooling the bytes out of RAM bounds the operation',
+        output.cases['5 pages, 4 members, spooled'].withinBudget === true
+        && output.cases['200 pages, 4 members, spooled'].withinBudget === true
+        && output.cases['200 pages, 4 members, spooled'].publishPhaseMB
+            === output.cases['5 pages, 4 members, spooled'].publishPhaseMB,
+        `${output.cases['200 pages, 4 members, spooled'].spooledMB}MB spooled for 200 `
+        + `pages, and the publish phase holds ${output.spoolChunkBytes / 1e6}MB either way`);
+    check('the artifact says which pair each visual is',
+        output.shape.length === 3
+        && output.shape[0].title === 'p3: reference vs member 2'
+        && output.shape[2].member === 'member 4',
+        output.shape.map((r) => r.title).join(' | '));
+
+    // ---- nothing is published until everything succeeds ---------------------
+    console.log('\n=== the atomic publish ===');
+    const publish = await page.evaluate(() => window.__m4.atomicPublish());
+    evidence.atomicPublish = publish;
+    check('a browser-local sink is available, with no new dependency',
+        publish.available === true,
+        `${(publish.perVisualBytes / 1e6).toFixed(1)}MB per visual at `
+        + `${publish.width}x${publish.height}, written in `
+        + `${publish.chunkBytes / 1e6}MB chunks`);
+    for (const [label, r] of Object.entries({
+        completed: publish.completed,
+        'cancelled midway': publish.cancelledMidway,
+        'superseded before publish': publish.supersededBeforePublish,
+    })) {
+        console.log(`  ${label.padEnd(26)} staged ${r.stagedPages}/${r.pages} pages  `
+            + `spooled ${(r.spooledBytes / 1e6).toFixed(1)}MB  peak in RAM ${
+                (r.peakRetainedBytes / 1e6).toFixed(1)}MB  `
+            + `published ${r.published}  artifact ${r.finalExists ? 'exists' : 'absent'}`
+            + `  spool ${r.spoolRemains ? 'REMAINS' : 'removed'}`);
+    }
+    check('a completed run publishes one artifact of every staged page',
+        publish.completed.published === true && publish.completed.finalExists === true
+        && publish.completed.finalSize
+            === publish.perVisualBytes * publish.completed.pages,
+        `${publish.completed.pages} pages, `
+        + `${(publish.completed.finalSize / 1e6).toFixed(1)}MB`);
+    check('and only a bounded chunk is ever live while it writes',
+        publish.completed.peakRetainedBytes <= publish.chunkBytes,
+        `${(publish.completed.peakRetainedBytes / 1e6).toFixed(1)}MB against a `
+        + `${publish.chunkBytes / 1e6}MB chunk, on `
+        + `${(publish.completed.spooledBytes / 1e6).toFixed(1)}MB of output`);
+    // The failure this contract exists to prevent.
+    probe('a cancelled run leaves no artifact, though pages were already staged',
+        publish.cancelledMidway.stagedPages > 0
+        && publish.cancelledMidway.published === false
+        && publish.cancelledMidway.finalExists === false,
+        `${publish.cancelledMidway.stagedPages} of `
+        + `${publish.cancelledMidway.pages} pages were on disk and nothing was published`);
+    probe('a run superseded before publishing leaves none either',
+        publish.supersededBeforePublish.stagedPages
+            === publish.supersededBeforePublish.pages
+        && publish.supersededBeforePublish.published === false
+        && publish.supersededBeforePublish.finalExists === false,
+        'every page finished, the generation moved, and the artifact was never made');
+    check('and the spool is discarded in every case',
+        [publish.completed, publish.cancelledMidway, publish.supersededBeforePublish]
+            .every((r) => r.spoolRemains === false),
+        'no temporary output survives a run, published or not');
+
     // ---- the ceiling, calibrated against the algorithm that ships -----------
     console.log('\n=== what a work unit costs under the selected algorithm ===');
     const calibration = await page.evaluate(() => window.__m4.separableCalibration());
@@ -1249,10 +1345,14 @@ try {
         + `${calibration.worstMsPerUnit.toExponential(2)} ms per unit`);
     // The ambiguity this replaces: the previous ceiling was read against the
     // shipped scan while the design recommended the dilation.
-    check('the ceiling reads as a wall-clock figure under that algorithm',
+    // Named precisely: this is kernel time, not the wait. The measurement is
+    // pairChangeMask on masks that already exist -- no rendering, no readback,
+    // no mask extraction, no yields, no painting, no encoding, no container.
+    check('the ceiling reads as whole-job comparison-kernel time, not user wait',
         calibration.projectedWorstSeconds > 10 && calibration.projectedWorstSeconds < 200,
-        `${calibration.ceiling.toLocaleString('en-US')} units projects to about `
-        + `${calibration.projectedWorstSeconds} seconds for the whole job`);
+        `${calibration.ceiling.toLocaleString('en-US')} comparison-work units projects `
+        + `to about ${calibration.projectedWorstSeconds} seconds of comparison-kernel `
+        + 'time on the measured machine');
     probe('and a unit is not the same amount of work under the other algorithm',
         work.byAlgorithm['any-neighbour-scan'].units
         > work.byAlgorithm['separable-dilation'].units * 10,
@@ -1304,6 +1404,72 @@ try {
         && async_.supersededByOwnership.result === null
         && async_.supersededByOwnership.reason.startsWith('superseded'),
         async_.supersededByOwnership.reason);
+
+    // ---- the write-up says what the architecture says -----------------------
+    //
+    // Five rounds of revision have left values behind more than once: a job
+    // example costed under a rejected algorithm, a tolerance ceiling from
+    // before the 72 dpi sweep, a plan table written when the plan and the
+    // verdict shared a vocabulary. History is worth keeping; history presented
+    // as the current contract is a document that lies. So the superseded values
+    // are a tripwire, and they are allowed only where the prose says they are
+    // historical.
+    console.log('\n=== the write-up matches the contract ===');
+    const DOCS = ['README.md', 'architecture.md', 'baseline.md',
+        'decision-matrix.md', 'limitations.md', 'measurements.md'];
+    const HISTORICAL = /Historical|historical|Superseded|superseded|rejected|REJECT|earlier version|earlier round|previous round|An earlier|Two earlier|would have|used to|no longer|before it came out|came out|replaced|changed in the|deliberately changed/;
+    const SUPERSEDED = [
+        ['14,785,512,000', 'the five-page job example, costed under the rejected scan'],
+        ['2,957,102,400 units', 'per-page work under the rejected scan'],
+        ['55 seconds', 'H10 before it was calibrated against the selected algorithm'],
+        ['Match tolerance 0.5%', 'the MATCH ratio floor, now fixed at zero'],
+        ['tolerance = 0.005', 'the MATCH ratio floor, now fixed at zero'],
+        ['0.15 bytes per pixel', 'the encoding allowance taken from a compression ratio'],
+        ['encodedImageUpperBound', 'the bound that described an encoder nobody controls'],
+        ['dataUrlBytesPerPixel', 'the measured-ratio allowance'],
+        ['**0.25 mm**', 'the tolerance ceiling from before the 72 dpi sweep'],
+        ['| CHANGE | CHANGE | CHANGE | CHANGE |',
+            'the candidate table from before plan and verdict were separated'],
+        ["every member's dilation", 'the all-member presentation'],
+    ];
+    const scan = (files) => {
+        const found = [];
+        for (const [name, text] of Object.entries(files)) {
+            const lines = text.split(/\r?\n/);
+            for (const [needle, why] of SUPERSEDED) {
+                lines.forEach((line, i) => {
+                    if (!line.includes(needle)) return;
+                    const context = lines.slice(Math.max(0, i - 3), i + 1).join('\n');
+                    if (HISTORICAL.test(context)) return;
+                    found.push(`${name}:${i + 1} — ${why}`);
+                });
+            }
+        }
+        return found;
+    };
+    const docs = {};
+    for (const name of DOCS) {
+        docs[name] = fs.readFileSync(
+            path.join(ROOT, 'research', 'm4-comparator-reliability', name), 'utf8',
+        );
+    }
+    evidence.documentContract = {
+        documents: DOCS,
+        supersededValues: SUPERSEDED.map(([needle, why]) => ({ needle, why })),
+    };
+    const stale = scan(docs);
+    check('no superseded value appears as current-state prose',
+        stale.length === 0,
+        stale.length === 0
+            ? `${SUPERSEDED.length} superseded values checked across ${DOCS.length} documents`
+            : stale.join(' | '));
+    // A tripwire that never fires is a tripwire nobody has tested.
+    probe('and the check fires on unlabelled superseded prose',
+        scan({ 'synthetic.md': 'The ceiling is about 55 seconds for the whole job.' })
+            .length === 1
+        && scan({ 'synthetic.md': 'An earlier version read about 55 seconds.' })
+            .length === 0,
+        'the same sentence passes when the prose says it is historical');
 
     // ---- network ------------------------------------------------------------
     console.log('\n=== the research harness talked to nobody ===');

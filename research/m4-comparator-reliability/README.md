@@ -49,7 +49,7 @@ node scripts/m4-comparator-fixtures.mjs
 node scripts/m4-comparator-research-gate.mjs
 ```
 
-**197 assertions, 80 of them negative probes.** Several assert that the shipped
+**211 assertions, 85 of them negative probes.** Several assert that the shipped
 comparator gets something wrong; those are the findings, and a gate the baseline
 passed would prove nothing. It gates the write-up, not the app, and is
 deliberately **not** wired into Core CI.
@@ -78,9 +78,11 @@ computed from a **canonical ink mask with no ratio floor**, before anything is
 painted, so the answer is not a property of the palette; **one engine** behind
 the preview, the export and the change report, which today each decide
 independently what a comparison means; a spatial tolerance in millimetres under a
-stated policy; a **peak** working-set budget checked against a derived,
-content-independent bound and a **job-level** work budget, both evaluated before
-allocation and both refusing by name rather than degrading; a comparison that can be abandoned;
+stated policy; a **peak** working-set budget checked against an
+exact bound from an owned encoder, a **job-level** output budget, and a
+**job-level** comparison-work budget, all evaluated before allocation and all
+refusing by name rather than degrading; finished output spooled out of RAM and
+published only once every page has succeeded; a comparison that can be abandoned;
 structured results rather than only an image; and an export that produces no
 bytes until every page is complete.
 
@@ -122,7 +124,8 @@ These are not the spike's to settle.
 | **H7** | the working-set budget | **512 MiB is a recommendation, not a measurement.** The measurements establish the shape of the cost, not where the line goes. Requires approval; never silently exceeded. |
 | **H8** | the ink predicate | the two shipped functions disagree — mean of channels versus any channel — and a pale yellow falls between them. One definition must serve the composite, the change bounds, the verdict and the change report. Whether the pale-grey hatch stays invisible is part of the same choice. |
 | **H9** | more than two members | **A: two-only** (measured) or **B: reference-pairs** (measured, and now with a presentation to match: one visual per pair, so the two-against-two disagreement is *shown* rather than only reported — the any-other-member composite paints that set as 0 changed pixels)? **C: all-member consensus — DEFER, requires separate research**; it is described and implemented nowhere, so it is refused rather than offered. The shipped any-other-layer rule reports a two-against-two disagreement as a clean match, so it is not among the options either. |
-| **H10** | the work ceiling, **for the whole job** | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** One ceiling on the total, not one per page: the export and the change report run over ranges. **Calibrated against `separable-dilation`, the algorithm the planner is bound to** — a unit means about 42× more work under the shipped scan, so the number is meaningless without it. At the worst of five measured figures it projects to about **23 seconds**, or **about 173 A4 pages at 300 dpi and 0.5 mm**, which is the form worth having an opinion about. Each further such page is 69,578,880 units, about 0.13 s. If real drawing sets run past ~170 sheets, raise it. Requires approval; never silently degraded to fit. |
+| **H11** | the output sink, and how large a job is accepted | The phase model bounds a page, not the operation: **5 pages × 4 members is 1044 MB at publish while each page peaks at 157 MB**, and as base64 data URLs — what `jsPDF.addImage` is handed today — 1914 MB. Spooling the encoded visuals to browser-local storage makes the publish phase a constant 4 MiB whether the job is 5 pages or 200, and the artifact appears only once every page has succeeded. The alternative, an explicit `MAX_OUTPUT_BYTES` with a fail-closed preflight, is acceptable only if the container must stay memory-resident — which `jsPDF` today forces — and it decides how large a drawing set the tool will accept. No external service either way. |
+| **H10** | the whole-job **comparison-kernel** work ceiling | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** One ceiling on the total, not one per page: the export and the change report run over ranges. **Calibrated against `separable-dilation`, the algorithm the planner is bound to** — a unit means about 42× more work under the shipped scan, so the number is meaningless without it. At the worst of five measured figures it projects to about **23 seconds of comparison-kernel time** — `pairChangeMask` on masks that already exist, *not* a user's wait, which would need an end-to-end calibration this research has not done — or **about 173 A4 pages at 300 dpi and 0.5 mm**, which is the form worth having an opinion about. Each further such page is 69,578,880 units, about 0.13 s. If real drawing sets run past ~170 sheets, raise it. Requires approval; never silently degraded to fit. |
 
 One decision each. **The MATCH ratio floor is not on this list**: the research
 recommends none, and it is **fixed at zero for the M4 MVP** rather than offered

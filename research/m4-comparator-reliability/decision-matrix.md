@@ -231,7 +231,7 @@ threshold, swallow a render failure, or recompute what a change is.
 | `algorithm` required, no default, planner bound to `separable-dilation` | **ADOPT** |
 | `MAX_COMPARISON_WORK_UNITS = 12,000,000,000`, checked before allocation, **calibrated against that algorithm** | **ADOPT as a recommendation requiring human approval** — H10 |
 | the ceiling applied **per page** | **REJECT** — the export and the change report run over ranges; a hundred pages that each pass are a hundred times the work |
-| the ceiling applied to the **whole job**, summed over every requested page and pair | **ADOPT** — measured: five A4 pages at 300 dpi and 0.5 mm are 2.96e9 each and 14.79e9 together, which is refused |
+| the ceiling applied to the **whole job**, summed over every requested page and pair | **ADOPT** — measured under the selected algorithm: an A4 page at 300 dpi and 0.5 mm is 69,578,880 units and **173 of them are 12,037,146,240 together, which is refused** |
 | a page that cannot be compared dropped from the estimate | **REJECT** — it makes the job look cheaper by not mentioning it |
 | that page kept in the plan at zero work, with the reason | **ADOPT** |
 | silently reducing DPI or tolerance to fit | **REJECT** — this is the `_600dpi.pdf` failure again |
@@ -260,7 +260,8 @@ conservative about the ink fraction, which is not knowable before rendering.
 Where 12e9 comes from, **under the selected algorithm**: the worst measured cost
 per unit over five sizes and radii is 1.9e-6 ms — an A1 at 150 dpi, 139,393,888
 units in 263 ms. 12e9 units at that rate is about **23 seconds** for the whole
-job, not the 55 seconds the scan-based reading gave.
+job of **comparison-kernel** time — what `pairChangeMask` costs on masks that
+already exist, not what a user waits.
 
 In work a person can picture: **about 173 A4 pages at 300 dpi and 0.5 mm**, at
 69,578,880 units each. Under this algorithm no *single* sheet in the corpus
@@ -515,6 +516,32 @@ For contrast, the shipped model puts A3 at 487 MB — inside the ceiling, counti
 the wrong buffers; adding the four mask buffers to that figure would have given
 about 557 MB and refused it. Neither number described the architecture that was
 chosen.
+
+### Where the finished bytes live
+
+The phase model bounds a page, not the operation: nothing is published until
+every page succeeds, and reference-pairs makes *n − 1* visuals per source page.
+
+| option | verdict |
+| --- | --- |
+| retain every finished visual in RAM until the save | **REJECT** — measured: 5 pages × 4 members is 1044 MB at publish while each page peaks at 157 MB |
+| hand them over as base64 data URLs, which is what ships | **REJECT** — the same job becomes 1914 MB; `jsPDF.addImage` is handed one per page |
+| encode, append to a browser-local sink, release | **ADOPT** — the publish phase holds one 4 MiB chunk for 5 pages or for 200 |
+| assemble and publish only after every page succeeds | **ADOPT** |
+| an explicit `MAX_OUTPUT_BYTES` with fail-closed preflight | acceptable **only** if the container must stay memory-resident, which `jsPDF` today forces |
+| a new external or cloud service | **REJECT** — out of scope and out of the trust boundary |
+
+Measured atomicity, on three-page runs: completed publishes a 6.0 MB artifact;
+cancelled midway leaves **2 of 3 pages staged and no artifact**; superseded
+before publish leaves **3 of 3 staged and no artifact**. The spool is discarded
+in every case.
+
+The artifact shape is stated rather than incidental — one source page becomes
+*n − 1* pair results in slot order, each naming its members, identically in the
+preview, the comparison PDF and the change report.
+
+Which sink ships decides how large a drawing set the tool accepts, so it is a
+product decision: **H11**.
 
 The 512 MiB itself is a judgement about how much memory one comparison may
 claim, not a threshold discovered in the data, and it is written down as one:

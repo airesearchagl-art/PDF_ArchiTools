@@ -62,6 +62,20 @@ the ink fraction here (1.7-1.9%) is low for a busy construction sheet.
 The work bound in `architecture.md` is arithmetic, not measured at scale: no
 comparison near the proposed ceiling was run to completion, deliberately.
 
+## H10 bounds the comparison, not the wait
+
+The calibration measures `pairChangeMask` on masks that already exist. It
+excludes PDF.js rendering, the RGBA readback, ink-mask extraction, the
+task-boundary yields, painting the pair visuals, PNG encoding, container
+assembly and the final artifact — several of which are, on the evidence
+elsewhere in this document, larger than the comparison itself. A single A4 page
+renders in tens of milliseconds and encodes in more.
+
+So "about 23 seconds" is **comparison-kernel** time and no claim is made about
+how long a person waits. If H10 is wanted as a wall-clock bound, it needs an
+end-to-end calibration from render through publish, which this research has not
+done.
+
 ## The work ceiling is calibrated on one number, on one machine
 
 `MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is calibrated against
@@ -127,6 +141,24 @@ not a behaviour that was observed.
 
 Garbage collection is also not instantaneous. The model assumes a released
 buffer stops counting immediately; a real heap may hold two while it catches up.
+
+## The output sink is prototyped, not integrated
+
+The spool, the atomic publish and the discard-on-cancel behaviour are measured
+against a browser-local sink in the research harness. What is **not** measured:
+
+- no comparison PDF was assembled from a spool. The parts are concatenated into
+  one file to prove the lifecycle; a real container has structure, and `jsPDF`
+  as used today builds the whole document in memory, so a streaming writer is a
+  requirement the research states rather than a component it built.
+- storage quota is not handled. A browser can refuse a write, and 20.9 GB of
+  spooled output for a 200-page four-member job is a number the quota will have
+  an opinion about. Nothing here asked it.
+- the spool is written and read on the main thread in the prototype.
+- no crash or tab-close was simulated, so nothing establishes that an abandoned
+  spool is cleaned up on the *next* run rather than only on this one.
+
+The 4 MiB chunk is chosen, not derived.
 
 ## Ownership is proposed; scheduling is measured, integration is not
 

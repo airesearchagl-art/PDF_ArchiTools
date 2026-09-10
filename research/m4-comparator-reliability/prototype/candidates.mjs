@@ -975,6 +975,215 @@ export function checkPhaseBudget(job, { limit = MAX_COMPARISON_BYTES } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Where the finished bytes live
+// ---------------------------------------------------------------------------
+
+/**
+ * The phase model bounds one page. It does not bound the **operation**.
+ *
+ * Two things this architecture already committed to make that a separate
+ * problem. Nothing is published until every requested page has succeeded — a
+ * partial comparison that looks complete is the failure the whole design exists
+ * to prevent. And under `reference-pairs` one source page produces *n − 1*
+ * visuals, not one.
+ *
+ * At A4 300 dpi the owned encoder writes 34.8 MB per visual, so four members
+ * are about 104 MB of finished output per source page, and five source pages
+ * are **522 MB** — past the 512 MiB ceiling before the container, the writer's
+ * own state, or anything still being compared. Every page passes its own peak
+ * check and the operation does not fit.
+ *
+ * The work ceiling does not catch this either: 12e9 units is about 173 A4
+ * pages, and this fails at five.
+ *
+ * So where finished bytes live is part of the architecture:
+ */
+export const OUTPUT_SINK = {
+    /**
+     * Everything retained in RAM until the final save. **This is what ships**:
+     * `jsPDF.addImage` is handed a base64 data URL per page and the document
+     * accumulates them all before `save()` serialises the lot.
+     */
+    MEMORY: 'memory',
+    /**
+     * Each visual encoded, written to browser-local storage, and released.
+     * RAM holds one write chunk. The final artifact is assembled from the spool
+     * and only becomes visible once every page has succeeded.
+     */
+    SPOOL: 'spool',
+};
+
+/** The recommended sink, and the one the budget is taken on. */
+export const M4_OUTPUT_SINK = OUTPUT_SINK.SPOOL;
+
+/** What a spooling writer may hold in RAM at once. */
+export const MAX_SPOOL_CHUNK_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The pair-result lifetime contract.
+ *
+ * ```
+ *   compare pair -> paint visual -> encode -> append to the sink -> release
+ * ```
+ *
+ * A visual's RGBA and its encoded bytes are both released before the next pair
+ * is painted. Nothing accumulates a list of finished images, which is the
+ * difference between an operation that is bounded and one that merely starts
+ * that way.
+ */
+export const PAIR_RESULT_LIFETIME = [
+    'compare pair',
+    'paint visual',
+    'encode',
+    'append to sink',
+    'release RGBA and encoded bytes',
+];
+
+/**
+ * What a whole operation's output costs, and how much of it is in RAM.
+ *
+ * `pages` is the number of **source** pages requested — an export of pages 3–5
+ * is three. `members` gives the pair count per page under the contract.
+ */
+export function estimateOutputState({
+    pages, members, contract, width, height,
+    sink = M4_OUTPUT_SINK,
+    encodeAsDataUrl = false,
+}) {
+    const pairsPerPage = contract === MULTI_MEMBER.REFERENCE_PAIRS
+        ? Math.max(1, members - 1)
+        : 1;
+    const perVisualBytes = pngStoredSize({ width, height });
+    const visuals = safeProduct(pages, pairsPerPage);
+    const totalEncodedBytes = visuals === null
+        ? null : safeProduct(visuals, perVisualBytes);
+    const base = {
+        pages,
+        members,
+        contract,
+        pairsPerPage,
+        visuals,
+        perVisualBytes,
+        totalEncodedBytes,
+        sink,
+        lifetime: PAIR_RESULT_LIFETIME,
+    };
+    if (totalEncodedBytes === null) {
+        return { ...base, retainedInRam: null, spooledBytes: 0, representable: false };
+    }
+    if (sink === OUTPUT_SINK.SPOOL) {
+        return {
+            ...base,
+            representable: true,
+            // The bytes are on disk. RAM holds one write chunk.
+            retainedInRam: MAX_SPOOL_CHUNK_BYTES,
+            spooledBytes: totalEncodedBytes,
+        };
+    }
+    // Everything resident: the encoded images the container is holding, plus
+    // the container's own assembled copy. A data-URL handoff pays base64 on
+    // top of that, at two bytes a character, which is what ships.
+    const held = encodeAsDataUrl
+        ? Math.ceil(totalEncodedBytes * 4 / 3) * 2
+        : totalEncodedBytes;
+    return {
+        ...base,
+        representable: true,
+        retainedInRam: held + totalEncodedBytes,
+        spooledBytes: 0,
+        encodeAsDataUrl,
+    };
+}
+
+/**
+ * The operation's peak: the larger of one page's working set and what the
+ * publish step is holding while it finishes.
+ *
+ * Checked before the first canvas, like the others — every term is arithmetic
+ * on the page size, the member count, the tolerance and the page count.
+ */
+export function estimateJobMemory({
+    pages, members, contract, width, height,
+    radiusPx = 0,
+    sink = M4_OUTPUT_SINK,
+    encodeAsDataUrl = false,
+    exportStrategy = BUDGETED_EXPORT_STRATEGY,
+}) {
+    const perPage = estimatePhaseMemory({
+        width, height, members, contract, radiusPx, exportStrategy,
+    });
+    const output = estimateOutputState({
+        pages, members, contract, width, height, sink, encodeAsDataUrl,
+    });
+    const publish = output.representable
+        ? output.retainedInRam
+        : null;
+    const jobPeak = publish === null ? null : Math.max(perPage.peakWorkingSet, publish);
+    return {
+        pages,
+        perPagePeak: perPage.peakWorkingSet,
+        perPagePeakPhase: perPage.peakPhase,
+        output,
+        publishPhase: publish,
+        jobPeak,
+        peakPhase: publish !== null && publish > perPage.peakWorkingSet
+            ? 'publish' : perPage.peakPhase,
+        representable: output.representable,
+    };
+}
+
+export function checkJobMemory(job, { limit = MAX_COMPARISON_BYTES } = {}) {
+    const estimate = estimateJobMemory(job);
+    if (!estimate.representable) {
+        return {
+            ...estimate,
+            limit,
+            withinBudget: false,
+            refusal: {
+                status: PLAN.OVER_MEMORY_BUDGET,
+                reason: 'the output this job would produce is not representable',
+            },
+        };
+    }
+    const withinBudget = estimate.jobPeak <= limit;
+    return {
+        ...estimate,
+        limit,
+        withinBudget,
+        refusal: withinBudget ? null : {
+            status: PLAN.OVER_MEMORY_BUDGET,
+            reason: `${(estimate.jobPeak / 1e6).toFixed(0)} MB at the `
+                + `${estimate.peakPhase} phase across ${estimate.pages} page(s), `
+                + `against a ceiling of ${(limit / 1e6).toFixed(0)} MB`,
+        },
+    };
+}
+
+/**
+ * What a reference-pairs artifact contains, and in what order.
+ *
+ * One source page becomes *n − 1* pair results, and a person has to be able to
+ * tell which is which without counting. Slot order, reference first, member
+ * identity carried on every one — in the preview, in the comparison PDF and in
+ * the change report alike, because they are three presentations of one result
+ * and disagreeing about ordering would make them three answers again.
+ */
+export function pairResultShape({ page, members, labels }) {
+    const results = [];
+    for (let i = 1; i < members; i++) {
+        results.push({
+            page,
+            index: i - 1,
+            reference: labels[0],
+            member: labels[i],
+            // Deterministic and stated, not incidental to a loop.
+            title: `p${page}: ${labels[0]} vs ${labels[i]}`,
+        });
+    }
+    return results;
+}
+
+// ---------------------------------------------------------------------------
 // The spatial tolerance, as a product contract
 // ---------------------------------------------------------------------------
 
@@ -1207,10 +1416,21 @@ export function estimateComparisonWork({
 }
 
 /**
- * The work ceiling, for **the whole job**.
+ * The **whole-job comparison-kernel** work ceiling.
  *
- * **12,000,000,000 work units — a recommendation requiring human approval, not
- * a measured threshold.** It is user-visible, because it refuses comparisons.
+ * **12,000,000,000 comparison-work units — a recommendation requiring human
+ * approval, not a measured threshold.** It is user-visible, because it refuses
+ * comparisons.
+ *
+ * *Comparison-kernel* is doing real work in that name. What is measured is
+ * `pairChangeMask` — the ink-mask comparison — on masks that have already been
+ * produced. It does not include PDF.js rendering, the RGBA readback, ink-mask
+ * extraction, the task-boundary yields, painting the pair visuals, PNG
+ * encoding, container assembly or the final artifact. So this ceiling bounds
+ * the comparison, not the wait, and the seconds below are kernel seconds.
+ * Bounding total wall-clock would need an end-to-end calibration from render
+ * through publish, which this research has not done — and mixing the two
+ * meanings under one number is how a ceiling stops meaning anything.
  *
  * One ceiling, applied to the total, rather than one per page. A per-page
  * ceiling bounds nothing a user actually asks for: an export of a hundred pages
@@ -1229,7 +1449,8 @@ export function estimateComparisonWork({
  *
  * Measured, under the dilation: the worst cost per unit over five sizes and
  * radii is 1.9e-6 ms — an A1 at 150 dpi, 139,393,888 units in 263 ms. Twelve
- * billion units at that rate is about **23 seconds** for the whole job.
+ * billion units at that rate is about **23 seconds of comparison-kernel time**
+ * for the whole job. Not 23 seconds of waiting.
  *
  * What that is, in work a user can picture: **about 173 A4 pages at 300 dpi and
  * a 0.5 mm tolerance**, at 69,578,880 units each. Under this algorithm no
@@ -1237,9 +1458,9 @@ export function estimateComparisonWork({
  * it — so on one page the memory budget is what refuses first, and the work
  * ceiling exists for ranges.
  *
- * The number is a judgement about how much of a person's afternoon one
- * operation may claim, and the machine it was calibrated on is one machine.
- * **Human Gate H10**, and the conversion is the point of stating it this way:
+ * The number is a judgement about how much comparison one operation may claim,
+ * and the machine it was calibrated on is one machine. **Human Gate H10**, and
+ * the conversion is the point of stating it this way:
  * each additional A4 page at 300 dpi is 69,578,880 units, about 0.13 seconds.
  * If a drawing set that people actually compare runs past ~170 sheets, this
  * number should go up, and the Gate now has what it needs to say so.
