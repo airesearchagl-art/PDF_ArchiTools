@@ -179,6 +179,19 @@ identical members; three the same and one changed; two against two; a reference
 against three different documents; one blank member; one missing member; one
 member that failed to render.
 
+### The picture, not only the verdict
+
+| option | verdict |
+| --- | --- |
+| reference-pairs verdict, any-other-member picture | **REJECT** — measured: two-against-two reports CHANGE over a picture showing **0 changed pixels** |
+| one visual per pair, each painted by the two-member rule | **ADOPT** — 0 / 17,060 / 17,060 px on the same set, and it names which member differs |
+| pairs produced serially | **ADOPT** — and the memory model's presentation phase depends on it |
+
+A correct structured status over a misleading picture is not an improvement on
+the shipped behaviour; it is the same wrong answer with a label the user cannot
+see. On *reference and three different* the old rule likewise shows 0 px where
+the three pair visuals show 8,530 / 8,530 / 17,060.
+
 **The choice between A and B is a product decision, not a technical one** —
 reference-pairs answers "how does each drawing differ from the reference",
 consensus answers "do they all agree" — so it goes to the Human Gate as **H9**
@@ -214,7 +227,9 @@ threshold, swallow a render failure, or recompute what a change is.
 | no work bound | **REJECT** — the search is O(ink x radius² x members) with no ceiling |
 | `pixels x radius² x members` as the bound | **REJECT** — zero at radius 0, and leaves the contract out |
 | `pixels x sourceMembers x (1 + comparedOtherMembers x (2r+1)²)`, summed over the contract's groups | **ADOPT** |
-| `MAX_COMPARISON_WORK_UNITS = 12,000,000,000`, checked before allocation | **ADOPT as a recommendation requiring human approval** — H10 |
+| a work ceiling in units, with no algorithm named | **REJECT** — the same A1 is 23.7e9 units scanning and 0.56e9 dilating; a unit means nothing until the algorithm is fixed |
+| `algorithm` required, no default, planner bound to `separable-dilation` | **ADOPT** |
+| `MAX_COMPARISON_WORK_UNITS = 12,000,000,000`, checked before allocation, **calibrated against that algorithm** | **ADOPT as a recommendation requiring human approval** — H10 |
 | the ceiling applied **per page** | **REJECT** — the export and the change report run over ranges; a hundred pages that each pass are a hundred times the work |
 | the ceiling applied to the **whole job**, summed over every requested page and pair | **ADOPT** — measured: five A4 pages at 300 dpi and 0.5 mm are 2.96e9 each and 14.79e9 together, which is refused |
 | a page that cannot be compared dropped from the estimate | **REJECT** — it makes the job look cheaper by not mentioning it |
@@ -242,13 +257,21 @@ takes its groups from the contract — two-only is one group, reference-pairs ov
 four members is three, consensus has no derived bound at all — and is
 conservative about the ink fraction, which is not knowable before rendering.
 
-Where 12e9 comes from: the highest measured cost per work unit is the A4 300 dpi
-radius-0 pair, 158 ms for 34,789,440 units, which is the case where the bound is
-tightest and therefore the pessimistic calibration. 12e9 units at that rate
-projects to about **55 seconds**. It permits A4 and A3 at 300 dpi with a 0.5 mm
-tolerance (2.96e9 and 5.92e9) and refuses an A1 at the same settings (2.37e10).
+Where 12e9 comes from, **under the selected algorithm**: the worst measured cost
+per unit over five sizes and radii is 1.9e-6 ms — an A1 at 150 dpi, 139,393,888
+units in 263 ms. 12e9 units at that rate is about **23 seconds** for the whole
+job, not the 55 seconds the scan-based reading gave.
+
+In work a person can picture: **about 173 A4 pages at 300 dpi and 0.5 mm**, at
+69,578,880 units each. Under this algorithm no *single* sheet in the corpus
+reaches the ceiling — an A1 at 300 dpi is 5% of it — so on one page the memory
+budget refuses first, and the work ceiling exists for ranges.
+
 Because it can refuse a comparison a user asked for, it is user-visible, and it
-goes to the Human Gate as **H10** the way the 512 MiB working set goes as H7.
+goes to the Human Gate as **H10** the way the 512 MiB working set goes as H7 —
+with the conversion attached: each further A4 page at 300 dpi is 69,578,880
+units, about 0.13 seconds. If real drawing sets run past ~170 sheets, the number
+should go up.
 
 **Cancellation alone does not solve this.** The composite is a synchronous double
 loop that cannot observe a cancellation flag or yield to the event loop, so a
@@ -453,13 +476,21 @@ colour. So no member's RGBA survives phase 2.
 | option | verdict |
 | --- | --- |
 | a measured compression ratio (0.15 B/px) as the allowance | **REJECT** — a ratio an unseen drawing can exceed cannot gate a fail-closed budget |
-| a derived, content-independent upper bound | **ADOPT** — PNG worst case: filter byte per row, RGBA, DEFLATE stored blocks, zlib and container overhead, about **4.003 B/px** |
-| `canvas.toDataURL()` in the peak | **REJECT** — base64 at 4/3, two bytes per character, co-resident with the bytes it encodes |
-| `canvas.toBlob()` | **ADOPT** — and the budget is taken on it |
-| carrying the PNG bound over to JPEG unexamined | **REJECT** — JPEG has no comparable provable worst case; a reason to prefer PNG, fed to **H5** |
+| a stored-block formula applied to `canvas.toBlob` | **REJECT** — the browser owns the DEFLATE strategy, block layout, IDAT chunking and internal scratch, and exposes none of them |
+| an **owned** encoder with a stated contract | **ADOPT** — RGBA8, filter 0, stored blocks of 65,535 bytes, IDAT chunks of 1 MiB; output size **exact**, not bounded |
+| a base64 data URL in the peak | **REJECT** — 4/3 the bytes at two bytes per character, co-resident with the bytes |
+| handing back a `Blob` over the encoded bytes | **ADOPT** — and the budget is taken on it |
+| carrying the PNG contract over to JPEG unexamined | **REJECT** — JPEG has no comparable provable worst case; a further reason to prefer PNG, fed to **H5** |
 
-The four measured export ratios remain in the evidence as **performance**
-evidence. They are not the safety proof.
+Measured: 8,709,434 bytes predicted and written, on three composites at two
+sizes, each decoded back by the browser to identical pixels. 4.001 B/px, with
+4,965 bytes of scratch because the encoder streams. The price is the file size —
+the browser's PNG made 0.031 B/px — and that trade goes to **H5** rather than
+being inherited.
+
+The measured browser ratios remain in the evidence as **performance** evidence.
+They are not the safety proof, and what a browser emits says nothing about what
+it allocates while emitting it.
 
 ### What that permits
 
@@ -471,7 +502,7 @@ Measured at 0.5 mm with two members:
 | A3 300 dpi | **278 MB** | within |
 | A2 300 dpi | **557 MB** | **refused** |
 | A1 300 dpi | 1115 MB | **refused** |
-| A1 300 dpi, four members | 1394 MB | **refused** |
+| A1 300 dpi, four members | 1255 MB | **refused** |
 | A0 600 dpi | 8928 MB | **refused** |
 
 Two rows moved when the compression assumption came out, and both are why it

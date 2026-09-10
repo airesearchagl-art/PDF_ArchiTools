@@ -64,25 +64,36 @@ comparison near the proposed ceiling was run to completion, deliberately.
 
 ## The work ceiling is calibrated on one number, on one machine
 
-`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is derived from a single
-observation — 158 ms for 34,789,440 units on the A4 300 dpi radius-0 pair — and
-projected linearly to about 55 seconds. Three things about that are weak, and
-are why it is a recommendation requiring approval rather than a finding:
+`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is calibrated against
+`separable-dilation`, the algorithm the planner is bound to, from the worst of
+five measured cost-per-unit figures and projected linearly to about 23 seconds.
+Three things about that are weak, and are why it is a recommendation requiring
+approval rather than a finding:
 
 - It is one machine and one browser. A slower machine gets a proportionally
   longer worst case at the same ceiling.
 - The projection is linear in work units, and nothing here measures a comparison
   anywhere near 12e9 units to check that it stays linear. Cache behaviour at
   that size is unknown.
-- 55 seconds is a judgement about how long a person may reasonably be asked to
-  wait, made without asking one.
+- 23 seconds is a judgement about how long a person may reasonably be asked to
+  wait, made without asking one. So is the 173-A4-page reading of the same
+  number, which is the form the Human Gate is more likely to have an opinion
+  about.
 
 The *shape* of the bound is better founded than its value: it is conservative
 about the ink fraction on purpose, and the radius-0 case demonstrates that the
 previous shape was not a bound at all.
 
+The second weakness is sharper than it sounds: the largest case measured is 139
+million units against a ceiling of twelve billion, so the linear projection
+spans a factor of 86 with nothing measured in between.
+
+Under this algorithm the ceiling also barely binds on a single page — an A1 at
+300 dpi is 5% of it, and memory refuses first. It exists for ranges, and no
+range was run.
+
 The job-level accumulation is arithmetic as well. **No multi-page job was
-actually run** — not five pages, not an export range, not a change report over a
+actually run** — not 173 pages, not an export range, not a change report over a
 document. What is established is that the sum is computed, that pages which
 cannot be compared stay in the plan, and that a job whose pages individually
 pass can be refused. Whether five pages take five times as long in practice is
@@ -108,8 +119,8 @@ implementation that keeps one more is not covered by it.
 
 Two of its terms are firmer than the rest. The presentation phase rests on
 `compositeFromMasks` being byte-identical to the shipped compositor, which is
-asserted over 34.8 MB of output; and the export allowance is measured on four
-real composites rather than assumed. Everything else — that a canvas is released
+asserted over 34.8 MB of output; and the encoded-output term is exact for the
+owned encoder, asserted by encoding and by decoding back. Everything else — that a canvas is released
 before the next member is rendered, that the reference mask survives all the
 pairs and nothing else does — is a contract the implementation has to honour,
 not a behaviour that was observed.
@@ -140,6 +151,19 @@ What is **not** measured:
 
 The production implementation gate has to exercise the real thing.
 
+## The pairwise presentation is measured as pixel counts, not as a design
+
+§4h establishes that a reference-pairs result painted pair by pair shows the
+disagreement the any-other-member composite hides, and that the pixels shown
+match the pixels the verdict counted. It does **not** establish how three pair
+visuals should be presented to a person: side by side, stacked, switchable, or
+one at a time with the differing members listed. That is interface design and no
+interface was built or shown to anyone.
+
+Nor does it establish what happens with the *pages* of a multi-member
+comparison, or how a pair visual is exported — the export is one image per page
+today, and three pairs are three images.
+
 ## The spatial tolerance ceiling comes from one fixture
 
 `maximum: 0.15 mm` is the **minimum** across 72, 150, 300 and 450 dpi of the
@@ -153,20 +177,26 @@ height — would move the number, and nothing here establishes that 0.15 mm is
 safe for marks the corpus does not contain. The ceiling is a floor under the
 problem, not a proof about drawings in general.
 
-## The encoded-output bound is PNG's, and only PNG's
+## The encoder is owned, which moves the limitation rather than removing it
 
-`encodedImageUpperBound` is derived from PNG: one filter byte per row, RGBA,
-DEFLATE's stored-block worst case, zlib and container overhead. That is a
-genuine upper bound for PNG and it is not a measurement.
+`pngStoredSize` is exact for `encodePngStored` — asserted by encoding real
+composites and comparing lengths, and by decoding them back losslessly. What it
+is **not** is a statement about `canvas.toBlob`: the browser's encoder owns its
+DEFLATE strategy, block layout, IDAT chunking and internal scratch, and this
+architecture would no longer use it.
 
-**JPEG has no comparable provable worst case here.** The bound is not shown to
-hold for it, and if H5 chooses JPEG it has to be re-derived rather than assumed
-to carry over. The four measured export ratios are performance evidence and are
-explicitly not the safety proof.
+That is a real cost, stated rather than buried: stored blocks do not compress,
+so the output is **4.001 B/px against the browser's 0.031** — roughly 130 times
+larger. A comparison PDF of a long drawing set would be very large. Whether that
+trade is acceptable is a product decision (**H5**) and this research does not
+make it.
 
-The bound also assumes the encoder does not hold more than one working bitmap
-beyond the canvas. `toBlob` is asynchronous and its internals are the browser's;
-nothing here observed what Chrome actually allocates during encoding.
+**JPEG has no comparable provable worst case here.** If H5 chooses JPEG, the
+allowance has to be re-derived for whatever encoder produces it.
+
+The encoder itself is a research prototype: correct on the sizes tested and not
+hardened. It has no interlace, no palette, no 16-bit path, and no defence
+against a caller passing mismatched dimensions.
 
 ## The multi-member contract is measured, not chosen
 

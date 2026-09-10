@@ -645,8 +645,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 27,
-      "ms": 104,
+      "compositeMs": 26,
+      "ms": 90,
       "memory": 60864160
     },
     "a wall added": {
@@ -664,8 +664,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 34,
-      "ms": 96,
+      "compositeMs": 32,
+      "ms": 80,
       "memory": 60864160
     },
     "a wall removed": {
@@ -683,8 +683,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 23,
-      "ms": 77,
+      "compositeMs": 22,
+      "ms": 71,
       "memory": 60864160
     },
     "the drawing shifted 2pt": {
@@ -702,8 +702,8 @@
         "width": 718,
         "height": 1181
       },
-      "compositeMs": 24,
-      "ms": 69,
+      "compositeMs": 22,
+      "ms": 76,
       "memory": 60864160
     },
     "A4 vs A3, same drawing": {
@@ -721,8 +721,8 @@
         "width": 1651,
         "height": 2315
       },
-      "compositeMs": 51,
-      "ms": 138,
+      "compositeMs": 50,
+      "ms": 132,
       "memory": 121728320
     },
     "A4 vs A1, same drawing": {
@@ -740,8 +740,8 @@
         "width": 3320,
         "height": 4680
       },
-      "compositeMs": 189,
-      "ms": 461,
+      "compositeMs": 187,
+      "ms": 482,
       "memory": 487641336
     },
     "portrait vs landscape": {
@@ -759,8 +759,8 @@
         "width": 1651,
         "height": 1651
       },
-      "compositeMs": 38,
-      "ms": 105,
+      "compositeMs": 34,
+      "ms": 88,
       "memory": 86044252
     },
     "A4 vs a sheet 3pt bigger": {
@@ -778,8 +778,8 @@
         "width": 1168,
         "height": 1630
       },
-      "compositeMs": 23,
-      "ms": 72,
+      "compositeMs": 22,
+      "ms": 97,
       "memory": 61402880
     },
     "same aspect, 1.4x": {
@@ -797,8 +797,8 @@
         "width": 1634,
         "height": 2291
       },
-      "compositeMs": 47,
-      "ms": 128,
+      "compositeMs": 46,
+      "ms": 180,
       "memory": 119332640
     },
     "/Rotate 0 vs 90": {
@@ -816,8 +816,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 34,
-      "ms": 95,
+      "compositeMs": 32,
+      "ms": 104,
       "memory": 86044252
     },
     "/Rotate 0 vs 180": {
@@ -854,8 +854,8 @@
         "width": 1650,
         "height": 1650
       },
-      "compositeMs": 46,
-      "ms": 141,
+      "compositeMs": 31,
+      "ms": 86,
       "memory": 86044252
     },
     "crop origin (0,0) vs (50,70)": {
@@ -868,8 +868,8 @@
       "inkPixels": 59636,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 21,
-      "ms": 66,
+      "compositeMs": 16,
+      "ms": 46,
       "memory": 44543324
     },
     "MediaBox larger, same CropBox": {
@@ -882,8 +882,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 35,
-      "ms": 126,
+      "compositeMs": 26,
+      "ms": 68,
       "memory": 60864160
     },
     "black vs grey ink": {
@@ -901,8 +901,8 @@
         "width": 1162,
         "height": 1624
       },
-      "compositeMs": 22,
-      "ms": 130,
+      "compositeMs": 23,
+      "ms": 65,
       "memory": 60864160
     },
     "black vs cyan ink": {
@@ -920,8 +920,8 @@
         "width": 90,
         "height": 58
       },
-      "compositeMs": 35,
-      "ms": 106,
+      "compositeMs": 30,
+      "ms": 84,
       "memory": 60864160
     },
     "a pale hatch added": {
@@ -939,8 +939,8 @@
         "width": 749,
         "height": 42
       },
-      "compositeMs": 28,
-      "ms": 76,
+      "compositeMs": 25,
+      "ms": 101,
       "memory": 60864160
     }
   },
@@ -983,7 +983,7 @@
         "changeRatio": 0,
         "bounds": null,
         "compositeMs": 29,
-        "ms": 89,
+        "ms": 79,
         "memory": 60864160
       },
       "strict": {
@@ -1007,8 +1007,8 @@
         "inkPixels": 80048,
         "changeRatio": 0,
         "bounds": null,
-        "compositeMs": 27,
-        "ms": 74,
+        "compositeMs": 25,
+        "ms": 73,
         "memory": 60864160
       },
       "strict": {
@@ -1034,8 +1034,8 @@
         "inkPixels": 80051,
         "changeRatio": 1,
         "bounds": null,
-        "compositeMs": 19,
-        "ms": 33,
+        "compositeMs": 16,
+        "ms": 29,
         "memory": 43474400
       },
       "strict": {
@@ -1061,8 +1061,8 @@
           "width": 1162,
           "height": 1624
         },
-        "compositeMs": 24,
-        "ms": 67,
+        "compositeMs": 27,
+        "ms": 77,
         "memory": 60864160
       },
       "strict": {
@@ -1089,8 +1089,8 @@
       "inkPixels": 79953,
       "changeRatio": 1,
       "bounds": null,
-      "compositeMs": 23,
-      "ms": 40,
+      "compositeMs": 16,
+      "ms": 28,
       "memory": 43474400
     },
     "strict": {
@@ -1114,8 +1114,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 24,
-      "ms": 80,
+      "compositeMs": 25,
+      "ms": 63,
       "memory": 60864160
     }
   },
@@ -1442,8 +1442,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 69,
-      "totalMs": 126
+      "compositeMs": 46,
+      "totalMs": 96
     },
     "matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1455,8 +1455,8 @@
       "members": 2,
       "inkPixels": 79953,
       "changeRatio": 0,
-      "compositeMs": 54,
-      "totalMs": 118
+      "compositeMs": 47,
+      "totalMs": 111
     },
     "NOT matching, A4 150dpi, 0mm": {
       "dpi": 150,
@@ -1468,8 +1468,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 28,
-      "totalMs": 121
+      "compositeMs": 35,
+      "totalMs": 120
     },
     "NOT matching, A4 150dpi, 0.5mm": {
       "dpi": 150,
@@ -1481,8 +1481,8 @@
       "members": 2,
       "inkPixels": 41116,
       "changeRatio": 1,
-      "compositeMs": 44,
-      "totalMs": 123
+      "compositeMs": 49,
+      "totalMs": 114
     },
     "NOT matching, A4 300dpi, 0mm": {
       "dpi": 300,
@@ -1494,8 +1494,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 135,
-      "totalMs": 338
+      "compositeMs": 124,
+      "totalMs": 314
     },
     "NOT matching, A4 300dpi, 0.5mm": {
       "dpi": 300,
@@ -1507,8 +1507,8 @@
       "members": 2,
       "inkPixels": 151411,
       "changeRatio": 1,
-      "compositeMs": 211,
-      "totalMs": 506
+      "compositeMs": 182,
+      "totalMs": 431
     }
   },
   "candidates": {
@@ -2692,8 +2692,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 35,
-      "ms": 97,
+      "compositeMs": 34,
+      "ms": 78,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 2": {
@@ -2706,8 +2706,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 40,
-      "ms": 114,
+      "compositeMs": 43,
+      "ms": 109,
       "memory": 60864160
     },
     "A4 150dpi, 2 layers, threshold 4": {
@@ -2720,8 +2720,8 @@
       "inkPixels": 79953,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 51,
-      "ms": 130,
+      "compositeMs": 41,
+      "ms": 113,
       "memory": 60864160
     },
     "A4 300dpi, 2 layers, threshold 0": {
@@ -2734,8 +2734,8 @@
       "inkPixels": 300848,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 149,
-      "ms": 478,
+      "compositeMs": 139,
+      "ms": 347,
       "memory": 243526080
     },
     "A4 150dpi, 4 layers, threshold 0": {
@@ -2753,8 +2753,8 @@
         "width": 908,
         "height": 50
       },
-      "compositeMs": 58,
-      "ms": 184,
+      "compositeMs": 65,
+      "ms": 175,
       "memory": 95643680
     },
     "A3 150dpi, 2 layers, threshold 0": {
@@ -2767,7 +2767,7 @@
       "inkPixels": 154247,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 78,
+      "compositeMs": 85,
       "ms": 203,
       "memory": 121728320
     },
@@ -2781,8 +2781,8 @@
       "inkPixels": 568537,
       "changeRatio": 0,
       "bounds": null,
-      "compositeMs": 286,
-      "ms": 752,
+      "compositeMs": 279,
+      "ms": 648,
       "memory": 487641336
     }
   },
@@ -3575,13 +3575,15 @@
     "limit": 12000000000,
     "cases": {
       "A4 300dpi, 2 members, radius 0": {
+        "scanUnits": 34789440,
+        "scanWithinBudget": true,
         "pixels": 8697360,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 0,
         "neighbourhoodBox": 1,
         "groups": 1,
-        "units": 34789440,
+        "units": 69578880,
         "withinBudget": true,
         "refusal": null,
         "requested": {
@@ -3589,7 +3591,7 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 0
         },
         "effective": {
@@ -3597,19 +3599,21 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 0
         },
         "degraded": false
       },
       "A4 300dpi, 2 members, radius 1": {
+        "scanUnits": 173947200,
+        "scanWithinBudget": true,
         "pixels": 8697360,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 1,
         "neighbourhoodBox": 9,
         "groups": 1,
-        "units": 173947200,
+        "units": 69578880,
         "withinBudget": true,
         "refusal": null,
         "requested": {
@@ -3617,7 +3621,7 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 1
         },
         "effective": {
@@ -3625,19 +3629,21 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 1
         },
         "degraded": false
       },
       "A4 300dpi, 2 members, radius 2": {
+        "scanUnits": 452262720,
+        "scanWithinBudget": true,
         "pixels": 8697360,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 2,
         "neighbourhoodBox": 25,
         "groups": 1,
-        "units": 452262720,
+        "units": 69578880,
         "withinBudget": true,
         "refusal": null,
         "requested": {
@@ -3645,7 +3651,7 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 2
         },
         "effective": {
@@ -3653,19 +3659,21 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 2
         },
         "degraded": false
       },
       "A4 300dpi, 2 members, 0.5mm": {
+        "scanUnits": 2957102400,
+        "scanWithinBudget": true,
         "pixels": 8697360,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 6,
         "neighbourhoodBox": 169,
         "groups": 1,
-        "units": 2957102400,
+        "units": 69578880,
         "withinBudget": true,
         "refusal": null,
         "requested": {
@@ -3673,7 +3681,7 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "effective": {
@@ -3681,19 +3689,21 @@
           "heightPx": 3507,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "degraded": false
       },
       "A4 300dpi, 4 members, ref-pairs, 0.5mm": {
+        "scanUnits": 8871307200,
+        "scanWithinBudget": true,
         "pixels": 8697360,
         "members": 4,
         "contract": "reference-pairs",
         "radiusPx": 6,
         "neighbourhoodBox": 169,
         "groups": 3,
-        "units": 8871307200,
+        "units": 208736640,
         "withinBudget": true,
         "refusal": null,
         "requested": {
@@ -3701,7 +3711,7 @@
           "heightPx": 3507,
           "members": 4,
           "contract": "reference-pairs",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "effective": {
@@ -3709,19 +3719,21 @@
           "heightPx": 3507,
           "members": 4,
           "contract": "reference-pairs",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "degraded": false
       },
       "A3 300dpi, 2 members, 0.5mm": {
+        "scanUnits": 5917083920,
+        "scanWithinBudget": true,
         "pixels": 17403188,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 6,
         "neighbourhoodBox": 169,
         "groups": 1,
-        "units": 5917083920,
+        "units": 139225504,
         "withinBudget": true,
         "refusal": null,
         "requested": {
@@ -3729,7 +3741,7 @@
           "heightPx": 4961,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "effective": {
@@ -3737,30 +3749,29 @@
           "heightPx": 4961,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "degraded": false
       },
       "A1 300dpi, 2 members, 0.5mm": {
+        "scanUnits": 23694575520,
+        "scanWithinBudget": false,
         "pixels": 69689928,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 6,
         "neighbourhoodBox": 169,
         "groups": 1,
-        "units": 23694575520,
-        "withinBudget": false,
-        "refusal": {
-          "status": "OVER_WORK_BUDGET",
-          "reason": "23,694,575,520 work units against a ceiling of 12,000,000,000"
-        },
+        "units": 557519424,
+        "withinBudget": true,
+        "refusal": null,
         "requested": {
           "widthPx": 7016,
           "heightPx": 9933,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "effective": {
@@ -3768,30 +3779,29 @@
           "heightPx": 9933,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 6
         },
         "degraded": false
       },
       "A0 600dpi, 2 members, 0.5mm": {
+        "scanUnits": 698586380184,
+        "scanWithinBudget": false,
         "pixels": 557976342,
         "members": 2,
         "contract": "two-only",
         "radiusPx": 12,
         "neighbourhoodBox": 625,
         "groups": 1,
-        "units": 698586380184,
-        "withinBudget": false,
-        "refusal": {
-          "status": "OVER_WORK_BUDGET",
-          "reason": "698,586,380,184 work units against a ceiling of 12,000,000,000"
-        },
+        "units": 4463810736,
+        "withinBudget": true,
+        "refusal": null,
         "requested": {
           "widthPx": 19866,
           "heightPx": 28087,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 12
         },
         "effective": {
@@ -3799,7 +3809,7 @@
           "heightPx": 28087,
           "members": 2,
           "contract": "two-only",
-          "algorithm": "any-neighbour-scan",
+          "algorithm": "separable-dilation",
           "radiusPx": 12
         },
         "degraded": false
@@ -3819,6 +3829,11 @@
       "status": "OVER_WORK_BUDGET",
       "reason": "no work bound is derived for this contract"
     },
+    "noAlgorithm": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "no comparison algorithm was selected, so no work bound exists"
+    },
+    "selectedAlgorithm": "separable-dilation",
     "unrepresentable": {
       "status": "OVER_WORK_BUDGET",
       "reason": "the work this comparison would do is not representable"
@@ -3847,7 +3862,7 @@
         "radius": 1,
         "box": 9,
         "scanMs": 5,
-        "dilationMs": 26,
+        "dilationMs": 27,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3855,8 +3870,8 @@
       "0.5mm": {
         "radius": 3,
         "box": 49,
-        "scanMs": 6,
-        "dilationMs": 24,
+        "scanMs": 5,
+        "dilationMs": 27,
         "scanChangePixels": 41116,
         "dilationChangePixels": 41116,
         "identical": true
@@ -3866,8 +3881,8 @@
       "0.25mm": {
         "radius": 1,
         "box": 9,
-        "scanMs": 26,
-        "dilationMs": 26,
+        "scanMs": 27,
+        "dilationMs": 29,
         "identical": true,
         "changePixels": 2173206
       },
@@ -3936,19 +3951,6 @@
     }
   },
   "exportEncoding": {
-    "strategies": {
-      "blob": {
-        "label": "canvas.toBlob()",
-        "base64": false,
-        "bytesPerCharacter": 0
-      },
-      "dataUrl": {
-        "label": "canvas.toDataURL()",
-        "base64": true,
-        "bytesPerCharacter": 2
-      }
-    },
-    "budgetedStrategy": "blob",
     "rows": {
       "A4 150dpi, changed": {
         "width": 1241,
@@ -3987,38 +3989,81 @@
         "pngBytesPerPixel": 0.0292
       }
     },
-    "bounds": {
-      "A4 150dpi, changed": {
-        "upperBound": 8713377,
-        "upperBoundBytesPerPixel": 4.003,
-        "measuredWorst": 78207,
-        "dataUrlBound": 23235672,
-        "measuredUnderBound": true
+    "worstMeasured": 0.0498,
+    "isPerformanceEvidenceOnly": true
+  },
+  "ownedEncoder": {
+    "contract": {
+      "colourType": 6,
+      "bitDepth": 8,
+      "filter": 0,
+      "deflateStrategy": "stored",
+      "maxDeflateBlockBytes": 65535,
+      "maxIdatChunkBytes": 1048576
+    },
+    "strategies": {
+      "blob": {
+        "label": "Blob([bytes])",
+        "base64": false,
+        "bytesPerCharacter": 0,
+        "copiesOutput": true
       },
-      "A4 300dpi, changed": {
-        "upperBound": 34823662,
-        "upperBoundBytesPerPixel": 4.001,
-        "measuredWorst": 243126,
-        "dataUrlBound": 92863100,
-        "measuredUnderBound": true
-      },
-      "A4 150dpi, dense": {
-        "upperBound": 8713377,
-        "upperBoundBytesPerPixel": 4.003,
-        "measuredWorst": 108371,
-        "dataUrlBound": 23235672,
-        "measuredUnderBound": true
-      },
-      "A3 150dpi, matched": {
-        "upperBound": 17414609,
-        "upperBoundBytesPerPixel": 4.002,
-        "measuredWorst": 126882,
-        "dataUrlBound": 46438958,
-        "measuredUnderBound": true
+      "dataUrl": {
+        "label": "base64 data URL",
+        "base64": true,
+        "bytesPerCharacter": 2,
+        "copiesOutput": false
       }
     },
-    "worstMeasured": 0.0498,
-    "boundIsDerivedNotMeasured": true
+    "budgetedStrategy": "blob",
+    "rows": {
+      "A4 150dpi, changed": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "encodedBytes": 8709434,
+        "predictedBytes": 8709434,
+        "exact": true,
+        "bytesPerPixel": 4.001,
+        "roundTripDifferingBytes": 0,
+        "roundTripLossless": true,
+        "encodeMs": 52,
+        "scratchBytes": 4965,
+        "browserPngBytesPerPixel": 0.0311,
+        "browserJpegBytesPerPixel": 0.0359
+      },
+      "A4 150dpi, dense": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "encodedBytes": 8709434,
+        "predictedBytes": 8709434,
+        "exact": true,
+        "bytesPerPixel": 4.001,
+        "roundTripDifferingBytes": 0,
+        "roundTripLossless": true,
+        "encodeMs": 48,
+        "scratchBytes": 4965,
+        "browserPngBytesPerPixel": 0.0321,
+        "browserJpegBytesPerPixel": 0.0498
+      },
+      "A3 150dpi, matched": {
+        "width": 1754,
+        "height": 2481,
+        "pixels": 4351674,
+        "encodedBytes": 17410762,
+        "predictedBytes": 17410762,
+        "exact": true,
+        "bytesPerPixel": 4.001,
+        "roundTripDifferingBytes": 0,
+        "roundTripLossless": true,
+        "encodeMs": 92,
+        "scratchBytes": 7017,
+        "browserPngBytesPerPixel": 0.0292,
+        "browserJpegBytesPerPixel": 0.0266
+      }
+    },
+    "boundIsExactNotEstimated": true
   },
   "phaseBudget": {
     "limit": 536870912,
@@ -4033,10 +4078,10 @@
           "mask-extraction": 52184160,
           "dilation": 17394720,
           "comparison": 26092080,
-          "presentation": 121773304
+          "presentation": 121786203
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 121773304,
+        "peakWorkingSet": 121786203,
         "peakMB": 122,
         "bytesPerPixel": 14,
         "withinBudget": true,
@@ -4045,14 +4090,16 @@
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 17394720,
           "dilated": 0,
           "composite": 34789440,
-          "encoderScratch": 34789440,
-          "encodedOutput": 34799704,
-          "encodedString": 0
+          "encoderScratch": 9921,
+          "encodedOutput": 34796061,
+          "encodedHandoff": 34796061
         }
       },
       "A4 300dpi, 2 members, 0.5mm": {
@@ -4064,10 +4111,10 @@
           "mask-extraction": 52184160,
           "dilation": 43510756,
           "comparison": 43486800,
-          "presentation": 139168024
+          "presentation": 139180923
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 139168024,
+        "peakWorkingSet": 139180923,
         "peakMB": 139,
         "bytesPerPixel": 16,
         "withinBudget": true,
@@ -4076,14 +4123,16 @@
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 17394720,
           "dilated": 17394720,
           "composite": 34789440,
-          "encoderScratch": 34789440,
-          "encodedOutput": 34799704,
-          "encodedString": 0
+          "encoderScratch": 9921,
+          "encodedOutput": 34796061,
+          "encodedHandoff": 34796061
         }
       },
       "A3 300dpi, 2 members, 0.5mm": {
@@ -4095,10 +4144,10 @@
           "mask-extraction": 104419128,
           "dilation": 87049824,
           "comparison": 87015940,
-          "presentation": 278465386
+          "presentation": 278487303
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 278465386,
+        "peakWorkingSet": 278487303,
         "peakMB": 278,
         "bytesPerPixel": 16,
         "withinBudget": true,
@@ -4107,14 +4156,16 @@
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 34806376,
           "dilated": 34806376,
           "composite": 69612752,
-          "encoderScratch": 69612752,
-          "encodedOutput": 69627130,
-          "encodedString": 0
+          "encoderScratch": 14033,
+          "encodedOutput": 69623883,
+          "encodedHandoff": 69623883
         }
       },
       "A2 300dpi, 2 members, 0.5mm": {
@@ -4126,10 +4177,10 @@
           "mask-extraction": 208838256,
           "dilation": 174079796,
           "comparison": 174031880,
-          "presentation": 556923759
+          "presentation": 556960437
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 556923759,
+        "peakWorkingSet": 556960437,
         "peakMB": 557,
         "bytesPerPixel": 16,
         "withinBudget": false,
@@ -4141,14 +4192,16 @@
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 69612752,
           "dilated": 69612752,
           "composite": 139225504,
-          "encoderScratch": 139225504,
-          "encodedOutput": 139247247,
-          "encodedString": 0
+          "encoderScratch": 19845,
+          "encodedOutput": 139244792,
+          "encodedHandoff": 139244792
         }
       },
       "A1 300dpi, 2 members, 0.5mm": {
@@ -4160,10 +4213,10 @@
           "mask-extraction": 418139568,
           "dilation": 348517444,
           "comparison": 348449640,
-          "presentation": 1115074153
+          "presentation": 1115135805
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 1115074153,
+        "peakWorkingSet": 1115135805,
         "peakMB": 1115,
         "bytesPerPixel": 16,
         "withinBudget": false,
@@ -4175,14 +4228,16 @@
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 139379856,
           "dilated": 139379856,
           "composite": 278759712,
-          "encoderScratch": 278759712,
-          "encodedOutput": 278795017,
-          "encodedString": 0
+          "encoderScratch": 28065,
+          "encodedOutput": 278794158,
+          "encodedHandoff": 278794158
         }
       },
       "A1 300dpi, 4 members, 0.5mm": {
@@ -4194,29 +4249,31 @@
           "mask-extraction": 557519424,
           "dilation": 487897300,
           "comparison": 487829496,
-          "presentation": 1393833865
+          "presentation": 1254515661
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 1393833865,
-        "peakMB": 1394,
-        "bytesPerPixel": 20,
+        "peakWorkingSet": 1254515661,
+        "peakMB": 1255,
+        "bytesPerPixel": 18,
         "withinBudget": false,
         "refusal": {
           "status": "OVER_MEMORY_BUDGET",
-          "reason": "1394 MB at the presentation phase, against a ceiling of 537 MB"
+          "reason": "1255 MB at the presentation phase, against a ceiling of 537 MB"
         },
         "memberProcessing": "serial",
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 278759712,
-          "dilated": 278759712,
+          "dilated": 139379856,
           "composite": 278759712,
-          "encoderScratch": 278759712,
-          "encodedOutput": 278795017,
-          "encodedString": 0
+          "encoderScratch": 28065,
+          "encodedOutput": 278794158,
+          "encodedHandoff": 278794158
         }
       },
       "A0 600dpi, 2 members, 0.5mm": {
@@ -4228,10 +4285,10 @@
           "mask-extraction": 3347858052,
           "dilation": 2790073530,
           "comparison": 2789881710,
-          "presentation": 8927823951
+          "presentation": 8928148889
         },
         "peakPhase": "presentation",
-        "peakWorkingSet": 8927823951,
+        "peakWorkingSet": 8928148889,
         "peakMB": 8928,
         "bytesPerPixel": 16,
         "withinBudget": false,
@@ -4243,14 +4300,16 @@
         "pairProcessing": "serial",
         "referenceMaskReused": true,
         "exportStrategy": "blob",
-        "encodedOutputIsUpperBound": true,
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
         "presentationLive": {
           "masks": 1115952684,
           "dilated": 1115952684,
           "composite": 2231905368,
-          "encoderScratch": 2231905368,
-          "encodedOutput": 2232107847,
-          "encodedString": 0
+          "encoderScratch": 79465,
+          "encodedOutput": 2232129344,
+          "encodedHandoff": 2232129344
         }
       }
     },
@@ -4260,7 +4319,7 @@
     },
     "byStrategy": {
       "blob": 278.5,
-      "dataUrl": 464.1
+      "dataUrl": 394.5
     },
     "a3Detail": {
       "pixels": 17403188,
@@ -4268,7 +4327,9 @@
       "contract": "reference-pairs",
       "radiusPx": 6,
       "exportStrategy": "blob",
-      "encodedOutputIsUpperBound": true,
+      "encoder": "png-stored (owned)",
+      "encodedOutputIsExact": true,
+      "presentationContract": "reference-pairs, one visual per pair, serial",
       "memberProcessing": "serial",
       "pairProcessing": "serial",
       "referenceMaskReused": true,
@@ -4311,16 +4372,16 @@
             "masks": 34806376,
             "dilated": 34806376,
             "composite": 69612752,
-            "encoderScratch": 69612752,
-            "encodedOutput": 69627130,
-            "encodedString": 0
+            "encoderScratch": 14033,
+            "encodedOutput": 69623883,
+            "encodedHandoff": 69623883
           },
-          "total": 278465386
+          "total": 278487303
         }
       },
       "peakPhase": "presentation",
-      "peakWorkingSet": 278465386,
-      "bytesPerPixel": 16.000826170469455
+      "peakWorkingSet": 278487303,
+      "bytesPerPixel": 16.00208553743142
     }
   },
   "spatialToleranceAcrossDpi": {
@@ -5013,17 +5074,143 @@
     "policyMaximum": 0.15,
     "policyMaximumIsSafeEverywhere": true
   },
+  "pairPresentation": {
+    "four identical": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 0
+      },
+      "pairs": [
+        {
+          "member": "identical-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "base-a4-copy",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "base-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      ],
+      "overallVerdict": "MATCH",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 0
+    },
+    "three the same, one changed": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 8530
+      },
+      "pairs": [
+        {
+          "member": "identical-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "base-a4-copy",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "added-line-a4",
+          "shownAsChanged": 8530,
+          "changePixels": 8530,
+          "verdict": "CHANGE"
+        }
+      ],
+      "overallVerdict": "CHANGE",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 8530
+    },
+    "two against two": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 0
+      },
+      "pairs": [
+        {
+          "member": "identical-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "wall-at-y-a4",
+          "shownAsChanged": 17060,
+          "changePixels": 17060,
+          "verdict": "CHANGE"
+        },
+        {
+          "member": "wall-at-y-a4-copy",
+          "shownAsChanged": 17060,
+          "changePixels": 17060,
+          "verdict": "CHANGE"
+        }
+      ],
+      "overallVerdict": "CHANGE",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 34120
+    },
+    "reference and three different": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 0
+      },
+      "pairs": [
+        {
+          "member": "added-line-a4",
+          "shownAsChanged": 8530,
+          "changePixels": 8530,
+          "verdict": "CHANGE"
+        },
+        {
+          "member": "removed-line-a4",
+          "shownAsChanged": 8530,
+          "changePixels": 8530,
+          "verdict": "CHANGE"
+        },
+        {
+          "member": "wall-at-y-a4",
+          "shownAsChanged": 17060,
+          "changePixels": 17060,
+          "verdict": "CHANGE"
+        }
+      ],
+      "overallVerdict": "CHANGE",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 34120
+    }
+  },
   "jobWork": {
     "limit": 12000000000,
+    "algorithm": "separable-dilation",
+    "perPageUnits": 69578880,
+    "pagesToExceed": 173,
+    "aggregateLabel": "173 pages, each below, the total above",
     "jobs": {
       "one page, below the ceiling": {
         "requestedPages": 1,
         "comparablePages": 1,
         "skipped": [],
         "perPageUnits": [
-          2957102400
+          69578880
         ],
-        "jobWorkUnits": 2957102400,
+        "jobWorkUnits": 69578880,
         "representable": true,
         "withinBudget": true,
         "refusal": null,
@@ -5034,33 +5221,201 @@
         "comparablePages": 3,
         "skipped": [],
         "perPageUnits": [
-          2957102400,
-          2957102400,
-          2957102400
+          69578880,
+          69578880,
+          69578880
         ],
-        "jobWorkUnits": 8871307200,
+        "jobWorkUnits": 208736640,
         "representable": true,
         "withinBudget": true,
         "refusal": null,
         "everyPageWithinPageCeiling": true
       },
-      "five pages, each below, the total above": {
-        "requestedPages": 5,
-        "comparablePages": 5,
+      "173 pages, each below, the total above": {
+        "requestedPages": 173,
+        "comparablePages": 173,
         "skipped": [],
         "perPageUnits": [
-          2957102400,
-          2957102400,
-          2957102400,
-          2957102400,
-          2957102400
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880
         ],
-        "jobWorkUnits": 14785512000,
+        "jobWorkUnits": 12037146240,
         "representable": true,
         "withinBudget": false,
         "refusal": {
           "status": "OVER_WORK_BUDGET",
-          "reason": "5 pages total 14,785,512,000 work units, over a ceiling of 12,000,000,000; no single page is"
+          "reason": "173 pages total 12,037,146,240 work units, over a ceiling of 12,000,000,000; no single page is"
         },
         "everyPageWithinPageCeiling": true
       },
@@ -5069,14 +5424,14 @@
         "comparablePages": 1,
         "skipped": [],
         "perPageUnits": [
-          23694575520
+          12627783200
         ],
-        "jobWorkUnits": 23694575520,
+        "jobWorkUnits": 12627783200,
         "representable": true,
         "withinBudget": false,
         "refusal": {
           "status": "OVER_WORK_BUDGET",
-          "reason": "page 1 alone is 23,694,575,520 work units, over a ceiling of 12,000,000,000"
+          "reason": "page 1 alone is 12,627,783,200 work units, over a ceiling of 12,000,000,000"
         },
         "everyPageWithinPageCeiling": false
       },
@@ -5085,11 +5440,11 @@
         "comparablePages": 3,
         "skipped": [],
         "perPageUnits": [
-          521841600,
-          521841600,
-          521841600
+          208736640,
+          208736640,
+          208736640
         ],
-        "jobWorkUnits": 1565524800,
+        "jobWorkUnits": 626209920,
         "representable": true,
         "withinBudget": true,
         "refusal": null,
@@ -5103,11 +5458,11 @@
           "page 3: RENDER_FAILED"
         ],
         "perPageUnits": [
-          2957102400,
+          69578880,
           0,
           0
         ],
-        "jobWorkUnits": 2957102400,
+        "jobWorkUnits": 69578880,
         "representable": true,
         "withinBudget": true,
         "refusal": null,
@@ -5118,10 +5473,10 @@
         "comparablePages": 2,
         "skipped": [],
         "perPageUnits": [
-          2957102400,
-          2957102400
+          69578880,
+          69578880
         ],
-        "jobWorkUnits": 5914204800,
+        "jobWorkUnits": 139157760,
         "representable": true,
         "withinBudget": true,
         "refusal": null,
@@ -5143,7 +5498,64 @@
         },
         "everyPageWithinPageCeiling": false
       }
+    },
+    "noAlgorithm": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "no comparison algorithm was selected, so no work bound exists"
     }
+  },
+  "calibration": {
+    "algorithm": "separable-dilation",
+    "rows": {
+      "A4 150dpi, 0.15mm": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "radius": 1,
+        "units": 17413712,
+        "ms": 27.6,
+        "msPerUnit": 0.000001584957876958693
+      },
+      "A4 150dpi, 0.5mm": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "radius": 3,
+        "units": 17413712,
+        "ms": 25.9,
+        "msPerUnit": 0.000001487333659733771
+      },
+      "A4 300dpi, 0.15mm": {
+        "width": 2481,
+        "height": 3508,
+        "pixels": 8703348,
+        "radius": 2,
+        "units": 69626784,
+        "ms": 119.2,
+        "msPerUnit": 0.0000017119848590957417
+      },
+      "A3 150dpi, 0.15mm": {
+        "width": 1754,
+        "height": 2481,
+        "pixels": 4351674,
+        "radius": 1,
+        "units": 34813392,
+        "ms": 53.3,
+        "msPerUnit": 0.0000015310200165792454
+      },
+      "A1 150dpi, 0.15mm": {
+        "width": 3508,
+        "height": 4967,
+        "pixels": 17424236,
+        "radius": 1,
+        "units": 139393888,
+        "ms": 255,
+        "msPerUnit": 0.000001829348500559795
+      }
+    },
+    "worstMsPerUnit": 0.000001829348500559795,
+    "ceiling": 12000000000,
+    "projectedWorstSeconds": 22
   },
   "asyncCancellation": {
     "width": 1241,
@@ -5161,7 +5573,7 @@
     "synchronousDriver": {
       "status": "READY_TO_COMPARE",
       "bands": 18,
-      "ms": 25,
+      "ms": 28,
       "cancellationObserved": false,
       "cancellationFlagAtEnd": false,
       "produced": true
@@ -5169,7 +5581,7 @@
     "asynchronousDriver": {
       "status": "CANCELLED",
       "bands": 4,
-      "ms": 28,
+      "ms": 24,
       "reason": "cancelled",
       "cancellationObserved": true,
       "publishable": false,

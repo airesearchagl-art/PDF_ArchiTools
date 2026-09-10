@@ -24,11 +24,14 @@ import {
   assertRigidPlan,
   estimateMemory, checkBudget, pixelRadiusFor, millimetresFor, MAX_COMPARISON_BYTES,
   INK_PREDICATES, inkMask, dilateMask, pairChangeMask, pairChangeMaskScan,
-  pairChangeMaskSteps, compositeFromMasks,
+  pairChangeMaskSteps, compositeFromMasks, presentReferencePairs,
+  visiblyChangedPixels,
   runCancellable, runCancellableAsync, checkComparisonWork,
-  MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM,
+  MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM, M4_PLANNER_ALGORITHM,
+  estimateComparisonWork,
   estimatePhaseMemory, checkPhaseBudget, EXPORT_STRATEGIES, BUDGETED_EXPORT_STRATEGY,
-  encodedImageUpperBound, estimateJobWork,
+  PNG_STORED_CONTRACT, pngStoredSize, encodePngStored, encoderScratchUpperBound,
+  estimateJobWork,
   SPATIAL_TOLERANCE_POLICY, isDefaultSpatialTolerance,
 } from '/research/m4-comparator-reliability/prototype/candidates.mjs';
 
@@ -1066,6 +1069,8 @@ window.__m4 = {
    * comparison that still reads every pixel of every member.
    */
   workBudget() {
+    const unrepresentableSide = Math.ceil(Math.sqrt(Number.MAX_SAFE_INTEGER / 24))
+      + 1000000;
     const rows = [
       ['A4 300dpi, 2 members, radius 0', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 0],
       ['A4 300dpi, 2 members, radius 1', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 1],
@@ -1081,8 +1086,17 @@ window.__m4 = {
     for (const [label, w, h, members, contract, radiusPx] of rows) {
       const checked = checkComparisonWork({
         width: w, height: h, members, contract, radiusPx,
+        algorithm: M4_PLANNER_ALGORITHM,
+      });
+      // The rejected algorithm, on the same job, so the difference a unit
+      // hides is visible rather than asserted.
+      const scan = checkComparisonWork({
+        width: w, height: h, members, contract, radiusPx,
+        algorithm: COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
       });
       cases[label] = {
+        scanUnits: scan.units,
+        scanWithinBudget: scan.withinBudget,
         pixels: checked.pixels,
         members: checked.members,
         contract: checked.contract,
@@ -1122,15 +1136,26 @@ window.__m4 = {
       consensus: checkComparisonWork({
         width: 2480, height: 3507, members: 4,
         contract: MULTI_MEMBER.CONSENSUS, radiusPx: 6,
+        algorithm: M4_PLANNER_ALGORITHM,
       }).refusal,
+      // No algorithm, no bound. A job may not be costed against a guess.
+      noAlgorithm: checkComparisonWork({
+        width: 2480, height: 3507, members: 2,
+        contract: MULTI_MEMBER.TWO_ONLY, radiusPx: 6,
+      }).refusal,
+      selectedAlgorithm: M4_PLANNER_ALGORITHM,
       // Arithmetic that would leave the safe-integer range is a refusal too.
+      // Sized from that limit rather than picked, so it stays unrepresentable
+      // under whichever algorithm is selected.
       unrepresentable: checkComparisonWork({
-        width: 2000000, height: 2000000, members: 4,
+        width: unrepresentableSide, height: unrepresentableSide, members: 4,
         contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 5000,
+        algorithm: M4_PLANNER_ALGORITHM,
       }).refusal,
       oneMember: checkComparisonWork({
         width: 2480, height: 3507, members: 1,
         contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 0,
+        algorithm: M4_PLANNER_ALGORITHM,
       }).refusal,
     };
   },
@@ -1303,11 +1328,220 @@ window.__m4 = {
   },
 
   /**
+   * The verdict and the picture, produced by the same rule.
+   *
+   * `reference-pairs` gets the two-against-two set right and the previous
+   * round still painted it with the any-other-member rule, in which A finds B
+   * at one wall and C finds D at the other and the sheet comes back clean. The
+   * status said CHANGE over a picture that said nothing did. This measures both
+   * presentations on the four sets that matter.
+   */
+  async pairPresentation() {
+    const colours = [[0, 0, 1], [1, 0, 0], [0, 0.6, 0], [0.8, 0, 0.8]];
+    const sets = {
+      'four identical': ['base-a4', 'identical-a4', 'base-a4-copy', 'base-a4'],
+      'three the same, one changed':
+        ['base-a4', 'identical-a4', 'base-a4-copy', 'added-line-a4'],
+      'two against two':
+        ['base-a4', 'identical-a4', 'wall-at-y-a4', 'wall-at-y-a4-copy'],
+      'reference and three different':
+        ['base-a4', 'added-line-a4', 'removed-line-a4', 'wall-at-y-a4'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(sets)) {
+      const members = [];
+      for (let i = 0; i < names.length; i++) {
+        members.push(await member(names[i], colours[i], `${names[i]}#${i}`));
+      }
+      const rendered = await renderMembersUpright(members, SCALE);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const dilated = masks;
+      // The rejected presentation: every member against every other.
+      const allMembers = compositeFromMasks({
+        masks, dilated, colors: colours.slice(0, masks.length), width, height,
+      });
+      // The one that matches the contract: slot 1 against each member, alone.
+      const visuals = presentReferencePairs({
+        masks, dilated, colors: colours.slice(0, masks.length), width, height,
+      });
+      const pairs = visuals.map((v, i) => {
+        const mask = pairChangeMask({
+          a: masks[0], b: masks[i + 1], width, height, radius: 0,
+        });
+        return {
+          member: names[i + 1],
+          shownAsChanged: visiblyChangedPixels(v.pixels),
+          changePixels: mask.changePixels,
+          verdict: canonicalVerdict(mask).status,
+        };
+      });
+      out[label] = {
+        members: names.length,
+        anyOtherMemberPresentation: {
+          shownAsChanged: visiblyChangedPixels(allMembers),
+        },
+        pairs,
+        overallVerdict: pairs.every((p) => p.verdict === RESULT.MATCH)
+          ? RESULT.MATCH : RESULT.CHANGE,
+        // Every pair whose status says CHANGE must have a picture that shows it.
+        everyChangedPairIsVisible: pairs
+          .filter((p) => p.verdict === RESULT.CHANGE)
+          .every((p) => p.shownAsChanged > 0),
+        // And the count the user sees must be the count the verdict used.
+        visibleMatchesMask: pairs.every((p) => p.shownAsChanged === p.changePixels),
+        totalShownByPairs: pairs.reduce((n, p) => n + p.shownAsChanged, 0),
+      };
+    }
+    return out;
+  },
+
+  /**
+   * The encoder the memory bound belongs to.
+   *
+   * A formula for `canvas.toBlob` is not a guarantee: the browser picks its own
+   * DEFLATE strategy, block layout, IDAT chunking and internal scratch, and
+   * exposes none of them. This encodes with a stated contract instead — RGBA8,
+   * filter 0, stored blocks of a stated size, IDAT chunks of a stated size —
+   * so the output size is exact rather than bounded, and the round trip proves
+   * the bytes are a real PNG rather than a plausible-looking buffer.
+   */
+  async ownedEncoder() {
+    const rows = {};
+    for (const [label, sheet, other, dpi] of [
+      ['A4 150dpi, changed', 'base-a4', 'added-line-a4', 150],
+      ['A4 150dpi, dense', 'dense-a', 'dense-b', 150],
+      ['A3 150dpi, matched', 'base-a3', 'base-a3', 150],
+    ]) {
+      const members = [
+        await member(sheet, BLUE, sheet), await member(other, RED, `${other}#1`),
+      ];
+      const rendered = await renderMembersUpright(members, dpi / 72);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const pixels = compositeFromMasks({
+        masks, dilated: masks, colors: [BLUE, RED], width, height,
+      });
+
+      const started = performance.now();
+      const encoded = encodePngStored({ pixels, width, height });
+      const encodeMs = Math.round(performance.now() - started);
+      const predicted = pngStoredSize({ width, height });
+
+      // The round trip: the browser has to accept it as a PNG and give back
+      // the same pixels.
+      const bitmap = await createImageBitmap(new Blob([encoded], { type: 'image/png' }));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0);
+      const back = ctx.getImageData(0, 0, width, height).data;
+      let differingBytes = 0;
+      for (let i = 0; i < back.length; i++) {
+        if (back[i] !== pixels[i]) differingBytes += 1;
+      }
+      bitmap.close();
+      canvas.width = 1;
+      canvas.height = 1;
+
+      // What the browser's own encoder produced, for contrast only.
+      const browserCanvas = document.createElement('canvas');
+      browserCanvas.width = width;
+      browserCanvas.height = height;
+      browserCanvas.getContext('2d')
+        .putImageData(new ImageData(pixels, width, height), 0, 0);
+      const browserPng = browserCanvas.toDataURL('image/png');
+      const browserJpeg = browserCanvas.toDataURL('image/jpeg');
+      browserCanvas.width = 1;
+      browserCanvas.height = 1;
+
+      rows[label] = {
+        width,
+        height,
+        pixels: width * height,
+        encodedBytes: encoded.length,
+        predictedBytes: predicted,
+        exact: encoded.length === predicted,
+        bytesPerPixel: +(encoded.length / (width * height)).toFixed(3),
+        roundTripDifferingBytes: differingBytes,
+        roundTripLossless: differingBytes === 0,
+        encodeMs,
+        scratchBytes: encoderScratchUpperBound({ width }),
+        // Performance evidence only. Not the bound.
+        browserPngBytesPerPixel: +(browserPng.length / (width * height)).toFixed(4),
+        browserJpegBytesPerPixel: +(browserJpeg.length / (width * height)).toFixed(4),
+      };
+    }
+    return {
+      contract: PNG_STORED_CONTRACT,
+      strategies: EXPORT_STRATEGIES,
+      budgetedStrategy: BUDGETED_EXPORT_STRATEGY,
+      rows,
+      boundIsExactNotEstimated: true,
+    };
+  },
+
+  /**
+   * Milliseconds per work unit, for the algorithm M4 actually selects.
+   *
+   * The ceiling is in work units and a work unit means a different amount of
+   * work under each algorithm, so the wall-clock reading of the ceiling has to
+   * be calibrated against the one that ships. The previous round calibrated
+   * against the nested scan while recommending the dilation.
+   */
+  async separableCalibration() {
+    const rows = {};
+    for (const [label, a, b, dpi, mm] of [
+      ['A4 150dpi, 0.15mm', 'dense-a', 'dense-b', 150, 0.15],
+      ['A4 150dpi, 0.5mm', 'dense-a', 'dense-b', 150, 0.5],
+      ['A4 300dpi, 0.15mm', 'dense-a', 'dense-b', 300, 0.15],
+      ['A3 150dpi, 0.15mm', 'base-a3', 'base-a3', 150, 0.15],
+      ['A1 150dpi, 0.15mm', 'base-a1', 'base-a1', 150, 0.15],
+    ]) {
+      const members = [
+        await member(a, BLUE, a), await member(b, RED, `${b}#1`),
+      ];
+      const rendered = await renderMembersUpright(members, dpi / 72);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((m) => inkMask(m.data, width, height));
+      const radius = pixelRadiusFor(mm, dpi);
+      // Warm, then measure.
+      pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+      const started = performance.now();
+      pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+      const ms = performance.now() - started;
+      const work = estimateComparisonWork({
+        width, height, members: 2, contract: MULTI_MEMBER.TWO_ONLY,
+        radiusPx: radius, algorithm: M4_PLANNER_ALGORITHM,
+      });
+      rows[label] = {
+        width,
+        height,
+        pixels: width * height,
+        radius,
+        units: work.units,
+        ms: +ms.toFixed(1),
+        msPerUnit: ms / work.units,
+      };
+    }
+    const worstMsPerUnit = Math.max(...Object.values(rows).map((r) => r.msPerUnit));
+    return {
+      algorithm: M4_PLANNER_ALGORITHM,
+      rows,
+      worstMsPerUnit,
+      ceiling: MAX_COMPARISON_WORK_UNITS,
+      projectedWorstSeconds: +(MAX_COMPARISON_WORK_UNITS * worstMsPerUnit / 1000)
+        .toFixed(1),
+    };
+  },
+
+  /**
    * What the export actually costs to hold, measured rather than assumed.
    *
    * `toDataURL` returns a string, so the figure that matters is the length of
-   * that string per pixel. The memory model carries an allowance; this is what
-   * it is an allowance for.
+   * that string per pixel. Kept as performance evidence only; the memory bound
+   * comes from the owned encoder above.
    */
   async exportEncoding() {
     const rows = {};
@@ -1345,31 +1579,16 @@ window.__m4 = {
         pngBytesPerPixel: +(png.length / area).toFixed(4),
       };
     }
-    // The measurements above are **performance** evidence. The bound below is
-    // the safety proof, and it is derived rather than measured: no image of
-    // these dimensions can encode larger, whatever it contains.
-    const bounds = {};
-    for (const [label, r] of Object.entries(rows)) {
-      const bound = encodedImageUpperBound({ width: r.width, height: r.height });
-      bounds[label] = {
-        upperBound: bound,
-        upperBoundBytesPerPixel: +(bound / r.pixels).toFixed(3),
-        measuredWorst: Math.max(r.jpegBytes, r.pngBytes),
-        // As a data URL the same bytes cost base64 on top, twice over in a
-        // two-byte string. This is why the recommendation is toBlob.
-        dataUrlBound: Math.ceil(bound * 4 / 3) * EXPORT_STRATEGIES.dataUrl.bytesPerCharacter,
-        measuredUnderBound: Math.max(r.jpegBytes, r.pngBytes) < bound,
-      };
-    }
+    // These are **performance** evidence and nothing else. What the browser's
+    // encoder produces says nothing about what it allocates while producing
+    // it, and a compression ratio cannot gate a fail-closed budget in any case.
+    // The bound comes from the owned encoder; see `ownedEncoder`.
     return {
-      strategies: EXPORT_STRATEGIES,
-      budgetedStrategy: BUDGETED_EXPORT_STRATEGY,
       rows,
-      bounds,
       worstMeasured: Math.max(...Object.values(rows).flatMap(
         (r) => [r.jpegBytesPerPixel, r.pngBytesPerPixel],
       )),
-      boundIsDerivedNotMeasured: true,
+      isPerformanceEvidenceOnly: true,
     };
   },
 
@@ -1479,12 +1698,23 @@ window.__m4 = {
       contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx, ...extra,
     });
     const repeat = (n, make) => Array.from({ length: n }, (_, i) => make(i + 1));
+    // Derived from the ceiling rather than hard-coded, so these stay the cases
+    // they are meant to be if the ceiling is ever recalibrated.
+    const perPage = estimateComparisonWork({
+      width: A4[0], height: A4[1], members: 2,
+      contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 6,
+      algorithm: M4_PLANNER_ALGORITHM,
+    }).units;
+    const pagesToExceed = Math.floor(MAX_COMPARISON_WORK_UNITS / perPage) + 1;
+    const overSide = Math.ceil(Math.sqrt(MAX_COMPARISON_WORK_UNITS / 8)) + 1000;
+    const unrepresentableSide = Math.ceil(Math.sqrt(Number.MAX_SAFE_INTEGER / 24))
+      + 1000000;
     const jobs = {
       'one page, below the ceiling': [page('page 1', A4, 2, 6)],
       'three pages, total below': repeat(3, (n) => page(`page ${n}`, A4, 2, 6)),
-      'five pages, each below, the total above':
-        repeat(5, (n) => page(`page ${n}`, A4, 2, 6)),
-      'one page over on its own': [page('page 1', A1, 2, 6)],
+      [`${pagesToExceed} pages, each below, the total above`]:
+        repeat(pagesToExceed, (n) => page(`page ${n}`, A4, 2, 6)),
+      'one page over on its own': [page('page 1', [overSide, overSide], 2, 6)],
       'reference-pairs over three pages':
         repeat(3, (n) => page(`page ${n}`, A4, 4, 1)),
       'a page that cannot be compared is still in the plan': [
@@ -1495,12 +1725,14 @@ window.__m4 = {
       'an export range costs only the pages asked for':
         repeat(2, (n) => page(`page ${n + 2}`, A4, 2, 6)),
       'arithmetic outside the safe-integer range': [
-        page('page 1', [2000000, 2000000], 4, 5000),
+        // Sized from the safe-integer limit rather than picked, so it stays
+        // unrepresentable under whichever algorithm is selected.
+        page('page 1', [unrepresentableSide, unrepresentableSide], 4, 5000),
       ],
     };
     const out = {};
     for (const [label, pages] of Object.entries(jobs)) {
-      const job = estimateJobWork({ pages });
+      const job = estimateJobWork({ pages, algorithm: M4_PLANNER_ALGORITHM });
       out[label] = {
         requestedPages: pages.length,
         comparablePages: job.comparablePages,
@@ -1515,7 +1747,18 @@ window.__m4 = {
           .every((p) => p.withinPageCeiling === true),
       };
     }
-    return { limit: MAX_COMPARISON_WORK_UNITS, jobs: out };
+    return {
+      limit: MAX_COMPARISON_WORK_UNITS,
+      algorithm: M4_PLANNER_ALGORITHM,
+      perPageUnits: perPage,
+      pagesToExceed,
+      aggregateLabel: `${pagesToExceed} pages, each below, the total above`,
+      jobs: out,
+      // A job with no algorithm named is refused rather than costed.
+      noAlgorithm: estimateJobWork({
+        pages: [page('page 1', A4, 2, 6)],
+      }).refusal,
+    };
   },
 
   /**
@@ -1558,7 +1801,9 @@ window.__m4 = {
         pairProcessing: checked.pairProcessing,
         referenceMaskReused: checked.referenceMaskReused,
         exportStrategy: checked.exportStrategy,
-        encodedOutputIsUpperBound: checked.encodedOutputIsUpperBound,
+        encoder: checked.encoder,
+        encodedOutputIsExact: checked.encodedOutputIsExact,
+        presentationContract: checked.presentationContract,
         presentationLive: checked.phases.presentation.live,
       };
     }

@@ -726,8 +726,11 @@ try {
     evidence.work = work;
     for (const [label, r] of Object.entries(work.cases)) {
         console.log(`  ${label.padEnd(40)} box ${String(r.neighbourhoodBox).padStart(4)}  `
-            + `${String(r.groups)} group(s)  ${String(r.units).padStart(14)} units  `
-            + `${r.withinBudget ? 'within' : 'REFUSED'}`);
+            + `${String(r.groups)} group(s)  selected ${
+                String(r.units).padStart(12)} ${
+                (r.withinBudget ? 'within' : 'REFUSED').padEnd(7)} `
+            + `scan ${String(r.scanUnits).padStart(14)} ${
+                r.scanWithinBudget ? 'within' : 'REFUSED'}`);
     }
     check('a work ceiling is stated', work.limit === 12_000_000_000,
         `${work.limit.toLocaleString('en-US')} work units`);
@@ -743,21 +746,30 @@ try {
         'four members under reference-pairs is three pair comparisons, and costs three times');
     const base = work.cases['A4 300dpi, 2 members, radius 0'];
     const perPixelBaseline = base.pixels * 2;
-    check('the neighbourhood term grows as (2r+1) squared',
-        work.cases['A4 300dpi, 2 members, radius 1'].units - perPixelBaseline
-            === (work.cases['A4 300dpi, 2 members, radius 0'].units - perPixelBaseline) * 9
-        && work.cases['A4 300dpi, 2 members, radius 2'].units - perPixelBaseline
-            === (work.cases['A4 300dpi, 2 members, radius 0'].units - perPixelBaseline) * 25,
+    // A property of the algorithm that was rejected, and the reason it was.
+    check('the rejected scan grows as (2r+1) squared',
+        work.cases['A4 300dpi, 2 members, radius 1'].scanUnits - perPixelBaseline
+            === (base.scanUnits - perPixelBaseline) * 9
+        && work.cases['A4 300dpi, 2 members, radius 2'].scanUnits - perPixelBaseline
+            === (base.scanUnits - perPixelBaseline) * 25,
         'boxes of 1, 9 and 25 over the same pixels');
-    probe('an A1 at 300 dpi with a half-millimetre tolerance is refused',
-        work.cases['A1 300dpi, 2 members, 0.5mm'].withinBudget === false
-        && work.cases['A1 300dpi, 2 members, 0.5mm'].refusal.status === 'OVER_WORK_BUDGET',
-        work.cases['A1 300dpi, 2 members, 0.5mm'].refusal.reason);
-    check('while ordinary sheets are not',
-        work.cases['A4 300dpi, 2 members, 0.5mm'].withinBudget
-        && work.cases['A3 300dpi, 2 members, 0.5mm'].withinBudget,
-        `A4 ${work.cases['A4 300dpi, 2 members, 0.5mm'].units.toLocaleString('en-US')}, `
-        + `A3 ${work.cases['A3 300dpi, 2 members, 0.5mm'].units.toLocaleString('en-US')}`);
+    // And the property of the one that was selected.
+    check('while the selected algorithm is flat in the radius',
+        [...new Set(['radius 0', 'radius 1', 'radius 2'].map(
+            (r) => work.cases[`A4 300dpi, 2 members, ${r}`].units,
+        ))].length === 1
+        && work.cases['A4 300dpi, 2 members, 0.5mm'].units === base.units,
+        `${base.units.toLocaleString('en-US')} units at every radius, because two `
+        + 'separable passes do not care how wide the box is');
+    // The consequence, said plainly rather than left for a reader to notice.
+    probe('so under the selected algorithm no single sheet reaches the work ceiling',
+        Object.values(work.cases).every((r) => r.withinBudget === true)
+        && work.cases['A1 300dpi, 2 members, 0.5mm'].scanWithinBudget === false,
+        `an A1 at 300 dpi and 0.5 mm is `
+        + `${work.cases['A1 300dpi, 2 members, 0.5mm'].units.toLocaleString('en-US')} `
+        + `units dilating against `
+        + `${work.cases['A1 300dpi, 2 members, 0.5mm'].scanUnits.toLocaleString('en-US')} `
+        + 'scanning — memory is what refuses it, not work');
     check('nothing is silently degraded to fit',
         Object.values(work.cases).every((r) => r.degraded === false
             && r.requested.radiusPx === r.effective.radiusPx
@@ -774,6 +786,15 @@ try {
         work.unrepresentable.reason);
     probe('and one member is refused before any work is estimated',
         work.oneMember.status === 'OVER_WORK_BUDGET');
+    // A unit means a different amount of work under each algorithm, so a
+    // ceiling in units without one named is not a ceiling.
+    probe('a job with no algorithm named is refused rather than costed against a guess',
+        work.noAlgorithm.status === 'OVER_WORK_BUDGET'
+        && work.noAlgorithm.reason.includes('no comparison algorithm'),
+        work.noAlgorithm.reason);
+    check('and the planner is bound to the algorithm the research recommends',
+        work.selectedAlgorithm === 'separable-dilation',
+        'every example above is costed under the algorithm M4 would ship');
     // The bound belongs to the algorithm, not to the feature.
     check('choosing a different algorithm derives a different bound',
         work.byAlgorithm['any-neighbour-scan'].withinBudget === false
@@ -871,29 +892,58 @@ try {
             String(r.jpegBytesPerPixel).padStart(7)} B/px  png ${
             String(r.pngBytesPerPixel).padStart(7)} B/px`);
     }
-    // The measurements above are performance evidence. The bound is derived.
-    check('the memory bound on the encoded image is derived, not measured',
-        encoding.boundIsDerivedNotMeasured === true
-        && Object.values(encoding.bounds).every(
-            (b) => b.upperBoundBytesPerPixel > 4 && b.upperBoundBytesPerPixel < 4.1,
+    check('the browser measurements are kept as performance evidence only',
+        encoding.isPerformanceEvidenceOnly === true,
+        `worst measured ${encoding.worstMeasured} B/px — a compression ratio an `
+        + 'unseen drawing can exceed, and it says nothing about what the browser '
+        + 'allocates while encoding');
+
+    // ---- the encoder the bound belongs to -----------------------------------
+    console.log('\n=== the owned encoder ===');
+    const encoder = await page.evaluate(() => window.__m4.ownedEncoder());
+    evidence.ownedEncoder = encoder;
+    for (const [label, r] of Object.entries(encoder.rows)) {
+        console.log(`  ${label.padEnd(22)} ${String(r.width).padStart(5)}x${
+            String(r.height).padEnd(5)} ${String(r.encodedBytes).padStart(9)} bytes  `
+            + `predicted ${String(r.predictedBytes).padStart(9)}  ${
+                r.exact ? 'exact' : 'MISMATCH'}  round trip ${
+                r.roundTripLossless ? 'lossless' : `${r.roundTripDifferingBytes} DIFFER`}`
+            + `  ${r.bytesPerPixel} B/px (browser png ${r.browserPngBytesPerPixel})`);
+    }
+    check('the encoder contract is stated rather than inherited',
+        encoder.contract.deflateStrategy === 'stored'
+        && encoder.contract.filter === 0 && encoder.contract.colourType === 6
+        && encoder.contract.bitDepth === 8
+        && encoder.contract.maxDeflateBlockBytes > 0
+        && encoder.contract.maxIdatChunkBytes > 0,
+        `RGBA8, filter 0, stored blocks of ${encoder.contract.maxDeflateBlockBytes} `
+        + `bytes, IDAT chunks of ${encoder.contract.maxIdatChunkBytes}`);
+    // The point of owning it: the size is not bounded, it is known.
+    check('the encoded size is exact, not an upper bound',
+        encoder.boundIsExactNotEstimated === true
+        && Object.values(encoder.rows).every((r) => r.exact),
+        Object.values(encoder.rows)
+            .map((r) => `${r.encodedBytes} = ${r.predictedBytes}`).join(', '));
+    probe('and the bytes are a real PNG, not a plausible buffer',
+        Object.values(encoder.rows).every((r) => r.roundTripLossless),
+        'decoded by the browser and compared pixel for pixel: 0 differing bytes');
+    probe('the price of the guarantee is the file size, and it is stated',
+        Object.values(encoder.rows).every(
+            (r) => r.bytesPerPixel > r.browserPngBytesPerPixel * 50,
         ),
-        'PNG worst case: one filter byte per row, RGBA, DEFLATE stored blocks, '
-        + 'zlib and container overhead — about 4 bytes per pixel, whatever the '
-        + 'image contains');
-    probe('the measured ratios are far under it, and are not the safety proof',
-        Object.values(encoding.bounds).every((b) => b.measuredUnderBound),
-        `worst measured ${encoding.worstMeasured} B/px against a derived bound of `
-        + `~${Object.values(encoding.bounds)[0].upperBoundBytesPerPixel} B/px — a `
-        + 'compression ratio an unseen drawing can exceed, so it may not gate memory');
-    probe('and a data URL costs multiples of the bytes it encodes',
-        Object.values(encoding.bounds).every((b) => b.dataUrlBound > b.upperBound * 2),
-        `${(Object.values(encoding.bounds)[0].upperBound / 1e6).toFixed(0)}MB of bytes `
-        + `becomes ${(Object.values(encoding.bounds)[0].dataUrlBound / 1e6).toFixed(0)}MB `
-        + 'of base64 in a two-byte string, still co-resident with the bytes');
-    check('so the budget is taken on the blob path',
-        encoding.budgetedStrategy === 'blob',
-        `${encoding.strategies.blob.label} rather than `
-        + `${encoding.strategies.dataUrl.label}`);
+        `${Object.values(encoder.rows)[0].bytesPerPixel} B/px stored against `
+        + `${Object.values(encoder.rows)[0].browserPngBytesPerPixel} B/px from the `
+        + "browser's PNG — a deliberate trade of size for a memory guarantee, H5");
+    check('the encoder holds one row, not a filtered raster or a zlib buffer',
+        Object.values(encoder.rows).every(
+            (r) => r.scratchBytes === 1 + r.width * 4,
+        ),
+        `${Object.values(encoder.rows)[0].scratchBytes} bytes of scratch on a `
+        + `${Object.values(encoder.rows)[0].width}px row`);
+    check('and the budget is taken on handing back bytes, not a base64 string',
+        encoder.budgetedStrategy === 'blob',
+        `${encoder.strategies.blob.label} rather than `
+        + `${encoder.strategies.dataUrl.label}`);
 
     // ---- the working set of the selected architecture -----------------------
     console.log('\n=== the working set, phase by phase ===');
@@ -919,13 +969,20 @@ try {
         Object.values(phased.cases).every((r) => r.memberProcessing === 'serial'
             && r.pairProcessing === 'serial' && r.referenceMaskReused === true),
         'members serial, reference pairs serial, reference mask and dilation reused');
-    check('and the encoded output is charged as an upper bound, not a ratio',
-        Object.values(phased.cases).every((r) => r.encodedOutputIsUpperBound === true
+    check('and the encoded output is charged exactly, from the owned encoder',
+        Object.values(phased.cases).every((r) => r.encodedOutputIsExact === true
             && r.exportStrategy === 'blob'
-            && r.presentationLive.encodedString === 0),
-        'no base64 string in the peak, and no compression assumption under it');
+            && r.encoder === 'png-stored (owned)'),
+        'no compression assumption under the peak, and no browser encoder in it');
+    check('the presentation phase holds two dilations, not one per member',
+        phased.cases['A1 300dpi, 4 members, 0.5mm'].presentationLive.dilated
+            === phased.cases['A1 300dpi, 4 members, 0.5mm'].pixels * 2
+        && phased.cases['A1 300dpi, 4 members, 0.5mm'].presentationContract
+            .startsWith('reference-pairs'),
+        'pairs are painted serially, so only the reference and the current '
+        + 'member are dilated at once');
     probe('keeping the data URL would cost more than the blob path',
-        phased.byStrategy.dataUrl > phased.byStrategy.blob * 1.5,
+        phased.byStrategy.dataUrl > phased.byStrategy.blob * 1.3,
         `A3 at 300 dpi: ${phased.byStrategy.blob}MB via toBlob against `
         + `${phased.byStrategy.dataUrl}MB via toDataURL`);
     // The claim the previous round could not support.
@@ -1072,6 +1129,47 @@ try {
         && !/^位置ずれのみ/.test(small.policy.disclosureWhenNonZero),
         small.policy.disclosureWhenNonZero);
 
+    // ---- the picture has to say what the verdict says -----------------------
+    console.log('\n=== the verdict and the picture, under one rule ===');
+    const presented = await page.evaluate(() => window.__m4.pairPresentation());
+    evidence.pairPresentation = presented;
+    for (const [label, r] of Object.entries(presented)) {
+        console.log(`  ${label.padEnd(30)} ${r.overallVerdict.padEnd(6)}  `
+            + `any-other-member picture ${String(
+                r.anyOtherMemberPresentation.shownAsChanged).padStart(6)}px  `
+            + `pairs ${r.pairs.map((p) => `${p.verdict === 'CHANGE' ? '!' : '='}${
+                p.shownAsChanged}`).join(' ')}`);
+    }
+    check('the pairwise presentation shows exactly what the verdict counted',
+        Object.values(presented).every((r) => r.visibleMatchesMask),
+        'every pair visual paints the same pixel count its own change mask found');
+    check('an identical set is a match, and shows nothing',
+        presented['four identical'].overallVerdict === 'MATCH'
+        && presented['four identical'].totalShownByPairs === 0);
+    // The failure this section exists for.
+    probe('the any-other-member picture reports two-against-two as clean',
+        presented['two against two'].anyOtherMemberPresentation.shownAsChanged === 0
+        && presented['two against two'].overallVerdict === 'CHANGE',
+        'the status said CHANGE over a picture in which every mark found a partner '
+        + '— A finds B at one wall, C finds D at the other');
+    probe('and the pairwise presentation shows the disagreement instead',
+        presented['two against two'].everyChangedPairIsVisible === true
+        && presented['two against two'].totalShownByPairs > 0,
+        presented['two against two'].pairs
+            .map((p) => `${p.member}: ${p.shownAsChanged}px ${p.verdict}`).join(', '));
+    probe('a reference against three different documents likewise',
+        presented['reference and three different']
+            .anyOtherMemberPresentation.shownAsChanged === 0
+        && presented['reference and three different'].everyChangedPairIsVisible === true,
+        `all three pairs visible: ${presented['reference and three different'].pairs
+            .map((p) => `${p.shownAsChanged}px`).join(', ')}`);
+    check('and the user can tell which member differs',
+        presented['three the same, one changed'].pairs
+            .filter((p) => p.verdict === 'CHANGE').length === 1
+        && presented['three the same, one changed'].pairs
+            .find((p) => p.verdict === 'CHANGE').member === 'added-line-a4',
+        'one pair of three is painted as changed, and it names the member');
+
     // ---- the work of a whole job, not of one page --------------------------
     console.log('\n=== the work a whole job would do ===');
     const jobs = await page.evaluate(() => window.__m4.jobWork());
@@ -1092,11 +1190,15 @@ try {
         `${jobs.jobs['three pages, total below'].jobWorkUnits.toLocaleString('en-US')} `
         + 'units, exactly three times one page');
     // The gap a per-page ceiling leaves open.
+    const aggregate = jobs.jobs[jobs.aggregateLabel];
     probe('pages that each pass on their own can be refused as a job',
-        jobs.jobs['five pages, each below, the total above'].withinBudget === false
-        && jobs.jobs['five pages, each below, the total above']
-            .everyPageWithinPageCeiling === true,
-        jobs.jobs['five pages, each below, the total above'].refusal.reason);
+        aggregate.withinBudget === false
+        && aggregate.everyPageWithinPageCeiling === true,
+        aggregate.refusal.reason);
+    check('and the page count it takes to get there is what the ceiling means',
+        jobs.pagesToExceed > 1,
+        `${jobs.perPageUnits.toLocaleString('en-US')} units for an A4 at 300 dpi and `
+        + `0.5 mm, so the ceiling is ${jobs.pagesToExceed} such pages`);
     probe('and a single page over the ceiling is named as the reason',
         jobs.jobs['one page over on its own'].withinBudget === false
         && jobs.jobs['one page over on its own'].refusal.reason.includes('alone is'),
@@ -1119,11 +1221,46 @@ try {
             .requestedPages === 2
         && jobs.jobs['an export range costs only the pages asked for'].jobWorkUnits
             === jobs.jobs['one page, below the ceiling'].jobWorkUnits * 2);
+    probe('a job with no algorithm named is refused too',
+        jobs.noAlgorithm.status === 'OVER_WORK_BUDGET'
+        && jobs.noAlgorithm.reason.includes('no comparison algorithm'),
+        jobs.noAlgorithm.reason);
+    check('the job estimates are costed under the selected algorithm',
+        jobs.algorithm === 'separable-dilation');
     probe('and a job whose arithmetic leaves the safe-integer range is refused',
         jobs.jobs['arithmetic outside the safe-integer range'].representable === false
         && jobs.jobs['arithmetic outside the safe-integer range'].refusal.status
             === 'OVER_WORK_BUDGET',
         jobs.jobs['arithmetic outside the safe-integer range'].refusal.reason);
+
+    // ---- the ceiling, calibrated against the algorithm that ships -----------
+    console.log('\n=== what a work unit costs under the selected algorithm ===');
+    const calibration = await page.evaluate(() => window.__m4.separableCalibration());
+    evidence.calibration = calibration;
+    for (const [label, r] of Object.entries(calibration.rows)) {
+        console.log(`  ${label.padEnd(20)} ${String(r.pixels).padStart(9)}px  radius ${
+            String(r.radius).padStart(2)}  ${String(r.units).padStart(11)} units  ${
+            String(r.ms.toFixed(1)).padStart(7)}ms  ${
+            r.msPerUnit.toExponential(2)} ms/unit`);
+    }
+    check('the calibration is taken on the algorithm the planner is bound to',
+        calibration.algorithm === 'separable-dilation',
+        `${Object.keys(calibration.rows).length} sizes and radii, worst `
+        + `${calibration.worstMsPerUnit.toExponential(2)} ms per unit`);
+    // The ambiguity this replaces: the previous ceiling was read against the
+    // shipped scan while the design recommended the dilation.
+    check('the ceiling reads as a wall-clock figure under that algorithm',
+        calibration.projectedWorstSeconds > 10 && calibration.projectedWorstSeconds < 200,
+        `${calibration.ceiling.toLocaleString('en-US')} units projects to about `
+        + `${calibration.projectedWorstSeconds} seconds for the whole job`);
+    probe('and a unit is not the same amount of work under the other algorithm',
+        work.byAlgorithm['any-neighbour-scan'].units
+        > work.byAlgorithm['separable-dilation'].units * 10,
+        `the same A1 at the same tolerance: `
+        + `${work.byAlgorithm['any-neighbour-scan'].units.toLocaleString('en-US')} `
+        + `scanning against `
+        + `${work.byAlgorithm['separable-dilation'].units.toLocaleString('en-US')} `
+        + 'dilating — which is why the algorithm has to be named');
 
     // ---- a cancellation that arrives while the comparison runs --------------
     console.log('\n=== a cancellation that arrives mid-comparison ===');

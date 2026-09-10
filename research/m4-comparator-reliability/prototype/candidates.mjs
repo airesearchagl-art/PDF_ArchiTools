@@ -149,6 +149,12 @@ export function pairChangeMask({ a, b, width, height, radius = 0 }) {
  * per member stop being co-resident with anything.
  *
  * Asserted byte-for-byte against the production compositor rather than argued.
+ *
+ * **This paints the any-other-member rule**, which is what ships. With two
+ * members that is the same as "they agree" and it is correct. With more, it is
+ * the rule the verdict rejects — so it must not be used to present a
+ * reference-pairs result, or the structured status would say CHANGE over a
+ * picture in which every mark found a partner. Use `presentReferencePairs`.
  */
 export function compositeFromMasks({
     masks, dilated, colors, width, height,
@@ -190,6 +196,71 @@ export function compositeFromMasks({
         out[i + 3] = 255;
     }
     return out;
+}
+
+/**
+ * What a reference-pairs comparison looks like.
+ *
+ * The verdict and the picture have to be produced by the same rule, and the
+ * previous round left them disagreeing. `reference-pairs` correctly reported
+ * CHANGE on the two-against-two set — and the picture was still painted by the
+ * any-other-member rule, in which A finds B at one wall and C finds D at the
+ * other, every mark finds a partner, and the user is shown a clean sheet under
+ * a status that says something changed. A correct status over a misleading
+ * picture is not better than the shipped behaviour; it is the same wrong answer
+ * with a label the user cannot see.
+ *
+ * So a reference-pairs result is **one visual per pair**, each painted by the
+ * two-member rule that is coherent: slot 1 against member *n*, and nothing
+ * else. The overall verdict is MATCH only when every pair matches, which is
+ * already the contract — this is the same decomposition applied to what is
+ * shown rather than only to what is decided. It also answers the question the
+ * user actually has, which is not "did anything differ" but "**which** of these
+ * differs from the reference, and where".
+ *
+ * Pairs are produced serially, so only the reference's dilation and the current
+ * member's are live at once. The memory model depends on that.
+ */
+export function presentReferencePairs({
+    masks, dilated, colors, width, height,
+    matchColor = [0, 0, 0], matchOpacity = 1,
+}) {
+    const visuals = [];
+    for (let i = 1; i < masks.length; i++) {
+        visuals.push({
+            member: i,
+            pixels: compositeFromMasks({
+                masks: [masks[0], masks[i]],
+                dilated: [dilated[0], dilated[i]],
+                colors: [colors[0], colors[i]],
+                width,
+                height,
+                matchColor,
+                matchOpacity,
+            }),
+        });
+    }
+    return visuals;
+}
+
+/**
+ * How many pixels a painted result actually shows as changed.
+ *
+ * Taken from the picture rather than from the masks, deliberately: the point is
+ * what reaches the user's eye. A matched pixel is painted in the match colour,
+ * which is neutral; an unmatched one is painted in its layer's colour, which is
+ * not. Cross-checked against the mask count by the gate.
+ */
+export function visiblyChangedPixels(pixels) {
+    let shown = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        if (r > 245 && g > 245 && b > 245) continue;
+        if (Math.max(r, g, b) - Math.min(r, g, b) > 30) shown += 1;
+    }
+    return shown;
 }
 
 /**
@@ -419,8 +490,11 @@ export async function runCancellableAsync(steps, {
  * total. A ratio floor cannot tell a hairline everywhere from a wall in one
  * place, and the second is the thing the tool is for.
  *
- * If a noise floor is wanted anyway it is a product decision with a corpus
- * behind it, listed for the Human Gate as **H10**, not a default.
+ * The M4 contract is that there is **no ratio floor at all**, fixed at zero
+ * rather than offered as a setting: the corpus shows no control that needs one
+ * and six revisions that it hides. It is not a Human Gate item — H10 is the
+ * whole-job work ceiling and nothing else. The setting that does this job, in a
+ * unit a user can reason about, is the spatial tolerance under H6.
  */
 export const MATCH_RATIO_FLOOR = 0;
 
@@ -525,54 +599,219 @@ export function checkBudget({ width, height, layers, limit = MAX_COMPARISON_BYTE
 // ---------------------------------------------------------------------------
 
 /**
- * A **content-independent** upper bound on the encoded image.
+ * The encoder the bound belongs to.
  *
- * The previous version of this allowed 0.15 bytes per pixel, derived from four
- * measured composites. That is a compression *ratio*, and a fail-closed memory
- * gate may not rest on one: the drawings in the corpus compress well, a scanned
- * or hatched sheet need not, and the gate would be admitting a job it cannot
- * hold on the strength of how the fixtures happened to encode. A bound has to
- * hold for a document nobody has seen.
+ * Two rounds of this got the encoding allowance wrong in two different ways.
+ * First it was 0.15 bytes per pixel, measured on four composites — a
+ * compression *ratio*, which a fail-closed gate may not rest on, because a
+ * scanned or hatched sheet need not compress the way these drawings do. Then it
+ * was PNG's stored-block worst case, which is a real bound but **not a bound on
+ * `canvas.toBlob('image/png')`**: the browser chooses its own DEFLATE strategy,
+ * its own block layout, its own IDAT chunking and its own internal scratch, and
+ * exposes none of it. A formula for an encoder nobody controls is not a
+ * guarantee about the encoder that runs.
  *
- * So it is derived rather than measured, from PNG's worst case:
+ * So the encoder is **owned**. `encodePngStored` below writes RGBA8 with filter
+ * 0 on every row, into DEFLATE *stored* blocks of a stated maximum size, inside
+ * IDAT chunks of a stated maximum size. Every one of those is a constant here
+ * rather than a browser's choice, so the output size is not merely bounded —
+ * it is **exactly** `pngStoredSize`, which the gate asserts by encoding real
+ * composites and comparing lengths.
  *
- *   - the raster is one filter byte per row plus RGBA per pixel;
- *   - DEFLATE's worst case is a *stored* block — the payload unchanged, plus
- *     5 bytes of block header per 65,535 bytes;
- *   - zlib adds a 2-byte header and a 4-byte Adler-32;
- *   - the PNG container adds a signature, IHDR, IDAT framing and IEND.
- *
- * That is an upper bound, not an estimate: no image of these dimensions can
- * encode larger. JPEG has no comparable provable worst case, which is a reason
- * to prefer PNG for M4 and is fed to **H5** as such; if JPEG is chosen, this
- * allowance has to be re-derived for it rather than assumed to carry over.
- *
- * The measured ratios stay in the evidence as **performance** evidence. They
- * are not the safety proof.
+ * No new dependency. Stored blocks mean no compression, which is the price:
+ * about four bytes per pixel of output where the browser's PNG produced 0.03.
+ * That is a deliberate trade of file size for a memory guarantee, and it is the
+ * kind of trade a Human Gate should see rather than inherit — **H5**.
  */
-export function encodedImageUpperBound({ width, height }) {
+export const PNG_STORED_CONTRACT = {
+    colourType: 6, // RGBA
+    bitDepth: 8,
+    filter: 0, // None, on every row
+    deflateStrategy: 'stored',
+    maxDeflateBlockBytes: 65535,
+    maxIdatChunkBytes: 1 << 20,
+};
+
+/**
+ * The exact encoded size, for the encoder above. Not an estimate.
+ *
+ * The raster is one filter byte per row plus RGBA. DEFLATE stored blocks add
+ * five bytes of header per block; zlib adds a two-byte header and a four-byte
+ * Adler-32; the container adds a signature, IHDR, IDAT framing per chunk, and
+ * IEND.
+ */
+export function pngStoredSize({ width, height }) {
     const raster = height * (1 + width * 4);
-    const deflateStored = raster + 5 * Math.ceil(raster / 65535) + 6;
-    // Signature, IHDR, IEND and IDAT framing, generously.
-    return deflateStored + 4096;
+    const blocks = Math.max(1, Math.ceil(raster / PNG_STORED_CONTRACT.maxDeflateBlockBytes));
+    const zlib = 2 + blocks * 5 + raster + 4;
+    const idatChunks = Math.max(1, Math.ceil(zlib / PNG_STORED_CONTRACT.maxIdatChunkBytes));
+    const signature = 8;
+    const ihdr = 12 + 13;
+    const iend = 12;
+    return signature + ihdr + idatChunks * 12 + zlib + iend;
 }
 
 /**
- * How the encoded bytes leave the canvas, and what that costs to hold.
+ * What the encoder itself holds while it runs, beyond its output.
+ *
+ * It streams: it walks the composite a row at a time and writes filter byte and
+ * row bytes straight into the stored-block payload. There is no intermediate
+ * filtered raster and no intermediate zlib buffer — which is the other half of
+ * owning the encoder, because a browser's may well allocate both.
+ */
+export function encoderScratchUpperBound({ width }) {
+    return 1 + width * 4;
+}
+
+const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+
+/**
+ * RGBA8 to PNG, deterministically.
+ *
+ * RESEARCH ONLY, and deliberately small: it exists so that the memory model
+ * describes an encoder whose behaviour is stated rather than inferred.
+ */
+export function encodePngStored({ pixels, width, height }) {
+    const out = new Uint8Array(pngStoredSize({ width, height }));
+    let pos = 0;
+    const u32 = (value) => {
+        out[pos++] = (value >>> 24) & 0xFF;
+        out[pos++] = (value >>> 16) & 0xFF;
+        out[pos++] = (value >>> 8) & 0xFF;
+        out[pos++] = value & 0xFF;
+    };
+    for (const b of [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) out[pos++] = b;
+
+    const chunk = (type, write) => {
+        const lengthAt = pos;
+        pos += 4;
+        const dataStart = pos;
+        for (let i = 0; i < 4; i++) out[pos++] = type.charCodeAt(i);
+        write();
+        const dataEnd = pos;
+        const saved = pos;
+        pos = lengthAt;
+        u32(dataEnd - dataStart - 4);
+        pos = saved;
+        let crc = 0xFFFFFFFF;
+        for (let i = dataStart; i < dataEnd; i++) {
+            crc = CRC_TABLE[(crc ^ out[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        u32((crc ^ 0xFFFFFFFF) >>> 0);
+    };
+
+    chunk('IHDR', () => {
+        u32(width);
+        u32(height);
+        out[pos++] = PNG_STORED_CONTRACT.bitDepth;
+        out[pos++] = PNG_STORED_CONTRACT.colourType;
+        out[pos++] = 0;
+        out[pos++] = 0;
+        out[pos++] = 0;
+    });
+
+    // The zlib stream, written straight into IDAT chunks as it is produced.
+    const raster = height * (1 + width * 4);
+    const blockMax = PNG_STORED_CONTRACT.maxDeflateBlockBytes;
+    const blocks = Math.max(1, Math.ceil(raster / blockMax));
+    const zlibLength = 2 + blocks * 5 + raster + 4;
+    const idatMax = PNG_STORED_CONTRACT.maxIdatChunkBytes;
+    const idatChunks = Math.max(1, Math.ceil(zlibLength / idatMax));
+
+    let zlibWritten = 0;
+    let chunkRemaining = 0;
+    let chunkStart = 0;
+    let chunkLengthAt = 0;
+    let chunksOpened = 0;
+
+    const closeChunk = () => {
+        const dataEnd = pos;
+        const saved = pos;
+        pos = chunkLengthAt;
+        u32(dataEnd - chunkStart - 4);
+        pos = saved;
+        let crc = 0xFFFFFFFF;
+        for (let i = chunkStart; i < dataEnd; i++) {
+            crc = CRC_TABLE[(crc ^ out[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        u32((crc ^ 0xFFFFFFFF) >>> 0);
+    };
+    const openChunk = () => {
+        chunkLengthAt = pos;
+        pos += 4;
+        chunkStart = pos;
+        for (let i = 0; i < 4; i++) out[pos++] = 'IDAT'.charCodeAt(i);
+        chunksOpened += 1;
+        chunkRemaining = Math.min(idatMax, zlibLength - zlibWritten);
+    };
+    const push = (byte) => {
+        if (chunkRemaining === 0) {
+            if (chunksOpened > 0) closeChunk();
+            openChunk();
+        }
+        out[pos++] = byte;
+        chunkRemaining -= 1;
+        zlibWritten += 1;
+    };
+
+    push(0x78);
+    push(0x01);
+    let adlerA = 1;
+    let adlerB = 0;
+    let blockRemaining = 0;
+    let rasterRemaining = raster;
+    const pushRaster = (byte) => {
+        if (blockRemaining === 0) {
+            const take = Math.min(blockMax, rasterRemaining);
+            // BFINAL is set on the block that carries the last raster byte.
+            push(rasterRemaining === take ? 1 : 0);
+            push(take & 0xFF);
+            push((take >>> 8) & 0xFF);
+            push(~take & 0xFF);
+            push((~take >>> 8) & 0xFF);
+            blockRemaining = take;
+        }
+        push(byte);
+        blockRemaining -= 1;
+        rasterRemaining -= 1;
+        adlerA = (adlerA + byte) % 65521;
+        adlerB = (adlerB + adlerA) % 65521;
+    };
+
+    for (let y = 0; y < height; y++) {
+        pushRaster(0);
+        const rowStart = y * width * 4;
+        for (let i = 0; i < width * 4; i++) pushRaster(pixels[rowStart + i]);
+    }
+    for (const byte of [(adlerB >>> 8) & 0xFF, adlerB & 0xFF,
+        (adlerA >>> 8) & 0xFF, adlerA & 0xFF]) push(byte);
+    closeChunk();
+    void idatChunks;
+    void blocks;
+
+    chunk('IEND', () => {});
+    return out.subarray(0, pos);
+}
+
+/**
+ * How the encoded bytes leave the encoder, and what that costs to hold.
  *
  * `toDataURL` returns a **string**: the encoded bytes, then base64 at 4/3 the
  * size, then whatever the engine charges per character — and the encoded buffer
- * is still live while the string is built. `toBlob` hands back the bytes and
- * nothing else.
- *
- * At an upper bound of about four bytes per pixel for the encoded output, the
- * data-URL path costs roughly two and a half times what the blob path does, for
- * an artefact that is then usually turned straight back into bytes. The
- * recommendation is **`toBlob`**, and the budget is taken on it.
+ * is still live while the string is built. A `Blob` built from a typed array
+ * copies it once. Neither is free; one is much less free than the other.
  */
 export const EXPORT_STRATEGIES = {
-    blob: { label: 'canvas.toBlob()', base64: false, bytesPerCharacter: 0 },
-    dataUrl: { label: 'canvas.toDataURL()', base64: true, bytesPerCharacter: 2 },
+    blob: { label: 'Blob([bytes])', base64: false, bytesPerCharacter: 0, copiesOutput: true },
+    dataUrl: { label: 'base64 data URL', base64: true, bytesPerCharacter: 2, copiesOutput: false },
 };
 
 /** The recommended path, and the one the budget is taken on. */
@@ -622,11 +861,14 @@ export function estimatePhaseMemory({
     const dilationIndex = dilating ? (width + 1) * 4 + (height + 1) * 4 : 0;
     const strategy = EXPORT_STRATEGIES[exportStrategy]
         ?? EXPORT_STRATEGIES[BUDGETED_EXPORT_STRATEGY];
-    const encodedOutput = encodedImageUpperBound({ width, height });
-    // The encoded bytes are still live while the string is built from them.
-    const encodedString = strategy.base64
+    // Exact, for the encoder this architecture owns.
+    const encodedOutput = pngStoredSize({ width, height });
+    const encoderScratch = encoderScratchUpperBound({ width });
+    // The encoded bytes are still live while the string is built from them, or
+    // while the Blob copies them.
+    const encodedHandoff = strategy.base64
         ? Math.ceil(encodedOutput * 4 / 3) * strategy.bytesPerCharacter
-        : 0;
+        : encodedOutput;
 
     const phases = {
         // The canvas, the pixels read back from it, and the masks of the
@@ -660,16 +902,20 @@ export function estimatePhaseMemory({
                 changeMask: materialiseChangeMask ? mask : 0,
             },
         },
-        // The picture needs every member's mask and every member's dilation,
-        // because a member is painted matched or unmatched against all others.
+        // Under reference-pairs the picture is produced one pair at a time, so
+        // only the reference's dilation and the current member's are live —
+        // not every member's. That is a consequence of the presentation
+        // contract, not an optimisation: an all-member composite would need
+        // them all, and would also paint the wrong answer (see
+        // `presentReferencePairs`).
         presentation: {
             live: {
                 masks: mask * members,
-                dilated: dilating ? mask * members : 0,
+                dilated: dilating ? mask * 2 : 0,
                 composite: rgba,
-                encoderScratch: rgba,
+                encoderScratch,
                 encodedOutput,
-                encodedString,
+                encodedHandoff,
             },
         },
     };
@@ -690,7 +936,11 @@ export function estimatePhaseMemory({
         contract,
         radiusPx,
         exportStrategy,
-        encodedOutputIsUpperBound: true,
+        encoder: 'png-stored (owned)',
+        encodedOutputIsExact: true,
+        presentationContract: contract === MULTI_MEMBER.REFERENCE_PAIRS
+            ? 'reference-pairs, one visual per pair, serial'
+            : 'two members, one visual',
         memberProcessing: 'serial',
         pairProcessing: contract === MULTI_MEMBER.REFERENCE_PAIRS ? 'serial' : 'single',
         referenceMaskReused: contract === MULTI_MEMBER.REFERENCE_PAIRS,
@@ -816,6 +1066,22 @@ export const COMPARISON_ALGORITHM = {
 };
 
 /**
+ * The algorithm the M4 planner is bound to.
+ *
+ * A work unit means a different amount of work under each algorithm — about
+ * forty times as much under the scan as under the dilation, on the same job —
+ * so a ceiling in units is meaningless until the algorithm is named. The
+ * previous round left `estimateComparisonWork` defaulting to the *shipped*
+ * scan while recommending the dilation, which meant every worked example and
+ * the wall-clock reading of the ceiling described an algorithm the design was
+ * not going to use.
+ *
+ * There is now **no default**. A job without an algorithm is refused rather
+ * than costed against a guess, and M4 binds here.
+ */
+export const M4_PLANNER_ALGORITHM = COMPARISON_ALGORITHM.SEPARABLE_DILATION;
+
+/**
  * Integer arithmetic that refuses to lie.
  *
  * A work estimate that silently loses precision is worse than no estimate: it
@@ -894,10 +1160,11 @@ export function comparisonGroups({ members, contract }) {
 export function estimateComparisonWork({
     width, height, members, contract,
     radiusPx = 0,
-    algorithm = COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
+    algorithm,
     requested = {},
 }) {
-    const groups = comparisonGroups({ members, contract });
+    const known = Object.values(COMPARISON_ALGORITHM).includes(algorithm);
+    const groups = known ? comparisonGroups({ members, contract }) : null;
     const pixels = safeProduct(width, height);
     const box = safeProduct(2 * radiusPx + 1, 2 * radiusPx + 1);
     const base = {
@@ -920,8 +1187,9 @@ export function estimateComparisonWork({
             widthPx: width, heightPx: height, members, contract, algorithm, radiusPx,
         },
         degraded: false,
+        algorithmSelected: known,
     };
-    if (groups === null || pixels === null || box === null) {
+    if (!known || groups === null || pixels === null || box === null) {
         return { ...base, units: null, representable: false };
     }
 
@@ -951,22 +1219,30 @@ export function estimateComparisonWork({
  * number means what it says — and a single page is bounded by it as a
  * consequence, since one page is a job of one.
  *
- * Where it comes from: the highest measured cost per work unit on the corpus is
- * the A4 300 dpi radius-0 pair, at 158 ms for 34,789,440 units — 4.5e-6 ms per
- * unit. That case is the one where the bound is *tightest*, so using it is the
- * pessimistic choice. Twelve billion units at that rate projects to about 55
- * seconds of comparison on the measured machine.
+ * **Calibrated against `M4_PLANNER_ALGORITHM`, and only meaningful with it.** A
+ * work unit is not a fixed amount of work: the same A1 at the same tolerance is
+ * 23,694,575,520 units under the shipped scan and 557,519,424 under the
+ * separable dilation, about forty-two times fewer. An earlier version of this
+ * comment read the ceiling against the scan while the design recommended the
+ * dilation, so every figure in it described an algorithm that was not going to
+ * ship.
  *
- * What it permits and refuses, at a half-millimetre tolerance and two members:
- * A4 at 300 dpi (2.96e9) and A3 at 300 dpi (5.92e9) are within it; an A1 at
- * 300 dpi (2.37e10) is not, and neither is the largest sheet the memory budget
- * allows once the radius reaches 0.5 mm at 600 dpi (2.4e10).
+ * Measured, under the dilation: the worst cost per unit over five sizes and
+ * radii is 1.9e-6 ms — an A1 at 150 dpi, 139,393,888 units in 263 ms. Twelve
+ * billion units at that rate is about **23 seconds** for the whole job.
  *
- * Fifty-five seconds is a long time to wait, which is why it is a ceiling on
- * *refusal* rather than a target: a job under it is expected to be
- * interruptible, and one over it is refused rather than started. The number is
- * a judgement about how much of a person's afternoon one comparison may claim,
- * and the machine it was calibrated on is one machine. Human Gate **H10**.
+ * What that is, in work a user can picture: **about 173 A4 pages at 300 dpi and
+ * a 0.5 mm tolerance**, at 69,578,880 units each. Under this algorithm no
+ * *single* sheet in the corpus reaches the ceiling — an A1 at 300 dpi is 5% of
+ * it — so on one page the memory budget is what refuses first, and the work
+ * ceiling exists for ranges.
+ *
+ * The number is a judgement about how much of a person's afternoon one
+ * operation may claim, and the machine it was calibrated on is one machine.
+ * **Human Gate H10**, and the conversion is the point of stating it this way:
+ * each additional A4 page at 300 dpi is 69,578,880 units, about 0.13 seconds.
+ * If a drawing set that people actually compare runs past ~170 sheets, this
+ * number should go up, and the Gate now has what it needs to say so.
  */
 export const MAX_COMPARISON_WORK_UNITS = 12_000_000_000;
 
@@ -987,9 +1263,11 @@ export function checkComparisonWork(job, { limit = MAX_COMPARISON_WORK_UNITS } =
             withinBudget: false,
             refusal: {
                 status: PLAN.OVER_WORK_BUDGET,
-                reason: estimate.groups === 0
-                    ? 'no work bound is derived for this contract'
-                    : 'the work this comparison would do is not representable',
+                reason: estimate.algorithmSelected === false
+                    ? 'no comparison algorithm was selected, so no work bound exists'
+                    : (estimate.groups === 0
+                        ? 'no work bound is derived for this contract'
+                        : 'the work this comparison would do is not representable'),
             },
         };
     }
@@ -1027,7 +1305,7 @@ export function checkComparisonWork(job, { limit = MAX_COMPARISON_WORK_UNITS } =
  */
 export function estimateJobWork({
     pages,
-    algorithm = COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
+    algorithm,
     limit = MAX_COMPARISON_WORK_UNITS,
 }) {
     const costed = [];
@@ -1073,7 +1351,9 @@ export function estimateJobWork({
             withinBudget: false,
             refusal: {
                 status: PLAN.OVER_WORK_BUDGET,
-                reason: 'the work this job would do is not representable',
+                reason: Object.values(COMPARISON_ALGORITHM).includes(algorithm)
+                ? 'the work this job would do is not representable'
+                : 'no comparison algorithm was selected, so no work bound exists',
             },
         };
     }

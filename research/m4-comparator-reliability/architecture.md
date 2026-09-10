@@ -235,6 +235,40 @@ member that failed to render.
 
 What is not viable is the current rule, because it can be cancelled.
 
+### The picture has to be painted by the rule the verdict used
+
+Choosing `reference-pairs` for the *verdict* and leaving the *picture* to the
+any-other-member rule is not a half-fix; it is the same wrong answer with a
+label the user cannot see. Measured, on the two-against-two set:
+
+| | shown as changed |
+| --- | --- |
+| the any-other-member composite | **0 px** — A finds B at one wall, C finds D at the other |
+| pair 1: reference vs `identical-a4` | 0 px, MATCH |
+| pair 2: reference vs `wall-at-y-a4` | **17,060 px**, CHANGE |
+| pair 3: reference vs `wall-at-y-a4-copy` | **17,060 px**, CHANGE |
+
+The status said CHANGE over a clean sheet. So a reference-pairs result is **one
+visual per pair**, each painted by the two-member rule that is coherent: slot 1
+against member *n*, and nothing else. Overall MATCH only when every pair
+matches, which is already the contract — this applies the same decomposition to
+what is *shown* rather than only to what is decided.
+
+It also answers the question the user actually has. On *three the same, one
+changed*, exactly one of the three pair visuals is painted as changed and it
+names the member; the any-other-member composite would have shown one
+undifferentiated 8,530-pixel blur. On *reference and three different*, the old
+rule shows **0 px** and the three pairs show 8,530 / 8,530 / 17,060.
+
+Pairs are produced serially, so only the reference's dilation and the current
+member's are live at once — which is where the memory model's presentation phase
+gets its two-dilation term rather than one per member.
+
+`compositeFromMasks` still implements the any-other-member rule, because that is
+what ships and the equivalence proof depends on it being exactly that. It is
+correct for two members and must not be used to present a reference-pairs
+result.
+
 ## Geometry
 
 ### Rotation is not a difference
@@ -533,8 +567,8 @@ more than one page's buffers.
 
 Work is **cumulative**, and the export and the change report both run over
 ranges. A ceiling checked per page bounds nothing a user actually asks for —
-a hundred pages that each pass comfortably are a hundred times the work, and
-"about 55 seconds" becomes an hour and a half.
+a hundred pages that each pass comfortably are a hundred times the work, and the
+tens of seconds the ceiling is meant to bound become tens of minutes.
 
 ```
     pageWork[i]  = estimateComparisonWork(page[i])
@@ -557,25 +591,63 @@ Measured: five A4 pages at 300 dpi and 0.5 mm are 2,957,102,400 units each —
 every one comfortably inside — and 14,785,512,000 together, which is refused.
 A per-page ceiling would have run all five.
 
-The ceiling: **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` — a recommendation
-requiring human approval, not a measured threshold.** It is user-visible,
-because it refuses comparisons. Where it comes from: the highest measured cost
-per work unit on the corpus is the A4 300 dpi radius-0 pair, 158 ms for
-34,789,440 units — 4.5 × 10⁻⁶ ms per unit, and the case where the bound is
-*tightest*, so it is the pessimistic calibration. Twelve billion units at that
-rate projects to about **55 seconds** on the measured machine — for the whole
-operation, which is what makes that number mean anything. A single page is
-bounded by the same figure as a consequence, since one page is a job of one.
+### A unit is not a unit until the algorithm is named
 
-One page, at a 0.5 mm tolerance with two members unless stated:
+The same A1 at the same tolerance is **23,694,575,520** work units under the
+shipped nested scan and **557,519,424** under the separable dilation — about
+forty-two times fewer for identical physical work. So a ceiling expressed in
+units says nothing until the algorithm is fixed, and the previous round left
+`estimateComparisonWork` defaulting to the *scan* while recommending the
+*dilation*: every worked example and the wall-clock reading of the ceiling
+described an algorithm the design was not going to use.
 
-| | work units | as a job of one |
+There is now **no default**. `M4_PLANNER_ALGORITHM` binds the planner to
+`separable-dilation`, and a job with no algorithm named is refused rather than
+costed against a guess.
+
+Under that algorithm the shape simplifies, because two separable passes do not
+care how wide the box is:
+
+```
+    pixels x sourceMembers x 4      per compared group, at any radius
+```
+
+An A4 at 300 dpi with two members is **69,578,880 units at every tolerance** —
+the radius has left the cost.
+
+### The ceiling
+
+**`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` — a recommendation requiring
+human approval, not a measured threshold.** It is user-visible, because it
+refuses comparisons.
+
+Calibrated against the selected algorithm: the worst cost per unit over five
+sizes and radii is **1.9 × 10⁻⁶ ms** — an A1 at 150 dpi, 139,393,888 units in
+263 ms. Twelve billion units at that rate is about **23 seconds** for the whole
+job, not the 55 seconds the scan-based reading gave.
+
+In work a person can picture, that is **about 173 A4 pages at 300 dpi and a
+0.5 mm tolerance**. And under this algorithm no *single* sheet in the corpus
+reaches the ceiling — an A1 at 300 dpi is 5% of it — so on one page the memory
+budget refuses first and the work ceiling exists for ranges.
+
+The number is a judgement about how much of a person's afternoon one operation
+may claim, on one machine. **H10**, and the conversion is why it is stated this
+way: each additional A4 page at 300 dpi is 69,578,880 units, about 0.13 seconds.
+If the drawing sets people actually compare run past ~170 sheets, the number
+should go up, and the Gate now has what it needs to say so.
+
+One page, at a 0.5 mm tolerance with two members unless stated, under both
+algorithms — the second column is what the design would actually cost, the third
+is what the rejected one would:
+
+| | selected (dilation) | rejected (scan) |
 | --- | --- | --- |
-| A4 at 300 dpi | 2,957,102,400 | within |
-| A3 at 300 dpi | 5,917,083,920 | within |
-| A4 at 300 dpi, four members, reference-pairs | 8,871,307,200 | within |
-| A1 at 300 dpi | 23,694,575,520 | **refused** |
-| A0 at 600 dpi | 698,586,380,184 | **refused** |
+| A4 at 300 dpi | 69,578,880 | 2,957,102,400 |
+| A3 at 300 dpi | 139,225,504 | 5,917,083,920 |
+| A4 at 300 dpi, four members, reference-pairs | 208,736,640 | 8,871,307,200 |
+| A1 at 300 dpi | 557,519,424 | 23,694,575,520 — **over the ceiling** |
+| A0 at 600 dpi | 4,463,477,952 | 698,586,380,184 — **over the ceiling** |
 
 Over the ceiling is a **typed refusal** — `OVER_WORK_BUDGET`, naming the numbers
 — never a quieter comparison. Reducing the DPI or the tolerance to fit would be
@@ -723,38 +795,51 @@ white and multiplies in a *flat* colour wherever the ink predicate is true. It
 never reads the source pixel's intensity. So no member's RGBA survives phase 2,
 and four bytes per pixel per member stop being co-resident with anything.
 
-### The export cannot be budgeted on a compression ratio
+### The encoder has to be one this architecture controls
 
-An earlier version of this allowed **0.15 bytes per pixel** for the encoded
-output, derived from four measured composites. That is a compression *ratio*,
-and a fail-closed memory gate may not rest on one. The drawings in this corpus
-compress to about a fortieth of that allowance; a scanned sheet, a photographic
-underlay or a dense hatch need not. The gate would then be admitting a job it
-cannot hold, on the strength of how the fixtures happened to encode.
+Two rounds got the encoding allowance wrong in two different ways.
 
-So the allowance is **derived**, from PNG's worst case:
+First it was **0.15 bytes per pixel**, from four measured composites — a
+compression *ratio*, which a fail-closed gate may not rest on, because a scanned
+sheet or a dense hatch need not compress the way these drawings do.
+
+Then it was PNG's stored-block worst case, which is a real bound and **not a
+bound on `canvas.toBlob('image/png')`**. The browser chooses its own DEFLATE
+strategy, its own block layout, its own IDAT chunking and its own internal
+scratch, and exposes none of it. A formula for an encoder nobody controls is not
+a guarantee about the encoder that runs.
+
+So the encoder is **owned**: RGBA8, filter 0 on every row, DEFLATE *stored*
+blocks of 65,535 bytes, IDAT chunks of 1 MiB — every one a constant in this
+design rather than a browser's choice. The output size is then not merely
+bounded but **exact**:
 
 ```
-    raster        = height x (1 + width x 4)      one filter byte per row, RGBA
-    deflate worst = raster + 5 x ceil(raster / 65535) + 6    stored blocks, zlib
-    + container overhead                          signature, IHDR, IDAT, IEND
+    raster  = height x (1 + width x 4)
+    zlib    = 2 + 5 x ceil(raster / 65535) + raster + 4
+    png     = 8 + 25 + 12 x ceil(zlib / 1 MiB) + zlib + 12
 ```
 
-About **4.003 bytes per pixel**, and it is an upper bound rather than an
-estimate: no image of those dimensions can encode larger, whatever it contains.
-The four measured ratios stay in the evidence as **performance** evidence; they
-are not the safety proof.
+Measured: 8,709,434 bytes predicted and 8,709,434 written, on three composites
+at two sheet sizes, and the browser decodes each one back to the identical
+pixels. **4.001 bytes per pixel**, and the encoder holds one row of scratch —
+4,965 bytes — rather than a filtered raster or a zlib buffer, because it streams.
 
-JPEG has no comparable provable worst case. That is a reason to prefer **PNG**
-for M4 and is fed to **H5** as one; if JPEG is chosen, the allowance has to be
-re-derived for it rather than assumed to carry over.
+**The price is the file size and it is stated:** stored blocks do not compress,
+so the browser's PNG produced 0.031 B/px against 4.001. That is a deliberate
+trade of output size for a memory guarantee, and it is the kind of trade a Human
+Gate should see rather than inherit — **H5**. JPEG has no comparable provable
+worst case, which is a further reason to prefer PNG; if JPEG is chosen the
+allowance has to be re-derived for it.
 
-**And the bytes should not become a string.** `toDataURL` returns base64 — 4/3
-the encoded size, at two bytes per character in the engine — while the encoded
-buffer is still live. At an upper bound of four bytes per pixel that is the
-difference between 278 MB and 464 MB for an A3 at 300 dpi, for an artefact that
-is usually turned straight back into bytes. **`canvas.toBlob` is the recommended
-path, and the budget is taken on it.**
+The four measured browser ratios stay in the evidence as **performance**
+evidence. They are not the safety proof, and what a browser *emits* says nothing
+about what it *allocates* while emitting it.
+
+**And the bytes should not become a string.** A data URL is base64 at 4/3 the
+encoded size, at two bytes per character, while the encoded buffer is still
+live: 394 MB against 278 MB for an A3 at 300 dpi. Handing back a `Blob` over the
+bytes is the recommended path, and the budget is taken on it.
 
 ### What that permits
 
@@ -766,7 +851,7 @@ At a 0.5 mm tolerance with two members:
 | A3 at 300 dpi | **278 MB** | presentation | within |
 | A2 at 300 dpi | 557 MB | presentation | **refused** |
 | A1 at 300 dpi | 1115 MB | presentation | **refused** |
-| A1 at 300 dpi, four members | 1394 MB | presentation | **refused** |
+| A1 at 300 dpi, four members | 1255 MB | presentation | **refused** |
 | A0 at 600 dpi | 8928 MB | presentation | **refused** |
 
 Two rows moved when the compression assumption was removed, and both are the
@@ -782,7 +867,9 @@ figure would have given about 557 MB and refused it. Neither number was
 describing the architecture that was chosen.
 
 A tolerance of zero allocates no dilation buffers at all: 14 bytes per pixel
-against 16 at 0.5 mm.
+against 16 at 0.5 mm. Four members cost 18 rather than 16, not 20 — because the
+pairwise presentation below holds two dilations at a time rather than one per
+member.
 
 The 512 MiB itself is a judgement about how much one comparison may claim, not a
 threshold found in the data, and it is recorded as one: **H7**.
