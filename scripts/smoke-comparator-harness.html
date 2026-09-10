@@ -1,0 +1,511 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Comparator reliability — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** Comparator engine. Not part of the app.
+ *
+ * Everything imported below is what ships: the planner, the canonical ink
+ * predicate, the separable dilation, the budgets and the owned PNG encoder.
+ * A harness that reimplemented any of them would prove nothing about the
+ * comparator a user runs.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import {
+  PLAN, RESULT, SPATIAL_TOLERANCE_POLICY, SPATIAL_TOLERANCE_DISCLOSURE,
+  MATCH_RATIO_FLOOR, GEOMETRY_TOLERANCE_PT, MAX_COMPARISON_WORK_UNITS,
+  MAX_OUTPUT_BYTES, DEFAULT_MEMORY_BUDGET_BYTES, MEMORY_BUDGET_PRESETS,
+  COMPARISON_ALGORITHM, MULTI_MEMBER_CONTRACT, pixelRadiusFor,
+  planComparison, runComparison, paintPair, verdictFor,
+  pageGeometry, canonicalMapping, compareGeometry, mappingsAreRigid,
+  inkMask, dilateMask, isInk, INK_THRESHOLD,
+  encodePngStored, pngStoredSize, PNG_STORED_CONTRACT,
+  preflightPages, estimateWork, estimateOutput, estimatePhaseMemory,
+} from '/src/utils/comparator/index.ts';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/comparator';
+const docs = new Map();
+async function open(name) {
+  if (!docs.has(name)) {
+    const response = await fetch(`${FIXTURES}/${name}.pdf`);
+    const data = new Uint8Array(await response.arrayBuffer());
+    docs.set(name, await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise);
+  }
+  return docs.get(name);
+}
+
+const COLOURS = [[0, 0, 1], [1, 0, 0], [0, 0.5, 0], [0.9, 0.7, 0]];
+
+async function members(names) {
+  const out = [];
+  for (let i = 0; i < names.length; i += 1) {
+    out.push({
+      slot: i,
+      label: names[i],
+      pdf: await open(names[i]),
+      color: COLOURS[i % COLOURS.length],
+    });
+  }
+  return out;
+}
+
+function settings(overrides = {}) {
+  return {
+    pages: [1],
+    dpi: 150,
+    toleranceMm: SPATIAL_TOLERANCE_POLICY.default,
+    memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES,
+    matchColor: [0, 0, 0],
+    matchOpacity: 1,
+    ...overrides,
+  };
+}
+
+const alwaysOwner = { isCancelled: () => false, isOwner: () => true };
+
+/** Plan and run, returning the shapes a driver can assert against. */
+async function compare(names, overrides = {}) {
+  const set = await members(names);
+  const plan = await planComparison(set, settings(overrides));
+  if (plan.refusal) {
+    return { plan: plan.status, refusal: plan.refusal, pages: [], verdict: null };
+  }
+  const run = await runComparison(plan, set, alwaysOwner);
+  return {
+    plan: plan.status,
+    refusal: null,
+    verdict: run.verdict,
+    abandoned: run.abandoned,
+    status: run.status,
+    renderScale: plan.renderScale,
+    radiusPx: plan.radiusPx,
+    mappings: plan.pages[0]?.mappings ?? [],
+    pages: run.pages.map((page) => ({
+      page: page.page,
+      status: page.status,
+      reported: page.reported,
+      verdict: page.verdict,
+      pairs: page.pairs.map((pair) => ({
+        title: pair.title,
+        label: pair.label,
+        referenceLabel: pair.referenceLabel,
+        verdict: pair.verdict,
+        changePixels: pair.changePixels,
+        inkPixels: pair.inkPixels,
+        width: pair.width,
+        height: pair.height,
+        hasBounds: pair.bounds !== null,
+        shownAsChanged: shownAsChanged(pair.pixels),
+      })),
+    })),
+  };
+}
+
+/** What the picture actually shows as changed, counted from the painted pixels. */
+function shownAsChanged(pixels) {
+  let shown = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
+    if (r > 245 && g > 245 && b > 245) continue;
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 30) shown += 1;
+  }
+  return shown;
+}
+
+window.__comparator = {
+  constants: () => ({
+    tolerance: SPATIAL_TOLERANCE_POLICY,
+    disclosure: SPATIAL_TOLERANCE_DISCLOSURE,
+    matchFloor: MATCH_RATIO_FLOOR,
+    geometryTolerancePt: GEOMETRY_TOLERANCE_PT,
+    workCeiling: MAX_COMPARISON_WORK_UNITS,
+    outputCeiling: MAX_OUTPUT_BYTES,
+    defaultMemory: DEFAULT_MEMORY_BUDGET_BYTES,
+    memoryPresets: MEMORY_BUDGET_PRESETS,
+    algorithm: COMPARISON_ALGORITHM,
+    contract: MULTI_MEMBER_CONTRACT,
+    inkThreshold: INK_THRESHOLD,
+    pngContract: PNG_STORED_CONTRACT,
+  }),
+
+  compare,
+
+  /** The geometry cases, as plan statuses. */
+  async geometry() {
+    const cases = {
+      identical: ['base-a4', 'identical-a4'],
+      'rotate 90': ['rotate-0', 'rotate-90'],
+      'rotate 180': ['rotate-0', 'rotate-180'],
+      'rotate 270': ['rotate-0', 'rotate-270'],
+      'crop origin': ['crop-origin-0', 'crop-origin-50-70'],
+      'crop + rotate 90': ['crop-origin-0', 'crop-rot-90'],
+      'crop + rotate 180': ['crop-origin-0', 'crop-rot-180'],
+      'crop + rotate 270': ['crop-origin-0', 'crop-rot-270'],
+      '+0.99pt': ['base-a4', 'sheet-plus-0-99'],
+      '+1.01pt': ['base-a4', 'sheet-plus-1-01'],
+      'different sheet': ['base-a4', 'base-a3'],
+      'portrait vs landscape': ['base-a4', 'landscape-a4'],
+      'same aspect 1.4x': ['base-a4', 'same-ratio-larger'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(cases)) {
+      const r = await compare(names);
+      out[label] = {
+        plan: r.pages[0]?.status ?? r.plan,
+        verdict: r.pages[0]?.verdict ?? null,
+        changePixels: r.pages[0]?.pairs[0]?.changePixels ?? null,
+        mappings: r.mappings.map((m) => ({
+          rigid: m.rigid, scaleX: m.scaleX, scaleY: m.scaleY,
+          scaleDelta: m.scaleDelta, renderRotation: m.renderRotation,
+        })),
+        reported: r.pages[0]?.reported ?? [],
+      };
+    }
+    return out;
+  },
+
+  /** Verdicts on real changes, at the default tolerance. */
+  async verdicts() {
+    const cases = {
+      identical: ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      'a digit changed': ['small-base', 'small-digit'],
+      'a symbol swapped': ['small-base', 'small-symbol'],
+      'nothing changed (control)': ['small-base', 'small-base-copy'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(cases)) {
+      const r = await compare(names);
+      const pair = r.pages[0].pairs[0];
+      out[label] = {
+        verdict: pair.verdict,
+        changePixels: pair.changePixels,
+        inkPixels: pair.inkPixels,
+        shownAsChanged: pair.shownAsChanged,
+        hasBounds: pair.hasBounds,
+      };
+    }
+    return out;
+  },
+
+  /** The digit change at every resolution the tool offers, at default 0 mm. */
+  async acrossDpi() {
+    const out = { supported: SPATIAL_TOLERANCE_POLICY.supportedDpi, rows: {} };
+    for (const dpi of SPATIAL_TOLERANCE_POLICY.supportedDpi) {
+      const r = await compare(['small-base', 'small-digit'], { dpi });
+      out.rows[dpi] = {
+        radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.default, dpi),
+        verdict: r.pages[0].pairs[0].verdict,
+        changePixels: r.pages[0].pairs[0].changePixels,
+      };
+    }
+    // And at the policy maximum, which must still see it at every resolution.
+    out.atMaximum = {};
+    for (const dpi of SPATIAL_TOLERANCE_POLICY.supportedDpi) {
+      const r = await compare(['small-base', 'small-digit'], {
+        dpi, toleranceMm: SPATIAL_TOLERANCE_POLICY.maximum,
+      });
+      out.atMaximum[dpi] = {
+        radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.maximum, dpi),
+        verdict: r.pages[0].pairs[0].verdict,
+        changePixels: r.pages[0].pairs[0].changePixels,
+      };
+    }
+    return out;
+  },
+
+  /** The canonical ink predicate, over the colours a drawing actually uses. */
+  inkPredicate() {
+    const swatches = {
+      black: '#000000', 'dark grey': '#404040', 'cad cyan': '#009ed9',
+      'cad yellow': '#ffe100', 'pale yellow': '#ffff8c', 'pale grey': '#d2d2d2',
+      white: '#ffffff',
+    };
+    const canvas = document.createElement('canvas');
+    canvas.width = Object.keys(swatches).length;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const out = {};
+    let x = 0;
+    for (const [name, colour] of Object.entries(swatches)) {
+      ctx.fillStyle = colour;
+      ctx.fillRect(x, 0, 1, 1);
+      const data = ctx.getImageData(x, 0, 1, 1).data;
+      const mask = inkMask(data, 1, 1);
+      out[name] = {
+        rgb: [data[0], data[1], data[2]],
+        // The predicate, the mask builder and the painter must agree: one
+        // definition, not three.
+        predicate: isInk(data, 0),
+        mask: mask[0] === 1,
+      };
+      x += 1;
+    }
+    return out;
+  },
+
+  /** Four members, reference-pairs, and the picture that has to match. */
+  async multiMember() {
+    const sets = {
+      'four identical': ['base-a4', 'identical-a4', 'base-a4-copy', 'base-a4'],
+      'three same, one changed':
+        ['base-a4', 'identical-a4', 'base-a4-copy', 'added-line-a4'],
+      'two vs two': ['base-a4', 'identical-a4', 'wall-at-y-a4', 'wall-at-y-a4-copy'],
+      'reference and three different':
+        ['base-a4', 'added-line-a4', 'removed-line-a4', 'wall-at-y-a4'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(sets)) {
+      const r = await compare(names);
+      out[label] = {
+        verdict: r.pages[0].verdict,
+        pairs: r.pages[0].pairs.map((p) => ({
+          label: p.label, title: p.title, verdict: p.verdict,
+          changePixels: p.changePixels, shownAsChanged: p.shownAsChanged,
+        })),
+      };
+    }
+    return out;
+  },
+
+  /** A page one document does not have, and a page that is merely blank. */
+  async missingAndFailure() {
+    const missing = await compare(['three-pages', 'two-pages'], { pages: [1, 2, 3] });
+    const blank = await compare(
+      ['three-pages', 'three-pages-blank-third'], { pages: [3] },
+    );
+    return {
+      pages: missing.pages.map((p) => ({
+        page: p.page, status: p.status, verdict: p.verdict,
+        reported: p.reported, pairs: p.pairs.length,
+      })),
+      blankThird: {
+        status: blank.pages[0].status,
+        verdict: blank.pages[0].verdict,
+        changePixels: blank.pages[0].pairs[0]?.changePixels ?? null,
+      },
+    };
+  },
+
+  /** Every budget, as the planner answers it. */
+  async budgets() {
+    const a4 = { width: 2480, height: 3507, members: 2, radiusPx: 0 };
+    // A sheet large enough to exceed the working set without exceeding the
+    // output ceiling, so the memory refusal can be reached on its own.
+    const big = { width: 6000, height: 8000, members: 2, radiusPx: 0 };
+    const gib = 1024 * 1024 * 1024;
+    const repeat = (n, shape) => Array.from({ length: n }, () => shape);
+
+    // And the same job through the real engine, to show it refuses rather than
+    // quietly rendering something smaller.
+    const engineRefusal = await compare(['base-a1', 'base-a1'], {
+      dpi: 450, memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES,
+    });
+
+    return {
+      defaultBudget: DEFAULT_MEMORY_BUDGET_BYTES,
+      memory: {
+        atDefault: preflightPages([big], DEFAULT_MEMORY_BUDGET_BYTES),
+        afterExplicitRaise: preflightPages([big], 2 * gib),
+      },
+      engineRefusal: {
+        plan: engineRefusal.plan,
+        status: engineRefusal.refusal?.status ?? null,
+        reason: engineRefusal.refusal?.reason ?? null,
+        achievable: engineRefusal.refusal?.achievable ?? null,
+        pages: engineRefusal.pages.length,
+      },
+      work: {
+        oneA4Page: estimateWork({ ...a4, pages: 1 }).jobUnits,
+        atCeiling: preflightPages(repeat(173, a4), 64 * gib).refusal?.status ?? null,
+        justUnder: preflightPages(repeat(2, a4), 8 * gib).refusal?.status ?? null,
+        unrepresentable: estimateWork({
+          width: 30000000, height: 30000000, members: 4, pages: 4, radiusPx: 0,
+        }).representable,
+      },
+      output: {
+        perVisual: estimateOutput({ ...a4, pages: 1 }).perVisualBytes,
+        ceiling: MAX_OUTPUT_BYTES,
+        // Seven A4 pages is the documented MVP capacity; nine is over it.
+        seven: preflightPages(repeat(7, a4), 8 * gib).refusal?.status ?? null,
+        nine: preflightPages(repeat(9, a4), 8 * gib).refusal?.status ?? null,
+      },
+      memoryPhases: estimatePhaseMemory(a4),
+    };
+  },
+
+  /** The owned encoder: exact size, and bytes a browser accepts as a PNG. */
+  async encoder() {
+    const set = await members(['base-a4', 'added-line-a4']);
+    const plan = await planComparison(set, settings());
+    const run = await runComparison(plan, set, alwaysOwner);
+    const pair = run.pages[0].pairs[0];
+    const encoded = encodePngStored(pair.pixels, pair.width, pair.height);
+    const predicted = pngStoredSize(pair.width, pair.height);
+
+    const bitmap = await createImageBitmap(
+      new Blob([encoded], { type: 'image/png' }),
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = pair.width;
+    canvas.height = pair.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0);
+    const back = ctx.getImageData(0, 0, pair.width, pair.height).data;
+    let differing = 0;
+    for (let i = 0; i < back.length; i += 1) {
+      if (back[i] !== pair.pixels[i]) differing += 1;
+    }
+    bitmap.close();
+    canvas.width = 1;
+    canvas.height = 1;
+
+    return {
+      width: pair.width,
+      height: pair.height,
+      bytes: encoded.length,
+      predicted,
+      exact: encoded.length === predicted,
+      bytesPerPixel: +(encoded.length / (pair.width * pair.height)).toFixed(3),
+      roundTripDiffering: differing,
+      signature: Array.from(encoded.slice(0, 8)),
+    };
+  },
+
+  /**
+   * A cancellation raised while the comparison runs, and a supersession.
+   *
+   * The flag is flipped from a timer, which can only fire when the run yields
+   * — so this measures whether anything can reach the decision point, not
+   * merely whether one exists.
+   */
+  async cancellation() {
+    const set = await members(['dense-a', 'dense-b']);
+    const plan = await planComparison(set, settings({ dpi: 300, toleranceMm: 0.15 }));
+
+    let cancelled = false;
+    window.setTimeout(() => { cancelled = true; }, 5);
+    const stopped = await runComparison(plan, set, {
+      isCancelled: () => cancelled, isOwner: () => true,
+    });
+
+    let generation = 1;
+    window.setTimeout(() => { generation = 2; }, 5);
+    const superseded = await runComparison(plan, set, {
+      isCancelled: () => false, isOwner: () => generation === 1,
+    });
+
+    const completed = await runComparison(plan, set, alwaysOwner);
+    return {
+      cancelled: {
+        status: stopped.status, abandoned: stopped.abandoned,
+        pages: stopped.pages.length,
+      },
+      superseded: {
+        status: superseded.status, abandoned: superseded.abandoned,
+        pages: superseded.pages.length,
+      },
+      completed: {
+        status: completed.status, abandoned: completed.abandoned,
+        verdict: completed.verdict,
+        changePixels: completed.pages[0].pairs[0].changePixels,
+      },
+    };
+  },
+
+  /**
+   * The three presentations, asked the same question.
+   *
+   * They are one engine now, so this drives the same planner with the page
+   * sets each presentation uses and asserts the statuses agree. A presentation
+   * that reached its own verdict would show up here as a disagreement.
+   */
+  async parity() {
+    const names = ['three-pages', 'two-pages'];
+    const preview = await compare(names, { pages: [3] });
+    const exported = await compare(names, { pages: [1, 2, 3] });
+    const report = await compare(names, { pages: [1, 2, 3] });
+    const statusOf = (r, page) => r.pages.find((p) => p.page === page)?.status ?? null;
+    const verdictOf = (r, page) => r.pages.find((p) => p.page === page)?.verdict ?? null;
+    return {
+      page3: {
+        preview: statusOf(preview, 3),
+        export: statusOf(exported, 3),
+        report: statusOf(report, 3),
+      },
+      page1Verdict: {
+        export: verdictOf(exported, 1),
+        report: verdictOf(report, 1),
+      },
+      renderScale: {
+        preview: preview.renderScale,
+        export: exported.renderScale,
+        report: report.renderScale,
+      },
+    };
+  },
+
+  /** The geometry primitives, without rendering anything. */
+  geometryUnits() {
+    const a4 = pageGeometry([0, 0, 595.28, 841.89], 0);
+    const turned = pageGeometry([0, 0, 595.28, 841.89], 90);
+    const a3 = pageGeometry([0, 0, 841.89, 1190.55], 0);
+    const displayScale = {
+      x: a4.displayWidth / turned.displayWidth,
+      y: a4.displayHeight / turned.displayHeight,
+    };
+    return {
+      // What a display-plane mapping would have produced for a quarter turn.
+      displayPlane: displayScale,
+      canonical: canonicalMapping(a4, turned),
+      differentSheet: compareGeometry(a4, a3).differences.map((d) => d.kind),
+      rigidAcrossRotations: mappingsAreRigid(
+        [90, 180, 270].map(
+          (r) => canonicalMapping(a4, pageGeometry([0, 0, 595.28, 841.89], r)),
+        ),
+      ),
+      dilationIsSeparable: (() => {
+        // The dilation must be the same answer as a box scan, not an
+        // approximation of it.
+        const w = 32;
+        const h = 24;
+        const mask = new Uint8Array(w * h);
+        for (let i = 0; i < 40; i += 1) mask[(i * 13) % (w * h)] = 1;
+        const dilated = dilateMask(mask, w, h, 2);
+        let same = true;
+        for (let y = 0; y < h && same; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            let expected = 0;
+            for (let ny = Math.max(0, y - 2); ny <= Math.min(h - 1, y + 2); ny += 1) {
+              for (let nx = Math.max(0, x - 2); nx <= Math.min(w - 1, x + 2); nx += 1) {
+                if (mask[ny * w + nx]) expected = 1;
+              }
+            }
+            if (dilated[y * w + x] !== expected) { same = false; break; }
+          }
+        }
+        return same;
+      })(),
+      verdictAtZeroFloor: {
+        empty: verdictFor({ changePixels: 0, inkPixels: 100, changed: false }),
+        one: verdictFor({ changePixels: 1, inkPixels: 100000, changed: true }),
+      },
+      paintsTwoMembers: (() => {
+        const a = Uint8Array.from([1, 0]);
+        const b = Uint8Array.from([0, 1]);
+        const painted = paintPair(a, b, a, b, [0, 0, 1], [1, 0, 0], 2, 1, [0, 0, 0], 1);
+        return Array.from(painted.slice(0, 8));
+      })(),
+    };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__comparatorReady = true;
+</script>

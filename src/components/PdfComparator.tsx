@@ -1,6 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { renderPageToCanvas, computeMultiPdfComposite, detectChangeBounds } from '../utils/pdfDiff';
+import {
+    DEFAULT_MEMORY_BUDGET_BYTES,
+    MEMORY_BUDGET_PRESETS,
+    PLAN,
+    RESULT,
+    SPATIAL_TOLERANCE_DISCLOSURE,
+    SPATIAL_TOLERANCE_POLICY,
+    encodePngStored,
+    formatBytes,
+    planComparison,
+    runComparison,
+    type ComparisonSettings,
+    type JobResult,
+    type MemberSource,
+    type PairResult,
+    type Refusal,
+} from '../utils/comparator';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Settings, FileText } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { VersionFooter } from './VersionFooter';
@@ -25,7 +41,17 @@ export const PdfComparator: React.FC = () => {
     const [numPages, setNumPages] = useState(0);
     const [scale, setScale] = useState(1.0); // Visual Zoom Scale (1.0 = 100% relative to 72DPI standard)
     const [dpi, setDpi] = useState(150);     // Render Resolution
-    const [threshold, setThreshold] = useState(0);
+    // The spatial tolerance, in the unit a drawing office reasons in. Default
+    // zero: a comparison nobody configured must report every difference it can
+    // see, and a non-zero value is an explicit choice with a stated cost.
+    const [toleranceMm, setToleranceMm] = useState<number>(SPATIAL_TOLERANCE_POLICY.default);
+    // 512 MiB is the recommendation, not a fixed limit. Nothing raises it
+    // automatically -- a budget that grows to fit the job is not a budget.
+    const [memoryBudgetBytes, setMemoryBudgetBytes] = useState(DEFAULT_MEMORY_BUDGET_BYTES);
+    const [result, setResult] = useState<JobResult | null>(null);
+    const [activePair, setActivePair] = useState(0);
+    const [busy, setBusy] = useState(false);
+    const [refusal, setRefusal] = useState<Refusal | null>(null);
     const [matchColor, setMatchColor] = useState('#C0C0C0'); // 一致箇所の色（デフォルト: 薄いグレー）
     const [matchOpacity, setMatchOpacity] = useState(0.7);   // 一致箇所の透明度（デフォルト: 70%）
     const [exportingProgress, setExportingProgress] = useState<{ current: number, total: number } | null>(null);
@@ -37,6 +63,12 @@ export const PdfComparator: React.FC = () => {
 
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    /**
+     * Ownership, the M3 shape. Every run captures this and re-reads it between
+     * bands and again before anything is shown or saved; a run whose generation
+     * has moved publishes nothing.
+     */
+    const generationRef = useRef(0);
 
     // Derived state
     const activeIndices = pdfs.map((pdf, i) => (pdf && visible[i] ? i : -1)).filter(i => i !== -1);
@@ -117,380 +149,327 @@ export const PdfComparator: React.FC = () => {
     };
 
     // Render Composite View
+    /**
+     * Everything the engine needs, gathered in one place.
+     *
+     * The three presentations differ in which pages they ask for and nothing
+     * else. They used to differ in render scale as well — the preview capped,
+     * the export capped differently, the change report not at all — which is
+     * how they came to disagree about what a comparison meant.
+     */
+    const buildJob = useCallback((pages: number[]): {
+        members: MemberSource[];
+        settings: ComparisonSettings;
+    } => ({
+        members: activeIndices.map((i) => ({
+            slot: i,
+            label: files[i]?.name ?? SLOTS[i].name,
+            pdf: pdfs[i]!,
+            color: SLOTS[i].rgb,
+        })),
+        settings: {
+            pages,
+            dpi,
+            toleranceMm,
+            memoryBudgetBytes,
+            matchColor: hexToRgb(matchColor),
+            matchOpacity,
+        },
+    }), [activeIndices, files, pdfs, dpi, toleranceMm, memoryBudgetBytes, matchColor, matchOpacity]);
+
+    /** A run that has been superseded may not draw, save, or report. */
+    const signalFor = (token: number) => ({
+        isCancelled: () => token !== generationRef.current,
+        isOwner: () => token === generationRef.current,
+    });
+
+    const paintToCanvas = (pair: PairResult) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        canvas.width = pair.width;
+        canvas.height = pair.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.putImageData(new ImageData(pair.pixels, pair.width, pair.height), 0, 0);
+        // Zoom is display only. It used to change the render scale, which made
+        // the preview a different comparison from the export.
+        canvas.style.width = `${(pair.width * scale) / (dpi / 72)}px`;
+        canvas.style.height = `${(pair.height * scale) / (dpi / 72)}px`;
+    };
+
     useEffect(() => {
-        const renderComposite = async () => {
-            // Check if we have at least one visible PDF
-            if (activeIndices.length === 0) {
-                // Clear canvas
-                if (canvasRef.current) {
-                    const ctx = canvasRef.current.getContext('2d');
-                    ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
-                return;
-            }
+        const token = generationRef.current + 1;
+        generationRef.current = token;
 
-            if (!canvasRef.current) return;
-
-            try {
-                const ctx = canvasRef.current.getContext('2d');
-                if (!ctx) return;
-
-                // 0. Determine Safe Render Scale
-                // Get base dimensions from the first active PDF
-                const basePdf = pdfs[activeIndices[0]]!;
-                let baseVp = { width: 600, height: 800 }; // Fallback
-                try {
-                    const page = await basePdf.getPage(pageNumber);
-                    baseVp = page.getViewport({ scale: 1.0 });
-                } catch (e) { console.warn("Could not get viewport", e); }
-
-                let renderScale = scale * (dpi / 72);
-
-                // Safety Limits for Canvas Buffer
-                const MAX_DIM = 12000;
-                const MAX_AREA = 80000000; // ~80MP
-
-                const estW = baseVp.width * renderScale;
-                const estH = baseVp.height * renderScale;
-
-                if (estW > MAX_DIM || estH > MAX_DIM || (estW * estH) > MAX_AREA) {
-                    // Reduce scale to fit limits
-                    const ratioW = MAX_DIM / estW;
-                    const ratioH = MAX_DIM / estH;
-                    const ratioA = Math.sqrt(MAX_AREA / (estW * estH));
-                    const safeFactor = Math.min(ratioW, ratioH, ratioA);
-                    renderScale *= safeFactor;
-                    console.warn(`Canvas size limit reached. Capping render scale to ${renderScale.toFixed(2)} (Requested: ${(scale * dpi / 72).toFixed(2)})`);
-                }
-
-
-                // 1. Render all active pages to buffers
-                const layerData = [];
-                let w = 0, h = 0;
-
-                for (const i of activeIndices) {
-                    const pdf = pdfs[i]!;
-                    if (pageNumber > pdf.numPages) continue; // Skip if page doesn't exist
-
-                    const canvas = await renderPageToCanvas(pdf, pageNumber, renderScale);
-                    w = Math.max(w, canvas.width);
-                    h = Math.max(h, canvas.height);
-
-                    const pCtx = canvas.getContext('2d');
-                    if (pCtx) {
-                        layerData.push({
-                            data: pCtx.getImageData(0, 0, canvas.width, canvas.height).data,
-                            color: SLOTS[i].rgb
-                        });
-                    }
-                }
-
-                if (w === 0 || h === 0 || layerData.length === 0) {
-                    return;
-                }
-
-                canvasRef.current.width = w;
-                canvasRef.current.height = h;
-
-                // Set CSS dimensions to match Visual Scale
-                const displayFactor = scale / renderScale;
-                canvasRef.current.style.width = `${w * displayFactor}px`;
-                canvasRef.current.style.height = `${h * displayFactor}px`;
-
-                // 2. Compute Composite with match color/opacity
-                const matchColorRGB = hexToRgb(matchColor);
-                const compositeData = computeMultiPdfComposite(layerData, w, h, threshold, matchColorRGB, matchOpacity);
-                ctx.putImageData(compositeData, 0, 0);
-
-            } catch (err) {
-                console.error("Error compositing:", err);
-            }
+        const clear = () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+            canvas.width = 1;
+            canvas.height = 1;
         };
 
-        const timer = setTimeout(() => {
-            renderComposite();
-        }, 300); // Debounce
-
-        return () => clearTimeout(timer);
-    }, [pdfs, activeIndices, visible, pageNumber, scale, threshold, dpi, matchColor, matchOpacity]);
-
-    // Handle PDF Download
-    const handleDownload = async () => {
-        if (activeIndices.length === 0) return;
-        if (numPages === 0) return;
-
-        // Determine Pages to Export
-        let pagesToExport: number[] = [];
-        if (exportScope === 'all') {
-            pagesToExport = Array.from({ length: numPages }, (_, i) => i + 1);
-        } else if (exportScope === 'current') {
-            pagesToExport = [pageNumber];
-        } else if (exportScope === 'range') {
-            const parts = exportRange.split(',').map(s => s.trim());
-            const uniquePages = new Set<number>();
-            parts.forEach(part => {
-                if (part.includes('-')) {
-                    const [start, end] = part.split('-').map(Number);
-                    if (!isNaN(start) && !isNaN(end)) {
-                        for (let k = Math.min(start, end); k <= Math.max(start, end); k++) {
-                            if (k >= 1 && k <= numPages) uniquePages.add(k);
-                        }
-                    }
-                } else {
-                    const p = Number(part);
-                    if (!isNaN(p) && p >= 1 && p <= numPages) uniquePages.add(p);
-                }
-            });
-            pagesToExport = Array.from(uniquePages).sort((a, b) => a - b);
-        }
-
-        if (pagesToExport.length === 0) {
-            alert("No valid pages selected for export.");
+        if (activeIndices.length < 2) {
+            setResult(null);
+            clear();
             return;
         }
 
-        setExportingProgress({ current: 0, total: pagesToExport.length });
+        const timer = setTimeout(() => {
+            void (async () => {
+                setBusy(true);
+                try {
+                    const { members, settings } = buildJob([pageNumber]);
+                    const plan = await planComparison(members, settings);
+                    if (token !== generationRef.current) return;
+                    setRefusal(plan.refusal);
+                    if (plan.refusal) { setResult(null); clear(); return; }
+                    const run = await runComparison(plan, members, signalFor(token));
+                    if (token !== generationRef.current || run.abandoned) return;
+                    setResult(run);
+                    const pairs = run.pages[0]?.pairs ?? [];
+                    if (pairs.length === 0) {
+                        clear();
+                    } else {
+                        const index = Math.min(activePair, pairs.length - 1);
+                        paintToCanvas(pairs[index]);
+                    }
+                } catch (err) {
+                    console.error('Comparison failed:', err);
+                } finally {
+                    if (token === generationRef.current) setBusy(false);
+                }
+            })();
+        }, 300);
 
-        // Calculate Export Scale (dpi / 72)
-        const exportScale = dpi / 72;
+        return () => {
+            clearTimeout(timer);
+            // Bumping the generation is what makes an in-flight run stop: it
+            // reads this between bands, and again before it would publish.
+            generationRef.current += 1;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfs, visible, pageNumber, dpi, toleranceMm, memoryBudgetBytes, matchColor, matchOpacity]);
 
+    // Re-paint when the user picks a different pair, without re-comparing.
+    useEffect(() => {
+        const pairs = result?.pages[0]?.pairs ?? [];
+        if (pairs.length === 0) return;
+        paintToCanvas(pairs[Math.min(activePair, pairs.length - 1)]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activePair, result, scale]);
+
+    /** The pages the user asked for, in order, without inventing any. */
+    const requestedPages = (): number[] => {
+        if (exportScope === 'all') {
+            return Array.from({ length: numPages }, (_, i) => i + 1);
+        }
+        if (exportScope === 'current') return [pageNumber];
+        const unique = new Set<number>();
+        exportRange.split(',').map((part) => part.trim()).forEach((part) => {
+            if (part.includes('-')) {
+                const [start, end] = part.split('-').map(Number);
+                if (!Number.isNaN(start) && !Number.isNaN(end)) {
+                    for (let k = Math.min(start, end); k <= Math.max(start, end); k += 1) {
+                        if (k >= 1 && k <= numPages) unique.add(k);
+                    }
+                }
+            } else {
+                const p = Number(part);
+                if (!Number.isNaN(p) && p >= 1 && p <= numPages) unique.add(p);
+            }
+        });
+        return Array.from(unique).sort((a, b) => a - b);
+    };
+
+    /**
+     * Plan, refuse or run — the same three steps for every presentation.
+     *
+     * A refusal returns null and leaves the reason on screen. Nothing here
+     * reduces the DPI, the tolerance, the page range or the member count to
+     * make a job fit: the user is told what does not fit and decides.
+     */
+    const planAndRun = async (pages: number[]): Promise<JobResult | null> => {
+        const token = generationRef.current + 1;
+        generationRef.current = token;
+        const { members, settings } = buildJob(pages);
+        const plan = await planComparison(members, settings);
+        if (plan.refusal) {
+            setRefusal(plan.refusal);
+            return null;
+        }
+        setRefusal(null);
+        const run = await runComparison(
+            plan, members, signalFor(token),
+            (done, total) => setExportingProgress({ current: done, total }),
+        );
+        if (run.abandoned || token !== generationRef.current) return null;
+        if (run.status === PLAN.RENDER_FAILED) {
+            setRefusal({
+                status: PLAN.RENDER_FAILED,
+                reason: run.pages.find((p) => p.status === PLAN.RENDER_FAILED)
+                    ?.reported[0] ?? 'ページを描画できませんでした。',
+            });
+            return null;
+        }
+        return run;
+    };
+
+    /** A canvas holding one pair's visual, for cropping or embedding. */
+    const canvasOf = (pair: PairResult): HTMLCanvasElement => {
+        const canvas = document.createElement('canvas');
+        canvas.width = pair.width;
+        canvas.height = pair.height;
+        canvas.getContext('2d')!
+            .putImageData(new ImageData(pair.pixels, pair.width, pair.height), 0, 0);
+        return canvas;
+    };
+
+    // Handle PDF Download
+    const handleDownload = async () => {
+        if (activeIndices.length < 2) {
+            alert('比較するPDFが2つ以上必要です');
+            return;
+        }
+        const pages = requestedPages();
+        if (pages.length === 0) {
+            alert('出力するページが選択されていません');
+            return;
+        }
+
+        setBusy(true);
+        setExportingProgress({ current: 0, total: pages.length });
         try {
+            const run = await planAndRun(pages);
+            if (!run) return;
+
             const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'px',
-                hotfixes: ["px_scaling"]
+                orientation: 'portrait', unit: 'px', hotfixes: ['px_scaling'],
             });
             doc.deletePage(1);
 
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-
-            if (!tempCtx) throw new Error("No 2D Context");
-
-            // Safety Limits for Export Canvas (same as preview)
-            const MAX_DIM = 12000;
-            const MAX_AREA = 80000000; // ~80MP
-
-            let processedCount = 0;
-
-            for (const p of pagesToExport) {
-                setExportingProgress({ current: processedCount + 1, total: pagesToExport.length });
-
-                // Determine Safe Scale for this page
-                let safeExportScale = exportScale;
-
-                try {
-                    // Peek at dimensions using the first active base PDF
-                    let basePdf = null;
-                    for (const idx of activeIndices) {
-                        if (pdfs[idx] && p <= pdfs[idx].numPages) {
-                            basePdf = pdfs[idx];
-                            break;
-                        }
-                    }
-
-                    if (basePdf) {
-                        const page = await basePdf.getPage(p);
-                        const vp = page.getViewport({ scale: 1.0 });
-                        const estW = vp.width * exportScale;
-                        const estH = vp.height * exportScale;
-
-                        if (estW > MAX_DIM || estH > MAX_DIM || (estW * estH) > MAX_AREA) {
-                            const ratioW = MAX_DIM / estW;
-                            const ratioH = MAX_DIM / estH;
-                            const ratioA = Math.sqrt(MAX_AREA / (estW * estH));
-                            safeExportScale = exportScale * Math.min(1, ratioW, ratioH, ratioA);
-                            console.warn(`Export: Cap scale to ${safeExportScale.toFixed(2)} for safe rendering.`);
-                        }
-                    }
-                } catch (e) { console.warn("Error estimating export size", e); }
-
-                // 1. Render Layers to individual canvases first
-                // This allows us to determine the Max Width/Height before compositing
-                const rawLayers: { canvas: HTMLCanvasElement, color: [number, number, number] }[] = [];
-                let maxW = 0;
-                let maxH = 0;
-
-                for (const i of activeIndices) {
-                    const pdf = pdfs[i];
-                    if (!pdf || p > pdf.numPages) continue;
-
-                    try {
-                        const canvas = await renderPageToCanvas(pdf, p, safeExportScale);
-                        maxW = Math.max(maxW, canvas.width);
-                        maxH = Math.max(maxH, canvas.height);
-                        rawLayers.push({
-                            canvas: canvas,
-                            color: SLOTS[i].rgb
-                        });
-                    } catch (err) {
-                        console.warn(`Skipping page ${p} of PDF ${i}`, err);
-                    }
-                }
-
-                if (maxW === 0 || maxH === 0 || rawLayers.length === 0) {
-                    processedCount++;
+            // Source page order, then slot order. The same ordering in every
+            // artifact, so a reader can find a pair without counting.
+            for (const page of run.pages) {
+                if (page.status !== PLAN.READY_TO_COMPARE) {
+                    doc.addPage([595, 842], 'portrait');
+                    doc.setFontSize(14);
+                    doc.text(`Page ${page.page}`, 40, 60);
+                    doc.setFontSize(10);
+                    page.reported.forEach((line, i) => doc.text(line, 40, 90 + i * 18));
                     continue;
                 }
-
-                // 2. Normalize and Extract Data
-                // Ensure all buffers are exactly maxW x maxH, padded with white
-                const normalizedLayerData = [];
-
-                tempCanvas.width = maxW;
-                tempCanvas.height = maxH;
-
-                for (const layer of rawLayers) {
-                    // Fill white (background)
-                    tempCtx.fillStyle = 'white';
-                    tempCtx.fillRect(0, 0, maxW, maxH);
-
-                    // Draw layer (top-left aligned)
-                    tempCtx.drawImage(layer.canvas, 0, 0);
-
-                    normalizedLayerData.push({
-                        data: tempCtx.getImageData(0, 0, maxW, maxH).data,
-                        color: layer.color
-                    });
-
-                    // Cleanup individual canvas
-                    layer.canvas.width = 0;
-                    layer.canvas.height = 0;
+                for (const pair of page.pairs) {
+                    const logicalW = pair.width / run.plan.renderScale;
+                    const logicalH = pair.height / run.plan.renderScale;
+                    doc.addPage(
+                        [logicalW, logicalH],
+                        logicalW > logicalH ? 'landscape' : 'portrait',
+                    );
+                    doc.addImage(
+                        encodePngStored(pair.pixels, pair.width, pair.height),
+                        'PNG', 0, 0, logicalW, logicalH,
+                    );
+                    doc.setFontSize(9);
+                    doc.text(`${pair.title} — ${pair.verdict}`, 8, 14);
                 }
-
-                // 3. Composite
-                const matchColorRGB = hexToRgb(matchColor);
-                const compositeData = computeMultiPdfComposite(normalizedLayerData, maxW, maxH, threshold, matchColorRGB, matchOpacity);
-
-                // Put composite back to tempCanvas
-                tempCtx.putImageData(compositeData, 0, 0);
-
-                const imgData = tempCanvas.toDataURL('image/jpeg', 0.85);
-
-                const orientation = maxW > maxH ? 'landscape' : 'portrait';
-
-                // Calculate Logical Size
-                const pdfW = maxW / safeExportScale;
-                const pdfH = maxH / safeExportScale;
-
-                doc.addPage([pdfW, pdfH], orientation);
-                doc.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-
-                processedCount++;
-
-                // Yield to event loop to allow UI update
-                await new Promise(resolve => setTimeout(resolve, 0));
             }
 
-            // Generate Filename
-            let baseName = "comparison";
-            if (files[0]) {
-                baseName = files[0].name.replace(/\.pdf$/i, "");
-            }
-            const filename = `comparison_${baseName}_${dpi}dpi.pdf`;
-
-            doc.save(filename);
-
+            // Ownership once more, immediately before the bytes leave: a run
+            // superseded while the container was assembled publishes nothing.
+            if (!signalFor(generationRef.current).isOwner()) return;
+            const baseName = files[activeIndices[0]]?.name.replace(/\.pdf$/i, '') ?? 'comparison';
+            doc.save(`comparison_${baseName}_${dpi}dpi.pdf`);
         } catch (error) {
-            console.error("Export Failed", error);
-            alert("Export Failed: " + error);
+            console.error('Export failed', error);
+            alert('エクスポートに失敗しました: ' + (error as Error).message);
         } finally {
             setExportingProgress(null);
+            setBusy(false);
         }
     };
 
-
-    // Generate Change Report function
     const generateChangeReport = async () => {
         if (activeIndices.length < 2) {
             alert('比較するPDFが2つ以上必要です');
             return;
         }
-
+        setBusy(true);
         try {
-            const reportPdf = new jsPDF();
-            let isFirstPage = true;
-            let changesFound = 0;
+            const run = await planAndRun(
+                Array.from({ length: numPages }, (_, i) => i + 1),
+            );
+            if (!run) return;
 
-            for (let page = 1; page <= numPages; page++) {
-                // 各ページをレンダリング
-                const pixelScale = scale * (dpi / 72);
-                const layerData = [];
-                let maxW = 0, maxH = 0;
+            const report = new jsPDF();
+            let first = true;
+            let changes = 0;
+            const newPage = () => {
+                if (!first) report.addPage();
+                first = false;
+            };
 
-                for (const i of activeIndices) {
-                    const pdf = pdfs[i]!;
-                    if (page > pdf.numPages) continue;
-                    const canvas = await renderPageToCanvas(pdf, page, pixelScale);
-                    maxW = Math.max(maxW, canvas.width);
-                    maxH = Math.max(maxH, canvas.height);
-                    const ctx = canvas.getContext('2d');
-                    if (ctx) {
-                        layerData.push({
-                            data: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
-                            color: SLOTS[i].rgb
-                        });
-                    }
+            for (const page of run.pages) {
+                if (page.status !== PLAN.READY_TO_COMPARE) {
+                    // A page one document does not have stays in the report.
+                    // Dropping it would lose it silently, which is the failure
+                    // this whole contract exists to prevent.
+                    newPage();
+                    report.setFontSize(12);
+                    report.text(`Page ${page.page} — ${page.status}`, 10, 20);
+                    report.setFontSize(9);
+                    page.reported.forEach((line, i) => report.text(line, 10, 32 + i * 8));
+                    continue;
                 }
-
-                if (layerData.length < 2) continue;
-
-                // 変更箇所を検出
-                const bounds = detectChangeBounds(layerData, maxW, maxH, threshold);
-
-                if (bounds) {
-                    changesFound++;
-
-                    // 合成画像を生成
-                    const matchColorRGB = hexToRgb(matchColor);
-                    const composite = computeMultiPdfComposite(layerData, maxW, maxH, threshold, matchColorRGB, matchOpacity);
-
-                    // 一時キャンバスに描画
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = maxW;
-                    tempCanvas.height = maxH;
-                    const tempCtx = tempCanvas.getContext('2d');
-                    if (!tempCtx) continue;
-                    tempCtx.putImageData(composite, 0, 0);
-
-                    // 変更箇所のみ切り抜き
-                    const croppedCanvas = document.createElement('canvas');
-                    croppedCanvas.width = bounds.width;
-                    croppedCanvas.height = bounds.height;
-                    const croppedCtx = croppedCanvas.getContext('2d');
-                    if (!croppedCtx) continue;
-
-                    croppedCtx.drawImage(
-                        tempCanvas,
-                        bounds.x, bounds.y, bounds.width, bounds.height,
-                        0, 0, bounds.width, bounds.height
+                for (const pair of page.pairs) {
+                    if (pair.verdict !== RESULT.CHANGE || !pair.bounds) continue;
+                    changes += 1;
+                    const source = canvasOf(pair);
+                    const crop = document.createElement('canvas');
+                    crop.width = pair.bounds.width;
+                    crop.height = pair.bounds.height;
+                    crop.getContext('2d')!.drawImage(
+                        source,
+                        pair.bounds.x, pair.bounds.y, pair.bounds.width, pair.bounds.height,
+                        0, 0, pair.bounds.width, pair.bounds.height,
                     );
+                    source.width = 1;
+                    source.height = 1;
 
-                    // PDFに追加
-                    if (!isFirstPage) reportPdf.addPage();
-                    isFirstPage = false;
-
-                    const imgData = croppedCanvas.toDataURL('image/png');
-                    const pdfWidth = reportPdf.internal.pageSize.getWidth() - 20; // マージン
-                    const aspectRatio = bounds.height / bounds.width;
-                    const pdfHeight = pdfWidth * aspectRatio;
-
-                    reportPdf.addImage(imgData, 'PNG', 10, 10, pdfWidth, pdfHeight);
-                    reportPdf.setFontSize(10);
-                    reportPdf.text(`Page ${page} - Change Detected (位置: x=${bounds.x}, y=${bounds.y})`, 10, pdfHeight + 20);
+                    newPage();
+                    const pdfWidth = report.internal.pageSize.getWidth() - 20;
+                    const pdfHeight = pdfWidth * (pair.bounds.height / pair.bounds.width);
+                    report.addImage(
+                        encodePngStored(
+                            crop.getContext('2d')!
+                                .getImageData(0, 0, crop.width, crop.height).data,
+                            crop.width, crop.height,
+                        ),
+                        'PNG', 10, 20, pdfWidth, pdfHeight,
+                    );
+                    report.setFontSize(10);
+                    report.text(pair.title, 10, 14);
+                    report.text(
+                        `変更あり（位置: x=${pair.bounds.x}, y=${pair.bounds.y}）`,
+                        10, pdfHeight + 30,
+                    );
+                    crop.width = 1;
+                    crop.height = 1;
                 }
             }
 
-            if (changesFound === 0) {
+            if (first) {
                 alert('変更箇所が検出されませんでした');
                 return;
             }
-
-            reportPdf.save('change_report.pdf');
-            alert(`レポート生成完了: ${changesFound}ページの変更を検出しました`);
+            if (!signalFor(generationRef.current).isOwner()) return;
+            report.save('change_report.pdf');
+            alert(`レポート生成完了: ${changes} 件の変更を検出しました`);
         } catch (error) {
             console.error('Report generation error:', error);
             alert('レポート生成に失敗しました: ' + (error as Error).message);
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -667,8 +646,11 @@ export const PdfComparator: React.FC = () => {
 
 
 
-                    {/* Threshold Slider */}
-                    <div className="threshold-control" style={{
+                    {/* Spatial tolerance, in the unit a drawing office uses.
+                        Zero is the default and is always selectable; anything
+                        above it is a choice the user made, with the cost said
+                        out loud rather than implied. */}
+                    <div className="tolerance-control" data-usage-target="comparator-tolerance" style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: '10px',
@@ -679,28 +661,46 @@ export const PdfComparator: React.FC = () => {
                         borderRadius: '20px'
                     }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={{ fontSize: '0.8em', fontWeight: 'bold' }}>Diff Threshold</label>
-                            <div style={{ fontSize: '0.7em', color: '#666' }}>Ignore shifts &le; {threshold}px</div>
+                            <label style={{ fontSize: '0.8em', fontWeight: 'bold' }}>許容値</label>
+                            <div style={{ fontSize: '0.7em', color: '#666' }}>
+                                同じ位置とみなす距離
+                            </div>
                         </div>
                         <input
                             type="range"
-                            min="0"
-                            max="5"
-                            step="1"
-                            value={threshold}
-                            onChange={(e) => setThreshold(parseInt(e.target.value))}
+                            aria-label="許容値 (mm)"
+                            data-testid="tolerance-slider"
+                            min={SPATIAL_TOLERANCE_POLICY.minimum}
+                            max={SPATIAL_TOLERANCE_POLICY.maximum}
+                            step={SPATIAL_TOLERANCE_POLICY.step}
+                            value={toleranceMm}
+                            onChange={(e) => setToleranceMm(parseFloat(e.target.value))}
                             style={{ cursor: 'pointer' }}
                         />
                         <div style={{
-                            fontSize: '1.2em',
+                            fontSize: '1.1em',
                             fontWeight: 'bold',
-                            width: '30px',
+                            width: '60px',
                             textAlign: 'center',
-                            color: threshold === 0 ? 'red' : 'green'
-                        }}>
-                            {threshold}px
+                            color: toleranceMm === 0 ? '#00796b' : '#b26a00'
+                        }} data-testid="tolerance-value">
+                            {toleranceMm.toFixed(2)} mm
                         </div>
                     </div>
+                    {toleranceMm > 0 && (
+                        <div data-testid="tolerance-warning" style={{
+                            fontSize: '0.72em',
+                            color: '#8a5300',
+                            background: '#fff4e0',
+                            border: '1px solid #ffd699',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            maxWidth: '320px',
+                            lineHeight: 1.4
+                        }}>
+                            {SPATIAL_TOLERANCE_DISCLOSURE}
+                        </div>
+                    )}
 
 
 
@@ -808,6 +808,31 @@ export const PdfComparator: React.FC = () => {
                                         <option value={450}>450 DPI (Very High)</option>
                                     </select>
                                 </div>
+
+                                {/* Memory budget. 512 MiB is the recommendation
+                                    and the default; a larger one is available
+                                    and is never chosen automatically. */}
+                                <div style={{ marginBottom: '5px' }}>
+                                    <label style={{ display: 'block', fontSize: '0.75em', fontWeight: 'bold', marginBottom: '4px', color: '#666' }}>
+                                        Memory budget
+                                    </label>
+                                    <select
+                                        data-testid="memory-budget"
+                                        aria-label="メモリ上限"
+                                        value={memoryBudgetBytes}
+                                        onChange={(e) => setMemoryBudgetBytes(Number(e.target.value))}
+                                        style={{ width: '100%', padding: '4px', fontSize: '0.85em', color: '#333', backgroundColor: 'white' }}
+                                    >
+                                        {MEMORY_BUDGET_PRESETS.map((preset) => (
+                                            <option key={preset.bytes} value={preset.bytes}>
+                                                {preset.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div style={{ fontSize: '0.7em', color: '#888', marginTop: '4px' }}>
+                                        現在: {formatBytes(memoryBudgetBytes)}
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -851,14 +876,125 @@ export const PdfComparator: React.FC = () => {
                         </div>
                     </div>
                 )}
+                {/* The comparison could not be made, and why. Nothing here
+                    quietly reduces the request to something that would fit:
+                    the numbers are shown and the choice is the user's. */}
+                {refusal && (
+                    <div data-testid="preflight-refusal" style={{
+                        maxWidth: '560px',
+                        margin: '40px auto',
+                        padding: '16px 20px',
+                        border: '1px solid #e0b4b4',
+                        background: '#fff6f6',
+                        borderRadius: '8px',
+                        color: '#7a2222',
+                        lineHeight: 1.6,
+                    }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                            この設定では比較できません
+                        </div>
+                        <div data-testid="refusal-status" style={{
+                            fontFamily: 'monospace', fontSize: '0.8em', color: '#a33',
+                        }}>
+                            {refusal.status}
+                        </div>
+                        <div style={{ marginTop: '8px' }}>{refusal.reason}</div>
+                        {refusal.requested && (
+                            <div style={{ fontSize: '0.85em', marginTop: '6px' }}>
+                                要求: {refusal.requested}
+                            </div>
+                        )}
+                        {refusal.achievable && (
+                            <div style={{ fontSize: '0.85em', marginTop: '2px' }}>
+                                実行可能: {refusal.achievable}
+                            </div>
+                        )}
+                        <div style={{ fontSize: '0.8em', marginTop: '10px', color: '#666' }}>
+                            設定を変更すると再計画します。自動では変更しません。
+                        </div>
+                    </div>
+                )}
+
+                {/* Which pair is on screen. With four members a reader has to
+                    be able to tell which document differs from the reference,
+                    not merely that something does. */}
+                {!refusal && (result?.pages[0]?.pairs.length ?? 0) > 0 && (
+                    <div data-testid="pair-tabs" style={{
+                        display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap',
+                    }}>
+                        {result!.pages[0].pairs.map((pair, index) => (
+                            <button
+                                key={pair.title}
+                                data-testid={`pair-tab-${index}`}
+                                onClick={() => setActivePair(index)}
+                                style={{
+                                    fontSize: '0.8em',
+                                    padding: '4px 10px',
+                                    borderRadius: '14px',
+                                    border: index === activePair
+                                        ? '2px solid #00796b' : '1px solid #ccc',
+                                    background: index === activePair ? '#e0f2f1' : 'white',
+                                    color: '#333',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                {pair.referenceLabel} vs {pair.label}
+                                <span style={{
+                                    marginLeft: '6px',
+                                    fontWeight: 'bold',
+                                    color: pair.verdict === RESULT.CHANGE ? '#c62828' : '#2e7d32',
+                                }}>
+                                    {pair.verdict}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* A page one document does not have is a different state from
+                    a page that exists and is blank, and from a page that
+                    matched. It says so. */}
+                {!refusal && result && result.pages[0]
+                    && result.pages[0].status !== PLAN.READY_TO_COMPARE && (
+                    <div data-testid="page-state" style={{
+                        maxWidth: '560px',
+                        margin: '40px auto',
+                        padding: '16px 20px',
+                        border: '1px solid #d6c48a',
+                        background: '#fffbe9',
+                        borderRadius: '8px',
+                        color: '#6b5400',
+                        lineHeight: 1.6,
+                    }}>
+                        <div data-testid="page-state-status" style={{
+                            fontFamily: 'monospace', fontSize: '0.8em',
+                        }}>
+                            {result.pages[0].status}
+                        </div>
+                        {result.pages[0].reported.map((line) => (
+                            <div key={line} style={{ marginTop: '6px' }}>{line}</div>
+                        ))}
+                    </div>
+                )}
+
                 {/* Canvas */}
                 <canvas
                     ref={canvasRef}
+                    data-testid="comparator-canvas"
                     style={{
                         boxShadow: '0 0 10px rgba(0,0,0,0.1)',
                         background: 'white',
+                        display: refusal || (result?.pages[0]?.pairs.length ?? 0) === 0
+                            ? 'none' : 'block',
                     }}
                 />
+                {busy && (
+                    <div data-testid="comparator-busy" style={{
+                        fontSize: '0.8em', color: '#888', marginTop: '8px',
+                    }}>
+                        比較中...
+                    </div>
+                )}
 
                 {/* Empty State Hint */}
                 {activeIndices.length === 0 && (
