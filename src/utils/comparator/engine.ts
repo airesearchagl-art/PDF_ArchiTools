@@ -206,8 +206,14 @@ export function verdictFor(mask: ChangeMask): ResultStatus {
         ? RESULT.MATCH : RESULT.CHANGE;
 }
 
-/** The same page of every member, rendered upright at the same scale. */
-async function renderUpright(
+/**
+ * The same page of every member, rendered upright at the same scale.
+ *
+ * Exported because a single loaded document is worth showing — that is a
+ * preview, not a comparison, and it carries no verdict — and it should be shown
+ * in the frame a comparison would use.
+ */
+export async function renderUprightCanvas(
     pdf: PDFDocumentProxy,
     pageNumber: number,
     scale: number,
@@ -405,7 +411,7 @@ export async function runComparison(
         let width = 0;
         let height = 0;
         try {
-            const canvas = await renderUpright(
+            const canvas = await renderUprightCanvas(
                 members[0].pdf, pagePlan.page, plan.renderScale,
             );
             width = canvas.width;
@@ -446,7 +452,7 @@ export async function runComparison(
         for (let i = 1; i < members.length; i += 1) {
             let otherMask: Uint8Array;
             try {
-                const canvas = await renderUpright(
+                const canvas = await renderUprightCanvas(
                     members[i].pdf, pagePlan.page, plan.renderScale,
                 );
                 const ctx = canvas.getContext('2d', { willReadFrequently: true })!;

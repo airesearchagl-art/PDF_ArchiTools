@@ -10,6 +10,7 @@ import {
     encodePngStored,
     formatBytes,
     planComparison,
+    renderUprightCanvas,
     runComparison,
     type ComparisonSettings,
     type JobResult,
@@ -209,10 +210,46 @@ export const PdfComparator: React.FC = () => {
             canvas.height = 1;
         };
 
-        if (activeIndices.length < 2) {
+        if (activeIndices.length === 0) {
             setResult(null);
+            setRefusal(null);
             clear();
             return;
+        }
+
+        // One document is not a comparison. It is worth showing anyway — the
+        // user is part-way through choosing files — but it carries no verdict,
+        // no pair and no claim about what changed.
+        if (activeIndices.length === 1) {
+            setResult(null);
+            setRefusal(null);
+            const only = pdfs[activeIndices[0]]!;
+            const timer = setTimeout(() => {
+                void (async () => {
+                    try {
+                        if (pageNumber > only.numPages) { clear(); return; }
+                        const rendered = await renderUprightCanvas(
+                            only, pageNumber, dpi / 72,
+                        );
+                        if (token !== generationRef.current) return;
+                        const canvas = canvasRef.current;
+                        if (!canvas) return;
+                        canvas.width = rendered.width;
+                        canvas.height = rendered.height;
+                        canvas.getContext('2d')?.drawImage(rendered, 0, 0);
+                        canvas.style.width = `${(rendered.width * scale) / (dpi / 72)}px`;
+                        canvas.style.height = `${(rendered.height * scale) / (dpi / 72)}px`;
+                        rendered.width = 1;
+                        rendered.height = 1;
+                    } catch (err) {
+                        console.error('Preview failed:', err);
+                    }
+                })();
+            }, 300);
+            return () => {
+                clearTimeout(timer);
+                generationRef.current += 1;
+            };
         }
 
         const timer = setTimeout(() => {
@@ -984,7 +1021,9 @@ export const PdfComparator: React.FC = () => {
                     style={{
                         boxShadow: '0 0 10px rgba(0,0,0,0.1)',
                         background: 'white',
-                        display: refusal || (result?.pages[0]?.pairs.length ?? 0) === 0
+                        display: refusal
+                            || (activeIndices.length > 1
+                                && (result?.pages[0]?.pairs.length ?? 0) === 0)
                             ? 'none' : 'block',
                     }}
                 />

@@ -451,6 +451,22 @@ window.__comparator = {
     };
   },
 
+  /**
+   * One document is not a comparison.
+   *
+   * It is shown, because the user is part-way through choosing files — and it
+   * carries no verdict, no pair and no claim about what changed.
+   */
+  async singleDocument() {
+    const set = await members(['base-a4']);
+    const plan = await planComparison(set, settings());
+    return {
+      plan: plan.status,
+      refusal: plan.refusal?.status ?? null,
+      pages: plan.pages.length,
+    };
+  },
+
   /** The geometry primitives, without rendering anything. */
   geometryUnits() {
     const a4 = pageGeometry([0, 0, 595.28, 841.89], 0);

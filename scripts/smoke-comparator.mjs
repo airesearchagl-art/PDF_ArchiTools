@@ -174,6 +174,12 @@ try {
         units.verdictAtZeroFloor.empty === 'MATCH'
         && units.verdictAtZeroFloor.one === 'CHANGE');
 
+    const single = await page.evaluate(() => window.__comparator.singleDocument());
+    probe('one document is not a comparison, and is refused as one',
+        single.plan === 'UNSUPPORTED' && single.refusal === 'UNSUPPORTED'
+        && single.pages === 0,
+        'the app still shows it — that is a preview, and it carries no verdict');
+
     // ---- verdicts ------------------------------------------------------------
     console.log('\n=== what it says about a drawing ===');
     const verdicts = await page.evaluate(() => window.__comparator.verdicts());
