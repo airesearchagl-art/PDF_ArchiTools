@@ -49,9 +49,10 @@ node scripts/m4-comparator-fixtures.mjs
 node scripts/m4-comparator-research-gate.mjs
 ```
 
-**93 assertions, 37 of them negative probes.** Several assert that the shipped
+**135 assertions, 54 of them negative probes.** Several assert that the shipped
 comparator gets something wrong; those are the findings, and a gate the baseline
-passed would prove nothing.
+passed would prove nothing. It gates the write-up, not the app, and is
+deliberately **not** wired into Core CI.
 
 No customer document is used. Every fixture is generated and none is committed.
 External HTTP(S) requests: 0.
@@ -61,29 +62,42 @@ External HTTP(S) requests: 0.
 Everything below is a **recommendation**, not a decision. The policy questions
 are listed under Human Decisions and belong to the Human Product Gate.
 
-**A + B + C, in that order**, as three responsibilities rather than three
+**A + B — implementation-ready**, as two responsibilities rather than two
 alternatives:
 
 - **strict validation** decides whether a comparison is meaningful at all;
-- **safe normalisation** handles rotation and crop origin, which are provable
-  arithmetic — rendering upright takes the rotation false-change from 99.3% to
-  **0.0%**;
-- **human alignment** is the way forward when the geometry genuinely differs,
-  and the result carries the alignment it was made under.
+- **canonical upright normalisation** handles rotation and crop origin, which
+  are provable arithmetic — rendering upright takes the rotation false-change
+  from 99.3% to **0 differing pixels** — and maps other members onto the
+  reference by the **identity** or refuses. `READY_TO_COMPARE` means every
+  mapping is rigid; there is no third case.
 
 With: **two stages** — a plan that says whether a comparison can be made, then a
-verdict that says what it found, so `CHANGE` never means "carry on"; **one
-engine** behind the preview, the export and the change report, which today each
-decide independently what a comparison means; a physical threshold in
-millimetres; a stated working-set budget and a work bound, both checked before
-allocation; structured results rather than only an image; and an export that
-produces no bytes until every page is complete.
+verdict that says what it found, so `CHANGE` never means "carry on"; a verdict
+computed from a **canonical ink mask with no ratio floor**, before anything is
+painted, so the answer is not a property of the palette; **one engine** behind
+the preview, the export and the change report, which today each decide
+independently what a comparison means; a physical threshold in millimetres; a
+working-set budget **and** a work budget, both checked before allocation and both
+refusing by name rather than degrading; a comparison that can be abandoned;
+structured results rather than only an image; and an export that produces no
+bytes until every page is complete.
+
+**C — a conditional follow-on, not part of this recommendation.** Human
+alignment is the right way forward from a refusal and it is not researched: the
+prototype records `{ x, y, rotation, scale }` without defining a coordinate
+space, units, transform order, pivot, bounds or provenance, and no aligned
+comparison has ever been run. If the Human Gate answers **H1** with "offer human
+alignment", an **Alignment Architecture Sub-Spike is required before M4
+production implementation**. The recommended M4 MVP is instead: geometry
+mismatch → `GEOMETRY_MISMATCH` → fail closed, which is a complete feature on its
+own.
 
 **REJECT candidate 0** — not as an implementation but as a contract. Its single
 verdict is what makes a wrong answer indistinguishable from a right one.
 
-**DEFER candidate D** (automatic registration), the JPEG/PNG question, and the
-alignment UI.
+**DEFER candidate D** (automatic registration), **all-member consensus** as a
+multi-member contract, the JPEG/PNG question, and the alignment UI.
 
 ## What is already right
 
@@ -98,7 +112,7 @@ These are not the spike's to settle.
 
 | | | |
 | --- | --- | --- |
-| **H1** | geometry mismatch | refuse outright, or offer human alignment? |
+| **H1** | geometry mismatch | refuse outright, or offer human alignment? **Answering "offer alignment" requires an Alignment Architecture Sub-Spike before M4 production implementation** — the transform contract does not exist yet, and no aligned comparison has been run. |
 | **H2** | a missing page | fail the whole export, or include the page marked as missing? |
 | **H3** | over budget | refuse, or offer the achievable resolution to accept? Never a silent downgrade — an A0 asked at 600 dpi currently delivers 227 and is named `_600dpi.pdf`. |
 | **H4** | alignment | should an offset, scale and rotation be saved with the comparison? |
@@ -106,7 +120,8 @@ These are not the spike's to settle.
 | **H6** | threshold unit | millimetres or PDF points? |
 | **H7** | the working-set budget | **512 MiB is a recommendation, not a measurement.** The measurements establish the shape of the cost, not where the line goes. Requires approval; never silently exceeded. |
 | **H8** | the ink predicate | the two shipped functions disagree — mean of channels versus any channel — and a pale yellow falls between them. One definition must serve the composite, the change bounds, the verdict and the change report. Whether the pale-grey hatch stays invisible is part of the same choice. |
-| **H9** | more than two members | two-only, reference-pairs, or all-member consensus? The shipped any-other-layer rule reports a two-against-two disagreement as a clean match, so it is not among the options. |
+| **H9** | more than two members | **A: two-only** (measured) or **B: reference-pairs** (measured)? **C: all-member consensus — DEFER, requires separate research**; it is described and implemented nowhere, so it is refused rather than offered. The shipped any-other-layer rule reports a two-against-two disagreement as a clean match, so it is not among the options either. |
+| **H10** | the work ceiling | **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is a recommendation, not a measurement.** It is calibrated from one observation on one machine and projects to roughly 55 seconds of comparison. It is user-visible because it refuses comparisons: an A1 at 300 dpi with a 0.5 mm tolerance is over it. Requires approval; never silently degraded to fit. Separately: whether a ratio floor on MATCH is wanted at all — the research recommends **none**, having measured that 0.5% hid six of seven true changes, and that a floor is not needed for MATCH to be reachable. |
 
 ## What this does not claim
 

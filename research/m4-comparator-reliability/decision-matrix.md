@@ -9,8 +9,8 @@ Every number is from `evidence.json`, produced by
 | --- | --- |
 | **0 — baseline** | what ships. Render each page on its own terms, size the field to the largest, draw each at the top-left, composite. No geometry examined. |
 | **A — strict geometry** | compare only when the pages describe the same visible sheet; refuse by name otherwise. |
-| **B — reference normalisation** | slot 1 is the reference; map others into its display plane where the mapping is rigid. Refuse where a rescale would be needed. |
-| **C — human alignment** | when geometry cannot be settled by arithmetic, ask for an offset rather than guessing, and carry it on the result. |
+| **B — canonical upright normalisation** | render every member upright from its own visible box; map others onto slot 1 by the **identity** or not at all. Refuse where a rescale would be needed. |
+| **C — human alignment** | when geometry cannot be settled by arithmetic, ask for an offset rather than guessing, and carry it on the result. **The refusal half is researched; the transform contract is not** — see below. |
 | **D — automatic registration** | correlate the images and align by the best fit. **Not implemented** — see below. |
 
 ## Two stages
@@ -38,33 +38,43 @@ back as `CHANGE` — which is the kind of answer this spike exists to stop.
 
 **Verdict**, reached only from a plan that was ready:
 
-| case | verdict | ink differing |
+| case | verdict | differing pixels |
 | --- | --- | --- |
-| the same drawing twice | **MATCH** | 0.0% |
-| a wall added | **CHANGE** | 9.6% |
-| rotation only, rendered upright | **MATCH** | 0.0% |
-| crop origin only | **MATCH** | 0.0% |
+| the same drawing twice | **MATCH** | 0 |
+| a wall added | **CHANGE** | 8530 (9.6%) |
+| rotation only, rendered upright | **MATCH** | 0 |
+| crop origin only | **MATCH** | 0 |
+| one digit of a dimension changed | **CHANGE** | 51 (0.063%) |
 | a different sheet | never reached | — |
+
+The verdict is taken from the change mask with **no ratio floor at all**. Every
+control reaches 0 differing pixels, so a floor is not needed to make MATCH
+reachable, and the 0.5% floor used in the previous round converted six of seven
+small true changes into matches. See §6b.
 
 Candidate 0 has one plan status and no verdict stage at all. It has no state for
 *I should not answer this*.
+
+Candidate C now has one fewer, deliberately: supplying an alignment returns
+`UNSUPPORTED`, not `READY`, because recording `{ x, y, rotation, scale }` is not
+the same as defining it. See §5b.
 
 ## The comparison
 
 | | 0 | A | B | C |
 | --- | --- | --- | --- | --- |
 | false change on a same-size pair | **0.0%** | 0.0% | 0.0% | 0.0% |
-| false change on A4 vs A3 | **99.4%** | refused | refused | refused, then human |
+| false change on A4 vs A3 | **99.4%** | refused | refused | refused; alignment deferred |
 | false change on `/Rotate 0` vs `90` | **99.3%** | **0.0%** ¹ | **0.0%** ¹ | 0.0% ¹ |
 | true change captured (wall added) | 9.6% | 9.6% | 9.6% | 9.6% |
 | refuses when it should | **never** | yes (4/4) | yes (4/4) | asks (4/4) |
 | distinguishes blank from missing | **no** | **yes** | yes | yes |
 | survives a failed member | **produces 100% change** | refuses | refuses | refuses |
-| human action needed | none | on 4 of 9 cases | on 4 of 9 | on 4 of 9, with a way forward |
+| human action needed | none | on 4 of 9 cases | on 4 of 9 | on 4 of 9; the way forward is not yet specified |
 | runtime, A4 150 dpi | 88 ms | 88 ms ² | 88 ms ² | 88 ms ² |
 | peak working set, A1 150 dpi | 488 MB | 488 MB ² | 488 MB ² | 488 MB ² |
 | deterministic | yes | yes | yes | yes |
-| implementation complexity | shipped | low | moderate | moderate + UI |
+| implementation complexity | shipped | low | moderate | moderate + UI + a sub-spike |
 
 ¹ Once the pages are rendered upright, which costs nothing: measured at 0.0% of
 ink differing across all three rotations, both canvases 1241×1754.
@@ -78,9 +88,24 @@ the cost is the baseline's cost.
 | --- | --- |
 | compare anything, align top-left | **REJECT** — this is the defect |
 | stretch a drawing onto another's sheet | **REJECT** — changes every length on it |
-| refuse anything not provably the same sheet | **ADOPT** as the default |
-| let a human supply the alignment | **ADOPT** as the way forward from a refusal |
+| refuse anything not provably the same sheet | **ADOPT** as the default, and as the whole of the recommended M4 MVP |
+| let a human supply the alignment | **DEFER** — the right way forward from a refusal, and not yet researched; see §5b |
 | guess the alignment automatically | **DEFER** — see section 5 |
+
+## 1b. What a mapping may be
+
+| option | verdict |
+| --- | --- |
+| a scale computed from the pages' display dimensions | **REJECT** — measured at x = 0.707, y = 1.414 on a quarter turn of the same sheet, and returned as ready anyway |
+| a uniform scale, where the pages are proportional | **REJECT** — same proportions are not the same paper; 1.4× scored 99.4% false change |
+| render upright, then map by the identity or refuse | **ADOPT** |
+
+`READY_TO_COMPARE` from Candidate B means every mapping is rigid, every
+`|scaleX - scaleY|` is exactly 0, and every render rotation is 0. Measured on all
+eight required pairs — `/Rotate` 0 against 0/90/180/270, crop origin alone, and
+crop origin combined with each rotation — every one accepted with an identity
+mapping and every one reaching MATCH at 0 differing pixels. A different physical
+sheet still reaches `GEOMETRY_MISMATCH`.
 
 ## 2. Rotation
 
@@ -134,16 +159,30 @@ where a wall goes is reported as a clean match.
 | option | verdict |
 | --- | --- |
 | any other layer (today) | **REJECT** — measured to hide a two-against-two disagreement |
-| **two members only**, three or more refused | viable, smallest contract |
-| **reference pairs** — each member against slot 1, MATCH only if all pairs match | **recommended** |
-| all-member consensus — a location matches only when every member agrees | viable, stricter, unmeasured against real revisions |
+| **A — two members only**, three or more refused | implemented and measured; viable, smallest contract |
+| **B — reference pairs** — each member against slot 1, MATCH only if all pairs match | implemented and measured; **recommended** |
+| **C — all-member consensus** — a location matches only when every member agrees | **DEFER — requires separate research.** Not selectable in this round. |
 
 Measured: reference-pairs catches both failing cases, with the two-against-two
 pairs at `identical: 0.0%`, `wall-at-y: 19.3%`, `wall-at-y-copy: 19.3%`.
 
-**This is a product decision, not a technical one** — reference-pairs answers
-"how does each drawing differ from the reference", consensus answers "do they all
-agree" — so it goes to the Human Gate as **H9** rather than being settled here.
+Consensus is described in `architecture.md` and implemented nowhere. Listing it
+beside two contracts that have been run against the corpus would present it as
+equally ready to build, and it is not: nothing is known about what it does with
+a blank member, a member the other documents do not have, or a member that
+failed to render — the cases where a stricter rule diverges most from its own
+description. `planMultiMember` therefore refuses it at every member count rather
+than returning a plan, which the gate asserts.
+
+Making it selectable means first running a prototype against, at minimum: four
+identical members; three the same and one changed; two against two; a reference
+against three different documents; one blank member; one missing member; one
+member that failed to render.
+
+**The choice between A and B is a product decision, not a technical one** —
+reference-pairs answers "how does each drawing differ from the reference",
+consensus answers "do they all agree" — so it goes to the Human Gate as **H9**
+rather than being settled here, with C marked as deferred rather than offered.
 
 ## 4c. One engine for three paths
 
@@ -173,8 +212,13 @@ threshold, swallow a render failure, or recompute what a change is.
 | option | verdict |
 | --- | --- |
 | no work bound | **REJECT** — the search is O(ink x radius² x members) with no ceiling |
-| a stated `MAX_WORK`, refused before rendering | **ADOPT** as the floor |
-| chunked comparison that can yield and be cancelled | **ADOPT** alongside it |
+| `pixels x radius² x members` as the bound | **REJECT** — zero at radius 0, and leaves the contract out |
+| `pixels x sourceMembers x (1 + comparedOtherMembers x (2r+1)²)`, summed over the contract's groups | **ADOPT** |
+| `MAX_COMPARISON_WORK_UNITS = 12,000,000,000`, checked before allocation | **ADOPT as a recommendation requiring human approval** — H10 |
+| silently reducing DPI or tolerance to fit | **REJECT** — this is the `_600dpi.pdf` failure again |
+| a typed `OVER_WORK_BUDGET` refusal that names the numbers | **ADOPT** |
+| separable dilation, so the bound does not carry `(2r+1)²` | **ADOPT** as the comparison algorithm |
+| banded execution with a generation check between bands | **ADOPT** alongside it |
 
 Measured, per ink pixel at radius 3: **0.59 µs** when the drawings match against
 **1.56 µs** when they do not. Every earlier cost figure was taken on matching
@@ -184,12 +228,63 @@ A physical threshold grows the radius with the DPI, so the worst case grows with
 it too: 43 ms at 150 dpi / radius 3 against 207 ms at 300 dpi / radius 6 on the
 same non-matching pair.
 
+**The previous bound was not one.** `pixels x radius² x members` is zero at
+radius 0, and a radius-0 comparison still reads every pixel of every member; it
+also omits the multi-member contract, so four members under reference-pairs
+costed the same as two. The shape adopted above is in units of one pixel read,
+takes its groups from the contract — two-only is one group, reference-pairs over
+four members is three, consensus has no derived bound at all — and is
+conservative about the ink fraction, which is not knowable before rendering.
+
+Where 12e9 comes from: the highest measured cost per work unit is the A4 300 dpi
+radius-0 pair, 158 ms for 34,789,440 units, which is the case where the bound is
+tightest and therefore the pessimistic calibration. 12e9 units at that rate
+projects to about **55 seconds**. It permits A4 and A3 at 300 dpi with a 0.5 mm
+tolerance (2.96e9 and 5.92e9) and refuses an A1 at the same settings (2.37e10).
+Because it can refuse a comparison a user asked for, it is user-visible, and it
+goes to the Human Gate as **H10** the way the 512 MiB working set goes as H7.
+
 **Cancellation alone does not solve this.** The composite is a synchronous double
 loop that cannot observe a cancellation flag or yield to the event loop, so a
-long comparison is not abandonable as written. Either the loop is restructured to
-work in chunks, or the work is bounded before it starts, or both. That is an
-architecture decision to make before implementation, and `architecture.md`
-records it as one.
+long comparison is not abandonable as written. Both halves of the replacement
+are now prototyped and measured: the separable dilation produces the *identical*
+change mask at every radius tried while removing `(2r+1)²` from the bound
+(23,694,575,520 units against 557,519,424 for the same A1), and banded execution
+ran a 1241×1754 comparison in 31 bands and was stopped after 3 of them with no
+verdict produced. It is not free — on a sparse drawing the nested scan is faster
+(4 ms against 23 ms) because it exits on the first ink it finds — but its cost is
+a property of the sheet rather than of the drawing, which is what a ceiling
+checked before rendering needs. On ink that matches nothing, the scan goes
+25 ms → 65 ms as the box widens from 9 to 49 while the dilation stays at 28 ms.
+
+## 5b. Candidate C, and what it would take to build it
+
+**The refusal is researched. The transform is not.**
+
+| option | verdict |
+| --- | --- |
+| refuse a geometry mismatch and stop | **ADOPT** as the M4 MVP |
+| refuse, and offer a human alignment | **DEFER** — right direction, no contract yet |
+| return `READY_TO_COMPARE` once an alignment object is supplied | **REJECT** — recording `{ x, y, rotation, scale }` is not defining it |
+
+`candidateHumanAlignment` now returns `UNSUPPORTED` rather than `READY` when an
+alignment is supplied, which is a deliberate change from the previous round. It
+is the same rule as §1b: a plan may not claim a comparison it has no contract
+for. The alignment is kept on the result as `recordedAlignment`, with
+`appliedAlignment: null`, so the distinction is legible rather than implied.
+
+**If the Human Gate answers H1 with "offer human alignment", an Alignment
+Architecture Sub-Spike is required before M4 production implementation.** It must
+settle, with evidence: coordinate space; units; transform order; rotation pivot;
+uniform against non-uniform scaling; bounds; validation; the interaction with
+CropBox and with upright normalisation; what the memory and work estimates
+become after an alignment; how the alignment is saved as provenance; and an
+actual aligned comparison that reaches MATCH and CHANGE and back.
+
+**Recommended instead, for M4:** geometry mismatch → `GEOMETRY_MISMATCH` → fail
+closed. That is a complete feature on its own — it stops the tool reporting its
+own coordinate handling as a design change — and it does not require the
+sub-spike to ship.
 
 ## 5. Automatic registration
 
@@ -214,6 +309,45 @@ evidence, not something to fold into this one.
 Measured: 0.5 mm converts to 1 / 3 / 6 / 12 px at 72 / 150 / 300 / 600 dpi. The
 setting stays the same and the comparison means the same thing.
 
+## 6b. What MATCH is allowed to rest on
+
+| option | verdict |
+| --- | --- |
+| a change count taken from the painted composite | **REJECT** — makes the verdict a property of the palette |
+| a canonical ink mask plus a physical spatial tolerance | **ADOPT** — the verdict is computed before anything is painted |
+| a 0.5% global ratio floor | **REJECT** — unmeasured, and measured to hide real revisions |
+| no ratio floor at all | **ADOPT** |
+| a ratio floor with a corpus behind it | **DEFER** to the Human Gate as **H10** |
+
+The floor introduced in the previous round was justified on the grounds that a
+zero floor would make MATCH unreachable. The corpus does not support that: every
+control — identical, rotation-only rendered upright, crop-origin, and a redraw
+of the same sheet — reaches **exactly 0 differing pixels**.
+
+What the floor did do was hide true changes. Of seven genuine changes on the
+small-change corpus, six fall under 0.5% of the ink:
+
+| | pixels | of the ink | zero floor | 0.5% floor |
+| --- | --- | --- | --- | --- |
+| a light hatch added | 43 | 0.053% | **CHANGE** | MATCH |
+| the pale-hatch fixture | 43 | 0.054% | **CHANGE** | MATCH |
+| one digit of a dimension | 51 | 0.063% | **CHANGE** | MATCH |
+| a 4 mm revision triangle | 160 | 0.198% | **CHANGE** | MATCH |
+| one short fine line | 200 | 0.248% | **CHANGE** | MATCH |
+| a symbol swapped | 394 | 0.488% | **CHANGE** | MATCH |
+| a wall added | 8530 | 9.640% | **CHANGE** | CHANGE |
+
+Render variance is a *spatial* disagreement of a pixel or two along a line, and
+the tolerance for it is the physical radius in millimetres applied to the mask,
+not a share of the page applied to the total. That is not free either — 0.5 mm
+at 150 dpi erases the changed digit outright, 51 pixels to 0 — which is exactly
+why the number belongs to the user in units a drawing office already uses.
+
+Presentation independence is asserted rather than assumed: the same changed pair
+under three palettes gives a 51-pixel mask and `CHANGE` in all three, while the
+count taken from the painted composite reads 51, 0 and 51 depending only on the
+colours chosen.
+
 ## 7. Requested resolution
 
 | option | verdict |
@@ -233,7 +367,7 @@ Never a silent downgrade. Measured: A0 at 300 dpi and at 600 dpi both deliver
 | bound one canvas | **REJECT** — understates a 2-layer comparison ~5× |
 | bound the whole working set | **ADOPT** |
 
-Proposed: **512 MB**, checked before allocation. Measured against it:
+Proposed: **512 MiB** (536,870,912 bytes), checked before allocation. Measured against it:
 
 | | pixels | working set | |
 | --- | --- | --- | --- |
@@ -265,14 +399,15 @@ open question rather than answered.
 Every ADOPT below is a **research recommendation**, not a decision. Where the
 choice is a product question — geometry-mismatch behaviour, missing-page policy,
 over-budget behaviour, alignment persistence, export format, threshold unit, the
-512 MiB budget, the ink predicate, and the multi-member contract — the Human
-Gate chooses, and `README.md` lists them.
+512 MiB working set, the work ceiling, the ink predicate, and the multi-member
+contract — the Human Gate chooses, and `README.md` lists them.
 
 | | |
 | --- | --- |
-| **RESEARCH RECOMMENDATION** | **A + B + C in that order.** Strict validation decides whether a comparison is meaningful; safe normalisation handles rotation and crop origin, which are provable; human alignment is the way forward when geometry genuinely differs. Plus: upright rendering, a physical threshold in millimetres, a stated working-set budget checked before allocation, structured results rather than only a picture, and atomic export. |
+| **RESEARCH RECOMMENDATION** | **A + B.** Strict validation decides whether a comparison is meaningful; canonical upright normalisation handles rotation and crop origin, which are provable, and maps by the identity or refuses. Plus: upright rendering, a verdict computed from a canonical ink mask with no ratio floor, a physical threshold in millimetres, a working-set budget and a work budget both checked before allocation, a comparison that can be abandoned, structured results rather than only a picture, and atomic export. This is a complete feature: it stops the tool reporting its own coordinate handling as a design change. |
+| **CONDITIONAL FOLLOW-ON** | **Candidate C** (human alignment). Recommended *only* if the Human Gate answers H1 with "offer human alignment", and then only after an Alignment Architecture Sub-Spike settles the transform contract — see §5b. Not implementation-ready in this round. |
 | **REJECT** | **Candidate 0.** Not as an implementation detail — as a contract. Its single verdict is what makes a wrong answer indistinguishable from a right one. |
-| **DEFER** | **Candidate D** (automatic registration), the JPEG/PNG question, and the alignment UI. |
+| **DEFER** | **Candidate D** (automatic registration), **all-member consensus** (§4b), the JPEG/PNG question, and the alignment UI. |
 
 ## What this does not claim
 

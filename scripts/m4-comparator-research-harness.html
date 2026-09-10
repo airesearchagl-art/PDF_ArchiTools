@@ -14,11 +14,18 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { renderPageToCanvas, computeMultiPdfComposite, detectChangeBounds }
   from '/src/utils/pdfDiff.ts';
-import { pageGeometry, compareGeometry } from '/research/m4-comparator-reliability/prototype/geometry.mjs';
 import {
-  PLAN, RESULT, verdictFor, GEOMETRY_TOLERANCE_PT, MULTI_MEMBER, planMultiMember,
+  pageGeometry, compareGeometry, uprightGeometry, displayPlaneScale,
+} from '/research/m4-comparator-reliability/prototype/geometry.mjs';
+import {
+  PLAN, RESULT, verdictFor, canonicalVerdict, MATCH_RATIO_FLOOR,
+  GEOMETRY_TOLERANCE_PT, MULTI_MEMBER, planMultiMember, IMPLEMENTED_CONTRACTS,
   candidateBaseline, candidateStrict, candidateNormalise, candidateHumanAlignment,
+  assertRigidPlan,
   estimateMemory, checkBudget, pixelRadiusFor, millimetresFor, MAX_COMPARISON_BYTES,
+  INK_PREDICATES, inkMask, pairChangeMask, pairChangeMaskScan, pairChangeMaskSteps,
+  runCancellable, checkComparisonWork,
+  MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM,
 } from '/research/m4-comparator-reliability/prototype/candidates.mjs';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -76,7 +83,11 @@ function productionExportScale(dpi, vp) {
  * largest dimensions, draw each at the top-left of a white field, composite.
  */
 async function composeAsProduction(
-  members, scale, threshold, { failMember = null, upright = false } = {},
+  members, scale, threshold,
+  {
+    failMember = null, upright = false,
+    matchColor = [0, 0, 0], matchOpacity = 1,
+  } = {},
 ) {
   const started = performance.now();
   const raw = [];
@@ -121,7 +132,9 @@ async function composeAsProduction(
   }
 
   const compositeStarted = performance.now();
-  const composite = computeMultiPdfComposite(layers, maxW, maxH, threshold, [0, 0, 0], 1);
+  const composite = computeMultiPdfComposite(
+    layers, maxW, maxH, threshold, matchColor, matchOpacity,
+  );
   const compositeMs = Math.round(performance.now() - compositeStarted);
   const bounds = detectChangeBounds(layers, maxW, maxH, threshold);
 
@@ -170,6 +183,103 @@ async function renderUpright(doc, pageNumber, scale) {
   return canvas;
 }
 
+// ---------------------------------------------------------------------------
+// The canonical comparison
+// ---------------------------------------------------------------------------
+
+/**
+ * Every member rendered in the canonical upright frame, at the same size.
+ *
+ * Sizes that do not agree are not normalised here by padding or stretching:
+ * that is a plan-level question and the plan has already answered it. If they
+ * disagree at this point something upstream let through a comparison it should
+ * have refused, so it is reported rather than papered over.
+ */
+async function renderMembersUpright(members, scale) {
+  const buffers = [];
+  let width = 0;
+  let height = 0;
+  for (const m of members) {
+    const doc = await open(m.name);
+    const canvas = await renderUpright(doc, m.pageNumber, scale);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (width === 0) { width = canvas.width; height = canvas.height; }
+    buffers.push({ label: m.label, data, width: canvas.width, height: canvas.height });
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+  return {
+    buffers,
+    width,
+    height,
+    sameSize: buffers.every((b) => b.width === width && b.height === height),
+  };
+}
+
+/**
+ * The verdict, taken from ink rather than from the picture.
+ *
+ * This is the whole of RF-N2's shape: an ink predicate and a physical spatial
+ * tolerance produce a change mask, the mask produces the verdict, and only then
+ * is anything painted. `presentation` here exists to prove the separation --
+ * the same comparison run with different layer colours, match colour and match
+ * opacity has to give the same verdict.
+ */
+async function canonicalCompare(members, scale, radius, {
+  isInk = INK_PREDICATES.mean, presentation = null,
+} = {}) {
+  const rendered = await renderMembersUpright(members, scale);
+  const { width, height } = rendered;
+  const masks = rendered.buffers.map((b) => inkMask(b.data, width, height, isInk));
+  // Reference pairs: slot 1 against each of the others, independently.
+  const pairs = [];
+  for (let i = 1; i < masks.length; i++) {
+    const mask = pairChangeMask({
+      a: masks[0], b: masks[i], width, height, radius,
+    });
+    pairs.push({
+      member: rendered.buffers[i].label,
+      changePixels: mask.changePixels,
+      inkPixels: mask.inkPixels,
+      ratio: mask.inkPixels === 0 ? 0 : mask.changePixels / mask.inkPixels,
+      verdict: canonicalVerdict(mask).status,
+    });
+  }
+  const changePixels = pairs.reduce((n, p) => n + p.changePixels, 0);
+  const inkPixels = Math.max(...pairs.map((p) => p.inkPixels), 0);
+  const out = {
+    width,
+    height,
+    sameSize: rendered.sameSize,
+    changePixels,
+    inkPixels,
+    ratio: inkPixels === 0 ? 0 : changePixels / inkPixels,
+    pairs,
+    // MATCH only when every pair matches. No pair can be cancelled by another.
+    verdict: pairs.every((p) => p.verdict === RESULT.MATCH) ? RESULT.MATCH : RESULT.CHANGE,
+  };
+  if (presentation) {
+    // What the user is shown, for the same input. Nothing here may reach the
+    // verdict above.
+    const coloured = members.map((m, i) => ({ ...m, color: presentation.colors[i] }));
+    const shown = await composeAsProduction(coloured, scale, radius, {
+      upright: true,
+      matchColor: presentation.matchColor,
+      matchOpacity: presentation.matchOpacity,
+    });
+    out.presentation = {
+      label: presentation.label,
+      // The colour-spread count the earlier rounds used: derived from the
+      // painted composite, and therefore a property of the palette.
+      compositeChangePixels: shown.changePixels,
+      compositeInkPixels: shown.inkPixels,
+      compositeRatio: shown.changeRatio,
+    };
+  }
+  return out;
+}
+
 const RED = [1, 0, 0];
 const BLUE = [0, 0, 1];
 const member = (name, color, label = name, pageNumber = 1) =>
@@ -200,6 +310,9 @@ window.__m4 = {
       'three-pages', 'two-pages', 'three-pages-blank-third',
       'base-a4-copy', 'wall-at-y-a4', 'wall-at-y-a4-copy',
       'dense-a', 'dense-b', 'sheet-plus-0-99', 'sheet-plus-1-01',
+      'rotate-0-copy', 'crop-rot-90', 'crop-rot-180', 'crop-rot-270',
+      'small-base', 'small-base-copy', 'small-digit', 'small-fine-line',
+      'small-symbol', 'small-revision-mark', 'small-hatch',
     ]) {
       const doc = await open(name);
       const page = await doc.getPage(1);
@@ -522,30 +635,35 @@ window.__m4 = {
         continue;
       }
       // Rotation is settled by rendering upright, which is what makes the plan
-      // ready in the first place; the diff has to see the same frame.
-      const composed = await composeAsProduction(pages, SCALE, 0, { upright: true });
-      const verdict = verdictFor({
-        changePixels: composed.changePixels, inkPixels: composed.inkPixels,
-      });
+      // ready in the first place; the diff has to see the same frame. The
+      // verdict comes from the ink masks, not from the painted composite.
+      const compared = await canonicalCompare(pages, SCALE, 0);
+      const verdict = canonicalVerdict(compared);
       out[label] = {
         plan: plan.status,
         verdict: verdict.status,
         ratio: verdict.ratio,
+        changePixels: verdict.changePixels,
         tolerance: verdict.tolerance,
       };
     }
 
-    // The same pair, with a human alignment supplied.
+    // The same pair, with a human alignment supplied. Candidate C records the
+    // numbers; it does not define what they mean, so it may not claim a plan
+    // that is ready. See the alignment sub-spike this defers to.
     const mismatched = await pair('base-a4', 'base-a3');
     const withAlignment = candidateHumanAlignment({
       pages: mismatched, alignment: { x: 12, y: -4, rotation: 0, scale: 1 },
     });
     out['a different sheet, aligned by a human'] = {
       plan: withAlignment.status,
-      alignment: withAlignment.alignment,
-      // The verdict still has to come from a comparison; the alignment only
-      // makes one possible.
-      verdict: 'requires a comparison under that alignment',
+      implementationReady: withAlignment.implementationReady,
+      requires: withAlignment.requires,
+      recordedAlignment: withAlignment.recordedAlignment,
+      appliedAlignment: withAlignment.appliedAlignment,
+      missingContract: withAlignment.missingContract,
+      verdict: null,
+      reported: withAlignment.reported,
     };
     return out;
   },
@@ -606,6 +724,12 @@ window.__m4 = {
         members: 4, contract: MULTI_MEMBER.REFERENCE_PAIRS,
       }),
       one: planMultiMember({ members: 1, contract: MULTI_MEMBER.REFERENCE_PAIRS }).status,
+      // Consensus is described, not implemented. Nothing has been run against
+      // a blank member, a missing member or a member that failed to render
+      // under it, so it is refused at every member count rather than offered.
+      twoConsensus: planMultiMember({ members: 2, contract: MULTI_MEMBER.CONSENSUS }),
+      fourConsensus: planMultiMember({ members: 4, contract: MULTI_MEMBER.CONSENSUS }),
+      implemented: IMPLEMENTED_CONTRACTS,
     };
     return out;
   },
@@ -714,6 +838,374 @@ window.__m4 = {
       };
     }
     return rows;
+  },
+
+  /**
+   * Candidate B, in the canonical upright frame.
+   *
+   * The pair that broke the earlier version is `/Rotate 0` against `/Rotate
+   * 90`: a scale taken in the display plane comes out at x = 0.707, y = 1.414
+   * — an anisotropic stretch on two pages that are the same piece of paper —
+   * and the plan returned `READY_TO_COMPARE` anyway. Both numbers are recorded
+   * here, the rejected one beside the one that replaced it, so the difference
+   * is visible rather than asserted.
+   */
+  async rigidMapping() {
+    const cases = {
+      '/Rotate 0 vs 0': ['rotate-0', 'rotate-0-copy'],
+      '/Rotate 0 vs 90': ['rotate-0', 'rotate-90'],
+      '/Rotate 0 vs 180': ['rotate-0', 'rotate-180'],
+      '/Rotate 0 vs 270': ['rotate-0', 'rotate-270'],
+      'crop origin only': ['crop-origin-0', 'crop-origin-50-70'],
+      'crop origin + /Rotate 90': ['crop-origin-0', 'crop-rot-90'],
+      'crop origin + /Rotate 180': ['crop-origin-0', 'crop-rot-180'],
+      'crop origin + /Rotate 270': ['crop-origin-0', 'crop-rot-270'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const geometry = [pageGeometry(pages[0]), pageGeometry(pages[1])];
+      const plan = candidateNormalise({ pages });
+      const invariant = assertRigidPlan(plan);
+      const compared = plan.status === PLAN.READY_TO_COMPARE
+        ? await canonicalCompare(pages, SCALE, 0)
+        : null;
+      out[label] = {
+        plan: plan.status,
+        alignment: plan.alignment ?? null,
+        renderRotation: plan.renderRotation ?? null,
+        mappings: (plan.mappings ?? []).map((m) => ({
+          member: m.member,
+          rigid: m.rigid,
+          scaleX: m.scaleX,
+          scaleY: m.scaleY,
+          scaleDelta: m.scaleDelta,
+          renderRotation: m.renderRotation,
+          sourceRotate: m.sourceRotate,
+          residualWidthPt: m.residualWidthPt,
+          residualHeightPt: m.residualHeightPt,
+        })),
+        invariantHolds: invariant.holds,
+        // What the rejected mapping would have produced for the same pair.
+        displayPlane: displayPlaneScale(geometry[0], geometry[1]),
+        upright: uprightGeometry(geometry[1]),
+        verdict: compared?.verdict ?? null,
+        changePixels: compared?.changePixels ?? null,
+        inkPixels: compared?.inkPixels ?? null,
+        ratio: compared?.ratio ?? null,
+        width: compared?.width ?? null,
+        height: compared?.height ?? null,
+        sameSize: compared?.sameSize ?? null,
+      };
+    }
+    // The control. Rendering upright must not turn a different sheet into a
+    // comparable one.
+    const different = await pair('base-a4', 'base-a3');
+    const diffPlan = candidateNormalise({ pages: different });
+    out['a different physical sheet'] = {
+      plan: diffPlan.status,
+      mappings: [],
+      invariantHolds: assertRigidPlan(diffPlan).holds,
+      reported: diffPlan.reported,
+      verdict: null,
+      displayPlane: displayPlaneScale(
+        pageGeometry(different[0]), pageGeometry(different[1]),
+      ),
+    };
+    return out;
+  },
+
+  /**
+   * Changes small enough for a ratio floor to swallow.
+   *
+   * Every pair below except the control is a **true** change to the drawing.
+   * `canonical` is the verdict with no floor at all; `underOldFloor` is what
+   * the 0.5%-of-ink floor from the previous round would have said about the
+   * same measurement. Where those two disagree, the floor is the thing
+   * reporting a revised drawing as unrevised.
+   *
+   * `spatial` is the alternative: the tolerance applied to the mask as a
+   * physical distance rather than to the total as a share. It is not free —
+   * a wide enough radius erodes a small change too — which is exactly why it
+   * has to be stated in millimetres the user chose rather than assumed.
+   */
+  async smallChanges() {
+    const cases = {
+      'nothing changed (control)': ['small-base', 'small-base-copy'],
+      'one digit of a dimension': ['small-base', 'small-digit'],
+      'one short fine line added': ['small-base', 'small-fine-line'],
+      'a symbol swapped': ['small-base', 'small-symbol'],
+      'a 4mm revision triangle added': ['small-base', 'small-revision-mark'],
+      'a light hatch added': ['small-base', 'small-hatch'],
+      'the pale hatch fixture': ['base-a4', 'pale-hatch-a4'],
+      'a wall added, for scale': ['base-a4', 'added-line-a4'],
+    };
+    const out = { cases: {}, spatial: {} };
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const compared = await canonicalCompare(pages, SCALE, 0);
+      const canonical = canonicalVerdict(compared).status;
+      const underOldFloor = verdictFor({
+        changePixels: compared.changePixels,
+        inkPixels: compared.inkPixels,
+        tolerance: 0.005,
+      }).status;
+      out.cases[label] = {
+        changePixels: compared.changePixels,
+        inkPixels: compared.inkPixels,
+        ratio: compared.ratio,
+        canonical,
+        underOldFloor,
+        // The failure the floor introduces, stated as a boolean so it can be
+        // asserted rather than read off a percentage.
+        floorWouldHide: canonical === RESULT.CHANGE && underOldFloor === RESULT.MATCH,
+      };
+    }
+    // The physical tolerance, on the control and on the smallest true change.
+    for (const [label, [a, b]] of Object.entries({
+      'nothing changed (control)': ['small-base', 'small-base-copy'],
+      'one digit of a dimension': ['small-base', 'small-digit'],
+    })) {
+      const pages = await pair(a, b);
+      out.spatial[label] = {};
+      for (const mm of [0, 0.1, 0.25, 0.5]) {
+        const radius = pixelRadiusFor(mm, DPI);
+        const compared = await canonicalCompare(pages, SCALE, radius);
+        out.spatial[label][`${mm}mm`] = {
+          radius,
+          changePixels: compared.changePixels,
+          verdict: compared.verdict,
+        };
+      }
+    }
+    out.floor = MATCH_RATIO_FLOOR;
+    return out;
+  },
+
+  /**
+   * The verdict must not be a property of the palette.
+   *
+   * The same comparison, painted three ways. `verdict` comes from the ink
+   * masks and must not move. `composite` is the colour-spread count the
+   * earlier rounds took from the painted result, and it moves a great deal —
+   * which is why it cannot be what MATCH and CHANGE are decided from.
+   */
+  async presentationIndependence() {
+    const presentations = {
+      'blue/red, black match, opaque': {
+        colors: [[0, 0, 1], [1, 0, 0]], matchColor: [0, 0, 0], matchOpacity: 1,
+      },
+      'grey/grey, grey match, faint': {
+        colors: [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],
+        matchColor: [0.5, 0.5, 0.5], matchOpacity: 0.2,
+      },
+      'green/magenta, white match': {
+        colors: [[0, 0.6, 0], [0.8, 0, 0.8]], matchColor: [1, 1, 1], matchOpacity: 1,
+      },
+    };
+    const out = {};
+    for (const [setLabel, [a, b]] of Object.entries({
+      'a changed pair': ['small-base', 'small-digit'],
+      'an identical pair': ['small-base', 'small-base-copy'],
+    })) {
+      const pages = await pair(a, b);
+      out[setLabel] = {};
+      for (const [label, p] of Object.entries(presentations)) {
+        const compared = await canonicalCompare(pages, SCALE, 0, {
+          presentation: { label, ...p },
+        });
+        out[setLabel][label] = {
+          verdict: compared.verdict,
+          changePixels: compared.changePixels,
+          composite: compared.presentation,
+        };
+      }
+    }
+    return out;
+  },
+
+  /**
+   * What a comparison would cost, before anything is allocated.
+   *
+   * Memory and work are separate ceilings. These are the work one, in units of
+   * one pixel read, computed from the member count, the multi-member contract,
+   * the neighbourhood box and the algorithm — all four, because leaving any of
+   * them out is how the previous shape managed to report zero for a radius-0
+   * comparison that still reads every pixel of every member.
+   */
+  workBudget() {
+    const rows = [
+      ['A4 300dpi, 2 members, radius 0', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 0],
+      ['A4 300dpi, 2 members, radius 1', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 1],
+      ['A4 300dpi, 2 members, radius 2', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 2],
+      ['A4 300dpi, 2 members, 0.5mm', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 6],
+      ['A4 300dpi, 4 members, ref-pairs, 0.5mm', 2480, 3507, 4,
+        MULTI_MEMBER.REFERENCE_PAIRS, 6],
+      ['A3 300dpi, 2 members, 0.5mm', 3508, 4961, 2, MULTI_MEMBER.TWO_ONLY, 6],
+      ['A1 300dpi, 2 members, 0.5mm', 7016, 9933, 2, MULTI_MEMBER.TWO_ONLY, 6],
+      ['A0 600dpi, 2 members, 0.5mm', 19866, 28087, 2, MULTI_MEMBER.TWO_ONLY, 12],
+    ];
+    const cases = {};
+    for (const [label, w, h, members, contract, radiusPx] of rows) {
+      const checked = checkComparisonWork({
+        width: w, height: h, members, contract, radiusPx,
+      });
+      cases[label] = {
+        pixels: checked.pixels,
+        members: checked.members,
+        contract: checked.contract,
+        radiusPx: checked.radiusPx,
+        neighbourhoodBox: checked.neighbourhoodBox,
+        groups: checked.groups,
+        units: checked.units,
+        withinBudget: checked.withinBudget,
+        refusal: checked.refusal,
+        requested: checked.requested,
+        effective: checked.effective,
+        degraded: checked.degraded,
+      };
+    }
+    // The same sheet under the algorithm that removes the radius from the cost.
+    const scan = checkComparisonWork({
+      width: 7016, height: 9933, members: 2,
+      contract: MULTI_MEMBER.TWO_ONLY, radiusPx: 6,
+      algorithm: COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
+    });
+    const separable = checkComparisonWork({
+      width: 7016, height: 9933, members: 2,
+      contract: MULTI_MEMBER.TWO_ONLY, radiusPx: 6,
+      algorithm: COMPARISON_ALGORITHM.SEPARABLE_DILATION,
+    });
+    return {
+      limit: MAX_COMPARISON_WORK_UNITS,
+      cases,
+      byAlgorithm: {
+        'any-neighbour-scan': { units: scan.units, withinBudget: scan.withinBudget },
+        'separable-dilation': {
+          units: separable.units, withinBudget: separable.withinBudget,
+        },
+      },
+      // A contract with no measured implementation gets no bound, and no bound
+      // is a refusal rather than a default.
+      consensus: checkComparisonWork({
+        width: 2480, height: 3507, members: 4,
+        contract: MULTI_MEMBER.CONSENSUS, radiusPx: 6,
+      }).refusal,
+      // Arithmetic that would leave the safe-integer range is a refusal too.
+      unrepresentable: checkComparisonWork({
+        width: 2000000, height: 2000000, members: 4,
+        contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 5000,
+      }).refusal,
+      oneMember: checkComparisonWork({
+        width: 2480, height: 3507, members: 1,
+        contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 0,
+      }).refusal,
+    };
+  },
+
+  /**
+   * An accepted comparison also has to be abandonable.
+   *
+   * The shipped loop is a synchronous nested scan: by the time it can be told
+   * to stop it has already finished. Both replacements are measured here — the
+   * separable dilation, which is the same answer at a fraction of the reads,
+   * and the banded generator, which returns control between bounded chunks so
+   * a cancellation can actually be observed.
+   *
+   * A cancelled comparison yields no verdict. Half a change mask is not a
+   * smaller change; it is a different drawing.
+   */
+  async cancellableComparison() {
+    const pages = await pair('dense-a', 'dense-b');
+    const rendered = await renderMembersUpright(pages, SCALE);
+    const { width, height } = rendered;
+    const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+    const args = { a: masks[0], b: masks[1], width, height };
+
+    const timings = {};
+    for (const mm of [0, 0.25, 0.5]) {
+      const radius = pixelRadiusFor(mm, DPI);
+      const scanStarted = performance.now();
+      const scan = pairChangeMaskScan({ ...args, radius });
+      const scanMs = Math.round(performance.now() - scanStarted);
+      const dilationStarted = performance.now();
+      const dilation = pairChangeMask({ ...args, radius });
+      const dilationMs = Math.round(performance.now() - dilationStarted);
+      timings[`${mm}mm`] = {
+        radius,
+        box: (2 * radius + 1) ** 2,
+        scanMs,
+        dilationMs,
+        scanChangePixels: scan.changePixels,
+        dilationChangePixels: dilation.changePixels,
+        // The separable form is not an approximation of the nested loop.
+        identical: scan.changePixels === dilation.changePixels
+          && scan.inkPixels === dilation.inkPixels,
+      };
+    }
+
+    // The case a bound has to cover, which is not the case on the corpus.
+    //
+    // The scan exits on the first ink it finds, so on a sparse drawing whose
+    // marks mostly agree it never runs the box. Its worst case is ink
+    // everywhere that matches nothing: two half-sheets of solid ink, which is
+    // what a scanned dark drawing against a redrawn one looks like. The scan
+    // then does the full `(2r+1)²` per pixel and the dilation does not.
+    const left = new Uint8Array(width * height);
+    const right = new Uint8Array(width * height);
+    const half = Math.floor(width / 2);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (x < half) left[y * width + x] = 1; else right[y * width + x] = 1;
+      }
+    }
+    const worstCase = {};
+    for (const mm of [0.25, 0.5]) {
+      const r = pixelRadiusFor(mm, DPI);
+      const scanStarted = performance.now();
+      const scan = pairChangeMaskScan({ a: left, b: right, width, height, radius: r });
+      const scanMs = Math.round(performance.now() - scanStarted);
+      const dilationStarted = performance.now();
+      const dilation = pairChangeMask({ a: left, b: right, width, height, radius: r });
+      const dilationMs = Math.round(performance.now() - dilationStarted);
+      worstCase[`${mm}mm`] = {
+        radius: r,
+        box: (2 * r + 1) ** 2,
+        scanMs,
+        dilationMs,
+        identical: scan.changePixels === dilation.changePixels,
+        changePixels: dilation.changePixels,
+      };
+    }
+
+    const radius = pixelRadiusFor(0.5, DPI);
+    const full = runCancellable(pairChangeMaskSteps({ ...args, radius, band: 256 }));
+    const stopped = runCancellable(
+      pairChangeMaskSteps({ ...args, radius, band: 256 }),
+      (_step, bands) => bands < 3,
+    );
+    return {
+      width,
+      height,
+      pixels: width * height,
+      inkFraction: masks[0].reduce((n, v) => n + v, 0) / (width * height),
+      timings,
+      worstCase,
+      banded: {
+        status: full.status,
+        bands: full.bands,
+        changePixels: full.result?.changePixels ?? null,
+        matchesDilation: full.result?.changePixels
+          === pairChangeMask({ ...args, radius }).changePixels,
+      },
+      cancelled: {
+        status: stopped.status,
+        bands: stopped.bands,
+        // No partial verdict, by construction.
+        result: stopped.result,
+        stoppedEarly: stopped.bands < full.bands,
+      },
+    };
   },
 
   PLAN,

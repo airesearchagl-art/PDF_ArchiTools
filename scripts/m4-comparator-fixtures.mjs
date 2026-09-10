@@ -129,6 +129,72 @@ function drawPlan(page, size, font, opts = {}) {
     }
 }
 
+/**
+ * The same plan, plus the small marks a revision is actually made of.
+ *
+ * Everything above is a wall: thousands of pixels, impossible to miss. A real
+ * revision is often a digit in a dimension, a symbol swapped, a four-millimetre
+ * revision triangle — changes of a few dozen pixels on a sheet with eighty
+ * thousand. Those are the ones a ratio floor disappears, so they need to exist
+ * in the corpus before any floor can be argued about.
+ *
+ * Kept as a separate family with its own base so that adding it changes none of
+ * the numbers already measured against `base-a4`.
+ */
+function drawSmallChange(page, size, font, opts = {}) {
+    const { w, h } = size;
+    const {
+        dimText = '1200', symbol = 'circle',
+        fineLine = false, revisionMark = false, pale = false,
+    } = opts;
+    const ink = rgb(0, 0, 0);
+    const lw = w * 0.0025;
+    drawPlan(page, size, font, { pale });
+
+    // A dimension string. One digit of this is the smallest honest change a
+    // drawing can carry and still mean something different.
+    page.drawText(dimText, {
+        x: w * 0.20, y: h * 0.44, size: h * 0.012, font, color: ink,
+    });
+
+    // A symbol that a reissue might swap for another symbol.
+    if (symbol === 'circle') {
+        page.drawCircle({
+            x: w * 0.5, y: h * 0.82, size: w * 0.012, borderColor: ink, borderWidth: lw,
+        });
+    } else {
+        page.drawRectangle({
+            x: w * 0.5 - w * 0.012, y: h * 0.82 - w * 0.012,
+            width: w * 0.024, height: w * 0.024, borderColor: ink, borderWidth: lw,
+        });
+    }
+
+    // A short fine line: an added dimension leader, thinner than the walls.
+    if (fineLine) {
+        page.drawLine({
+            start: { x: w * 0.30, y: h * 0.50 }, end: { x: w * 0.38, y: h * 0.50 },
+            thickness: lw * 0.6, color: ink,
+        });
+    }
+
+    // The revision triangle itself, about four millimetres on an A4.
+    if (revisionMark) {
+        const s = w * 0.014;
+        const x = w * 0.72;
+        const y = h * 0.52;
+        for (const [from, to] of [
+            [[x, y], [x + s, y]],
+            [[x, y], [x + s / 2, y + s]],
+            [[x + s, y], [x + s / 2, y + s]],
+        ]) {
+            page.drawLine({
+                start: { x: from[0], y: from[1] }, end: { x: to[0], y: to[1] },
+                thickness: lw * 0.8, color: ink,
+            });
+        }
+    }
+}
+
 async function make(name, note, build) {
     const doc = await PDFDocument.create();
     doc.setTitle(`M4 ${name}`);
@@ -238,6 +304,73 @@ await make('mediabox-larger', 'MediaBox bigger than the CropBox, same visible dr
         drawPlan(page, SHEET.A4, font);
         page.setCropBox(0, 0, SHEET.A4.w, SHEET.A4.h);
     });
+
+// A second copy at /Rotate 0, so "0 against 0" is a real pair of documents
+// rather than a document compared with itself.
+await make('rotate-0-copy', 'a second copy of the same A4 drawing at /Rotate 0',
+    async (doc, font) => {
+        const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+        drawPlan(page, SHEET.A4, font);
+        page.setRotation(degrees(0));
+    });
+
+// Crop origin *and* rotation together. Either alone is recoverable; the pair is
+// where a mapping computed in the display plane goes anisotropic, so the
+// canonical upright normalisation has to be shown on exactly these.
+for (const angle of [90, 180, 270]) {
+    await make(`crop-rot-${angle}`, `the crop-origin region at /Rotate ${angle}`,
+        async (doc, font) => {
+            const page = doc.addPage([SHEET.A4.w + 50, SHEET.A4.h + 70]);
+            page.pushOperators(
+                pushGraphicsState(), concatTransformationMatrix(1, 0, 0, 1, 50, 70),
+            );
+            drawPlan(page, SHEET.A4, font);
+            page.pushOperators(popGraphicsState());
+            page.setCropBox(50, 70, 495, 741);
+            page.setRotation(degrees(angle));
+        });
+}
+
+// ---------------------------------------------------------------------------
+// Changes small enough for a ratio floor to swallow
+// ---------------------------------------------------------------------------
+//
+// A wall is 9.6% of the ink. A digit is not. Every fixture here is a *true*
+// change to the drawing, small enough that a global "under half a percent is a
+// match" rule would report it as unchanged -- which is the failure a floor
+// introduces, and the reason one cannot be picked by intuition.
+//
+// `small-base-copy` is the control: a redraw with nothing changed, so the
+// difference between "too small to see" and "nothing there" stays measurable.
+
+await make('small-base', 'the reference sheet for the small-change set', async (doc, font) => {
+    drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font);
+});
+await make('small-base-copy', 'the same sheet redrawn — the render-variance control',
+    async (doc, font) => {
+        drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font);
+    });
+await make('small-digit', 'one digit of a dimension changed: 1200 becomes 1300',
+    async (doc, font) => {
+        drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+            { dimText: '1300' });
+    });
+await make('small-fine-line', 'one short fine line added', async (doc, font) => {
+    drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+        { fineLine: true });
+});
+await make('small-symbol', 'the symbol swapped from a circle to a square',
+    async (doc, font) => {
+        drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+            { symbol: 'square' });
+    });
+await make('small-revision-mark', 'a 4mm revision triangle added', async (doc, font) => {
+    drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+        { revisionMark: true });
+});
+await make('small-hatch', 'a light hatch added to the same sheet', async (doc, font) => {
+    drawSmallChange(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font, { pale: true });
+});
 
 // ---------------------------------------------------------------------------
 // Three and four members

@@ -15,23 +15,35 @@ The geometry findings do not depend on the drawing — a sheet size is a sheet
 size — but every *ratio* here does. "99.4% of ink flagged" is 99.4% of this
 drawing's ink.
 
-## The change set is three changes
+## The change set is small, and still synthetic
 
-A wall added, a wall removed, the whole drawing shifted 2 pt. Nothing that
-matters in practice and is hard to see: a dimension string edited, a symbol
-swapped, a revision cloud, text reflowed by a font substitution.
+The corpus now carries changes at the scale a revision actually has — a digit in
+a dimension edited, a symbol swapped, a short fine line, a 4 mm revision
+triangle, a light hatch — alongside the walls. They are what §4f of
+`measurements.md` rests on.
+
+What is still missing: text reflowed by a font substitution, a revision cloud,
+a scanned raster underlay, and anything drawn by a real CAD package rather than
+by `pdf-lib`. The smallest change measured is 43 pixels at 150 dpi, and nothing
+establishes that 43 pixels is the smallest change a *user* would want caught.
 
 The 9.6% figure for "a real change" is one change on one drawing, and it is used
 here only as a control — to show the detector works — not as a claim about
 sensitivity.
 
-## The false-change numbers are a proxy
+## The baseline's false-change numbers are a proxy
 
-`changeRatio` counts composite pixels whose channels are far apart, i.e. painted
-in a layer colour rather than the matched colour. That is a good proxy for "the
-tool is calling this a change" and it is not the same as what a user would judge.
-A 99.4% and a 75.9% are both "almost everything"; the gap between them is not
-meaningful.
+The `changeRatio` in section 1 counts composite pixels whose channels are far
+apart, i.e. painted in a layer colour rather than the matched colour. That is a
+good proxy for "the shipped tool is calling this a change" and it is not the
+same as what a user would judge. A 99.4% and a 75.9% are both "almost
+everything"; the gap between them is not meaningful.
+
+It is also **presentation-dependent**, which §4g measures rather than assumes:
+give both layers the same grey and the same genuinely-changed pair counts zero.
+The proposed verdict is computed from the ink masks instead, and the baseline
+figures are kept in that form only because they describe what the shipped code
+does.
 
 ## The worst case is measured, but only on one shape
 
@@ -45,13 +57,31 @@ dense fixtures are short horizontal strokes; a drawing dense in a different way 
 fine hatch, dense text, a photographic underlay — could behave differently, and
 the ink fraction here (1.7-1.9%) is low for a busy construction sheet.
 
-The `pixels x radius squared x members` upper bound in `architecture.md` is
-arithmetic, not measured at scale: no comparison near the proposed budget was run
-to completion, deliberately.
+The work bound in `architecture.md` is arithmetic, not measured at scale: no
+comparison near the proposed ceiling was run to completion, deliberately.
+
+## The work ceiling is calibrated on one number, on one machine
+
+`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` is derived from a single
+observation — 158 ms for 34,789,440 units on the A4 300 dpi radius-0 pair — and
+projected linearly to about 55 seconds. Three things about that are weak, and
+are why it is a recommendation requiring approval rather than a finding:
+
+- It is one machine and one browser. A slower machine gets a proportionally
+  longer worst case at the same ceiling.
+- The projection is linear in work units, and nothing here measures a comparison
+  anywhere near 12e9 units to check that it stays linear. Cache behaviour at
+  that size is unknown.
+- 55 seconds is a judgement about how long a person may reasonably be asked to
+  wait, made without asking one.
+
+The *shape* of the bound is better founded than its value: it is conservative
+about the ink fraction on purpose, and the radius-0 case demonstrates that the
+previous shape was not a bound at all.
 
 ## The budget is a judgement, not a discovered threshold
 
-512 MB is chosen, not found. What the measurements establish is the *shape* of
+512 MiB is chosen, not found. What the measurements establish is the *shape* of
 the cost — layers x pixels x 4 bytes, about five canvases over for two layers —
 and that an A1 at 300 dpi needs 1.95 GB while passing the existing canvas caps.
 Where to draw the line is a decision about how much memory one comparison may
@@ -61,28 +91,54 @@ Nothing over the budget was allocated, so the failure mode past it is
 **calculated, not observed**. Whether a browser fails cleanly or takes the tab
 with it at 2 GB is untested here, and deliberately so.
 
-## Cancellation and ownership are proposed, not measured
+## Ownership is proposed; only abandonability is measured
 
 The ownership section in `architecture.md` reuses M3's shape — a mount flag and a
-generation counter — and no cancellation, supersession or unmount behaviour was
-exercised here. It is a proposal by analogy.
+generation counter — and **no supersession or unmount behaviour was exercised
+against a running comparison here**. It is a proposal by analogy.
 
-One thing about it *is* established, by reading the code rather than by
-measurement: the composite is a synchronous double loop with no yield point, so a
-comparison in progress cannot observe a cancellation flag at all. Ownership stops
-a stale result being *published*; it does not make a long comparison stop.
-Whether the loop is chunked, replaced with a bounded lookup, or bounded before it
-starts is an open architecture decision that this spike does not settle.
+What is now measured is the half that made the proposal impossible. A banded
+comparison ran in 31 bands over a 1241×1754 sheet, produced the mask the direct
+form produces, and stopped after 3 bands with no verdict. That establishes that
+there is somewhere for a generation check to attach; it does not establish that
+attaching M3's check there behaves the way M3's does.
+
+The banded prototype is also a synchronous generator driven in a loop, not a
+worker yielding to an event loop. It demonstrates the *structure* — bounded
+chunks with a decision point between them — not the scheduling.
 
 ## The multi-member contract is measured, not chosen
 
 Four-member sets are measured — a two-against-two split is reported as a clean
-match by the shipped rule, and caught by reference-pairs — but which contract to
-adopt is a product question listed as H9. All-member consensus is described and
-**not measured**: no consensus implementation was run against the corpus.
+match by the shipped rule, and caught by reference-pairs — but which of the two
+implemented contracts to adopt is a product question listed as H9.
+
+All-member consensus is described and **not measured**: no consensus
+implementation was run against the corpus. It is therefore refused by
+`planMultiMember` rather than offered, which is a change from the previous round
+— an option nobody has run should not sit in a table beside two that have been.
+Making it selectable means first measuring it against four identical members,
+three the same and one changed, two against two, a reference against three
+different documents, one blank member, one missing member, and one member that
+failed to render.
 
 The 3- and 4-way fixtures are the same plan with the wall in one of two places. A
 real four-way revision set would differ in more ways than that.
+
+## Human alignment has no transform contract
+
+Candidate C's refusal is researched. Its transform is not: the prototype records
+`{ x, y, rotation, scale }` and defines none of it — coordinate space, units,
+transform order, rotation pivot, whether scaling may be non-uniform, bounds,
+validation, how it composes with CropBox and upright normalisation, what the
+memory and work estimates become afterwards, or how it is saved as provenance.
+**No aligned comparison has been run end to end**, so no aligned MATCH or CHANGE
+exists anywhere in this evidence.
+
+Supplying an alignment therefore returns `UNSUPPORTED` rather than
+`READY_TO_COMPARE`, changed from the previous round. If the Human Gate answers
+H1 with "offer human alignment", an Alignment Architecture Sub-Spike is required
+before M4 production implementation.
 
 ## Automatic registration was not implemented or measured
 

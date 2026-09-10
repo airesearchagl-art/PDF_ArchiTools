@@ -80,8 +80,25 @@ try {
     console.log('\n=== the corpus ===');
     const corpus = await page.evaluate(() => window.__m4.corpus());
     evidence.corpus = corpus;
-    check('every fixture was read', Object.keys(corpus).length === 31,
+    check('every fixture was read', Object.keys(corpus).length === 42,
         `${Object.keys(corpus).length} fixtures`);
+    check('the crop-and-rotate fixtures show the same visible box turned',
+        [90, 180, 270].every((a) => corpus[`crop-rot-${a}`].rotate === a
+            && corpus[`crop-rot-${a}`].view[0] === 50
+            && corpus[`crop-rot-${a}`].view[1] === 70),
+        'CropBox at (50,70), 495x741, at three rotations');
+    // Whether each small change is really a change is settled by the pixels,
+    // not by an operator count -- '1200' and '1300' draw the same number of
+    // operators. What the corpus has to establish is that they are all the same
+    // sheet, so nothing below is measuring a geometry difference by accident.
+    check('the small-change family is one sheet at one size',
+        ['small-base-copy', 'small-digit', 'small-fine-line', 'small-symbol',
+            'small-revision-mark', 'small-hatch'].every((n) => (
+            corpus[n].display[0] === corpus['small-base'].display[0]
+            && corpus[n].display[1] === corpus['small-base'].display[1]
+            && corpus[n].rotate === 0
+        )),
+        `all ${corpus['small-base'].display.join('x')} at /Rotate 0`);
     check('the four rotations differ only in the rotation',
         [0, 90, 180, 270].every((a) => corpus[`rotate-${a}`].rotate === a)
         && new Set([0, 90, 180, 270].map((a) => corpus[`rotate-${a}`].ops)).size === 1,
@@ -221,6 +238,12 @@ try {
         staged.identical.plan === 'READY_TO_COMPARE' && staged.identical.verdict === 'MATCH',
         `${pct(staged.identical.ratio)} of ink differs, tolerance `
         + `${pct(staged.identical.tolerance)}`);
+    // The point of the tolerance change: MATCH is reached at zero, not at a
+    // floor. A control that needed a floor would say so here.
+    check('and reaches it with no ratio floor at all',
+        staged.identical.tolerance === 0 && staged.identical.changePixels === 0,
+        `${staged.identical.changePixels} differing pixels, floor `
+        + `${staged.identical.tolerance}`);
     check('a wall added is READY_TO_COMPARE and then CHANGE',
         staged['a wall added'].plan === 'READY_TO_COMPARE'
         && staged['a wall added'].verdict === 'CHANGE',
@@ -238,10 +261,19 @@ try {
         staged['a different sheet'].plan === 'GEOMETRY_MISMATCH'
         && staged['a different sheet'].verdict === null,
         staged['a different sheet'].reported.join('; '));
-    check('a human alignment makes the plan ready, and nothing more',
-        staged['a different sheet, aligned by a human'].plan === 'READY_TO_COMPARE'
-        && staged['a different sheet, aligned by a human'].alignment === 'human',
-        'the verdict still has to come from a comparison');
+    // Changed deliberately from the previous round, where this returned
+    // READY_TO_COMPARE. Recording {x, y, rotation, scale} is not the same as
+    // defining what those numbers mean, and a plan may not claim a comparison
+    // it has no contract for. Same principle as the Candidate B fix.
+    const aligned = staged['a different sheet, aligned by a human'];
+    check('a supplied alignment does not make the plan ready',
+        aligned.plan === 'UNSUPPORTED' && aligned.implementationReady === false
+        && aligned.requires === 'alignment-architecture-sub-spike',
+        aligned.reported.join('; '));
+    probe('the alignment is recorded but never applied',
+        aligned.recordedAlignment !== null && aligned.appliedAlignment === null,
+        `${aligned.missingContract.length} undefined parts of the contract, `
+        + `starting with ${aligned.missingContract[0]}`);
 
     // ---- more than two members ---------------------------------------------
     console.log('\n=== more than two members ===');
@@ -277,6 +309,18 @@ try {
     check('and produce three pairs under the reference contract',
         multi.plans.fourReferencePairs.pairs === 3);
     probe('one member is not a comparison', multi.plans.one === 'UNSUPPORTED');
+    // Consensus is described in the architecture and implemented nowhere, so it
+    // is refused rather than offered. An option nobody has run is not an option.
+    probe('all-member consensus is refused at every member count',
+        multi.plans.twoConsensus.status === 'UNSUPPORTED'
+        && multi.plans.fourConsensus.status === 'UNSUPPORTED'
+        && multi.plans.fourConsensus.deferred === true,
+        multi.plans.fourConsensus.reported.join('; '));
+    check('the implemented contracts are the two that were measured',
+        multi.plans.implemented.length === 2
+        && multi.plans.implemented.includes('two-only')
+        && multi.plans.implemented.includes('reference-pairs'),
+        multi.plans.implemented.join(', '));
 
     // ---- the tolerance for calling two sheets the same ---------------------
     console.log('\n=== how close is the same sheet ===');
@@ -407,10 +451,11 @@ try {
     check('the human candidate asks rather than guessing',
         candidates['A4 vs A3, same drawing'].human.status === 'ALIGNMENT_REQUIRED',
         candidates['A4 vs A3, same drawing'].human.reported.join('; '));
-    check('and becomes ready once an alignment is supplied',
-        candidates['A4 vs A3, same drawing'].humanWithAlignment.status === 'READY_TO_COMPARE'
-        && candidates['A4 vs A3, same drawing'].humanWithAlignment.alignment === 'human',
-        'the plan carries the alignment it was made under; the verdict still has to be earned');
+    probe('and does not become ready merely because an alignment was supplied',
+        candidates['A4 vs A3, same drawing'].humanWithAlignment.status === 'UNSUPPORTED'
+        && candidates['A4 vs A3, same drawing'].humanWithAlignment
+            .implementationReady === false,
+        'the transform contract is undefined, so there is nothing to be ready for');
     // The one the baseline gets wrong on every geometry case.
     probe('the baseline is ready for all of them regardless',
         Object.values(candidates).every((r) => r.baseline.status === 'READY_TO_COMPARE'),
@@ -550,6 +595,247 @@ try {
         determinism.identical === true,
         `${determinism.changePixels.join(' and ')} change pixels`);
 
+    // ---- Candidate B, in canonical upright space ---------------------------
+    console.log('\n=== every accepted mapping is rigid ===');
+    const rigid = await page.evaluate(() => window.__m4.rigidMapping());
+    evidence.rigidMapping = rigid;
+    for (const [label, r] of Object.entries(rigid)) {
+        const mapped = r.mappings.map((m) => `${m.scaleX}x${m.scaleY} rigid:${m.rigid}`)
+            .join(' ') || '—';
+        console.log(`  ${label.padEnd(28)} ${r.plan.padEnd(18)} ${mapped.padEnd(22)}`
+            + ` display-plane ${r.displayPlane.x.toFixed(3)}/${r.displayPlane.y.toFixed(3)}`
+            + `  ${(r.verdict ?? '').padEnd(6)}`
+            + `${r.changePixels === null || r.changePixels === undefined
+                ? '' : ` ${r.changePixels}px`}`);
+    }
+    const accepted = Object.entries(rigid)
+        .filter(([, r]) => r.plan === 'READY_TO_COMPARE');
+    check('all eight required geometry pairs are accepted', accepted.length === 8,
+        accepted.map(([k]) => k).join(', '));
+    check('and every one of them is planned in canonical upright space',
+        accepted.every(([, r]) => r.alignment === 'canonical-upright-page-space'
+            && r.renderRotation === 0),
+        'render rotation 0 on all eight');
+    // The invariant this whole section exists for.
+    probe('READY_TO_COMPARE implies every mapping is rigid',
+        accepted.every(([, r]) => r.invariantHolds === true
+            && r.mappings.length > 0 && r.mappings.every((m) => m.rigid === true)),
+        `${accepted.reduce((n, [, r]) => n + r.mappings.length, 0)} mappings, none `
+        + 'non-rigid');
+    probe('and no accepted mapping is anisotropic',
+        accepted.every(([, r]) => r.mappings.every(
+            (m) => m.scaleX === 1 && m.scaleY === 1 && m.scaleDelta === 0,
+        )),
+        'scale 1 on both axes, |scaleX - scaleY| = 0 exactly');
+    // What the previous round did with the same input.
+    probe('the rejected display-plane mapping would have been an anisotropic stretch',
+        rigid['/Rotate 0 vs 90'].displayPlane.uniform === false
+        && Math.abs(rigid['/Rotate 0 vs 90'].displayPlane.x - 0.707) < 0.01
+        && Math.abs(rigid['/Rotate 0 vs 90'].displayPlane.y - 1.414) < 0.01,
+        `x ${rigid['/Rotate 0 vs 90'].displayPlane.x.toFixed(3)}, `
+        + `y ${rigid['/Rotate 0 vs 90'].displayPlane.y.toFixed(3)} on two pages that `
+        + 'are the same piece of paper');
+    check('every accepted pair reaches MATCH when it is actually compared',
+        accepted.every(([, r]) => r.verdict === 'MATCH' && r.changePixels === 0
+            && r.sameSize === true),
+        `${accepted.length} pairs, 0 differing pixels each`);
+    probe('and a different physical sheet is still refused',
+        rigid['a different physical sheet'].plan === 'GEOMETRY_MISMATCH'
+        && rigid['a different physical sheet'].verdict === null,
+        rigid['a different physical sheet'].reported.join('; '));
+
+    // ---- changes small enough for a floor to swallow ------------------------
+    console.log('\n=== changes small enough for a floor to swallow ===');
+    const small = await page.evaluate(() => window.__m4.smallChanges());
+    evidence.smallChanges = small;
+    for (const [label, r] of Object.entries(small.cases)) {
+        console.log(`  ${label.padEnd(32)} ${String(r.changePixels).padStart(6)}px  `
+            + `${pct(r.ratio).padStart(7)}  canonical ${r.canonical.padEnd(6)}  `
+            + `under a 0.5% floor ${r.underOldFloor}`
+            + `${r.floorWouldHide ? '   <- hidden' : ''}`);
+    }
+    const trueChanges = Object.entries(small.cases)
+        .filter(([k]) => k !== 'nothing changed (control)');
+    check('the floor in force is zero', small.floor === 0);
+    check('the control is a match without one',
+        small.cases['nothing changed (control)'].changePixels === 0
+        && small.cases['nothing changed (control)'].canonical === 'MATCH',
+        `${small.cases['nothing changed (control)'].changePixels} differing pixels on a `
+        + 'redraw of the same sheet');
+    check('every true change is a change',
+        trueChanges.every(([, r]) => r.canonical === 'CHANGE'),
+        `${trueChanges.length} changes, smallest `
+        + `${Math.min(...trueChanges.map(([, r]) => r.changePixels))}px`);
+    // The finding: the floor introduced in the previous round is not harmless.
+    const hidden = trueChanges.filter(([, r]) => r.floorWouldHide);
+    probe('the 0.5% floor would have reported real changes as unchanged',
+        hidden.length > 0,
+        `${hidden.length} of ${trueChanges.length}: `
+        + hidden.map(([k, r]) => `${k} (${pct(r.ratio)})`).join(', '));
+    // And the alternative to a ratio floor, measured on the same pairs.
+    for (const [label, rows] of Object.entries(small.spatial)) {
+        console.log(`  ${label.padEnd(32)} `
+            + Object.entries(rows).map(([mm, r]) => `${mm}:${r.radius}px `
+                + `${String(r.changePixels).padStart(5)} ${r.verdict}`).join('  '));
+    }
+    check('render variance needs no floor at any tolerance',
+        Object.values(small.spatial['nothing changed (control)'])
+            .every((r) => r.changePixels === 0 && r.verdict === 'MATCH'),
+        'the control is 0 differing pixels from 0mm to 0.5mm');
+    // The physical tolerance is not free either, and saying so is the point.
+    probe('but a physical tolerance does erode a small change as it widens',
+        small.spatial['one digit of a dimension']['0.5mm'].changePixels
+        < small.spatial['one digit of a dimension']['0mm'].changePixels,
+        Object.entries(small.spatial['one digit of a dimension'])
+            .map(([mm, r]) => `${mm}:${r.changePixels}px`).join(' -> '));
+
+    // ---- the verdict is not a property of the palette -----------------------
+    console.log('\n=== the same comparison, painted three ways ===');
+    const presentation = await page.evaluate(() => window.__m4.presentationIndependence());
+    evidence.presentation = presentation;
+    for (const [set, rows] of Object.entries(presentation)) {
+        for (const [label, r] of Object.entries(rows)) {
+            console.log(`  ${set.padEnd(16)} ${label.padEnd(30)} verdict ${
+                r.verdict.padEnd(6)} mask ${String(r.changePixels).padStart(6)}px  `
+                + `composite ${pct(r.composite.compositeRatio).padStart(7)}`);
+        }
+    }
+    for (const [set, expected] of [['a changed pair', 'CHANGE'], ['an identical pair', 'MATCH']]) {
+        const rows = Object.values(presentation[set]);
+        check(`${set} keeps its verdict under every presentation`,
+            rows.every((r) => r.verdict === expected),
+            `${expected} under ${rows.length} palettes`);
+        check(`and ${set} keeps the same change-pixel count`,
+            new Set(rows.map((r) => r.changePixels)).size === 1,
+            `${rows[0].changePixels}px, identical across all of them`);
+    }
+    // Why it had to be moved off the composite in the first place.
+    probe('while the count taken from the painted composite moves with the palette',
+        new Set(Object.values(presentation['a changed pair'])
+            .map((r) => r.composite.compositeChangePixels)).size > 1,
+        Object.entries(presentation['a changed pair'])
+            .map(([k, r]) => `${k}: ${r.composite.compositeChangePixels}px`).join(' | '));
+
+    // ---- the work a comparison would do ------------------------------------
+    console.log('\n=== the work budget ===');
+    const work = await page.evaluate(() => window.__m4.workBudget());
+    evidence.work = work;
+    for (const [label, r] of Object.entries(work.cases)) {
+        console.log(`  ${label.padEnd(40)} box ${String(r.neighbourhoodBox).padStart(4)}  `
+            + `${String(r.groups)} group(s)  ${String(r.units).padStart(14)} units  `
+            + `${r.withinBudget ? 'within' : 'REFUSED'}`);
+    }
+    check('a work ceiling is stated', work.limit === 12_000_000_000,
+        `${work.limit.toLocaleString('en-US')} work units`);
+    // The defect in the previous shape, stated as a check.
+    probe('a radius-0 comparison is not zero work',
+        work.cases['A4 300dpi, 2 members, radius 0'].units > 0,
+        `${work.cases['A4 300dpi, 2 members, radius 0'].units.toLocaleString('en-US')} `
+        + 'units at radius 0, where pixels x radius squared x members gives zero');
+    check('the member count and the contract are both represented',
+        work.cases['A4 300dpi, 4 members, ref-pairs, 0.5mm'].units
+            === work.cases['A4 300dpi, 2 members, 0.5mm'].units * 3
+        && work.cases['A4 300dpi, 4 members, ref-pairs, 0.5mm'].groups === 3,
+        'four members under reference-pairs is three pair comparisons, and costs three times');
+    const base = work.cases['A4 300dpi, 2 members, radius 0'];
+    const perPixelBaseline = base.pixels * 2;
+    check('the neighbourhood term grows as (2r+1) squared',
+        work.cases['A4 300dpi, 2 members, radius 1'].units - perPixelBaseline
+            === (work.cases['A4 300dpi, 2 members, radius 0'].units - perPixelBaseline) * 9
+        && work.cases['A4 300dpi, 2 members, radius 2'].units - perPixelBaseline
+            === (work.cases['A4 300dpi, 2 members, radius 0'].units - perPixelBaseline) * 25,
+        'boxes of 1, 9 and 25 over the same pixels');
+    probe('an A1 at 300 dpi with a half-millimetre tolerance is refused',
+        work.cases['A1 300dpi, 2 members, 0.5mm'].withinBudget === false
+        && work.cases['A1 300dpi, 2 members, 0.5mm'].refusal.status === 'OVER_WORK_BUDGET',
+        work.cases['A1 300dpi, 2 members, 0.5mm'].refusal.reason);
+    check('while ordinary sheets are not',
+        work.cases['A4 300dpi, 2 members, 0.5mm'].withinBudget
+        && work.cases['A3 300dpi, 2 members, 0.5mm'].withinBudget,
+        `A4 ${work.cases['A4 300dpi, 2 members, 0.5mm'].units.toLocaleString('en-US')}, `
+        + `A3 ${work.cases['A3 300dpi, 2 members, 0.5mm'].units.toLocaleString('en-US')}`);
+    check('nothing is silently degraded to fit',
+        Object.values(work.cases).every((r) => r.degraded === false
+            && r.requested.radiusPx === r.effective.radiusPx
+            && r.requested.widthPx === r.effective.widthPx
+            && r.requested.contract === r.effective.contract),
+        'requested and effective settings are recorded together on every estimate');
+    probe('a contract with no measured implementation gets no bound, and no bound refuses',
+        work.consensus.status === 'OVER_WORK_BUDGET'
+        && work.consensus.reason.includes('no work bound'),
+        work.consensus.reason);
+    probe('arithmetic that would leave the safe-integer range is refused, not rounded',
+        work.unrepresentable.status === 'OVER_WORK_BUDGET'
+        && work.unrepresentable.reason.includes('not representable'),
+        work.unrepresentable.reason);
+    probe('and one member is refused before any work is estimated',
+        work.oneMember.status === 'OVER_WORK_BUDGET');
+    // The bound belongs to the algorithm, not to the feature.
+    check('choosing a different algorithm derives a different bound',
+        work.byAlgorithm['any-neighbour-scan'].withinBudget === false
+        && work.byAlgorithm['separable-dilation'].withinBudget === true,
+        `${work.byAlgorithm['any-neighbour-scan'].units.toLocaleString('en-US')} scanning `
+        + `against ${work.byAlgorithm['separable-dilation'].units.toLocaleString('en-US')} `
+        + 'dilating, for the same A1 at the same tolerance');
+
+    // ---- an accepted comparison can be abandoned ---------------------------
+    console.log('\n=== stopping a comparison that has started ===');
+    const cancellable = await page.evaluate(() => window.__m4.cancellableComparison());
+    evidence.cancellable = cancellable;
+    for (const [label, r] of Object.entries(cancellable.timings)) {
+        console.log(`  ${label.padEnd(8)} radius ${String(r.radius).padStart(2)} `
+            + `box ${String(r.box).padStart(3)}  scan ${String(r.scanMs).padStart(5)}ms  `
+            + `dilation ${String(r.dilationMs).padStart(5)}ms  `
+            + `${r.identical ? 'same mask' : 'DIFFERENT MASK'}`);
+    }
+    check('the separable form is the same answer, not an approximation of it',
+        Object.values(cancellable.timings).every((r) => r.identical),
+        `identical change masks at radius ${Object.values(cancellable.timings)
+            .map((r) => r.radius).join(', ')}`);
+    const t = cancellable.timings;
+    const w = cancellable.worstCase;
+    const growth = (a, b) => b / Math.max(a, 1);
+    // Honest rather than flattering: on this corpus the scan is the faster of
+    // the two, because a drawing is mostly paper and the scan exits on the
+    // first ink it finds. That is a property of the drawing, not of the
+    // algorithm, which is exactly why a ceiling cannot be derived from it.
+    check('on a sparse drawing the scan is the cheaper of the two',
+        t['0.5mm'].scanMs <= t['0.5mm'].dilationMs * 4,
+        `${pct(cancellable.inkFraction)} of the sheet is ink: scan `
+        + `${t['0.5mm'].scanMs}ms against dilation ${t['0.5mm'].dilationMs}ms`);
+    check('the separable form is flat in the radius',
+        growth(t['0.25mm'].dilationMs, t['0.5mm'].dilationMs) <= 2,
+        `box 9 -> 49: dilation ${t['0.25mm'].dilationMs}ms -> `
+        + `${t['0.5mm'].dilationMs}ms`);
+    for (const [label, r] of Object.entries(w)) {
+        console.log(`  worst case ${label.padEnd(8)} box ${String(r.box).padStart(3)}  `
+            + `scan ${String(r.scanMs).padStart(5)}ms  `
+            + `dilation ${String(r.dilationMs).padStart(5)}ms  `
+            + `${r.identical ? 'same mask' : 'DIFFERENT MASK'}`);
+    }
+    // The case the bound has to cover: ink everywhere, matching nowhere.
+    probe('but on ink that matches nothing the scan grows with the box and the dilation does not',
+        growth(w['0.25mm'].dilationMs, w['0.5mm'].dilationMs)
+        < growth(w['0.25mm'].scanMs, w['0.5mm'].scanMs)
+        && w['0.5mm'].scanMs > w['0.5mm'].dilationMs,
+        `box 9 -> 49 on a solid sheet: scan ${w['0.25mm'].scanMs}ms -> `
+        + `${w['0.5mm'].scanMs}ms, dilation ${w['0.25mm'].dilationMs}ms -> `
+        + `${w['0.5mm'].dilationMs}ms`);
+    check('and both still agree about the mask there',
+        Object.values(w).every((r) => r.identical),
+        `${w['0.5mm'].changePixels.toLocaleString('en-US')} change pixels either way`);
+    check('the banded form gives the same answer as the direct one',
+        cancellable.banded.status === 'READY_TO_COMPARE'
+        && cancellable.banded.matchesDilation === true,
+        `${cancellable.banded.bands} bands over a `
+        + `${cancellable.width}x${cancellable.height} comparison`);
+    probe('and stops when it is told to, with no verdict at all',
+        cancellable.cancelled.status === 'CANCELLED'
+        && cancellable.cancelled.result === null
+        && cancellable.cancelled.stoppedEarly === true,
+        `stopped after ${cancellable.cancelled.bands} of `
+        + `${cancellable.banded.bands} bands; half a change mask is not a smaller change`);
+
     // ---- network ------------------------------------------------------------
     console.log('\n=== the research harness talked to nobody ===');
     probe('no external HTTP(S) request', external.length === 0,
@@ -557,7 +843,7 @@ try {
     check('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 
     fs.writeFileSync(EVIDENCE, `${JSON.stringify({
-        generated: '2026-09-09',
+        generated: '2026-09-10',
         base: '44cb82db7365e436c642f375852f22990c45a6ce',
         note: 'Research measurements. Baseline numbers are the shipped comparator.',
         ...evidence,

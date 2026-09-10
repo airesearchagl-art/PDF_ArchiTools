@@ -42,26 +42,77 @@ MISSING_PAGE        a member does not have this page
 GEOMETRY_MISMATCH   the pages do not describe the same sheet
 ALIGNMENT_REQUIRED  they could be compared with an alignment the tool will not invent
 RENDER_FAILED       a member could not be read
+OVER_MEMORY_BUDGET  the working set is over the ceiling
+OVER_WORK_BUDGET    the work is over the ceiling
 UNSUPPORTED         the request cannot be honoured at all
 CANCELLED           superseded or abandoned
 ```
+
+The two budget statuses are separate because the two ceilings are: an A4 at
+300 dpi is comfortable on memory and, at a half-millimetre tolerance, three
+billion neighbourhood reads.
 
 **The result** says what was found, and is reachable only from a plan that was
 ready and a comparison that actually ran:
 
 ```
-MATCH               nothing beyond the stated tolerance
+MATCH               the change mask is empty
 CHANGE              differences found, and here they are
 ```
 
-Measured: identical → `READY_TO_COMPARE` → **MATCH** (0.0% of ink differing);
+Measured: identical → `READY_TO_COMPARE` → **MATCH** (0 differing pixels);
 a wall added → `READY_TO_COMPARE` → **CHANGE** (9.6%); a rotation-only pair →
 **MATCH** once rendered upright; a different sheet → `GEOMETRY_MISMATCH` and
 **no verdict at all**.
 
-The match tolerance is 0.5% of ink, not zero: rendering is not bit-exact and
-antialiasing puts a handful of pixels either side of every line, so a zero
-tolerance would make MATCH unreachable.
+### What the verdict is computed from
+
+```
+    each member rendered in canonical upright space
+      -> canonical ink predicate            -> one ink mask per member
+      -> physical spatial tolerance (mm)    -> canonical semantic change mask
+      -> mask empty ? MATCH : CHANGE
+      -> and only then, the picture
+```
+
+The verdict comes from the **masks**, before anything is painted. None of the
+following may reach it: layer display colours, the match colour, the match
+opacity, JPEG against PNG, the preview's styling. Measured on the same changed
+pair under three palettes — the mask is 51 pixels in all three and the verdict
+is `CHANGE` in all three, while the count taken from the painted composite reads
+51, 0 and 51 depending only on which colours were chosen.
+
+**The match floor is zero.** An earlier version of this document set it at 0.5%
+of ink on the reasoning that rendering is not bit-exact. The corpus does not
+support that: every control — an identical drawing, a rotation-only pair
+rendered upright, a crop-origin pair, a redraw of the same sheet — comes back at
+**exactly 0 differing pixels**, so a zero floor does not make MATCH unreachable.
+What the floor did do was hide real revisions. Measured against a corpus of
+small true changes:
+
+| a true change to the drawing | pixels | of the ink | at a zero floor | under a 0.5% floor |
+| --- | --- | --- | --- | --- |
+| a light hatch added | 43 | 0.053% | **CHANGE** | MATCH |
+| the pale-hatch fixture | 43 | 0.054% | **CHANGE** | MATCH |
+| one digit of a dimension, 1200 → 1300 | 51 | 0.063% | **CHANGE** | MATCH |
+| a 4 mm revision triangle added | 160 | 0.198% | **CHANGE** | MATCH |
+| one short fine line added | 200 | 0.248% | **CHANGE** | MATCH |
+| a symbol swapped, circle → square | 394 | 0.488% | **CHANGE** | MATCH |
+| a wall added | 8530 | 9.640% | **CHANGE** | CHANGE |
+| *nothing changed (control)* | *0* | *0.000%* | *MATCH* | *MATCH* |
+
+Six of the seven true changes on that corpus were converted into matches by the
+floor. A drawing office would have been told a reissued sheet was unchanged.
+
+Render variance, where it exists, is a *spatial* disagreement of a pixel or two
+along a line, and the tolerance for it is the physical radius in millimetres,
+applied to the mask. That is not free either, and the number is the user's:
+0.5 mm at 150 dpi erases the changed digit entirely (51 → 0 pixels). A share of
+the page cannot tell a hairline everywhere from a wall in one place; a stated
+distance can, and it can be argued about in units a drawing office already uses.
+
+If a noise floor is wanted anyway, it is a product decision with a corpus behind
+it — Human Gate **H10** — not a default.
 
 Each status carries what the user needs to act: which member, what differs, what
 would resolve it. The image, when there is one, is one field of the result.
@@ -158,14 +209,26 @@ agreement. With four it is not, and the failure is silent:
 
 Every pixel finds a partner, so a genuine disagreement comes back clean.
 
-Three contracts are viable, and the choice is a product question rather than a
-technical one, so it goes to the Human Gate (**H9**):
+Two contracts are implemented and measured, and the choice between them is a
+product question rather than a technical one, so it goes to the Human Gate
+(**H9**):
 
-| | |
-| --- | --- |
-| **two members only** | three or more refused as `UNSUPPORTED`. The smallest honest contract. |
-| **reference pairs** | each non-reference member compared against slot 1 independently; MATCH only when every pair matches. Catches both failing cases above — measured at 19.3% per pair for the two-against-two set. |
-| **all-member consensus** | a location matches only when every member agrees. Stricter; unmeasured against real revision sets. |
+| | | |
+| --- | --- | --- |
+| **A — two members only** | three or more refused as `UNSUPPORTED`. The smallest honest contract. | measured |
+| **B — reference pairs** | each non-reference member compared against slot 1 independently; MATCH only when every pair matches. Catches both failing cases above — measured at 19.3% per pair for the two-against-two set. | measured |
+| **C — all-member consensus** | a location matches only when every member agrees. Stricter. | **DEFER — separate research required** |
+
+Consensus is described here and implemented nowhere. Nothing is known about what
+it does with a blank member, a member the other documents do not have, or a
+member that failed to render, and those are exactly the cases where a stricter
+rule behaves least like its description. Offering it beside two contracts that
+*have* been run against the corpus would make it look equally ready, so
+`planMultiMember` refuses it at every member count rather than returning a plan.
+Making it selectable means first running a prototype against, at minimum: four
+identical members, three the same and one changed, two against two, a reference
+against three different documents, one blank member, one missing member, and one
+member that failed to render.
 
 What is not viable is the current rule, because it can be cancelled.
 
@@ -180,6 +243,50 @@ same page produce identical canvases: **0.0% of ink differing**, both canvases
 
 This is the single largest source of false change in the baseline and it is one
 argument that is not currently passed. It needs no policy.
+
+### Every comparison happens in canonical upright space, and only rigidly
+
+```
+    source PDF geometry
+      -> inspect the physical visible box    (CropBox, else MediaBox; /Rotate ignored)
+      -> normalise rotation to upright       (getViewport({ scale, rotation: 0 }))
+      -> compare canonical upright geometry
+      -> produce only a rigid mapping, or refuse
+```
+
+There are two cases and no third. Either the visible boxes are the same sheet
+within the stated 1 pt, and the mapping is the **identity** — upright, from each
+page's own origin, scale 1 — or they are not the same sheet and there is no
+mapping at all.
+
+That is not a preference; the alternative was measured and it is wrong. An
+earlier version of the reference-normalisation candidate computed a scale from
+the pages' *display* dimensions. For an A4 at `/Rotate 0` against the same A4 at
+`/Rotate 90` that gives:
+
+```
+x = 0.707   y = 1.414   uniform = false   rigid = false
+```
+
+— an anisotropic stretch across two pages that are the same piece of paper — and
+the plan returned `READY_TO_COMPARE` regardless. Rendering upright removes the
+quarter turn *before* any mapping is computed, so the stretch never arises.
+
+The invariant, checked rather than asserted:
+
+```
+status == READY_TO_COMPARE  =>  every mapping.rigid == true
+                            and every |scaleX - scaleY| == 0
+                            and every renderRotation == 0
+```
+
+Measured on all eight required pairs — `/Rotate` 0 against 0, 90, 180 and 270;
+crop origin alone; and crop origin combined with each of the three rotations.
+Every one is `READY_TO_COMPARE` with a rigid identity mapping, and every one
+reaches **MATCH with 0 differing pixels** when the comparison is actually run.
+The display-plane mapping would have been anisotropic on four of them (0.707 /
+1.414 for the rotations, 0.668 / 1.497 for the cropped ones). A different
+physical sheet still reaches `GEOMETRY_MISMATCH`.
 
 ### The crop origin is already handled
 
@@ -213,13 +320,48 @@ false change, and would pass any check based on proportions alone.
 
 ## Alignment
 
-When geometry genuinely differs, the tool says so and offers a human alignment:
-an offset, optionally a rotation and a scale. The result carries the alignment it
-was made under, so a comparison is never separable from the assumption behind it.
+Half of this is settled and half of it is not, and the halves have to be kept
+apart.
 
-The tool proposes nothing. An offer of "we think it is 12.4 pt across" becomes
-the answer the moment it is displayed, and this is the tool that is supposed to
-stop that happening.
+**Settled: the refusal.** When geometry genuinely differs the tool says so by
+name, and does not guess. The tool proposes nothing — an offer of "we think it
+is 12.4 pt across" becomes the answer the moment it is displayed, and this is
+the tool that is supposed to stop that happening.
+
+**Not settled: what happens next.** Letting a person supply an offset, a
+rotation and a scale is a good answer to that refusal, and it is not a
+researched one. The prototype records `{ x, y, rotation, scale }`; it does not
+define it. None of the following exists yet:
+
+| | |
+| --- | --- |
+| coordinate space | reference upright space, source page space, or canvas pixels? |
+| units | points, millimetres, or pixels at some resolution? |
+| transform order | translate-then-rotate-then-scale, or another order? |
+| rotation pivot | page origin, box centre, or a point the user picks? |
+| scaling | uniform only, or may the axes differ — and if they may, every length on the drawing changes |
+| bounds and validation | what is a rejectable alignment, and what does rejecting it say? |
+| CropBox / upright interaction | the alignment composes with the normalisation above; in which order? |
+| memory and work after alignment | both estimates are computed from a frame the alignment may change |
+| provenance | how the alignment is carried on a saved result, so a comparison is never separable from it |
+| evidence | no aligned comparison has been run end to end, so no aligned MATCH or CHANGE has ever been produced |
+
+So `candidateHumanAlignment` returns `ALIGNMENT_REQUIRED` when there is no
+alignment, and — deliberately changed from the previous round — **refuses**
+rather than returning `READY_TO_COMPARE` when one is supplied. A plan may not
+claim a comparison it has no contract for. That is the same rule the Candidate B
+fix above rests on, applied to the same kind of unearned readiness.
+
+**If the Human Gate answers H1 with "offer human alignment", an Alignment
+Architecture Sub-Spike is required before M4 production implementation**, and it
+must settle every row of that table with evidence, including an actual aligned
+comparison that reaches a verdict and back.
+
+**The recommended M4 MVP does not include it.** Geometry mismatch →
+`GEOMETRY_MISMATCH` → fail closed. That is a complete, honest feature on its
+own: it never reports its own coordinate handling as a design change, which is
+the defect this whole spike exists for. Alignment is the follow-on that makes a
+refusal recoverable, and it is worth doing properly rather than early.
 
 **Automatic registration is deferred and was not measured.** The corpus carries a
 border, a title block, a repeating grid and a repeated label on purpose: they are
@@ -293,21 +435,105 @@ And a physical threshold grows the radius with the resolution, so the worst case
 grows with it: the same non-matching pair costs 43 ms at 150 dpi with radius 3
 and 207 ms at 300 dpi with radius 6.
 
-Two things follow, and both are needed:
+Two things follow, and both are needed.
 
-**A stated work bound**, evaluated before rendering, alongside the memory
-budget. `ink x radius² x members` is not knowable exactly in advance, but
-`pixels x radius² x members` is an upper bound on it and can be checked the same
-way the working set is.
+### A stated work bound
 
-**A comparison that can be abandoned.** The composite as written is a
-synchronous double loop with no yield point and no way to observe a cancellation
-flag, so **cancellation alone does not solve this** — a long comparison cannot
-currently be stopped, only waited out. Either the loop works in chunks that
-return to the event loop and check for supersession, or a precomputed dilation
-mask replaces the per-pixel neighbourhood search with a bounded lookup, or the
-work is refused before it starts. This is an architecture decision to make
-**before** implementation, not something to discover in it.
+Evaluated before rendering, alongside the memory budget, and separate from it.
+An A4 at 300 dpi is 234 MB of working set — comfortable — and, at a
+half-millimetre tolerance, three billion neighbourhood reads. Passing one
+ceiling says nothing about the other.
+
+`pixels x radius² x members` was proposed for this and **is not an upper bound
+on anything**. At radius 0 it is zero, and a radius-0 comparison still reads
+every pixel of every member. It also leaves the multi-member contract out, so
+four members under reference-pairs cost the same as two.
+
+A work unit is **one pixel read**. Per compared group:
+
+```
+    pixels x sourceMembers                                     every pixel, once
+  + pixels x sourceMembers x comparedOtherMembers x (2r+1)²      the neighbourhood
+```
+
+and the groups come from the contract, not from the member count: two-only is
+one group, reference-pairs over four members is three, and consensus has no
+derived bound at all because no implementation of it has been measured. If H9
+selects a different contract, the bound is derived for that contract before it
+ships.
+
+The second term is conservative by design. The shipped loop runs the
+neighbourhood only on ink and exits on the first ink it finds, so a sparse
+drawing costs a fraction of this — 0.9% of the measured A4 is ink. But the ink
+fraction is not knowable before rendering, and a scanned dark sheet can be ink
+nearly everywhere. A bound that holds only for sparse drawings is not a bound.
+
+The ceiling: **`MAX_COMPARISON_WORK_UNITS = 12,000,000,000` — a recommendation
+requiring human approval, not a measured threshold.** It is user-visible,
+because it refuses comparisons. Where it comes from: the highest measured cost
+per work unit on the corpus is the A4 300 dpi radius-0 pair, 158 ms for
+34,789,440 units — 4.5 × 10⁻⁶ ms per unit, and the case where the bound is
+*tightest*, so it is the pessimistic calibration. Twelve billion units at that
+rate projects to about **55 seconds** on the measured machine.
+
+| at a 0.5 mm tolerance, two members | work units | |
+| --- | --- | --- |
+| A4 at 300 dpi | 2,957,102,400 | within |
+| A3 at 300 dpi | 5,917,083,920 | within |
+| A4 at 300 dpi, four members, reference-pairs | 8,871,307,200 | within |
+| A1 at 300 dpi | 23,694,575,520 | **refused** |
+| A0 at 600 dpi | 698,586,380,184 | **refused** |
+
+Over the ceiling is a **typed refusal** — `OVER_WORK_BUDGET`, naming the numbers
+— never a quieter comparison. Reducing the DPI or the tolerance to fit would be
+the silent-downgrade failure the export path already has, where an A0 asked for
+at 600 dpi delivers 227 and is still named `_600dpi.pdf`. Every estimate records
+the requested and the effective settings together so that a downgrade could not
+happen unremarked. Arithmetic that would leave the safe-integer range is a
+refusal too, rather than a number that has quietly lost its low bits.
+
+Fifty-five seconds is a long time to wait, which is why this is a ceiling on
+*refusal* rather than a target: a job under it must be interruptible, and one
+over it is refused before a canvas is allocated. The number is a judgement about
+how much of a person's afternoon one comparison may claim, and the machine it
+was calibrated on is one machine. Human Gate **H10**.
+
+### A comparison that can be abandoned
+
+The composite as written is a synchronous double loop with no yield point and no
+way to observe a cancellation flag, so **cancellation alone does not solve
+this** — a long comparison cannot currently be stopped, only waited out. This is
+an architecture decision to make **before** implementation, not something to
+discover in it.
+
+**Recommended: a separable dilation, run in bands.** Both halves were
+prototyped and measured.
+
+*Separable dilation.* "Matched if the other member has ink within `radius`" over
+a square box is a dilation, and a dilation over a square is separable: any-in-
+the-box is any-in-the-row-span followed by any-in-the-column-span. Two passes
+over the pixels regardless of how wide the box is. Measured to produce the
+**identical** change mask as the nested loop at every radius tried, so it is not
+an approximation. And it changes the bound rather than only the runtime: the
+same A1 at 0.5 mm is 23,694,575,520 units scanning and 557,519,424 units
+dilating — refused under one algorithm and comfortably within the ceiling under
+the other.
+
+It is not free, and the measurement says so plainly: on a sparse drawing the
+nested scan is *faster*, because it exits on the first ink it finds — 4 ms
+against 23 ms on the 0.9%-ink A4. The dilation's cost is O(pixels) whatever the
+drawing does. What it buys is that its cost is a property of the *sheet* rather
+than of the *drawing*, which is what a ceiling checked before rendering needs.
+On the case a bound has to cover — ink everywhere, matching nothing — the scan
+grows 25 ms → 65 ms as the box goes from 9 to 49 while the dilation stays at
+28 ms.
+
+*Bands.* Every phase runs over a band of rows or columns and returns control
+between bands. Measured: 31 bands over a 1241×1754 comparison, the banded result
+identical to the direct one, and a cancellation observed after 3 of the 31 with
+**no verdict produced at all**. Half a change mask is not a smaller change; it
+is a different drawing, so a cancelled comparison returns `CANCELLED` and
+nothing else.
 
 Whatever is chosen, the ownership rule from M3 still applies on top: a run that
 has been superseded publishes nothing.
@@ -362,9 +588,17 @@ visibility, the threshold or the DPI while one runs, or leave the tool entirely.
 
 The M3 annotator settled this with a mount flag plus a generation counter,
 captured at the start and re-checked immediately before anything is published.
-The same shape applies here, with more things that can invalidate a run. It is
-**proposed** for reuse, not measured: no cancellation behaviour was exercised in
-this spike.
+The same shape applies here, with more things that can invalidate a run. That
+*ownership* half is **proposed** for reuse and not measured: no supersession
+behaviour was exercised against a running comparison in this spike.
+
+The *abandonability* half is now measured, because it is the half the shipped
+loop makes impossible. A banded comparison was run to completion in 31 bands
+over a 1241×1754 sheet, produced the same mask as the direct one, and was
+stopped after 3 of those 31 with no verdict of any kind returned. A generation
+check between bands is where the M3 rule attaches; without bands there is
+nowhere to attach it, which is why the algorithm choice above is a prerequisite
+for cancellation rather than an optimisation of it.
 
 ## What this does not promise
 

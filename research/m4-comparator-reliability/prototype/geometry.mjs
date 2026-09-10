@@ -23,6 +23,11 @@ export function normaliseRotation(rotate) {
  * `view` is what PDF.js reports as the visible box — the CropBox where there is
  * one, the MediaBox otherwise — in PDF points. `displayWidth`/`displayHeight`
  * are that box after `/Rotate`, which is the frame a rendered canvas is in.
+ *
+ * `physical` is the same box with `/Rotate` ignored. That is the canonical
+ * upright space: a property of the paper rather than of how the page dictionary
+ * asks for it to be shown, so two pages that differ only by a quarter turn have
+ * the same one.
  */
 export function pageGeometry({ view, rotate }) {
     const [x0, y0, x1, y1] = view;
@@ -39,6 +44,27 @@ export function pageGeometry({ view, rotate }) {
         displayHeight: quarter ? boxWidth : boxHeight,
         /** Physical size of the visible region, rotation ignored. */
         physical: { width: boxWidth, height: boxHeight },
+    };
+}
+
+/**
+ * The canonical upright frame a comparison is actually made in.
+ *
+ * The renderer is asked for `getViewport({ scale, rotation: 0 })`, which is
+ * measured as removing the whole of the rotation difference. Everything
+ * downstream — the mapping, the render size, the diff — is expressed against
+ * this rather than against the display plane, because the display plane still
+ * carries `/Rotate` and anything derived from it inherits the quarter turn.
+ */
+export function uprightGeometry(geometry) {
+    return {
+        width: geometry.physical.width,
+        height: geometry.physical.height,
+        origin: geometry.origin,
+        /** What the page dictionary asked for, kept so it can be reported. */
+        sourceRotate: geometry.rotate,
+        /** What the renderer is asked for. Always upright. */
+        renderRotation: 0,
     };
 }
 
@@ -120,19 +146,62 @@ export function compareGeometry(a, b, { tolerancePt = 1 } = {}) {
 }
 
 /**
- * The scale that puts a page into the reference page's display plane.
+ * The mapping that was **rejected**, kept so the rejection can be measured.
  *
- * Only meaningful when the two are the same physical sheet — otherwise this
- * would be stretching one drawing onto another's paper, which changes lengths
- * and is exactly what a comparison must not do silently.
+ * This scales one page's *display* plane onto another's. It reads as reasonable
+ * until the pair differs by a quarter turn: an A4 at `/Rotate 0` against the
+ * same A4 at `/Rotate 90` gives x = 0.707 and y = 1.414 — an anisotropic
+ * stretch, on two pages that are the same piece of paper. A plan built on it is
+ * offering to compare a drawing it has squashed in one axis and pulled in the
+ * other, which changes every length on it.
+ *
+ * Exported only so the research gate can show that number rather than assert
+ * it. Nothing plans a comparison with this.
  */
-export function referenceScale(reference, other) {
+export function displayPlaneScale(reference, other) {
+    const x = reference.displayWidth / other.displayWidth;
+    const y = reference.displayHeight / other.displayHeight;
+    return { x, y, delta: Math.abs(x - y), uniform: Math.abs(x - y) < 1e-6 };
+}
+
+/**
+ * The mapping a comparison may actually use.
+ *
+ * Taken in the canonical upright frame, so a quarter turn has already been
+ * removed by the renderer and cannot reappear here as a stretch.
+ *
+ * There are two cases and no third. Either the two visible boxes are the same
+ * sheet within `tolerancePt`, and the mapping is the **identity** — rotate to
+ * upright, start at each page's own crop origin, scale 1 — or they are not the
+ * same sheet, and there is no mapping at all. Candidate B never rescales, so
+ * `scaleX` and `scaleY` are not computed from the pages: they are 1, and the
+ * sub-point disagreement that the tolerance permits is reported as a residual
+ * in points rather than folded into a scale factor.
+ *
+ * That is what makes `rigid` structural rather than checked afterwards. It is
+ * the statement that the comparison changed no length on either drawing, and it
+ * is what the plan's `READY_TO_COMPARE` is allowed to rest on.
+ */
+export function canonicalMapping(reference, other, { tolerancePt = 1 } = {}) {
+    const a = uprightGeometry(reference);
+    const b = uprightGeometry(other);
+    const residualWidthPt = Math.abs(a.width - b.width);
+    const residualHeightPt = Math.abs(a.height - b.height);
+    const sameSheet = residualWidthPt <= tolerancePt && residualHeightPt <= tolerancePt;
     return {
-        x: reference.displayWidth / other.displayWidth,
-        y: reference.displayHeight / other.displayHeight,
-        uniform: Math.abs(
-            (reference.displayWidth / other.displayWidth)
-            - (reference.displayHeight / other.displayHeight),
-        ) < 1e-6,
+        /** Both members are rendered upright. This is the whole of the rotation fix. */
+        renderRotation: 0,
+        sourceRotate: { reference: a.sourceRotate, other: b.sourceRotate },
+        scaleX: 1,
+        scaleY: 1,
+        /** Zero by construction, not by measurement. */
+        scaleDelta: 0,
+        // PDF.js renders from each page's own visible box, so a crop origin is
+        // removed by rendering rather than by a translation applied afterwards.
+        translationPt: { x: 0, y: 0 },
+        residualWidthPt,
+        residualHeightPt,
+        rigid: sameSheet,
+        tolerancePt,
     };
 }
