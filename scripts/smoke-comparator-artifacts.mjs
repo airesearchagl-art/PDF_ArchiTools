@@ -482,13 +482,18 @@ try {
         (args) => window.__artifacts.noticeProof(...args),
         [`/test-fixtures/comparator-downloads/${keptExport}`, 3,
             ['Page 3 — MISSING_PAGE', 'ページ 3 — two-pages.pdf に対応ページがありません'],
-            ['Page 3 — MISSING_PAGE', 'ページ 3 — 比較は正常に完了しました'],
+            ['Page 9 — RENDER_FAILED', 'ページ 9 — 比較は正常に完了しました'],
             1240, 1754],
     );
     console.log(`  notice ${glyphs.renderedWidth}x${glyphs.renderedHeight}, `
-        + `${glyphs.inked} ink pixels; agreement with the sentence `
+        + `${glyphs.inked} ink pixels (${glyphs.japaneseInk} of them from the `
+        + `Japanese line); agreement with the sentence `
         + `${(glyphs.sameSentence * 100).toFixed(1)}%, with a different one `
         + `${(glyphs.otherSentence * 100).toFixed(1)}%`);
+    check('the machine can draw the sentence in the first place',
+        glyphs.japaneseInk > 200,
+        `${glyphs.japaneseInk} ink pixels from the Japanese line alone; without `
+        + 'this, agreeing with it would be two blanks agreeing');
     check('the Japanese sentence survived into the file as the sentence it was',
         glyphs.inked > 200 && glyphs.sameSentence > 0.9,
         `${(glyphs.sameSentence * 100).toFixed(1)}% of the ink agrees, `

@@ -144,6 +144,15 @@ window.__artifacts = {
     const counted = ink(shot.data);
     const sameSentence = agreement(draw(lines));
     const otherSentence = agreement(draw(decoy));
+    // Whether this machine can draw the Japanese at all. If it cannot, the
+    // notice is tofu everywhere and the agreement above would be agreement
+    // between two identical blanks -- so it is measured rather than assumed.
+    // 12288 is where CJK punctuation starts: above Latin-1 and above the em
+    // dash, which the ASCII line also carries.
+    const japanese = lines.filter(
+      (line) => [...line].some((ch) => ch.codePointAt(0) >= 12288),
+    );
+    const japaneseInk = ink(draw(japanese)).inked;
     shot.canvas.width = 1;
     shot.canvas.height = 1;
     await pdf.destroy();
@@ -153,6 +162,7 @@ window.__artifacts = {
       inked: counted.inked,
       sameSentence,
       otherSentence,
+      japaneseInk,
     };
   },
 
