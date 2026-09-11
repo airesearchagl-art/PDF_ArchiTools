@@ -1,0 +1,1052 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Comparator reliability — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** Comparator engine. Not part of the app.
+ *
+ * Everything imported below is what ships: the planner, the canonical ink
+ * predicate, the separable dilation, the budgets and the owned PNG encoder.
+ * A harness that reimplemented any of them would prove nothing about the
+ * comparator a user runs.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import jsPDF from 'jspdf';
+import {
+  PLAN, RESULT, SPATIAL_TOLERANCE_POLICY, SPATIAL_TOLERANCE_DISCLOSURE,
+  MATCH_RATIO_FLOOR, GEOMETRY_TOLERANCE_PT, MAX_COMPARISON_WORK_UNITS,
+  MAX_OUTPUT_BYTES, DEFAULT_MEMORY_BUDGET_BYTES, MEMORY_BUDGET_PRESETS,
+  COMPARISON_ALGORITHM, MULTI_MEMBER_CONTRACT, pixelRadiusFor,
+  ARTIFACT, ARTIFACT_ITEM, NOTICE_RASTER,
+  planComparison, runComparison, paintPair, verdictFor, renderUprightCanvas,
+  pageGeometry, canonicalMapping, compareGeometry, mappingsAreRigid,
+  inkMask, dilateMask, isInk, INK_THRESHOLD, RasterShapeError,
+  pairChangeMask, pairChangeMaskSteps,
+  encodePngStored, pngStoredSize, PNG_STORED_CONTRACT,
+  planArtifact, preflightArtifact, itemCost, jsPdfIngest, jsPdfRetained,
+  jsPdfFileBytes, JSPDF_CONTAINER, MEMORY_TERMS,
+  estimateWork, estimatePhaseMemory,
+  createComparisonPdf, createChangeReport, containerVersion,
+} from '/src/utils/comparator/index.ts';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/comparator';
+const docs = new Map();
+async function open(name) {
+  if (!docs.has(name)) {
+    const response = await fetch(`${FIXTURES}/${name}.pdf`);
+    const data = new Uint8Array(await response.arrayBuffer());
+    docs.set(name, await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise);
+  }
+  return docs.get(name);
+}
+
+const COLOURS = [[0, 0, 1], [1, 0, 0], [0, 0.5, 0], [0.9, 0.7, 0]];
+
+async function members(names) {
+  const out = [];
+  for (let i = 0; i < names.length; i += 1) {
+    out.push({
+      slot: i,
+      label: names[i],
+      pdf: await open(names[i]),
+      color: COLOURS[i % COLOURS.length],
+    });
+  }
+  return out;
+}
+
+function settings(overrides = {}) {
+  return {
+    pages: [1],
+    dpi: 150,
+    toleranceMm: SPATIAL_TOLERANCE_POLICY.default,
+    memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES,
+    matchColor: [0, 0, 0],
+    matchOpacity: 1,
+    // The engine has no default artifact; the semantic checks are previews.
+    artifact: ARTIFACT.PREVIEW,
+    ...overrides,
+  };
+}
+
+const MIB = 1024 * 1024;
+const GIB = 1024 * MIB;
+
+/** A plan over synthetic compared pages, for the pure budget arithmetic. */
+function synthetic(kind, shapes, limit, members = 2, radiusPx = 0) {
+  const pages = shapes.map((s, i) => ({
+    page: i + 1, status: s.status ?? PLAN.READY_TO_COMPARE,
+    width: s.width ?? 0, height: s.height ?? 0,
+  }));
+  const slots = Array.from({ length: members }, (_, i) => i);
+  return preflightArtifact(planArtifact(kind, pages, slots, radiusPx), members, radiusPx, limit);
+}
+
+/** The pages 1..n, which is what a range export of "1-n" asks for. */
+const firstPages = (n) => Array.from({ length: n }, (_, i) => i + 1);
+
+/** The first n for which `accepts(n)` is false, searching up from `from`. */
+async function firstRefused(from, to, accepts) {
+  let lo = from;
+  let hi = to;
+  if (!(await accepts(lo))) return { largest: null, first: lo };
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (await accepts(mid)) lo = mid; else hi = mid;
+  }
+  return { largest: lo, first: hi };
+}
+
+const alwaysOwner = { isCancelled: () => false, isOwner: () => true };
+
+/** Plan and run, returning the shapes a driver can assert against. */
+async function compare(names, overrides = {}) {
+  const set = await members(names);
+  const plan = await planComparison(set, settings(overrides));
+  if (plan.refusal) {
+    return { plan: plan.status, refusal: plan.refusal, pages: [], verdict: null };
+  }
+  const run = await runComparison(plan, set, alwaysOwner);
+  return {
+    plan: plan.status,
+    refusal: null,
+    verdict: run.verdict,
+    abandoned: run.abandoned,
+    status: run.status,
+    renderScale: plan.renderScale,
+    radiusPx: plan.radiusPx,
+    mappings: plan.pages[0]?.mappings ?? [],
+    pages: run.pages.map((page) => ({
+      page: page.page,
+      status: page.status,
+      reported: page.reported,
+      verdict: page.verdict,
+      pairs: page.pairs.map((pair) => ({
+        title: pair.title,
+        label: pair.label,
+        referenceLabel: pair.referenceLabel,
+        verdict: pair.verdict,
+        changePixels: pair.changePixels,
+        inkPixels: pair.inkPixels,
+        width: pair.width,
+        height: pair.height,
+        hasBounds: pair.bounds !== null,
+        shownAsChanged: shownAsChanged(pair.pixels),
+      })),
+    })),
+  };
+}
+
+/** What the picture actually shows as changed, counted from the painted pixels. */
+function shownAsChanged(pixels) {
+  let shown = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
+    if (r > 245 && g > 245 && b > 245) continue;
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 30) shown += 1;
+  }
+  return shown;
+}
+
+window.__comparator = {
+  constants: () => ({
+    tolerance: SPATIAL_TOLERANCE_POLICY,
+    disclosure: SPATIAL_TOLERANCE_DISCLOSURE,
+    matchFloor: MATCH_RATIO_FLOOR,
+    geometryTolerancePt: GEOMETRY_TOLERANCE_PT,
+    workCeiling: MAX_COMPARISON_WORK_UNITS,
+    outputCeiling: MAX_OUTPUT_BYTES,
+    defaultMemory: DEFAULT_MEMORY_BUDGET_BYTES,
+    memoryPresets: MEMORY_BUDGET_PRESETS,
+    algorithm: COMPARISON_ALGORITHM,
+    contract: MULTI_MEMBER_CONTRACT,
+    inkThreshold: INK_THRESHOLD,
+    pngContract: PNG_STORED_CONTRACT,
+  }),
+
+  compare,
+
+  /** The geometry cases, as plan statuses. */
+  async geometry() {
+    const cases = {
+      identical: ['base-a4', 'identical-a4'],
+      'rotate 90': ['rotate-0', 'rotate-90'],
+      'rotate 180': ['rotate-0', 'rotate-180'],
+      'rotate 270': ['rotate-0', 'rotate-270'],
+      'crop origin': ['crop-origin-0', 'crop-origin-50-70'],
+      'crop + rotate 90': ['crop-origin-0', 'crop-rot-90'],
+      'crop + rotate 180': ['crop-origin-0', 'crop-rot-180'],
+      'crop + rotate 270': ['crop-origin-0', 'crop-rot-270'],
+      '+0.99pt': ['base-a4', 'sheet-plus-0-99'],
+      '+1.01pt': ['base-a4', 'sheet-plus-1-01'],
+      'different sheet': ['base-a4', 'base-a3'],
+      'portrait vs landscape': ['base-a4', 'landscape-a4'],
+      'same aspect 1.4x': ['base-a4', 'same-ratio-larger'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(cases)) {
+      const r = await compare(names);
+      out[label] = {
+        plan: r.pages[0]?.status ?? r.plan,
+        verdict: r.pages[0]?.verdict ?? null,
+        changePixels: r.pages[0]?.pairs[0]?.changePixels ?? null,
+        mappings: r.mappings.map((m) => ({
+          rigid: m.rigid, scaleX: m.scaleX, scaleY: m.scaleY,
+          scaleDelta: m.scaleDelta, renderRotation: m.renderRotation,
+        })),
+        reported: r.pages[0]?.reported ?? [],
+      };
+    }
+    return out;
+  },
+
+  /** Verdicts on real changes, at the default tolerance. */
+  async verdicts() {
+    const cases = {
+      identical: ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      'a digit changed': ['small-base', 'small-digit'],
+      'a symbol swapped': ['small-base', 'small-symbol'],
+      'nothing changed (control)': ['small-base', 'small-base-copy'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(cases)) {
+      const r = await compare(names);
+      const pair = r.pages[0].pairs[0];
+      out[label] = {
+        verdict: pair.verdict,
+        changePixels: pair.changePixels,
+        inkPixels: pair.inkPixels,
+        shownAsChanged: pair.shownAsChanged,
+        hasBounds: pair.hasBounds,
+      };
+    }
+    return out;
+  },
+
+  /** The digit change at every resolution the tool offers, at default 0 mm. */
+  async acrossDpi() {
+    const out = { supported: SPATIAL_TOLERANCE_POLICY.supportedDpi, rows: {} };
+    for (const dpi of SPATIAL_TOLERANCE_POLICY.supportedDpi) {
+      const r = await compare(['small-base', 'small-digit'], { dpi });
+      out.rows[dpi] = {
+        radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.default, dpi),
+        verdict: r.pages[0].pairs[0].verdict,
+        changePixels: r.pages[0].pairs[0].changePixels,
+      };
+    }
+    // And at the policy maximum, which must still see it at every resolution.
+    out.atMaximum = {};
+    for (const dpi of SPATIAL_TOLERANCE_POLICY.supportedDpi) {
+      const r = await compare(['small-base', 'small-digit'], {
+        dpi, toleranceMm: SPATIAL_TOLERANCE_POLICY.maximum,
+      });
+      out.atMaximum[dpi] = {
+        radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.maximum, dpi),
+        verdict: r.pages[0].pairs[0].verdict,
+        changePixels: r.pages[0].pairs[0].changePixels,
+      };
+    }
+    return out;
+  },
+
+  /** The canonical ink predicate, over the colours a drawing actually uses. */
+  inkPredicate() {
+    const swatches = {
+      black: '#000000', 'dark grey': '#404040', 'cad cyan': '#009ed9',
+      'cad yellow': '#ffe100', 'pale yellow': '#ffff8c', 'pale grey': '#d2d2d2',
+      white: '#ffffff',
+    };
+    const canvas = document.createElement('canvas');
+    canvas.width = Object.keys(swatches).length;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const out = {};
+    let x = 0;
+    for (const [name, colour] of Object.entries(swatches)) {
+      ctx.fillStyle = colour;
+      ctx.fillRect(x, 0, 1, 1);
+      const data = ctx.getImageData(x, 0, 1, 1).data;
+      const mask = inkMask(data, 1, 1);
+      out[name] = {
+        rgb: [data[0], data[1], data[2]],
+        // The predicate, the mask builder and the painter must agree: one
+        // definition, not three.
+        predicate: isInk(data, 0),
+        mask: mask[0] === 1,
+      };
+      x += 1;
+    }
+    return out;
+  },
+
+  /** Four members, reference-pairs, and the picture that has to match. */
+  async multiMember() {
+    const sets = {
+      'four identical': ['base-a4', 'identical-a4', 'base-a4-copy', 'base-a4'],
+      'three same, one changed':
+        ['base-a4', 'identical-a4', 'base-a4-copy', 'added-line-a4'],
+      'two vs two': ['base-a4', 'identical-a4', 'wall-at-y-a4', 'wall-at-y-a4-copy'],
+      'reference and three different':
+        ['base-a4', 'added-line-a4', 'removed-line-a4', 'wall-at-y-a4'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(sets)) {
+      const r = await compare(names);
+      out[label] = {
+        verdict: r.pages[0].verdict,
+        pairs: r.pages[0].pairs.map((p) => ({
+          label: p.label, title: p.title, verdict: p.verdict,
+          changePixels: p.changePixels, shownAsChanged: p.shownAsChanged,
+        })),
+      };
+    }
+    return out;
+  },
+
+  /** A page one document does not have, and a page that is merely blank. */
+  async missingAndFailure() {
+    const missing = await compare(['three-pages', 'two-pages'], { pages: [1, 2, 3] });
+    const blank = await compare(
+      ['three-pages', 'three-pages-blank-third'], { pages: [3] },
+    );
+    return {
+      pages: missing.pages.map((p) => ({
+        page: p.page, status: p.status, verdict: p.verdict,
+        reported: p.reported, pairs: p.pairs.length,
+      })),
+      blankThird: {
+        status: blank.pages[0].status,
+        verdict: blank.pages[0].verdict,
+        changePixels: blank.pages[0].pairs[0]?.changePixels ?? null,
+      },
+    };
+  },
+
+  /** Every budget, as the planner answers it, for the file the export builds. */
+  async budgets() {
+    const kind = ARTIFACT.COMPARISON_PDF;
+    const a4 = { width: 2480, height: 3507 };
+    // A sheet large enough to exceed the working set without exceeding the
+    // output ceiling, so the memory refusal can be reached on its own.
+    const big = { width: 6000, height: 8000 };
+    const repeat = (n, shape) => Array.from({ length: n }, () => shape);
+
+    // And the same job through the real engine, to show it refuses rather than
+    // quietly rendering something smaller.
+    const engineRefusal = await compare(['base-a1', 'base-a1'], {
+      dpi: 450, memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES, artifact: kind,
+    });
+
+    return {
+      defaultBudget: DEFAULT_MEMORY_BUDGET_BYTES,
+      memory: {
+        atDefault: synthetic(kind, [big], DEFAULT_MEMORY_BUDGET_BYTES),
+        afterExplicitRaise: synthetic(kind, [big], 2 * GIB),
+      },
+      engineRefusal: {
+        plan: engineRefusal.plan,
+        status: engineRefusal.refusal?.status ?? null,
+        reason: engineRefusal.refusal?.reason ?? null,
+        achievable: engineRefusal.refusal?.achievable ?? null,
+        pages: engineRefusal.pages.length,
+      },
+      work: {
+        oneA4Page: estimateWork({ ...a4, members: 2, radiusPx: 0, pages: 1 }).jobUnits,
+        atCeiling: synthetic(kind, repeat(173, a4), 64 * GIB).refusal?.status ?? null,
+        justUnder: synthetic(kind, repeat(2, a4), 8 * GIB).refusal?.status ?? null,
+        unrepresentable: estimateWork({
+          width: 30000000, height: 30000000, members: 4, pages: 4, radiusPx: 0,
+        }).representable,
+      },
+      output: {
+        perVisual: itemCost(kind, ARTIFACT_ITEM.PAIR_VISUAL, a4.width, a4.height).outputBytes,
+        ceiling: MAX_OUTPUT_BYTES,
+        // Seven A4 pages is the documented MVP capacity; nine is over it.
+        seven: synthetic(kind, repeat(7, a4), 8 * GIB).refusal?.status ?? null,
+        nine: synthetic(kind, repeat(9, a4), 8 * GIB).refusal?.status ?? null,
+      },
+      memoryPhases: estimatePhaseMemory({ ...a4, members: 2, radiusPx: 0 }),
+    };
+  },
+
+  /**
+   * The memory ceiling as a boundary, not as an assertion.
+   *
+   * "512 MiB by default" is only a ceiling if there is a largest job it takes
+   * and a first job it will not. So this finds the boundary to the pixel, for
+   * the Comparison PDF the export builds, shows the step past it refused by
+   * name, shows an explicit preset accepting that same job, shows that nothing
+   * moved the budget on the tool's own initiative, and shows that a larger
+   * budget buys nothing against the other two ceilings.
+   */
+  memoryBoundary() {
+    const kind = ARTIFACT.COMPARISON_PDF;
+    const sheet = (width) => ({ width, height: Math.round(width * Math.SQRT2) });
+    const accepts = (width, limit) =>
+      synthetic(kind, [sheet(width)], limit).refusal === null;
+
+    // To the pixel: a ceiling described as "about" is one nobody can test.
+    let lo = 100;
+    let hi = 40000;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (accepts(mid, DEFAULT_MEMORY_BUDGET_BYTES)) lo = mid; else hi = mid;
+    }
+    const largest = synthetic(kind, [sheet(lo)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const firstOver = synthetic(kind, [sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const raised = synthetic(kind, [sheet(hi)], GIB);
+    // Asked again, at the default, after a larger budget has been used once.
+    const askedAgain = synthetic(kind, [sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
+
+    const a4 = { width: 2480, height: 3507 };
+    const repeat = (n) => Array.from({ length: n }, () => a4);
+    const gib = GIB;
+    const preflightPages = (shapes, limit) => synthetic(kind, shapes, limit);
+
+    return {
+      largestAccepted: {
+        width: lo, height: sheet(lo).height,
+        megapixels: (lo * sheet(lo).height) / 1e6,
+        jobPeak: largest.jobPeak, limit: largest.memoryLimit,
+        refusal: largest.refusal?.status ?? null,
+      },
+      firstRefused: {
+        width: hi, height: sheet(hi).height,
+        jobPeak: firstOver.jobPeak,
+        status: firstOver.refusal?.status ?? null,
+        achievable: firstOver.refusal?.achievable ?? null,
+      },
+      afterExplicitOneGiB: {
+        status: raised.refusal?.status ?? null,
+        limit: raised.memoryLimit,
+        offered: MEMORY_BUDGET_PRESETS.some((preset) => preset.bytes === gib),
+      },
+      askedAgainAtDefault: askedAgain.refusal?.status ?? null,
+      independence: {
+        // A budget the size of the machine does not buy past the other two.
+        outputAtSixtyFourGiB:
+          preflightPages(repeat(9), 64 * gib).refusal?.status ?? null,
+        workAtSixtyFourGiB:
+          preflightPages(repeat(173), 64 * gib).refusal?.status ?? null,
+      },
+    };
+  },
+
+  /**
+   * What a job actually holds, against what the budget said it would.
+   *
+   * A ceiling computed from a model is a ceiling only while the code keeps to
+   * the model. The export path is a sink — paint, encode, release, append — so
+   * however many pages it writes, the live full-resolution visuals should never
+   * be more than one, and that one should be gone before jsPDF ingests it. The
+   * sink here is the production one, writing a real jsPDF document; the
+   * encoded bytes are the ones the preflight added up, and because the encoder
+   * is exact, "should" here means equal, not close.
+   */
+  async bufferLifetime() {
+    const names = ['three-pages', 'three-pages-copy', 'three-pages-changed'];
+    const set = await members(names);
+    const plan = await planComparison(set, settings({
+      pages: [1, 2, 3], artifact: ARTIFACT.COMPARISON_PDF,
+    }));
+    const sink = createComparisonPdf(150);
+
+    const seen = [];
+    let maxLiveVisuals = 0;
+    let maxLiveBytes = 0;
+    let releasedBySink = 0;
+    await runComparison(plan, set, alwaysOwner, {
+      onPair: (pair) => {
+        // Counted with the pair still in hand, which is the worst moment.
+        seen.push(pair);
+        const live = seen.filter((p) => p.pixels !== null);
+        maxLiveVisuals = Math.max(maxLiveVisuals, live.length);
+        maxLiveBytes = Math.max(
+          maxLiveBytes, live.reduce((n, p) => n + p.pixels.length, 0),
+        );
+        sink.onPair(pair);
+        // Before the sink returns, which is before the engine lets go of it.
+        if (pair.pixels === null) releasedBySink += 1;
+      },
+      onPage: sink.onPage,
+    });
+    const stillHeld = seen.filter((p) => p.pixels !== null).length;
+    const encodedBytes = sink.appended.reduce((n, item) => n + item.encodedBytes, 0);
+
+    // The control: the same job with no sink, which is what a presentation
+    // that collected every pair and then wrote them all out would hold.
+    const retained = await runComparison(plan, set, alwaysOwner);
+    const held = retained.pages.flatMap((page) => page.pairs)
+      .filter((pair) => pair.pixels !== null);
+
+    const preflight = plan.preflight;
+    const oneVisualBytes = plan.pages[0].width * plan.pages[0].height * 4;
+    return {
+      pairs: seen.length,
+      maxLiveVisuals,
+      maxLiveBytes,
+      releasedBySink,
+      stillHeld,
+      encodedBytes,
+      predictedEncoded: preflight.output.encodedBytes,
+      oneVisualBytes,
+      retainedVisuals: held.length,
+      retainedBytes: held.reduce((n, pair) => n + pair.pixels.length, 0),
+      modelledPeak: preflight.jobPeak,
+      withinBudget: preflight.withinBudget,
+    };
+  },
+
+  /**
+   * One frame per compared page, and nothing else can reach a verdict.
+   *
+   * The isolated fixtures carry the A4 drawing at the A4 drawing's coordinates
+   * on a sheet a sub-point larger, so whatever differs is the frame's doing.
+   * The negative probes hand the mask builder what the old path handed it —
+   * the member's natural raster, with the reference's width and height
+   * supplied separately — and require a refusal, not a picture.
+   */
+  async canonicalFrame() {
+    const run = async (names, overrides = {}) => {
+      const set = await members(names);
+      const plan = await planComparison(set, settings(overrides));
+      const rasters = [];
+      const result = plan.refusal ? null : await runComparison(plan, set, alwaysOwner, {
+        onRaster: (r) => rasters.push(r),
+      });
+      const page = result?.pages[0];
+      const pair = page?.pairs[0];
+      return {
+        plan: plan.pages[0]?.status ?? plan.status,
+        reported: plan.pages[0]?.reported ?? [],
+        frame: plan.pages[0]?.frame ?? null,
+        residual: plan.pages[0]?.mappings[0]
+          ? {
+            widthPt: plan.pages[0].mappings[0].residualWidthPt,
+            heightPt: plan.pages[0].mappings[0].residualHeightPt,
+          }
+          : null,
+        rasters,
+        status: page?.status ?? null,
+        verdict: page?.verdict ?? null,
+        changePixels: pair?.changePixels ?? null,
+        inkPixels: pair?.inkPixels ?? null,
+        pairWidth: pair?.width ?? null,
+        pairHeight: pair?.height ?? null,
+      };
+    };
+
+    const isolated = await run(['base-a4', 'sheet-plus-0-99-same-drawing']);
+    const isolated300 = await run(['base-a4', 'sheet-plus-0-99-same-drawing'], { dpi: 300 });
+    // The reference is the larger sheet: the member is a sub-point short, so
+    // the strip it does not cover is paper.
+    const reversed = await run(['sheet-plus-0-99-same-drawing', 'base-a4']);
+    const isolatedOver = await run(['base-a4', 'sheet-plus-1-01-same-drawing']);
+    const proportional = await run(['base-a4', 'sheet-plus-0-99']);
+    const proportionalOver = await run(['base-a4', 'sheet-plus-1-01']);
+    const userUnit = await run(['base-a4', 'userunit-2']);
+
+    // ---- the old path, handed to the new guard -------------------------------
+    const frame = isolated.frame;
+    const memberPdf = await open('sheet-plus-0-99-same-drawing');
+    const natural = await renderUprightCanvas(memberPdf, 1, frame.scale);
+    const naturalData = natural.getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, natural.width, natural.height).data;
+    const naturalSize = { width: natural.width, height: natural.height };
+    natural.width = 1;
+    natural.height = 1;
+    const refusalOf = (fn) => {
+      try { fn(); return null; } catch (e) {
+        return e instanceof RasterShapeError ? e.message : `not a shape error: ${e}`;
+      }
+    };
+    const inkMaskRefusal = refusalOf(
+      () => inkMask(naturalData, frame.width, frame.height),
+    );
+    // What that call used to return, computed here by hand with the old
+    // loop, so the probe can show the guard is standing in front of something.
+    const sheared = new Uint8Array(frame.width * frame.height);
+    for (let p = 0; p < sheared.length; p += 1) sheared[p] = isInk(naturalData, p * 4) ? 1 : 0;
+    const referencePdf = await open('base-a4');
+    const referenceCanvas = await renderUprightCanvas(referencePdf, 1, frame.scale);
+    const referenceMask = inkMask(
+      referenceCanvas.getContext('2d', { willReadFrequently: true })
+        .getImageData(0, 0, frame.width, frame.height).data,
+      frame.width, frame.height,
+    );
+    referenceCanvas.width = 1;
+    referenceCanvas.height = 1;
+    const shearedChange = pairChangeMask(referenceMask, sheared, referenceMask, sheared);
+    const naturalMask = new Uint8Array(naturalSize.width * naturalSize.height);
+    const compareRefusal = refusalOf(
+      () => pairChangeMask(referenceMask, naturalMask, referenceMask, naturalMask),
+    );
+    const bandedRefusal = refusalOf(
+      () => pairChangeMaskSteps(referenceMask, naturalMask, frame.width, frame.height, 0),
+    );
+    const paintRefusal = refusalOf(() => paintPair(
+      referenceMask, naturalMask, referenceMask, naturalMask,
+      [0, 0, 1], [1, 0, 0], frame.width, frame.height, [0, 0, 0], 1,
+    ));
+
+    return {
+      isolated, isolated300, reversed, isolatedOver, proportional, proportionalOver,
+      userUnit,
+      probes: {
+        naturalSize,
+        inkMaskRefusal,
+        compareRefusal,
+        bandedRefusal,
+        paintRefusal,
+        shearedChangePixels: shearedChange.changePixels,
+      },
+    };
+  },
+
+  /**
+   * A page nobody could compare is not free.
+   *
+   * The one sheet both documents have is 24pt square, so the comparison is
+   * next to nothing and everything the file holds is notices. The boundary is
+   * found through the production planner by choosing how many pages to ask
+   * for, for each file separately, because the two files draw notices of
+   * different sizes. It is found under an explicit 1 GiB, because at the
+   * default the memory ceiling speaks first — which is itself checked.
+   */
+  async noticeBudget() {
+    const set = await members(['tiny-1', 'tiny-120']);
+    const planFor = (kind, n, limit) => planComparison(set, settings({
+      pages: firstPages(n), artifact: kind, memoryBudgetBytes: limit,
+    }));
+    const describe = (plan) => {
+      const items = plan.preflight.artifact.items;
+      const sum = (pred) => items.filter(pred).reduce((n, i) => n + i.cost.outputBytes, 0);
+      return {
+        status: plan.status,
+        refusal: plan.refusal?.status ?? null,
+        reason: plan.refusal?.reason ?? null,
+        achievable: plan.refusal?.achievable ?? null,
+        pages: plan.pages.length,
+        notices: plan.preflight.output.notices,
+        visuals: plan.preflight.output.visuals,
+        outputBytes: plan.preflight.output.outputBytes,
+        pairOutput: sum((i) => i.kind === ARTIFACT_ITEM.PAIR_VISUAL),
+        noticeOutput: sum((i) => i.kind !== ARTIFACT_ITEM.PAIR_VISUAL),
+        noticeSize: items.find((i) => i.kind === ARTIFACT_ITEM.MISSING_PAGE_NOTICE)
+          ? [items.find((i) => i.kind === ARTIFACT_ITEM.MISSING_PAGE_NOTICE).width,
+            items.find((i) => i.kind === ARTIFACT_ITEM.MISSING_PAGE_NOTICE).height]
+          : null,
+        jobPeak: plan.preflight.jobPeak,
+        order: items.map((i) => `${i.page}:${i.kind}`),
+      };
+    };
+
+    const out = {};
+    for (const kind of [ARTIFACT.COMPARISON_PDF, ARTIFACT.CHANGE_REPORT]) {
+      const bound = await firstRefused(2, 120,
+        async (n) => (await planFor(kind, n, GIB)).refusal === null);
+      const under = await planFor(kind, bound.largest, GIB);
+      const over = await planFor(kind, bound.first, GIB);
+
+      // The refused plan, handed to the engine anyway: nothing may reach a sink.
+      let sinkCalls = 0;
+      await runComparison(over, set, alwaysOwner, {
+        onPair: () => { sinkCalls += 1; },
+        onPage: () => { sinkCalls += 1; },
+      });
+
+      out[kind] = {
+        notice: NOTICE_RASTER[kind],
+        largest: bound.largest,
+        first: bound.first,
+        under: describe(under),
+        over: describe(over),
+        overAtDefault: (await planFor(kind, bound.first, DEFAULT_MEMORY_BUDGET_BYTES))
+          .refusal?.status ?? null,
+        overAtTwoGiB: (await planFor(kind, bound.first, 2 * GIB)).refusal?.status ?? null,
+        sinkCallsOnRefused: sinkCalls,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * Every kind of page in one job, through the production sinks.
+   *
+   * The plan lists what the file will contain, in order; the sink records what
+   * it wrote, in order. They have to be the same list — for the Change Report,
+   * the same list less the pairs that did not change.
+   */
+  async mixedOrder() {
+    const names = ['four-pages-a3-second', 'three-pages', 'three-pages-changed'];
+    const out = {};
+    for (const kind of [ARTIFACT.COMPARISON_PDF, ARTIFACT.CHANGE_REPORT]) {
+      const set = await members(names);
+      const plan = await planComparison(set, settings({ pages: [1, 2, 3, 4], artifact: kind }));
+      const sink = kind === ARTIFACT.COMPARISON_PDF ? createComparisonPdf(150) : createChangeReport();
+      const run = await runComparison(plan, set, alwaysOwner, {
+        onPair: sink.onPair, onPage: sink.onPage,
+      });
+      const images = sink.doc.internal.collections.addImage_images ?? {};
+      out[kind] = {
+        refusal: plan.refusal?.status ?? null,
+        pages: run.pages.map((p) => ({
+          page: p.page, status: p.status, verdicts: p.pairs.map((q) => q.verdict),
+        })),
+        planned: plan.preflight.artifact.items.map((i) => ({
+          kind: i.kind, page: i.page, slot: i.slot, emitted: i.emitted,
+          width: i.width, height: i.height,
+        })),
+        appended: sink.appended.map((i) => ({
+          kind: i.kind, page: i.page, slot: i.slot, width: i.width, height: i.height,
+        })),
+        pairVerdicts: Object.fromEntries(run.pages.flatMap((p) => p.pairs.map(
+          (q) => [`${q.page}:${q.slot}`, q.verdict],
+        ))),
+        images: Object.keys(images).length,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * jsPDF, asked directly: the alias it invents reuses images.
+   *
+   * Two real composites from one comparison — a MATCH, and a CHANGE whose
+   * change lies in the lower half of the sheet — handed to jsPDF the way the
+   * export used to hand them over, with no alias. Then the same two through
+   * the production sink.
+   */
+  async aliasProbe() {
+    const set = await members(['base-a4', 'identical-a4', 'removed-line-a4']);
+    const plan = await planComparison(set, settings());
+    const run = await runComparison(plan, set, alwaysOwner);
+    const [match, change] = run.pages[0].pairs;
+    const firstChangeRow = change.bounds.y;
+
+    const raw = new jsPDF({ unit: 'pt' });
+    raw.addImage(encodePngStored(match.pixels, match.width, match.height),
+      'PNG', 0, 0, match.width / 2, match.height / 2);
+    raw.addPage();
+    raw.addImage(encodePngStored(change.pixels, change.width, change.height),
+      'PNG', 0, 0, change.width / 2, change.height / 2);
+    const rawImages = Object.keys(raw.internal.collections.addImage_images).length;
+
+    const sink = createComparisonPdf(150);
+    const verdicts = [match.verdict, change.verdict];
+    sink.onPair(match);
+    sink.onPair(change);
+    const stored = Object.values(sink.doc.internal.collections.addImage_images);
+    // Does the second stored image carry the change? Its colour string, at a
+    // row of the change, differs from the first's.
+    const rowStart = firstChangeRow * change.width * 3;
+    const rowEnd = rowStart + change.width * 3;
+    const differs = stored.length === 2
+      && stored[0].data.slice(rowStart, rowEnd) !== stored[1].data.slice(rowStart, rowEnd);
+    return {
+      verdicts,
+      firstChangeRow,
+      height: change.height,
+      rawImages,
+      sinkImages: stored.length,
+      aliases: stored.map((s) => s.alias),
+      secondCarriesChange: differs,
+    };
+  },
+
+  /**
+   * The production container, under the ceiling that bounds it.
+   *
+   * Through the real planner, over real A4 pages at 300 dpi and the Comparison
+   * PDF the export builds: the largest page count 512 MiB takes, the first it
+   * refuses, the same job at the explicit presets, and the other two ceilings
+   * standing whatever the memory. Then the largest accepted job is actually
+   * built by the production sink, and the jsPDF document it produced is
+   * measured against the terms the model priced it with.
+   */
+  async productionMemory() {
+    const kind = ARTIFACT.COMPARISON_PDF;
+    const set = await members(['a4-180', 'a4-180']);
+    const planFor = (n, limit) => planComparison(set, settings({
+      pages: firstPages(n), dpi: 300, artifact: kind, memoryBudgetBytes: limit,
+    }));
+    const summary = (plan) => ({
+      pages: plan.pages.length,
+      status: plan.status,
+      refusal: plan.refusal?.status ?? null,
+      reason: plan.refusal?.reason ?? null,
+      jobPeak: plan.preflight.jobPeak,
+      peakPhase: plan.preflight.peakPhase,
+      limit: plan.preflight.memoryLimit,
+      outputBytes: plan.preflight.output.outputBytes,
+      workUnits: plan.preflight.work.jobUnits,
+    });
+
+    const at512 = await firstRefused(1, 60,
+      async (n) => (await planFor(n, DEFAULT_MEMORY_BUDGET_BYTES)).refusal === null);
+    const largest = await planFor(at512.largest, DEFAULT_MEMORY_BUDGET_BYTES);
+    const firstOver = await planFor(at512.first, DEFAULT_MEMORY_BUDGET_BYTES);
+    const atOneGiB = await planFor(at512.first, GIB);
+    const atTwoGiB = await planFor(at512.first, 2 * GIB);
+    const askedAgain = await planFor(at512.first, DEFAULT_MEMORY_BUDGET_BYTES);
+    const at1 = await firstRefused(at512.first, 60,
+      async (n) => (await planFor(n, GIB)).refusal === null);
+    const outputAtOne = await planFor(at1.first, GIB);
+    const outputAtTwo = await planFor(at1.first, 2 * GIB);
+    const workAtTwo = await planFor(173, 2 * GIB);
+    const workAtMachine = await planFor(173, 64 * GIB);
+
+    // ---- build the largest accepted job, and measure what jsPDF holds -------
+    const sink = createComparisonPdf(300);
+    const run = await runComparison(largest, set, alwaysOwner, {
+      onPair: sink.onPair, onPage: sink.onPage,
+    });
+    const stored = Object.values(sink.doc.internal.collections.addImage_images);
+    const text = sink.doc.output();
+    let maxCharCode = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      const code = text.charCodeAt(i);
+      if (code > maxCharCode) maxCharCode = code;
+    }
+    const items = largest.preflight.artifact.items;
+    const memory = largest.preflight.memory;
+    const w = largest.pages[0].width;
+    const h = largest.pages[0].height;
+
+    return {
+      version: { running: containerVersion(), modelled: JSPDF_CONTAINER.version },
+      terms: MEMORY_TERMS,
+      largest: summary(largest),
+      firstOver: summary(firstOver),
+      atOneGiB: summary(atOneGiB),
+      atTwoGiB: summary(atTwoGiB),
+      askedAgain: summary(askedAgain),
+      outputBoundary: { largest: at1.largest, first: at1.first },
+      outputAtOne: summary(outputAtOne),
+      outputAtTwo: summary(outputAtTwo),
+      workAtTwo: summary(workAtTwo),
+      workAtMachine: summary(workAtMachine),
+      presets: MEMORY_BUDGET_PRESETS.map((p) => p.bytes),
+      model: {
+        frame: [w, h],
+        ingest: jsPdfIngest(w, h),
+        item: items[0].cost,
+        kernel: memory.kernel,
+        sinkPeak: memory.sinkPeak,
+        retainedTotal: memory.retainedTotal,
+        duringRun: memory.duringRun,
+        publish: memory.publish,
+        atPublish: memory.atPublish,
+      },
+      measured: {
+        runStatus: run.status,
+        appended: sink.appended.length,
+        images: stored.length,
+        distinctAliases: new Set(stored.map((s) => s.alias)).size,
+        retainedChars: stored.reduce((n, s) => n + s.data.length, 0),
+        modelledRetainedChars: items.reduce((n, i) => n + i.width * i.height * 3, 0),
+        noSMask: stored.every((s) => s.sMask === undefined),
+        fileBytes: text.length,
+        modelledFileBytes: largest.preflight.output.fileBytes,
+        imageStreamBytes: stored.reduce((n, s) => n + s.data.length, 0),
+        maxCharCode,
+        encodedBytes: sink.appended.reduce((n, i) => n + i.encodedBytes, 0),
+        modelledEncoded: largest.preflight.output.encodedBytes,
+        retainedPerImage: jsPdfRetained(w, h),
+        filePerImage: jsPdfFileBytes(w, h),
+      },
+    };
+  },
+
+  /** The owned encoder: exact size, and bytes a browser accepts as a PNG. */
+  async encoder() {
+    const set = await members(['base-a4', 'added-line-a4']);
+    const plan = await planComparison(set, settings());
+    const run = await runComparison(plan, set, alwaysOwner);
+    const pair = run.pages[0].pairs[0];
+    const encoded = encodePngStored(pair.pixels, pair.width, pair.height);
+    const predicted = pngStoredSize(pair.width, pair.height);
+
+    const bitmap = await createImageBitmap(
+      new Blob([encoded], { type: 'image/png' }),
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = pair.width;
+    canvas.height = pair.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0);
+    const back = ctx.getImageData(0, 0, pair.width, pair.height).data;
+    let differing = 0;
+    for (let i = 0; i < back.length; i += 1) {
+      if (back[i] !== pair.pixels[i]) differing += 1;
+    }
+    bitmap.close();
+    canvas.width = 1;
+    canvas.height = 1;
+
+    return {
+      width: pair.width,
+      height: pair.height,
+      bytes: encoded.length,
+      predicted,
+      exact: encoded.length === predicted,
+      bytesPerPixel: +(encoded.length / (pair.width * pair.height)).toFixed(3),
+      roundTripDiffering: differing,
+      signature: Array.from(encoded.slice(0, 8)),
+    };
+  },
+
+  /**
+   * A cancellation raised while the comparison runs, and a supersession.
+   *
+   * The flag is flipped from a timer, which can only fire when the run yields
+   * — so this measures whether anything can reach the decision point, not
+   * merely whether one exists.
+   */
+  async cancellation() {
+    const set = await members(['dense-a', 'dense-b']);
+    const plan = await planComparison(set, settings({ dpi: 300, toleranceMm: 0.15 }));
+
+    let cancelled = false;
+    window.setTimeout(() => { cancelled = true; }, 5);
+    const stopped = await runComparison(plan, set, {
+      isCancelled: () => cancelled, isOwner: () => true,
+    });
+
+    let generation = 1;
+    window.setTimeout(() => { generation = 2; }, 5);
+    const superseded = await runComparison(plan, set, {
+      isCancelled: () => false, isOwner: () => generation === 1,
+    });
+
+    const completed = await runComparison(plan, set, alwaysOwner);
+    return {
+      cancelled: {
+        status: stopped.status, abandoned: stopped.abandoned,
+        pages: stopped.pages.length,
+      },
+      superseded: {
+        status: superseded.status, abandoned: superseded.abandoned,
+        pages: superseded.pages.length,
+      },
+      completed: {
+        status: completed.status, abandoned: completed.abandoned,
+        verdict: completed.verdict,
+        changePixels: completed.pages[0].pairs[0].changePixels,
+      },
+    };
+  },
+
+  /**
+   * The three presentations, asked the same question.
+   *
+   * They are one engine now, so this drives the same planner with the page
+   * sets each presentation uses and asserts the statuses agree. A presentation
+   * that reached its own verdict would show up here as a disagreement.
+   */
+  async parity() {
+    const names = ['three-pages', 'two-pages'];
+    const preview = await compare(names, { pages: [3] });
+    const exported = await compare(names, { pages: [1, 2, 3] });
+    const report = await compare(names, { pages: [1, 2, 3] });
+    const statusOf = (r, page) => r.pages.find((p) => p.page === page)?.status ?? null;
+    const verdictOf = (r, page) => r.pages.find((p) => p.page === page)?.verdict ?? null;
+    return {
+      page3: {
+        preview: statusOf(preview, 3),
+        export: statusOf(exported, 3),
+        report: statusOf(report, 3),
+      },
+      page1Verdict: {
+        export: verdictOf(exported, 1),
+        report: verdictOf(report, 1),
+      },
+      renderScale: {
+        preview: preview.renderScale,
+        export: exported.renderScale,
+        report: report.renderScale,
+      },
+    };
+  },
+
+  /**
+   * One document is not a comparison.
+   *
+   * It is shown, because the user is part-way through choosing files — and it
+   * carries no verdict, no pair and no claim about what changed.
+   */
+  async singleDocument() {
+    const set = await members(['base-a4']);
+    const plan = await planComparison(set, settings());
+    return {
+      plan: plan.status,
+      refusal: plan.refusal?.status ?? null,
+      pages: plan.pages.length,
+    };
+  },
+
+  /** The geometry primitives, without rendering anything. */
+  geometryUnits() {
+    const a4 = pageGeometry([0, 0, 595.28, 841.89], 0);
+    const turned = pageGeometry([0, 0, 595.28, 841.89], 90);
+    const a3 = pageGeometry([0, 0, 841.89, 1190.55], 0);
+    const displayScale = {
+      x: a4.displayWidth / turned.displayWidth,
+      y: a4.displayHeight / turned.displayHeight,
+    };
+    return {
+      // What a display-plane mapping would have produced for a quarter turn.
+      displayPlane: displayScale,
+      canonical: canonicalMapping(a4, turned),
+      differentSheet: compareGeometry(a4, a3).differences.map((d) => d.kind),
+      rigidAcrossRotations: mappingsAreRigid(
+        [90, 180, 270].map(
+          (r) => canonicalMapping(a4, pageGeometry([0, 0, 595.28, 841.89], r)),
+        ),
+      ),
+      dilationIsSeparable: (() => {
+        // The dilation must be the same answer as a box scan, not an
+        // approximation of it.
+        const w = 32;
+        const h = 24;
+        const mask = new Uint8Array(w * h);
+        for (let i = 0; i < 40; i += 1) mask[(i * 13) % (w * h)] = 1;
+        const dilated = dilateMask(mask, w, h, 2);
+        let same = true;
+        for (let y = 0; y < h && same; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            let expected = 0;
+            for (let ny = Math.max(0, y - 2); ny <= Math.min(h - 1, y + 2); ny += 1) {
+              for (let nx = Math.max(0, x - 2); nx <= Math.min(w - 1, x + 2); nx += 1) {
+                if (mask[ny * w + nx]) expected = 1;
+              }
+            }
+            if (dilated[y * w + x] !== expected) { same = false; break; }
+          }
+        }
+        return same;
+      })(),
+      verdictAtZeroFloor: {
+        empty: verdictFor({ changePixels: 0, inkPixels: 100, changed: false }),
+        one: verdictFor({ changePixels: 1, inkPixels: 100000, changed: true }),
+      },
+      paintsTwoMembers: (() => {
+        const a = Uint8Array.from([1, 0]);
+        const b = Uint8Array.from([0, 1]);
+        const painted = paintPair(a, b, a, b, [0, 0, 1], [1, 0, 0], 2, 1, [0, 0, 0], 1);
+        return Array.from(painted.slice(0, 8));
+      })(),
+    };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__comparatorReady = true;
+</script>

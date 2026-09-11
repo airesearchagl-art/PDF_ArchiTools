@@ -104,6 +104,7 @@ jobs:
           node scripts/make-titleblock-fixtures.mjs
           node scripts/make-drawing-register-fixtures.mjs
           node scripts/make-annotator-save-fixtures.mjs
+          node scripts/make-comparator-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -149,6 +150,19 @@ jobs:
 
       - name: Annotator save through the UI
         run: node scripts/smoke-annotator-save-ui.mjs
+
+      # Drives the production comparison engine and then the real controls: the
+      # first proves the tool declines what it cannot compare honestly, the
+      # second proves a person can reach the settings that decide it.
+      - name: Comparator reliability
+        run: node scripts/smoke-comparator.mjs
+
+      # And the files a user actually walks away with. The gate above proves
+      # the comparison; this one downloads the Comparison PDF and the Change
+      # Report out of the real UI, reopens them, and measures the claims in the
+      # bytes -- including the ones that are about nothing being written at all.
+      - name: Comparator artifacts
+        run: node scripts/smoke-comparator-artifacts.mjs
 
       # Every PDF.js path in the app, not just the Annotator's: which worker a
       # feature fetches is a property of the built bundle and of module
