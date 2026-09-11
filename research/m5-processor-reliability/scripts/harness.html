@@ -1,0 +1,545 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M5 Processor reliability — research harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** Processor functions, unchanged, and the research
+ * prototypes, over the synthetic corpus. Not part of the app.
+ *
+ * "両方実行" has no function of its own: PdfTools.tsx composes it inline as
+ * processMonochrome → processLayer. It is composed here the same way, with the
+ * same production functions and the UI's default settings.
+ */
+import {
+  processLayer, processMonochrome, processOptimize, processMargin,
+} from '/src/utils/pdf-processor.ts';
+import { normalizePageSize } from '/src/utils/page-size-normalizer.ts';
+import { updateTitleBlocks } from '/src/utils/title-block-updater.ts';
+import { assessSource } from '/src/utils/annotator-save/source-assessment.ts';
+import { PDFDocument } from 'pdf-lib';
+import { inspect, portable, visualDiff } from '/research/m5-processor-reliability/prototype/inspect.mjs';
+import { monochromeStructural } from '/research/m5-processor-reliability/prototype/mono-structure.mjs';
+import { marginInPlace } from '/research/m5-processor-reliability/prototype/margin-inplace.mjs';
+import { createOwner, runBatch, PLAN, RESULT } from '/research/m5-processor-reliability/prototype/job.mjs';
+import { optimizeStructural } from '/research/m5-processor-reliability/prototype/optimize-structure.mjs';
+
+const FIXTURES = '/test-fixtures/m5-processor';
+const cache = new Map();
+async function bytesOf(name) {
+  if (!cache.has(name)) {
+    if (name.startsWith('@opt:')) {
+      // A document of DCT images, made by production Optimize itself: the
+      // realistic JPEG input for the monochrome candidates.
+      const base = name.slice(5);
+      cache.set(name, await processOptimize(fileOf(base, await bytesOf(base)), { dpi: 150 }));
+    } else {
+      const r = await fetch(`${FIXTURES}/${name}.pdf`);
+      cache.set(name, new Uint8Array(await r.arrayBuffer()));
+    }
+  }
+  return cache.get(name).slice();
+}
+const fileOf = (name, bytes) => new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
+
+/** The UI's defaults (PdfTools.tsx:36-42). */
+const DEFAULTS = {
+  layer: { color: '#ffffff', opacity: 0.5 },
+  mono: { dpi: 300, contrast: 1.0 },
+  optimize: { dpi: 150 },
+  margin: { scale: 0.8, position: 'center' },
+};
+
+const OPS = {
+  layer: (name, bytes) => processLayer(fileOf(name, bytes), DEFAULTS.layer),
+  monochrome: (name, bytes, dpi) => processMonochrome(fileOf(name, bytes), { ...DEFAULTS.mono, dpi: dpi ?? DEFAULTS.mono.dpi }),
+  both: async (name, bytes, dpi) => processLayer(
+    await processMonochrome(fileOf(name, bytes), { ...DEFAULTS.mono, dpi: dpi ?? DEFAULTS.mono.dpi }),
+    DEFAULTS.layer,
+  ),
+  margin: (name, bytes) => processMargin(fileOf(name, bytes), DEFAULTS.margin),
+  optimize: (name, bytes, dpi) => processOptimize(fileOf(name, bytes), { dpi: dpi ?? DEFAULTS.optimize.dpi }),
+};
+
+const MARKER = /[A-Z0-9]+(?:-[A-Z0-9]+)*-M5(?:-\d+)?/g;
+const markersIn = (texts) => [...new Set(texts.join(' ').match(MARKER) ?? [])].filter((m) => m !== 'OCR-LAYER-M5');
+const sum = (arr, f) => arr.reduce((n, x) => n + f(x), 0);
+
+/**
+ * Whether each property survived, decided from structure. Visual numbers are
+ * reported next to them and decide nothing.
+ */
+function preservation(src, out) {
+  if (out.loadError) return { loadError: out.loadError };
+  const srcText = src.text.join(' ');
+  const outText = out.text.join(' ');
+  const markers = markersIn(src.text);
+  const srcPaths = sum(src.pages, (p) => p.content.pathOps);
+  const outPaths = sum(out.pages, (p) => p.content.pathOps);
+  const srcImages = src.pages.flatMap((p) => p.images);
+  const outImages = out.pages.flatMap((p) => p.images);
+  const kinds = (r) => r.pages.flatMap((p) => p.annots.map((a) => a.subtype)).filter((s) => s !== 'Widget' && s !== 'Link').sort();
+  const links = (r) => r.pages.flatMap((p) => p.annots.filter((a) => a.subtype === 'Link').map((a) => a.uri));
+  const widgets = (r) => r.pages.flatMap((p) => p.annots.filter((a) => a.subtype === 'Widget'));
+  const field = (r, name) => r.fields.find((f) => f.name === name) ?? null;
+  const fullPageRaster = out.pages.every((p) => p.content.pathOps === 0 && p.content.textShows === 0
+    && p.content.imageDraws === 1 && p.images.length === 1);
+  const vis = src.thumbs.map((t, i) => visualDiff(t, out.thumbs[i]));
+
+  const verdict = (had, has) => (!had ? 'n/a' : (has ? 'retained' : 'lost'));
+  const srcSig = src.signatures[0] ?? null;
+  const outSig = out.signatures[0] ?? null;
+  return {
+    pageCount: { before: src.pages.length, after: out.pages.length },
+    pageOrder: (() => {
+      const order = (r) => r.text.map((t) => (t.match(/PAGE-ORDER-M5-(\d)/) ?? [])[1] ?? null);
+      const b = order(src);
+      if (b.every((x) => x === null)) return 'n/a';
+      const a = order(out);
+      if (a.join(',') === b.join(',')) return 'preserved (by extracted text)';
+      if (a.some((x) => x !== null)) return `changed ${a.join(',')}`;
+      // The text is gone, so ask the pixels: which source page does each
+      // output page look like? Only as evidence of order, never of content.
+      const matched = out.thumbs.map((t) => {
+        let best = null;
+        src.thumbs.forEach((s, j) => {
+          const d = visualDiff(s, t);
+          if (d && (best === null || d.meanAbs < best.d)) best = { j, d: d.meanAbs };
+        });
+        return best ? best.j + 1 : null;
+      });
+      return matched.every((j, i) => j === i + 1)
+        ? 'preserved (by rendered appearance; the text is gone)' : `changed ${matched.join(',')}`;
+    })(),
+    boxes: src.pages.map((p, i) => ({
+      mediaBefore: p.mediaBox, mediaAfter: out.pages[i]?.mediaBox ?? null,
+      cropBefore: p.cropBox, cropAfter: out.pages[i]?.cropBox ?? null,
+      rotateBefore: p.rotate, rotateAfter: out.pages[i]?.rotate ?? null,
+    })),
+    nativeText: markers.length === 0 ? 'n/a'
+      : (markers.every((m) => outText.includes(m)) ? 'extractable' : `lost ${markers.filter((m) => !outText.includes(m)).join(' ')}`),
+    ocrText: srcText.includes('OCR-LAYER-M5') ? (outText.includes('OCR-LAYER-M5') ? 'extractable' : 'lost') : 'n/a',
+    vectors: srcPaths === 0 ? 'n/a' : (outPaths >= srcPaths ? 'retained'
+      : (outPaths === 0 ? 'lost' : `lost (${outPaths} of ${srcPaths} path operators remain)`)),
+    vectorOps: { before: srcPaths, after: outPaths },
+    raster: srcImages.length === 0 ? 'n/a'
+      : (srcImages.every((s) => outImages.some((o) => o.digest === s.digest)) ? 'retained (same bytes)'
+        : (outImages.length > 0 ? 're-encoded' : 'lost')),
+    fullPageRaster,
+    outImages: outImages.map((i) => ({ filter: i.filter, width: i.width, height: i.height, colorSpace: i.colorSpace })),
+    annotations: (() => {
+      const b = kinds(src); const a = kinds(out);
+      return b.length === 0 ? 'n/a' : (b.join(',') === a.join(',') ? 'retained' : `lost (${b.join(',')} -> ${a.join(',') || 'none'})`);
+    })(),
+    links: links(src).length === 0 ? 'n/a' : (links(src).every((u) => links(out).includes(u)) ? 'retained' : 'lost'),
+    form: !field(src, 'm5.text') ? 'n/a'
+      : (field(out, 'm5.text')?.value === field(src, 'm5.text').value && widgets(out).length === widgets(src).length
+        ? 'retained with value' : (field(out, 'm5.text') ? `field present, value ${field(out, 'm5.text').value}` : 'lost')),
+    acroFormBefore: src.acroForm, acroFormAfter: out.acroForm,
+    signature: !srcSig ? 'n/a' : (!outSig ? 'removed' : (outSig.state === 'intact' ? 'intact' : `invalidated (${outSig.state})`)),
+    xfa: !src.xfa ? 'n/a' : (out.xfa ? 'retained' : 'removed'),
+    metadata: {
+      title: src.info.title === out.info.title ? 'retained' : `changed ${JSON.stringify(out.info.title)}`,
+      author: !src.info.author ? 'n/a' : (src.info.author === out.info.author ? 'retained' : 'lost'),
+      producer: src.info.producer === out.info.producer ? 'retained' : `changed ${JSON.stringify(out.info.producer)}`,
+      modDate: src.info.modDate === out.info.modDate ? 'retained' : 'changed',
+      xmp: !src.xmpMarker ? 'n/a' : (out.xmpMarker ? 'retained' : 'lost'),
+    },
+    visual: {
+      meanAbs: vis[0]?.meanAbs ?? null, differingFraction: vis[0]?.differingFraction ?? null,
+      chromaBefore: src.thumbs[0]?.chromaFraction ?? null, chromaAfter: out.thumbs[0]?.chromaFraction ?? null,
+      sizeBefore: src.thumbs[0] ? [src.thumbs[0].width, src.thumbs[0].height] : null,
+      sizeAfter: out.thumbs[0] ? [out.thumbs[0].width, out.thumbs[0].height] : null,
+    },
+    size: { before: src.bytes, after: out.bytes, ratio: out.bytes / src.bytes },
+  };
+}
+
+const srcReports = new Map();
+async function sourceReport(name) {
+  if (!srcReports.has(name)) srcReports.set(name, await inspect(await bytesOf(name)));
+  return srcReports.get(name);
+}
+
+/**
+ * How much of the page a translucent white overlay actually reached: of the
+ * source's ink, the share the overlay lightened. White on white shows nothing,
+ * so paper is not counted.
+ */
+function overlayCoverage(before, after) {
+  if (!before || !after || before.width !== after.width || before.height !== after.height) return null;
+  let ink = 0; let lightened = 0;
+  for (let i = 0; i < before.data.length; i += 4) {
+    const l0 = 0.299 * before.data[i] + 0.587 * before.data[i + 1] + 0.114 * before.data[i + 2];
+    if (l0 > 150) continue;
+    ink += 1;
+    const l1 = 0.299 * after.data[i] + 0.587 * after.data[i + 1] + 0.114 * after.data[i + 2];
+    if (l1 > l0 + 30) lightened += 1;
+  }
+  return ink === 0 ? null : lightened / ink;
+}
+
+/** Magenta: the colour of the content `mediabox-larger` hides outside its CropBox. */
+function magentaFraction(thumb) {
+  let n = 0;
+  for (let i = 0; i < thumb.data.length; i += 4) {
+    if (thumb.data[i] > 180 && thumb.data[i + 1] < 90 && thumb.data[i + 2] > 180) n += 1;
+  }
+  return n / (thumb.data.length / 4);
+}
+
+window.__m5 = {
+  defaults: () => DEFAULTS,
+
+  /** The fixtures describe what they claim to: the controls for every later check. */
+  async corpus(names) {
+    const out = {};
+    for (const name of names) out[name] = portable(await sourceReport(name));
+    return out;
+  },
+
+  /** Every target operation over the corpus, measured before and after. */
+  async baseline(plan) {
+    const rows = [];
+    for (const { op, fixture, dpi } of plan) {
+      const src = await sourceReport(fixture);
+      const started = performance.now();
+      let out = null; let error = null;
+      try { out = await OPS[op](fixture, await bytesOf(fixture), dpi); } catch (e) { error = String(e?.message ?? e); }
+      const ms = performance.now() - started;
+      if (!out) { rows.push({ op, fixture, dpi: dpi ?? null, error, outputBytes: 0, ms }); continue; }
+      const outReport = await inspect(out);
+      const row = { op, fixture, dpi: dpi ?? null, ms, ...preservation(src, outReport) };
+      if (op === 'layer') row.overlayCoverage = overlayCoverage(src.thumbs[0], outReport.thumbs[0]);
+      if (fixture === 'mediabox-larger') {
+        row.hiddenContentRevealed = magentaFraction(outReport.thumbs[0]) > 0.001;
+        row.hiddenMagentaBefore = magentaFraction(src.thumbs[0]);
+        row.hiddenMagentaAfter = magentaFraction(outReport.thumbs[0]);
+      }
+      rows.push(row);
+    }
+    return rows;
+  },
+
+  /** The hardened lanes, handed the documents they do not inspect for. */
+  async hardened() {
+    const rows = [];
+    const rule = [{ rect: { x: 0.62, y: 0.88, width: 0.3, height: 0.04 }, text: 'REV-M5' }];
+    for (const fixture of ['signature-a4', 'xfa-a4', 'metadata-a4', 'form-a4']) {
+      const src = await sourceReport(fixture);
+      for (const [lane, run] of [
+        ['normalize-size', async () => (await normalizePageSize(await bytesOf(fixture), { target: 'A3' })).data],
+        ['title-block-update', async () => (await updateTitleBlocks(await bytesOf(fixture), { rules: rule, templateOrientation: 'portrait' })).data],
+      ]) {
+        let out = null; let error = null;
+        try { out = await run(); } catch (e) { error = String(e?.message ?? e); }
+        if (!out) { rows.push({ lane, fixture, error }); continue; }
+        const r = preservation(src, await inspect(out, { render: false }));
+        rows.push({ lane, fixture, signature: r.signature, xfa: r.xfa, form: r.form, metadata: r.metadata, nativeText: r.nativeText });
+      }
+    }
+    return rows;
+  },
+
+  /**
+   * The signature proxy, fed a change it must notice: one byte inside the
+   * signed range, not in /Contents. Without this, "intact" could be a checker
+   * that says intact to everything.
+   */
+  async signatureProbe() {
+    const original = await bytesOf('signature-a4');
+    const tampered = original.slice();
+    // One letter of the signer's /Name: covered by /ByteRange, outside
+    // /Contents, and harmless to the file's structure.
+    const at = new TextDecoder('latin1').decode(original).indexOf('M5 synthetic signer') + 3;
+    if (at < 3) throw new Error('signer name not found in the fixture');
+    tampered[at] = 0x53; // 's' -> 'S'
+    return {
+      original: (await inspect(original, { render: false })).signatures,
+      tampered: (await inspect(tampered, { render: false })).signatures,
+    };
+  },
+
+  /** What the existing M3 inspection says about each document, unchanged. */
+  async assess(names) {
+    const out = {};
+    for (const name of names) {
+      const v = await assessSource(await bytesOf(name));
+      out[name] = { supported: v.supported, codes: v.problems.map((p) => p.code), signatureFields: v.signatureFields };
+    }
+    // And that looking did not modify: a document without an AcroForm still has none.
+    const plain = await bytesOf('text-a4');
+    await assessSource(plain);
+    out.__inspectionIsReadOnly = !(await inspect(plain, { render: false })).acroForm;
+    return out;
+  },
+
+  /** Monochrome candidates B and C against the same corpus. */
+  async monoCandidates(names) {
+    const out = {};
+    for (const name of names) {
+      const src = await sourceReport(name);
+      out[name] = {};
+      for (const [label, images] of [['B', 'refuse'], ['C', 'grayscale']]) {
+        const started = performance.now();
+        let r;
+        try { r = await monochromeStructural(await bytesOf(name), { images, contrast: 1 }); } catch (e) {
+          out[name][label] = { status: 'ERROR', error: String(e?.message ?? e) }; continue;
+        }
+        const entry = { status: r.status, refusals: r.refusals.slice(0, 4), stats: r.stats, ms: performance.now() - started };
+        if (r.bytes) {
+          const rep = await inspect(r.bytes);
+          const p = preservation(src, rep);
+          Object.assign(entry, {
+            nativeText: p.nativeText, ocrText: p.ocrText, vectors: p.vectors, raster: p.raster, annotations: p.annotations,
+            links: p.links, form: p.form, xfa: p.xfa, signature: p.signature, metadata: p.metadata,
+            boxes: p.boxes[0], chromaAfter: p.visual.chromaAfter, chromaBefore: p.visual.chromaBefore,
+            outImages: p.outImages, size: p.size,
+          });
+        }
+        out[name][label] = entry;
+      }
+      // Candidate A, for the same row: production at the UI default.
+      const a = await inspect(await OPS.monochrome(name, await bytesOf(name)));
+      const pa = preservation(src, a);
+      out[name].A = { status: 'CONVERTED', nativeText: pa.nativeText, ocrText: pa.ocrText, vectors: pa.vectors, raster: pa.raster,
+        annotations: pa.annotations, links: pa.links, form: pa.form, xfa: pa.xfa, signature: pa.signature, metadata: pa.metadata,
+        boxes: pa.boxes[0], chromaAfter: pa.visual.chromaAfter, chromaBefore: pa.visual.chromaBefore, size: pa.size };
+    }
+    return out;
+  },
+
+  /**
+   * Margin: production (embedPage) against the in-place candidate.
+   *
+   * For the visual, the expected picture is computed independently: the
+   * source's own rendering, shrunk by the scale into the chosen corner of the
+   * *visible* page. Each candidate is measured against that.
+   */
+  async marginCandidates(names, positions = ['center', 'tl']) {
+    const out = {};
+    for (const name of names) {
+      const src = await sourceReport(name);
+      out[name] = {};
+      for (const position of positions) {
+        const options = { scale: 0.8, position };
+        const expected = (() => {
+          const t = src.thumbs[0];
+          const canvas = document.createElement('canvas');
+          canvas.width = t.width; canvas.height = t.height;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.fillStyle = 'white'; ctx.fillRect(0, 0, t.width, t.height);
+          const from = document.createElement('canvas');
+          from.width = t.width; from.height = t.height;
+          from.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(t.data), t.width, t.height), 0, 0);
+          const w = t.width * options.scale; const h = t.height * options.scale;
+          const x = position === 'center' ? (t.width - w) / 2 : (position.endsWith('l') ? 0 : t.width - w);
+          const y = position === 'center' ? (t.height - h) / 2 : (position.startsWith('t') ? 0 : t.height - h);
+          ctx.drawImage(from, x, y, w, h);
+          return { width: t.width, height: t.height, data: ctx.getImageData(0, 0, t.width, t.height).data };
+        })();
+        for (const [label, run] of [
+          ['production', async () => ({ status: 'TRANSFORMED', bytes: await processMargin(fileOf(name, await bytesOf(name)), options) })],
+          ['inplace', async () => marginInPlace(await bytesOf(name), options)],
+        ]) {
+          let r;
+          try { r = await run(); } catch (e) { out[name][`${label}:${position}`] = { status: 'ERROR', error: String(e?.message ?? e) }; continue; }
+          if (!r.bytes) { out[name][`${label}:${position}`] = { status: r.status, refusals: r.refusals }; continue; }
+          const rep = await inspect(r.bytes);
+          const p = preservation(src, rep);
+          const againstExpected = visualDiff(expected, rep.thumbs[0]);
+          out[name][`${label}:${position}`] = {
+            status: r.status, nativeText: p.nativeText, ocrText: p.ocrText, vectors: p.vectors, raster: p.raster,
+            annotations: p.annotations, links: p.links, form: p.form, xfa: p.xfa, signature: p.signature,
+            metadata: p.metadata, boxes: p.boxes[0], pageCount: p.pageCount,
+            outputThumb: p.visual.sizeAfter, sourceThumb: p.visual.sizeBefore,
+            againstExpected: againstExpected ? { meanAbs: againstExpected.meanAbs, differing: againstExpected.differingFraction } : 'different page shape',
+            hiddenMagenta: name === 'mediabox-larger' ? magentaFraction(rep.thumbs[0]) : null,
+            annotRects: rep.pages[0].annots.map((a) => ({ subtype: a.subtype, rect: a.rect })),
+            size: p.size,
+          };
+        }
+      }
+    }
+    return out;
+  },
+
+  /** Optimize: what it does to size, at each resolution the UI offers, and a lossless re-save. */
+  async optimizeSizes(names) {
+    const out = {};
+    for (const name of names) {
+      const src = await bytesOf(name);
+      const row = { source: src.length };
+      // Every marker, the OCR layer's included: a document with none to lose
+      // is n/a, not "kept".
+      const wanted = [...new Set((await sourceReport(name)).text.join(' ').match(MARKER) ?? [])];
+      for (const dpi of [72, 150, 300]) {
+        const o = await OPS.optimize(name, src.slice(), dpi);
+        const rep = await inspect(o, { render: false });
+        row[`O1@${dpi}`] = {
+          bytes: o.length, ratio: o.length / src.length,
+          text: wanted.length === 0 ? 'n/a' : (wanted.every((m) => rep.text.join(' ').includes(m)) ? 'kept' : 'lost'),
+          vectorOps: sum(rep.pages, (p) => p.content.pathOps),
+        };
+      }
+      const doc = await PDFDocument.load(src.slice(), { updateMetadata: false });
+      const lossless = await doc.save({ useObjectStreams: true });
+      row.O2lossless = { bytes: lossless.length, ratio: lossless.length / src.length };
+      const o3 = await optimizeStructural(src.slice(), { dpi: 150 });
+      const o3r = await inspect(o3.bytes);
+      const p3 = preservation(await sourceReport(name), o3r);
+      row.O3at150 = {
+        bytes: o3.bytes.length, ratio: o3.bytes.length / src.length, reencoded: o3.report.reencoded, kept: o3.report.kept,
+        text: wanted.length === 0 ? 'n/a' : (wanted.every((m) => o3r.text.join(' ').includes(m)) ? 'kept' : 'lost'),
+        vectors: p3.vectors, annotations: p3.annotations, form: p3.form, meanAbs: p3.visual.meanAbs,
+      };
+      out[name] = row;
+    }
+    return out;
+  },
+
+  /** What failing looks like: an unreadable file, and a failure part-way through a document. */
+  async failures() {
+    const out = { invalid: {}, midDocument: {} };
+    for (const op of Object.keys(OPS)) {
+      try { const b = await OPS[op]('invalid', await bytesOf('invalid')); out.invalid[op] = { bytes: b.length }; } catch (e) {
+        out.invalid[op] = { threw: String(e?.message ?? e).slice(0, 120), bytes: 0 };
+      }
+    }
+    // The second page's canvas comes back without a context.
+    for (const op of ['monochrome', 'optimize', 'both']) {
+      const original = HTMLCanvasElement.prototype.getContext;
+      let large = 0;
+      HTMLCanvasElement.prototype.getContext = function patched(...args) {
+        if (this.width > 1000 && this.height > 1000) { large += 1; if (large === 2) return null; }
+        return original.apply(this, args);
+      };
+      try {
+        const b = await OPS[op]('three-pages', await bytesOf('three-pages'));
+        out.midDocument[op] = { bytes: b.length, pages: (await inspect(b, { render: false })).pages.length };
+      } catch (e) {
+        out.midDocument[op] = { threw: String(e?.message ?? e).slice(0, 120), bytes: 0 };
+      } finally {
+        HTMLCanvasElement.prototype.getContext = original;
+      }
+    }
+    return out;
+  },
+
+  /**
+   * Full-page raster cost. Measured where it is safe to measure, calculated
+   * everywhere; the browser's canvas limit is probed without drawing a page.
+   */
+  async memory(measure) {
+    const sheets = { A4: [595.28, 841.89], A3: [841.89, 1190.55], A1: [1683.78, 2383.94], A0: [2383.94, 3370.39] };
+    const probe = (w, h) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      let usable = false;
+      try {
+        ctx.fillStyle = 'rgb(1,2,3)'; ctx.fillRect(w - 1, h - 1, 1, 1);
+        const d = ctx.getImageData(w - 1, h - 1, 1, 1).data;
+        usable = d[0] === 1 && d[1] === 2 && d[2] === 3 && d[3] === 255;
+      } catch { usable = false; }
+      const dataUrl = usable ? null : c.toDataURL('image/jpeg', 0.8);
+      c.width = 1; c.height = 1;
+      return { usable, emptyDataUrl: dataUrl === 'data:,' };
+    };
+    const rows = [];
+    for (const [sheet, [wPt, hPt]] of Object.entries(sheets)) {
+      for (const dpi of [72, 150, 300, 600]) {
+        const s = dpi / 72;
+        const w = Math.floor(wPt * s); const h = Math.floor(hPt * s);
+        rows.push({ sheet, dpi, width: w, height: h, megapixels: (w * h) / 1e6, rgba: w * h * 4 });
+      }
+    }
+    const measured = [];
+    for (const { op, fixture, dpi } of measure) {
+      const src = await bytesOf(fixture);
+      const t0 = performance.now();
+      let out = null; let error = null;
+      try { out = await OPS[op](fixture, src, dpi); } catch (e) { error = String(e?.message ?? e); }
+      const rep = out ? await inspect(out, { render: false }) : null;
+      const img = rep?.pages[0]?.images[0] ?? null;
+      measured.push({
+        op, fixture, dpi, ms: performance.now() - t0, error,
+        outputBytes: out?.length ?? 0,
+        image: img ? { width: img.width, height: img.height, filter: img.filter, encodedBytes: img.encodedBytes } : null,
+      });
+    }
+    // The canvas limit, probed at the sizes the UI can ask for and nothing drawn.
+    const limits = [];
+    for (const [sheet, dpi] of [['A1', 300], ['A0', 300], ['A1', 600], ['A0', 600]]) {
+      const [wPt, hPt] = sheets[sheet];
+      const w = Math.floor(wPt * dpi / 72); const h = Math.floor(hPt * dpi / 72);
+      limits.push({ sheet, dpi, width: w, height: h, megapixels: (w * h) / 1e6, ...probe(w, h) });
+    }
+    return { rows, measured, limits };
+  },
+
+  /** The 600 dpi case the canvas cannot hold: what production does with it. */
+  async overLimit() {
+    const out = {};
+    for (const op of ['monochrome', 'both']) {
+      try {
+        const b = await OPS[op]('vector-a1', await bytesOf('vector-a1'), 600);
+        const rep = await inspect(b);
+        out[op] = { bytes: b.length, inkFraction: rep.thumbs[0].inkFraction, image: rep.pages[0].images[0] ?? null };
+      } catch (e) {
+        out[op] = { threw: String(e?.message ?? e).slice(0, 160), bytes: 0 };
+      }
+    }
+    return out;
+  },
+
+  /** The PLAN/RESULT + ownership prototype, wrapping production processLayer. */
+  async jobPrototype() {
+    const plan = async (bytes) => {
+      const v = await assessSource(bytes);
+      if (v.supported) return { status: PLAN.READY };
+      const code = v.problems[0]?.code;
+      return {
+        status: { signed: PLAN.SIGNATURE_UNSAFE, 'xfa-unsupported': PLAN.XFA_UNSAFE, encrypted: PLAN.ENCRYPTED }[code]
+          ?? PLAN.UNSUPPORTED_DOCUMENT,
+        reason: v.problems.map((p) => p.message).join(' / '),
+      };
+    };
+    const run = (file) => processLayer(file, DEFAULTS.layer);
+    const files = async (names) => Promise.all(names.map(async (n) => fileOf(n, await bytesOf(n))));
+    const out = {};
+    for (const policy of ['B1', 'B2', 'B3']) {
+      const published = [];
+      const owner = createOwner();
+      const r = await runBatch({
+        files: await files(['batch-ok', 'invalid', 'text-a4', 'signature-a4']),
+        plan, run, owner, policy, publish: async (o) => { published.push(o.artifacts.map((a) => a.name)); },
+      });
+      out[policy] = { result: r.result, artifacts: r.artifacts.map((a) => a.name), manifest: r.manifest, published, results: r.results };
+    }
+    // Superseded part-way through: nothing may be published, under any policy.
+    const published = [];
+    const owner = createOwner();
+    const pending = runBatch({
+      files: await files(['long-8', 'batch-ok', 'text-a4']),
+      plan, run: (file) => processMonochrome(file, { dpi: 150, contrast: 1 }), owner, policy: 'B2',
+      publish: async (o) => { published.push(o.artifacts.map((a) => a.name)); },
+    });
+    setTimeout(() => owner.supersede(), 30);
+    const superseded = await pending;
+    out.superseded = { result: superseded.result, published, results: superseded.results };
+    // And the control: the same batch, not superseded, publishes once.
+    const controlPublished = [];
+    const control = await runBatch({
+      files: await files(['batch-ok', 'text-a4']), plan, run, owner: createOwner(), policy: 'B2',
+      publish: async (o) => { controlPublished.push(o.artifacts.map((a) => a.name)); },
+    });
+    out.control = { result: control.result, published: controlPublished };
+    return out;
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m5Ready = true;
+</script>
