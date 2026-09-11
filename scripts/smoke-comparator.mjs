@@ -373,6 +373,77 @@ try {
         `peak at the ${budgets.memoryPhases.peakPhase} phase, `
         + `${budgets.memoryPhases.bytesPerPixel.toFixed(1)} bytes per pixel`);
 
+    // ---- the memory ceiling, as a boundary -------------------------------------
+    //
+    // The budget above is arithmetic. What makes it a ceiling is that there is
+    // a largest job it takes and a first job it refuses, that the refusal moves
+    // only when a person moves it, and that moving it buys nothing anywhere
+    // else.
+    console.log('\n=== where 512 MiB actually stops ===');
+    const boundary = await page.evaluate(() => window.__comparator.memoryBoundary());
+    console.log(`  largest accepted: ${boundary.largestAccepted.width}x${
+        boundary.largestAccepted.height} (${
+        boundary.largestAccepted.megapixels.toFixed(1)} Mpx), peak ${
+        (boundary.largestAccepted.jobPeak / (1024 * 1024)).toFixed(1)} MiB`);
+    console.log(`  first refused:    ${boundary.firstRefused.width}x${
+        boundary.firstRefused.height}, peak ${
+        (boundary.firstRefused.jobPeak / (1024 * 1024)).toFixed(1)} MiB  ${
+        boundary.firstRefused.status}`);
+    check('the largest job the default budget takes is inside it',
+        boundary.largestAccepted.refusal === null
+        && boundary.largestAccepted.jobPeak <= boundary.largestAccepted.limit,
+        `${(boundary.largestAccepted.jobPeak / (1024 * 1024)).toFixed(1)} MiB of `
+        + `${boundary.largestAccepted.limit / (1024 * 1024)} MiB`);
+    probe('and one pixel-step past it is refused by name',
+        boundary.firstRefused.status === 'OVER_MEMORY_BUDGET'
+        && boundary.firstRefused.jobPeak > boundary.largestAccepted.limit,
+        `${boundary.firstRefused.width}px wide instead of `
+        + `${boundary.largestAccepted.width}px`);
+    check('the refusal names something the user can actually do',
+        typeof boundary.firstRefused.achievable === 'string'
+        && boundary.firstRefused.achievable.length > 0,
+        boundary.firstRefused.achievable ?? '');
+    check('the same job is accepted once a person selects 1 GiB',
+        boundary.afterExplicitOneGiB.status === null
+        && boundary.afterExplicitOneGiB.offered === true,
+        '1 GiB is an offered preset, not a computed escape');
+    probe('and asking again at the default still refuses, because nothing was raised',
+        boundary.askedAgainAtDefault === 'OVER_MEMORY_BUDGET',
+        'no sticky budget, no automatic retry at a larger one');
+    probe('a 64 GiB budget does not buy past the output ceiling',
+        boundary.independence.outputAtSixtyFourGiB === 'OVER_OUTPUT_BUDGET');
+    probe('nor past the work ceiling',
+        boundary.independence.workAtSixtyFourGiB === 'OVER_WORK_BUDGET',
+        'three ceilings, three separate questions');
+
+    // ---- what the job is actually holding ---------------------------------------
+    console.log('\n=== the budget and the buffers agree ===');
+    const lifetime = await page.evaluate(() => window.__comparator.bufferLifetime());
+    console.log(`  ${lifetime.pairs} pairs: at most ${lifetime.maxLiveVisuals} live `
+        + `visual (${(lifetime.maxLiveBytes / 1e6).toFixed(1)} MB); retaining every `
+        + `one would hold ${lifetime.retainedVisuals} (${
+        (lifetime.retainedBytes / 1e6).toFixed(1)} MB)`);
+    check('an export over six pairs holds one full-resolution visual, not six',
+        lifetime.maxLiveVisuals === 1
+        && lifetime.maxLiveBytes === lifetime.oneVisualBytes,
+        `${lifetime.maxLiveBytes.toLocaleString('en-US')} bytes = one visual`);
+    check('and it has released that one by the time the job ends',
+        lifetime.stillHeld === 0,
+        'the sink took it, so the run does not keep it');
+    probe('while the same run without a sink does hold all of them',
+        lifetime.retainedVisuals === lifetime.pairs
+        && lifetime.retainedBytes === lifetime.pairs * lifetime.oneVisualBytes,
+        `${(lifetime.retainedBytes / 1e6).toFixed(1)} MB — the lifetime the `
+        + 'ceiling would have been wrong about');
+    check('the encoded bytes it does accumulate are exactly what preflight counted',
+        lifetime.encodedBytes === lifetime.predictedEncoded,
+        `${lifetime.encodedBytes.toLocaleString('en-US')} = `
+        + `${lifetime.predictedEncoded.toLocaleString('en-US')} bytes`);
+    check('so the modelled peak is the peak of the code that runs',
+        lifetime.withinBudget === true
+        && lifetime.modelledPeak >= lifetime.oneVisualBytes + lifetime.predictedEncoded,
+        `${(lifetime.modelledPeak / 1e6).toFixed(1)} MB modelled`);
+
     // ---- the encoder ---------------------------------------------------------
     console.log('\n=== the owned encoder ===');
     const encoder = await page.evaluate(() => window.__comparator.encoder());

@@ -1,0 +1,246 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Comparator artifacts — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Reopens the files the Comparator actually wrote, and asks the production
+ * engine what should have been in them.
+ *
+ * This harness renders nothing of its own into an artifact. It reads a PDF the
+ * app downloaded, rasterises it with the same PDF.js the app uses, and counts
+ * ink with the same canonical predicate the comparison uses — so "the change is
+ * visible in the exported file" is measured in the exported file, not asserted
+ * from the run that produced it.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import {
+  INK_THRESHOLD, planComparison, runComparison,
+} from '/src/utils/comparator/index.ts';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+/** The canonical predicate, applied to a rasterised artifact page. */
+function ink(data) {
+  let inked = 0;
+  let coloured = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    if (r < INK_THRESHOLD || g < INK_THRESHOLD || b < INK_THRESHOLD) inked += 1;
+    // The change paint is the only thing in a visual with a hue.
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 30) coloured += 1;
+  }
+  return { inked, coloured };
+}
+
+async function load(url) {
+  const data = new Uint8Array(await (await fetch(url)).arrayBuffer());
+  return pdfjsLib.getDocument({ data, isEvalSupported: false }).promise;
+}
+
+async function rasterise(page, scale) {
+  const viewport = page.getViewport({ scale, rotation: 0 });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  return { data, width: canvas.width, height: canvas.height, canvas, ctx };
+}
+
+const COLOURS = [[0, 0, 1], [1, 0, 0], [0, 0.5, 0], [0.9, 0.7, 0]];
+
+window.__artifacts = {
+  /**
+   * Every page of a written artifact: its size, what text it carries, and
+   * whether anything was actually drawn on it.
+   */
+  async inspect(url) {
+    const pdf = await load(url);
+    const pages = [];
+    for (let n = 1; n <= pdf.numPages; n += 1) {
+      const page = await pdf.getPage(n);
+      const unit = page.getViewport({ scale: 1, rotation: 0 });
+      const text = (await page.getTextContent()).items
+        .map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+      // Big enough to see the paint, small enough to do this for every page.
+      const scale = Math.min(1, 800 / unit.width);
+      const shot = await rasterise(page, scale);
+      const counted = ink(shot.data);
+      shot.canvas.width = 1;
+      shot.canvas.height = 1;
+      pages.push({
+        index: n,
+        widthPt: Math.round(unit.width * 100) / 100,
+        heightPt: Math.round(unit.height * 100) / 100,
+        landscape: unit.width > unit.height,
+        rotation: unit.rotation,
+        text,
+        inked: counted.inked,
+        coloured: counted.coloured,
+        pixels: shot.width * shot.height,
+      });
+    }
+    await pdf.destroy();
+    return { numPages: pdf.numPages, pages };
+  },
+
+  /**
+   * Whether the glyphs on a notice page survived into the file.
+   *
+   * The notice is an image because jsPDF's standard fonts have no Japanese
+   * glyphs. That claim is only worth anything if the image really carries the
+   * sentence, so the same sentence is drawn again here with the same canvas
+   * text stack and compared with the artifact page pixel for pixel — and a
+   * different sentence is compared too, so a match means the glyphs and not
+   * merely "some ink in roughly that shape".
+   */
+  async noticeProof(url, pageIndex, lines, decoy, width, height) {
+    const pdf = await load(url);
+    const page = await pdf.getPage(pageIndex);
+    const unit = page.getViewport({ scale: 1, rotation: 0 });
+    const shot = await rasterise(page, width / unit.width);
+
+    const draw = (text) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#333333';
+      ctx.font = '32px sans-serif';
+      ctx.textBaseline = 'top';
+      text.forEach((line, i) => ctx.fillText(line, 60, 80 + i * 52, width - 120));
+      const data = ctx.getImageData(0, 0, width, height).data;
+      canvas.width = 1;
+      canvas.height = 1;
+      return data;
+    };
+
+    // Ink-only agreement: the rasteriser antialiases, so the question is
+    // whether the same pixels are inked, not whether they are the same grey.
+    const agreement = (reference) => {
+      let both = 0;
+      let either = 0;
+      const limit = Math.min(reference.length, shot.data.length);
+      for (let i = 0; i < limit; i += 4) {
+        const a = shot.data[i] < INK_THRESHOLD || shot.data[i + 1] < INK_THRESHOLD
+          || shot.data[i + 2] < INK_THRESHOLD;
+        const b = reference[i] < INK_THRESHOLD || reference[i + 1] < INK_THRESHOLD
+          || reference[i + 2] < INK_THRESHOLD;
+        if (a && b) both += 1;
+        if (a || b) either += 1;
+      }
+      return either === 0 ? 0 : both / either;
+    };
+
+    const counted = ink(shot.data);
+    const sameSentence = agreement(draw(lines));
+    const otherSentence = agreement(draw(decoy));
+    shot.canvas.width = 1;
+    shot.canvas.height = 1;
+    await pdf.destroy();
+    return {
+      renderedWidth: shot.width,
+      renderedHeight: shot.height,
+      inked: counted.inked,
+      sameSentence,
+      otherSentence,
+    };
+  },
+
+  /**
+   * Where the change actually sits on a written report page.
+   *
+   * The caption says the crop was x,y,w,h of the comparison. The only way to
+   * check that against the picture rather than against the run is to find the
+   * painted change in the rasterised page and see whether it is the shape the
+   * caption claims.
+   */
+  async colouredBox(url, pageIndex, scale = 2) {
+    const pdf = await load(url);
+    const page = await pdf.getPage(pageIndex);
+    const shot = await rasterise(page, scale);
+    let minX = shot.width;
+    let minY = shot.height;
+    let maxX = -1;
+    let maxY = -1;
+    let coloured = 0;
+    for (let y = 0; y < shot.height; y += 1) {
+      for (let x = 0; x < shot.width; x += 1) {
+        const i = (y * shot.width + x) * 4;
+        const r = shot.data[i];
+        const g = shot.data[i + 1];
+        const b = shot.data[i + 2];
+        if (Math.max(r, g, b) - Math.min(r, g, b) <= 30) continue;
+        coloured += 1;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    shot.canvas.width = 1;
+    shot.canvas.height = 1;
+    await pdf.destroy();
+    return {
+      coloured,
+      width: maxX >= minX ? maxX - minX + 1 : 0,
+      height: maxY >= minY ? maxY - minY + 1 : 0,
+      pageWidth: shot.width,
+      pageHeight: shot.height,
+    };
+  },
+
+  /**
+   * What the production engine says about the same job, so the artifact can be
+   * checked against the comparison rather than against itself.
+   */
+  async expected(names, pages, dpi, toleranceMm) {
+    const members = [];
+    for (let i = 0; i < names.length; i += 1) {
+      const data = new Uint8Array(
+        await (await fetch(`/test-fixtures/comparator/${names[i]}.pdf`)).arrayBuffer(),
+      );
+      members.push({
+        slot: i,
+        label: `${names[i]}.pdf`,
+        pdf: await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise,
+        color: COLOURS[i % COLOURS.length],
+      });
+    }
+    const plan = await planComparison(members, {
+      pages, dpi, toleranceMm, memoryBudgetBytes: 512 * 1024 * 1024,
+      matchColor: [0.75, 0.75, 0.75], matchOpacity: 1,
+    });
+    if (plan.refusal) return { refusal: plan.refusal, pages: [] };
+    const run = await runComparison(plan, members, {
+      isCancelled: () => false, isOwner: () => true,
+    });
+    return {
+      refusal: null,
+      renderScale: plan.renderScale,
+      pages: run.pages.map((page) => ({
+        page: page.page,
+        status: page.status,
+        reported: page.reported,
+        pairs: page.pairs.map((pair) => ({
+          title: pair.title, verdict: pair.verdict,
+          width: pair.width, height: pair.height,
+          bounds: pair.bounds,
+        })),
+      })),
+    };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__artifactsReady = true;
+</script>

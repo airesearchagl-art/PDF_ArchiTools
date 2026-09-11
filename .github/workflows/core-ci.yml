@@ -157,6 +157,13 @@ jobs:
       - name: Comparator reliability
         run: node scripts/smoke-comparator.mjs
 
+      # And the files a user actually walks away with. The gate above proves
+      # the comparison; this one downloads the Comparison PDF and the Change
+      # Report out of the real UI, reopens them, and measures the claims in the
+      # bytes -- including the ones that are about nothing being written at all.
+      - name: Comparator artifacts
+        run: node scripts/smoke-comparator-artifacts.mjs
+
       # Every PDF.js path in the app, not just the Annotator's: which worker a
       # feature fetches is a property of the built bundle and of module
       # evaluation order, so it is driven through the real UI of dist/.

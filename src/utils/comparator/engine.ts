@@ -26,7 +26,8 @@ import {
     type CanonicalMapping,
 } from './geometry';
 import {
-    dilateMask, inkMask, pairChangeMaskSteps, runBanded, type ChangeMask,
+    dilateMask, inkMask, pairChangeMaskSteps, runBanded, taskBoundary,
+    type ChangeMask,
 } from './mask';
 import { preflightPages, type PageShape, type Preflight } from './budget';
 
@@ -91,7 +92,13 @@ export interface PairResult {
     inkPixels: number;
     width: number;
     height: number;
-    pixels: Uint8ClampedArray<ArrayBuffer>;
+    /**
+     * The painted visual — full-resolution RGBA, and the largest thing a pair
+     * produces. Null once it has been handed to a sink and released: an export
+     * that kept every page's would be holding the whole job in RAM, which is
+     * not what the budget was computed against.
+     */
+    pixels: Uint8ClampedArray<ArrayBuffer> | null;
     /** The bounding box of what changed, or null when nothing did. */
     bounds: { x: number; y: number; width: number; height: number } | null;
 }
@@ -372,12 +379,35 @@ export async function planComparison(
  * reference's mask and dilation computed once and reused — the buffer lifetime
  * the memory model was built on.
  */
+export interface RunOptions {
+    onProgress?: (done: number, total: number) => void;
+    /**
+     * Consume each pair as it is produced.
+     *
+     * When given, the pair's RGBA is released as soon as this returns, so an
+     * export holds one visual at a time rather than the whole job. Semantic
+     * metadata — the verdict, the counts, the bounds — is small and is kept.
+     */
+    onPair?: (pair: PairResult) => void | Promise<void>;
+    /**
+     * Consume each page as it is finished, in source-page order, after that
+     * page's pairs and including the pages that produced none.
+     *
+     * A page nobody could compare has to reach the artifact in its own place.
+     * Collecting those and appending them at the end would put page 2's notice
+     * after page 5's comparison, and a reader has no way to tell that ordering
+     * from a missing page they were never told about.
+     */
+    onPage?: (page: PageResult) => void | Promise<void>;
+}
+
 export async function runComparison(
     plan: JobPlan,
     members: MemberSource[],
     signal: RunSignal,
-    onProgress?: (done: number, total: number) => void,
+    options: RunOptions = {},
 ): Promise<JobResult> {
+    const { onProgress, onPair, onPage } = options;
     const results: PageResult[] = [];
     const comparable = plan.pages.filter((p) => p.status === PLAN.READY_TO_COMPARE);
     let done = 0;
@@ -395,15 +425,25 @@ export async function runComparison(
         };
     }
 
+    const abandon = (): JobResult => ({
+        status: PLAN.CANCELLED, pages: results, verdict: null, abandoned: true, plan,
+    });
+
     for (const pagePlan of plan.pages) {
         if (pagePlan.status !== PLAN.READY_TO_COMPARE) {
-            results.push({
+            const unreadable: PageResult = {
                 page: pagePlan.page,
                 status: pagePlan.status,
                 reported: pagePlan.reported,
                 pairs: [],
                 verdict: null,
-            });
+            };
+            results.push(unreadable);
+            if (onPage) {
+                await onPage(unreadable);
+                await taskBoundary();
+                if (signal.isCancelled() || !signal.isOwner()) return abandon();
+            }
             continue;
         }
 
@@ -497,7 +537,7 @@ export async function runComparison(
             }
 
             const dilatedOther = dilateMask(otherMask, width, height, plan.radiusPx);
-            pairs.push({
+            const pair: PairResult = {
                 page: pagePlan.page,
                 slot: members[i].slot,
                 label: members[i].label,
@@ -517,17 +557,56 @@ export async function runComparison(
                     referenceMask, otherMask, dilatedReference, dilatedOther,
                     width, height,
                 ),
-            });
+            };
+
+            // Painting, bounds and encoding are the expensive stretch after the
+            // banded kernel, and a run that cannot be stopped here can still
+            // publish something the user has already replaced. So the boundary
+            // is per pair, not per comparison.
+            await taskBoundary();
+            if (signal.isCancelled() || !signal.isOwner()) {
+                return {
+                    status: PLAN.CANCELLED,
+                    pages: results,
+                    verdict: null,
+                    abandoned: true,
+                    plan,
+                };
+            }
+
+            if (onPair) {
+                await onPair(pair);
+                // Handed over and no longer needed. What accumulates from here
+                // is the artifact, which the output budget accounts for.
+                pair.pixels = null;
+                await taskBoundary();
+                if (signal.isCancelled() || !signal.isOwner()) {
+                    return {
+                        status: PLAN.CANCELLED,
+                        pages: results,
+                        verdict: null,
+                        abandoned: true,
+                        plan,
+                    };
+                }
+            }
+            pairs.push(pair);
         }
 
-        results.push({
+        const compared: PageResult = {
             page: pagePlan.page,
             status: PLAN.READY_TO_COMPARE,
             reported: [],
             pairs,
             verdict: pairs.every((p) => p.verdict === RESULT.MATCH)
                 ? RESULT.MATCH : RESULT.CHANGE,
-        });
+        };
+        results.push(compared);
+        if (onPage) {
+            await onPage(compared);
+            await taskBoundary();
+            if (signal.isCancelled() || !signal.isOwner()) return abandon();
+        }
         done += 1;
         onProgress?.(done, comparable.length);
     }
@@ -541,13 +620,13 @@ export async function runComparison(
         };
     }
 
-    const compared = results.filter((p) => p.verdict !== null);
+    const judged = results.filter((p) => p.verdict !== null);
     return {
         status: plan.status,
         pages: results,
-        verdict: compared.length === 0
+        verdict: judged.length === 0
             ? null
-            : (compared.every((p) => p.verdict === RESULT.MATCH)
+            : (judged.every((p) => p.verdict === RESULT.MATCH)
                 ? RESULT.MATCH : RESULT.CHANGE),
         abandoned: false,
         plan,

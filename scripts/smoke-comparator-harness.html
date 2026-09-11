@@ -340,6 +340,128 @@ window.__comparator = {
     };
   },
 
+  /**
+   * The memory ceiling as a boundary, not as an assertion.
+   *
+   * "512 MiB by default" is only a ceiling if there is a largest job it takes
+   * and a first job it will not. So this finds the boundary to the pixel, shows
+   * the step past it refused by name, shows an explicit preset accepting that
+   * same job, shows that nothing moved the budget on the tool's own initiative,
+   * and shows that a larger budget buys nothing against the other two ceilings.
+   */
+  memoryBoundary() {
+    const gib = 1024 * 1024 * 1024;
+    const sheet = (width) => ({
+      width, height: Math.round(width * Math.SQRT2), members: 2, radiusPx: 0,
+    });
+    const accepts = (width, limit) =>
+      preflightPages([sheet(width)], limit).refusal === null;
+
+    // To the pixel: a ceiling described as "about" is one nobody can test.
+    let lo = 100;
+    let hi = 40000;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (accepts(mid, DEFAULT_MEMORY_BUDGET_BYTES)) lo = mid; else hi = mid;
+    }
+    const largest = preflightPages([sheet(lo)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const firstOver = preflightPages([sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const raised = preflightPages([sheet(hi)], gib);
+    // Asked again, at the default, after a larger budget has been used once.
+    const askedAgain = preflightPages([sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
+
+    const a4 = { width: 2480, height: 3507, members: 2, radiusPx: 0 };
+    const repeat = (n) => Array.from({ length: n }, () => a4);
+
+    return {
+      largestAccepted: {
+        width: lo, height: sheet(lo).height,
+        megapixels: (lo * sheet(lo).height) / 1e6,
+        jobPeak: largest.jobPeak, limit: largest.memoryLimit,
+        refusal: largest.refusal?.status ?? null,
+      },
+      firstRefused: {
+        width: hi, height: sheet(hi).height,
+        jobPeak: firstOver.jobPeak,
+        status: firstOver.refusal?.status ?? null,
+        achievable: firstOver.refusal?.achievable ?? null,
+      },
+      afterExplicitOneGiB: {
+        status: raised.refusal?.status ?? null,
+        limit: raised.memoryLimit,
+        offered: MEMORY_BUDGET_PRESETS.some((preset) => preset.bytes === gib),
+      },
+      askedAgainAtDefault: askedAgain.refusal?.status ?? null,
+      independence: {
+        // A budget the size of the machine does not buy past the other two.
+        outputAtSixtyFourGiB:
+          preflightPages(repeat(9), 64 * gib).refusal?.status ?? null,
+        workAtSixtyFourGiB:
+          preflightPages(repeat(173), 64 * gib).refusal?.status ?? null,
+      },
+    };
+  },
+
+  /**
+   * What a job actually holds, against what the budget said it would.
+   *
+   * A ceiling computed from a model is a ceiling only while the code keeps to
+   * the model. The export path is a sink — paint, encode, append, release — so
+   * however many pages it writes, the live full-resolution visuals should never
+   * be more than one. The encoded bytes that *do* accumulate are the ones the
+   * preflight added up, and because the encoder's size is exact, "should" here
+   * means equal, not close.
+   */
+  async bufferLifetime() {
+    const names = ['three-pages', 'three-pages-copy', 'three-pages-changed'];
+    const set = await members(names);
+    const plan = await planComparison(set, settings({ pages: [1, 2, 3] }));
+
+    const seen = [];
+    let maxLiveVisuals = 0;
+    let maxLiveBytes = 0;
+    let encodedBytes = 0;
+    await runComparison(plan, set, alwaysOwner, {
+      onPair: (pair) => {
+        // Counted with the pair still in hand, which is the worst moment.
+        seen.push(pair);
+        const live = seen.filter((p) => p.pixels !== null);
+        maxLiveVisuals = Math.max(maxLiveVisuals, live.length);
+        maxLiveBytes = Math.max(
+          maxLiveBytes, live.reduce((n, p) => n + p.pixels.length, 0),
+        );
+        encodedBytes += encodePngStored(pair.pixels, pair.width, pair.height).length;
+      },
+    });
+    const stillHeld = seen.filter((p) => p.pixels !== null).length;
+
+    // The control: the same job with no sink, which is what a presentation
+    // that collected every pair and then wrote them all out would hold.
+    const retained = await runComparison(plan, set, alwaysOwner);
+    const held = retained.pages.flatMap((page) => page.pairs)
+      .filter((pair) => pair.pixels !== null);
+
+    const shape = {
+      width: plan.pages[0].width, height: plan.pages[0].height,
+      members: names.length, radiusPx: plan.radiusPx,
+    };
+    const preflight = preflightPages([shape, shape, shape], DEFAULT_MEMORY_BUDGET_BYTES);
+
+    return {
+      pairs: seen.length,
+      maxLiveVisuals,
+      maxLiveBytes,
+      stillHeld,
+      encodedBytes,
+      predictedEncoded: preflight.output.totalEncodedBytes,
+      oneVisualBytes: shape.width * shape.height * 4,
+      retainedVisuals: held.length,
+      retainedBytes: held.reduce((n, pair) => n + pair.pixels.length, 0),
+      modelledPeak: preflight.jobPeak,
+      withinBudget: preflight.withinBudget,
+    };
+  },
+
   /** The owned encoder: exact size, and bytes a browser accepts as a PNG. */
   async encoder() {
     const set = await members(['base-a4', 'added-line-a4']);

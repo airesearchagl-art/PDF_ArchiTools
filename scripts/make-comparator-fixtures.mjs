@@ -454,6 +454,24 @@ await make('three-pages-blank-third', 'three pages, the third deliberately blank
         doc.addPage([SHEET.A4.w, SHEET.A4.h]);
     });
 
+// Three members over three pages, so an export has both a page order and a
+// slot order to get wrong. The changed member differs on page 2 only, which is
+// how a reader tells "the pages are in order" from "the pairs are in order".
+await make('three-pages-copy', 'three pages, pixel-identical to three-pages',
+    async (doc, font) => {
+        for (const n of [1, 2, 3]) {
+            drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+                { label: `PLAN ${n}` });
+        }
+    });
+await make('three-pages-changed', 'three pages, with a wall added on page 2 only',
+    async (doc, font) => {
+        for (const n of [1, 2, 3]) {
+            drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+                { label: `PLAN ${n}`, extraLine: n === 2 });
+        }
+    });
+
 fs.writeFileSync(path.join(OUT, 'corpus.json'), `${JSON.stringify({
     files: written, sheets: SHEET,
 }, null, 2)}\n`);
