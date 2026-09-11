@@ -26,12 +26,57 @@ export function isInk(buffer: Uint8ClampedArray, index: number): boolean {
         || buffer[index + 2] < INK_THRESHOLD;
 }
 
+/**
+ * A raster that is not the shape it claims to be.
+ *
+ * A flat buffer carries no shape of its own: read with a row stride it was not
+ * written with, it is still a buffer of plausible bytes, and every row after
+ * the first is sheared by the difference. That is a comparison of a drawing
+ * against a skewed copy of another one, and nothing downstream could tell. So
+ * the shape is checked wherever a buffer meets a width and a height, and a
+ * mismatch is an error rather than a picture.
+ */
+export class RasterShapeError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'RasterShapeError';
+    }
+}
+
+/** Width and height a raster may have: positive whole pixels. */
+export function assertFrame(width: number, height: number, what: string): void {
+    if (!Number.isInteger(width) || !Number.isInteger(height)
+        || width <= 0 || height <= 0) {
+        throw new RasterShapeError(`${what}: ${width}x${height} is not a raster frame`);
+    }
+}
+
+/** A buffer holds exactly `width x height x channels` values, or is refused. */
+export function assertRaster(
+    buffer: ArrayLike<number>,
+    width: number,
+    height: number,
+    channels: number,
+    what: string,
+): void {
+    assertFrame(width, height, what);
+    if (buffer.length !== width * height * channels) {
+        throw new RasterShapeError(
+            `${what}: ${buffer.length} values for a ${width}x${height} frame `
+            + `(expected ${width * height * channels})`,
+        );
+    }
+}
+
 /** One member's ink, as a flat 0/1 mask. The only thing a verdict may read. */
 export function inkMask(
     buffer: Uint8ClampedArray,
     width: number,
     height: number,
 ): Uint8Array {
+    // The row stride is `width`. A readback from a canvas of any other width
+    // would be accepted by the loop below and silently sheared.
+    assertRaster(buffer, width, height, 4, 'inkMask');
     const mask = new Uint8Array(width * height);
     for (let p = 0; p < mask.length; p += 1) mask[p] = isInk(buffer, p * 4) ? 1 : 0;
     return mask;
@@ -56,6 +101,7 @@ export function dilateMask(
     height: number,
     radius: number,
 ): Uint8Array {
+    assertRaster(mask, width, height, 1, 'dilateMask');
     if (radius <= 0) return mask;
     const horizontal = new Uint8Array(width * height);
     const rowSum = new Int32Array(width + 1);
@@ -89,6 +135,17 @@ export interface ChangeMask {
     changed: boolean;
 }
 
+/** Masks that are compared pixel by pixel have to be the same frame. */
+export function assertSameFrame(masks: readonly ArrayLike<number>[], what: string): void {
+    const [first, ...rest] = masks;
+    if (rest.some((m) => m.length !== first.length)) {
+        throw new RasterShapeError(
+            `${what}: masks of ${masks.map((m) => m.length).join(', ')} pixels `
+            + 'are not one frame',
+        );
+    }
+}
+
 /**
  * The canonical semantic change mask for one pair.
  *
@@ -101,6 +158,7 @@ export function pairChangeMask(
     dilatedA: Uint8Array,
     dilatedB: Uint8Array,
 ): ChangeMask {
+    assertSameFrame([a, b, dilatedA, dilatedB], 'pairChangeMask');
     let changePixels = 0;
     let inkPixels = 0;
     for (let p = 0; p < a.length; p += 1) {
@@ -122,13 +180,28 @@ export function pairChangeMask(
  * has to yield to a task boundary so that whatever the user did can actually
  * arrive. See `runBanded`.
  */
-export function* pairChangeMaskSteps(
+export function pairChangeMaskSteps(
     a: Uint8Array,
     b: Uint8Array,
     width: number,
     height: number,
     radius: number,
     band = 256,
+): Generator<{ phase: string; done: number; total: number }, ChangeMask, void> {
+    // Here rather than in the generator body, which would not run until the
+    // first band was asked for -- inside the driver, after the run had started.
+    assertRaster(a, width, height, 1, 'pairChangeMaskSteps (reference)');
+    assertRaster(b, width, height, 1, 'pairChangeMaskSteps (member)');
+    return changeMaskBands(a, b, width, height, radius, band);
+}
+
+function* changeMaskBands(
+    a: Uint8Array,
+    b: Uint8Array,
+    width: number,
+    height: number,
+    radius: number,
+    band: number,
 ): Generator<{ phase: string; done: number; total: number }, ChangeMask, void> {
     function* dilateInBands(
         mask: Uint8Array,

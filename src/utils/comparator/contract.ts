@@ -146,8 +146,52 @@ export const COMPARISON_ALGORITHM = 'separable-dilation' as const;
  * pixel that is about seven A4 pages at 300 dpi with two members — a known
  * limitation, and not one to be solved by quietly switching to an encoder whose
  * size cannot be bounded.
+ *
+ * Every item the artifact will contain counts against it, not only the
+ * comparisons: a page nobody could compare is written as a notice image, and a
+ * notice costs what any other image of its size costs.
  */
 export const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
+
+/**
+ * What a run is producing, because the cost of a run depends on it.
+ *
+ * The preview keeps its visuals as pixels on screen; the two files hold every
+ * image in a jsPDF document until it is saved, and write notices of different
+ * sizes. A plan that did not know which one it was for would be pricing a
+ * different job from the one that runs.
+ */
+export const ARTIFACT = {
+    PREVIEW: 'PREVIEW',
+    COMPARISON_PDF: 'COMPARISON_PDF',
+    CHANGE_REPORT: 'CHANGE_REPORT',
+} as const;
+
+export type ArtifactKind = (typeof ARTIFACT)[keyof typeof ARTIFACT];
+
+/** One thing an artifact will contain, named by why it is there. */
+export const ARTIFACT_ITEM = {
+    /** A compared pair. In the Change Report it is written only on CHANGE, cropped. */
+    PAIR_VISUAL: 'PAIR_VISUAL',
+    MISSING_PAGE_NOTICE: 'MISSING_PAGE_NOTICE',
+    GEOMETRY_MISMATCH_NOTICE: 'GEOMETRY_MISMATCH_NOTICE',
+} as const;
+
+export type ArtifactItemKind = (typeof ARTIFACT_ITEM)[keyof typeof ARTIFACT_ITEM];
+
+/**
+ * The raster a notice is drawn into, per file.
+ *
+ * One source for the planner and for the code that draws it: the preflight has
+ * to price the notice the file actually receives, and the two files do not
+ * receive the same one.
+ */
+export const NOTICE_RASTER: Readonly<Record<
+    Exclude<ArtifactKind, 'PREVIEW'>, { width: number; height: number }
+>> = {
+    COMPARISON_PDF: { width: 1240, height: 1754 },
+    CHANGE_REPORT: { width: 1240, height: 620 },
+};
 
 /** Which member is compared against which. Slot 1 is the reference. */
 export const MULTI_MEMBER_CONTRACT = 'reference-pairs' as const;

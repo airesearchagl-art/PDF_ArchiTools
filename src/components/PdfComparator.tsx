@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import {
+    ARTIFACT,
+    ARTIFACT_ITEM,
     DEFAULT_MEMORY_BUDGET_BYTES,
     MEMORY_BUDGET_PRESETS,
     PLAN,
     RESULT,
     SPATIAL_TOLERANCE_DISCLOSURE,
     SPATIAL_TOLERANCE_POLICY,
-    encodePngStored,
+    createChangeReport,
+    createComparisonPdf,
     formatBytes,
     planComparison,
     renderUprightCanvas,
     runComparison,
     taskBoundary,
+    type ArtifactKind,
     type ComparisonSettings,
     type JobResult,
     type MemberSource,
@@ -21,7 +25,6 @@ import {
     type Refusal,
 } from '../utils/comparator';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Settings, FileText } from 'lucide-react';
-import jsPDF from 'jspdf';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
 import { configurePdfWorker } from '../utils/pdf-worker-source';
@@ -177,12 +180,13 @@ export const PdfComparator: React.FC = () => {
     /**
      * Everything the engine needs, gathered in one place.
      *
-     * The three presentations differ in which pages they ask for and nothing
-     * else. They used to differ in render scale as well — the preview capped,
-     * the export capped differently, the change report not at all — which is
-     * how they came to disagree about what a comparison meant.
+     * The three presentations differ in which pages they ask for and in what
+     * they build from the answer, and nothing else. They used to differ in
+     * render scale as well — the preview capped, the export capped differently,
+     * the change report not at all — which is how they came to disagree about
+     * what a comparison meant. What they build is named, because it is priced.
      */
-    const buildJob = useCallback((pages: number[]): {
+    const buildJob = useCallback((pages: number[], artifact: ArtifactKind): {
         members: MemberSource[];
         settings: ComparisonSettings;
     } => ({
@@ -199,6 +203,7 @@ export const PdfComparator: React.FC = () => {
             memoryBudgetBytes,
             matchColor: hexToRgb(matchColor),
             matchOpacity,
+            artifact,
         },
     }), [activeIndices, files, pdfs, dpi, toleranceMm, memoryBudgetBytes, matchColor, matchOpacity]);
 
@@ -287,7 +292,7 @@ export const PdfComparator: React.FC = () => {
             void (async () => {
                 setBusy(true);
                 try {
-                    const { members, settings } = buildJob([pageNumber]);
+                    const { members, settings } = buildJob([pageNumber], ARTIFACT.PREVIEW);
                     const plan = await planComparison(members, settings);
                     if (token !== generationRef.current) return;
                     setRefusal(plan.refusal);
@@ -363,6 +368,7 @@ export const PdfComparator: React.FC = () => {
      */
     const planAndRun = async (
         pages: number[],
+        artifact: ArtifactKind,
         sinks: {
             onPair?: (pair: PairResult) => void | Promise<void>;
             onPage?: (page: PageResult) => void | Promise<void>;
@@ -373,7 +379,7 @@ export const PdfComparator: React.FC = () => {
         // itself is not a stale-run guard; it is an assertion that 1 === 1.
         const token = generationRef.current + 1;
         generationRef.current = token;
-        const { members, settings } = buildJob(pages);
+        const { members, settings } = buildJob(pages, artifact);
         const plan = await planComparison(members, settings);
         if (plan.refusal) {
             setRefusal(plan.refusal);
@@ -398,44 +404,6 @@ export const PdfComparator: React.FC = () => {
         return { run, isOwner: () => token === generationRef.current };
     };
 
-    /**
-     * A notice, rendered as an image.
-     *
-     * jsPDF's standard fonts have no Japanese glyphs, so text written through
-     * them would reach the artifact as boxes or as nothing — and a missing page
-     * the user cannot read about has been lost as surely as one that was
-     * deleted. Drawing it on a canvas uses the system's own text stack, and the
-     * result goes into the PDF through the same owned encoder as everything
-     * else. No font asset, no new dependency.
-     */
-    const noticeImage = (lines: string[], width = 1240, height = 1754) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, width, height);
-        ctx.fillStyle = '#333333';
-        ctx.font = '32px sans-serif';
-        ctx.textBaseline = 'top';
-        lines.forEach((line, i) => ctx.fillText(line, 60, 80 + i * 52, width - 120));
-        const pixels = ctx.getImageData(0, 0, width, height).data;
-        canvas.width = 1;
-        canvas.height = 1;
-        return { pixels, width, height };
-    };
-
-    /** A canvas holding one pair's visual, for cropping or embedding. */
-    const canvasOf = (pair: PairResult): HTMLCanvasElement | null => {
-        if (!pair.pixels) return null;
-        const canvas = document.createElement('canvas');
-        canvas.width = pair.width;
-        canvas.height = pair.height;
-        canvas.getContext('2d')!
-            .putImageData(new ImageData(pair.pixels, pair.width, pair.height), 0, 0);
-        return canvas;
-    };
-
     // Handle PDF Download
     const handleDownload = async () => {
         if (activeIndices.length < 2) {
@@ -451,52 +419,14 @@ export const PdfComparator: React.FC = () => {
         setBusy(true);
         setExportingProgress({ current: 0, total: pages.length });
         try {
-            // Points, because the page sizes below are points: `logicalW` is
-            // the pixel width divided back by the render scale, which is the
-            // source sheet. In CSS pixels the same numbers produced a sheet
-            // three quarters of the drawing's size -- the picture was right and
-            // the paper it claimed to be on was not.
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'pt' });
-            doc.deletePage(1);
-
             // The sink. Each visual is painted, encoded, appended and released
-            // before the next one is produced, so the job holds one page's
-            // pixels rather than every page's — which is the lifetime the
-            // memory budget was computed against.
-            const appendPair = (pair: PairResult) => {
-                if (!pair.pixels) return;
-                const logicalW = pair.width / (dpi / 72);
-                const logicalH = pair.height / (dpi / 72);
-                doc.addPage(
-                    [logicalW, logicalH],
-                    logicalW > logicalH ? 'landscape' : 'portrait',
-                );
-                doc.addImage(
-                    encodePngStored(pair.pixels, pair.width, pair.height),
-                    'PNG', 0, 0, logicalW, logicalH,
-                );
-                doc.setFontSize(9);
-                doc.text(`${pair.title} — ${pair.verdict}`, 8, 14);
-            };
-
-            // A page nobody could compare is kept and named, in its own place
-            // in the document, as an image — so the notice survives into the
-            // artifact whatever glyphs it needs.
-            const appendNotice = (page: PageResult) => {
-                if (page.status === PLAN.READY_TO_COMPARE) return;
-                const notice = noticeImage([
-                    `Page ${page.page} — ${page.status}`,
-                    ...page.reported,
-                ]);
-                doc.addPage([notice.width / 2, notice.height / 2], 'portrait');
-                doc.addImage(
-                    encodePngStored(notice.pixels, notice.width, notice.height),
-                    'PNG', 0, 0, notice.width / 2, notice.height / 2,
-                );
-            };
-
+            // before the next one is produced, and every page nobody could
+            // compare is written as a notice in its own place -- in the sequence
+            // the preflight priced, because it is the same code the gates run.
+            const sink = createComparisonPdf(dpi);
             const outcome = await planAndRun(
-                pages, { onPair: appendPair, onPage: appendNotice },
+                pages, ARTIFACT.COMPARISON_PDF,
+                { onPair: sink.onPair, onPage: sink.onPage },
             );
             if (!outcome) return;
 
@@ -506,7 +436,7 @@ export const PdfComparator: React.FC = () => {
             await taskBoundary();
             if (!outcome.isOwner()) return;
             const baseName = files[activeIndices[0]]?.name.replace(/\.pdf$/i, '') ?? 'comparison';
-            doc.save(`comparison_${baseName}_${dpi}dpi.pdf`);
+            sink.save(`comparison_${baseName}_${dpi}dpi.pdf`);
         } catch (error) {
             console.error('Export failed', error);
             alert('エクスポートに失敗しました: ' + (error as Error).message);
@@ -524,82 +454,25 @@ export const PdfComparator: React.FC = () => {
         setBusy(true);
         setExportingProgress({ current: 0, total: numPages });
         try {
-            const report = new jsPDF();
-            let first = true;
-            let changes = 0;
-            const newPage = () => {
-                if (!first) report.addPage();
-                first = false;
-            };
-
             // Same sink discipline as the export: crop, encode, append,
             // release. A report over a long document holds one crop at a time.
-            const appendChange = (pair: PairResult) => {
-                if (pair.verdict !== RESULT.CHANGE || !pair.bounds) return;
-                const source = canvasOf(pair);
-                if (!source) return;
-                changes += 1;
-                const crop = document.createElement('canvas');
-                crop.width = pair.bounds.width;
-                crop.height = pair.bounds.height;
-                const cropCtx = crop.getContext('2d', { willReadFrequently: true })!;
-                cropCtx.drawImage(
-                    source,
-                    pair.bounds.x, pair.bounds.y, pair.bounds.width, pair.bounds.height,
-                    0, 0, pair.bounds.width, pair.bounds.height,
-                );
-                source.width = 1;
-                source.height = 1;
-
-                newPage();
-                const pdfWidth = report.internal.pageSize.getWidth() - 20;
-                const pdfHeight = pdfWidth * (pair.bounds.height / pair.bounds.width);
-                report.addImage(
-                    encodePngStored(
-                        cropCtx.getImageData(0, 0, crop.width, crop.height).data,
-                        crop.width, crop.height,
-                    ),
-                    'PNG', 10, 24, pdfWidth, pdfHeight,
-                );
-                report.setFontSize(10);
-                report.text(`${pair.title} — CHANGE`, 10, 16);
-                report.text(
-                    `x=${pair.bounds.x} y=${pair.bounds.y} `
-                    + `w=${pair.bounds.width} h=${pair.bounds.height}`,
-                    10, Math.min(pdfHeight + 34, report.internal.pageSize.getHeight() - 8),
-                );
-                crop.width = 1;
-                crop.height = 1;
-            };
-
-            const appendNotice = (page: PageResult) => {
-                if (page.status === PLAN.READY_TO_COMPARE) return;
-                const notice = noticeImage([
-                    `Page ${page.page} — ${page.status}`,
-                    ...page.reported,
-                ], 1240, 620);
-                newPage();
-                const pdfWidth = report.internal.pageSize.getWidth() - 20;
-                report.addImage(
-                    encodePngStored(notice.pixels, notice.width, notice.height),
-                    'PNG', 10, 16, pdfWidth,
-                    pdfWidth * (notice.height / notice.width),
-                );
-            };
-
+            const sink = createChangeReport();
             const outcome = await planAndRun(
                 Array.from({ length: numPages }, (_, i) => i + 1),
-                { onPair: appendChange, onPage: appendNotice },
+                ARTIFACT.CHANGE_REPORT,
+                { onPair: sink.onPair, onPage: sink.onPage },
             );
             if (!outcome) return;
 
-            if (first) {
+            if (sink.appended.length === 0) {
                 alert('変更箇所が検出されませんでした');
                 return;
             }
+            const changes = sink.appended
+                .filter((item) => item.kind === ARTIFACT_ITEM.PAIR_VISUAL).length;
             await taskBoundary();
             if (!outcome.isOwner()) return;
-            report.save('change_report.pdf');
+            sink.save('change_report.pdf');
             alert(`レポート生成完了: ${changes} 件の変更を検出しました`);
         } catch (error) {
             console.error('Report generation error:', error);

@@ -10,3 +10,4 @@ export * from './mask';
 export * from './png';
 export * from './budget';
 export * from './engine';
+export * from './artifacts';

@@ -9,7 +9,7 @@
  *
  * Adopted from `research/m4-comparator-reliability/` (PR #21).
  */
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
 import {
     GEOMETRY_TOLERANCE_PT,
     MATCH_RATIO_FLOOR,
@@ -17,6 +17,7 @@ import {
     PLAN,
     RESULT,
     pixelRadiusFor,
+    type ArtifactKind,
     type PlanStatus,
     type Refusal,
     type ResultStatus,
@@ -26,10 +27,11 @@ import {
     type CanonicalMapping,
 } from './geometry';
 import {
+    RasterShapeError, assertFrame, assertRaster, assertSameFrame,
     dilateMask, inkMask, pairChangeMaskSteps, runBanded, taskBoundary,
     type ChangeMask,
 } from './mask';
-import { preflightPages, type PageShape, type Preflight } from './budget';
+import { planArtifact, preflightArtifact, type Preflight } from './budget';
 
 export interface MemberSource {
     slot: number;
@@ -46,12 +48,33 @@ export interface ComparisonSettings {
     memoryBudgetBytes: number;
     matchColor: [number, number, number];
     matchOpacity: number;
+    /** What the run is producing. There is no default: each is priced differently. */
+    artifact: ArtifactKind;
 }
 
 /** What a run is allowed to keep doing, and whether it may still publish. */
 export interface RunSignal {
     isCancelled: () => boolean;
     isOwner: () => boolean;
+}
+
+/**
+ * The one raster every member of a compared page is drawn into.
+ *
+ * The reference's visible box, at the render scale, in whole pixels. Every
+ * member is rendered into exactly this — at the same scale, upright, anchored
+ * at its own page origin — so every mask of the page has the same row stride by
+ * construction. A member whose sheet differs by the sub-point residual the
+ * geometry tolerance admits is clipped or padded with paper at the far edges;
+ * nothing is stretched to fit.
+ */
+export interface RasterFrame {
+    width: number;
+    height: number;
+    /** The physical extent of the frame: the reference's visible box, in points. */
+    widthPt: number;
+    heightPt: number;
+    scale: number;
 }
 
 export interface PagePlan {
@@ -61,6 +84,8 @@ export interface PagePlan {
     reported: string[];
     width: number;
     height: number;
+    /** Present exactly when the page is READY_TO_COMPARE. */
+    frame: RasterFrame | null;
     mappings: CanonicalMapping[];
     /** Labels of members that do not have this page. */
     missing: string[];
@@ -147,6 +172,8 @@ export function paintPair(
     matchColor: [number, number, number],
     matchOpacity: number,
 ): Uint8ClampedArray<ArrayBuffer> {
+    assertRaster(reference, width, height, 1, 'paintPair');
+    assertSameFrame([reference, other, dilatedReference, dilatedOther], 'paintPair');
     const out = new Uint8ClampedArray(width * height * 4);
     const masks = [reference, other];
     const dilated = [dilatedReference, dilatedOther];
@@ -187,6 +214,8 @@ export function changeBounds(
     width: number,
     height: number,
 ): { x: number; y: number; width: number; height: number } | null {
+    assertRaster(a, width, height, 1, 'changeBounds');
+    assertSameFrame([a, b, dilatedA, dilatedB], 'changeBounds');
     let minX = width;
     let minY = height;
     let maxX = -1;
@@ -238,6 +267,135 @@ export async function renderUprightCanvas(
     return canvas;
 }
 
+/** The raster a member would have had on its own, which is not the one it gets. */
+export interface MemberRaster {
+    page: number;
+    slot: number;
+    label: string;
+    /** The frame it was drawn into. Always the page's frame. */
+    width: number;
+    height: number;
+    maskLength: number;
+    /** What an upright render of its own visible box would have been. */
+    naturalWidth: number;
+    naturalHeight: number;
+}
+
+/**
+ * One member's page, drawn into the page's canonical frame.
+ *
+ * The frame is the reference's; the page is this member's. It is rendered
+ * upright, at the frame's scale, with its own page origin at the frame's
+ * origin — PDF user space unchanged, which is what the identity mapping means —
+ * and then the frame is whatever the canvas is: exactly `frame.width x
+ * frame.height`, never the member's own size. Where the member's sheet is a
+ * sub-point short of the frame, the strip beyond it is paper; where it is a
+ * sub-point long, the excess falls off the canvas. Both happen at the far edges
+ * only, and neither moves or scales the drawing.
+ *
+ * The viewport is the one PDF.js builds for a page, over a box of the frame's
+ * size at this page's origin, so two members whose origins agree get
+ * bit-identical transforms and identical content renders identically.
+ */
+export async function renderCanonicalFrame(
+    pdf: PDFDocumentProxy,
+    pageNumber: number,
+    frame: RasterFrame,
+): Promise<{ canvas: HTMLCanvasElement; naturalWidth: number; naturalHeight: number }> {
+    assertFrame(frame.width, frame.height, `page ${pageNumber} frame`);
+    const page = await pdf.getPage(pageNumber);
+    // PDF.js multiplies the scale by UserUnit (pdf.mjs PageViewport). The
+    // planner refuses such pages; this is the same rule, where it would bite.
+    if (page.userUnit !== 1) {
+        throw new RasterShapeError(`page ${pageNumber}: UserUnit ${page.userUnit}`);
+    }
+    const [vx0, vy0, vx1, vy1] = page.view;
+    const x0 = Math.min(vx0, vx1);
+    const y0 = Math.min(vy0, vy1);
+    const ownWidthPt = Math.abs(vx1 - vx0);
+    const ownHeightPt = Math.abs(vy1 - vy0);
+    const natural = page.getViewport({ scale: frame.scale, rotation: 0 });
+    // `PageViewport` is not a runtime export of pdfjs-dist; its instances carry
+    // the class, and the class takes the box as an argument.
+    const Viewport = natural.constructor as new (params: {
+        viewBox: number[];
+        userUnit: number;
+        scale: number;
+        rotation: number;
+    }) => PageViewport;
+    const viewport = new Viewport({
+        viewBox: [x0, y0, x0 + frame.widthPt, y0 + frame.heightPt],
+        userUnit: 1,
+        scale: frame.scale,
+        rotation: 0,
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = frame.width;
+    canvas.height = frame.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('2D context unavailable');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // The member's own visible box inside the frame, widened to whole pixels.
+    // PDF.js does not clip content to the crop box -- it relies on the canvas
+    // -- so without this a member a sub-point short of the frame would show
+    // whatever its PDF hides beyond its own edge in the strip that should be
+    // paper. On the whole pixels the clip introduces no antialiased edge; for
+    // a member at least the frame's size it is the whole canvas.
+    const top = Math.max(0, Math.floor((frame.heightPt - ownHeightPt) * frame.scale));
+    const right = Math.min(frame.width, Math.ceil(ownWidthPt * frame.scale));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, top, right, frame.height - top);
+    ctx.clip();
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    ctx.restore();
+
+    if (canvas.width !== frame.width || canvas.height !== frame.height) {
+        throw new RasterShapeError(
+            `page ${pageNumber}: rendered ${canvas.width}x${canvas.height} into a `
+            + `${frame.width}x${frame.height} frame`,
+        );
+    }
+    return {
+        canvas,
+        naturalWidth: Math.ceil(natural.width),
+        naturalHeight: Math.ceil(natural.height),
+    };
+}
+
+/** One member's ink mask, from its canonical frame. */
+async function frameMask(
+    member: MemberSource,
+    pageNumber: number,
+    frame: RasterFrame,
+    onRaster?: (raster: MemberRaster) => void,
+): Promise<Uint8Array> {
+    const { canvas, naturalWidth, naturalHeight } = await renderCanonicalFrame(
+        member.pdf, pageNumber, frame,
+    );
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    // The frame's width and height, never the canvas's own: they are equal by
+    // construction and `inkMask` refuses a readback that is not.
+    const mask = inkMask(
+        ctx.getImageData(0, 0, frame.width, frame.height).data, frame.width, frame.height,
+    );
+    canvas.width = 1;
+    canvas.height = 1;
+    onRaster?.({
+        page: pageNumber,
+        slot: member.slot,
+        label: member.label,
+        width: frame.width,
+        height: frame.height,
+        maskLength: mask.length,
+        naturalWidth,
+        naturalHeight,
+    });
+    return mask;
+}
+
 /**
  * Whether the comparison can be made, page by page, before anything is drawn.
  *
@@ -252,9 +410,13 @@ export async function planComparison(
     const renderScale = settings.dpi / 72;
     const radiusPx = pixelRadiusFor(settings.toleranceMm, settings.dpi);
     const pages: PagePlan[] = [];
+    const memberSlots = members.map((m) => m.slot);
 
     if (members.length < 2) {
-        const empty = preflightPages([], settings.memoryBudgetBytes);
+        const empty = preflightArtifact(
+            planArtifact(settings.artifact, [], memberSlots, radiusPx),
+            members.length, radiusPx, settings.memoryBudgetBytes,
+        );
         return {
             status: PLAN.UNSUPPORTED,
             contract: MULTI_MEMBER_CONTRACT,
@@ -285,6 +447,7 @@ export async function planComparison(
                 ),
                 width: 0,
                 height: 0,
+                frame: null,
                 mappings: [],
                 missing,
             });
@@ -292,9 +455,33 @@ export async function planComparison(
         }
 
         const geometries = [];
+        const unitless: string[] = [];
         for (const m of members) {
             const page = await m.pdf.getPage(pageNumber);
             geometries.push(pageGeometry(page.view, page.rotate));
+            if (page.userUnit !== 1) {
+                unitless.push(
+                    `ページ ${pageNumber} — ${m.label}: UserUnit ${page.userUnit} `
+                    + 'は未対応のため比較できません',
+                );
+            }
+        }
+        // A page whose unit is not the point cannot be put in a frame measured
+        // in points: PDF.js would draw it at `scale x UserUnit`, which is a
+        // different scale from the one the frame was planned at. Declined, by
+        // name, rather than drawn at a size nobody chose.
+        if (unitless.length > 0) {
+            pages.push({
+                page: pageNumber,
+                status: PLAN.GEOMETRY_MISMATCH,
+                reported: unitless,
+                width: 0,
+                height: 0,
+                frame: null,
+                mappings: [],
+                missing: [],
+            });
+            continue;
         }
         const [reference, ...others] = geometries;
 
@@ -325,31 +512,40 @@ export async function planComparison(
                 ],
                 width: 0,
                 height: 0,
+                frame: null,
                 mappings: [],
                 missing: [],
             });
             continue;
         }
 
+        const frame: RasterFrame = {
+            width: Math.ceil(reference.physical.width * renderScale),
+            height: Math.ceil(reference.physical.height * renderScale),
+            widthPt: reference.physical.width,
+            heightPt: reference.physical.height,
+            scale: renderScale,
+        };
         pages.push({
             page: pageNumber,
             status: PLAN.READY_TO_COMPARE,
             reported: [],
-            width: Math.ceil(reference.physical.width * renderScale),
-            height: Math.ceil(reference.physical.height * renderScale),
+            width: frame.width,
+            height: frame.height,
+            frame,
             mappings,
             missing: [],
         });
     }
 
-    const shapes: PageShape[] = pages
-        .filter((p) => p.status === PLAN.READY_TO_COMPARE)
-        .map((p) => ({
-            width: p.width, height: p.height, members: members.length, radiusPx,
-        }));
-    const budget = preflightPages(shapes, settings.memoryBudgetBytes);
+    // Every page, compared or not, in order: the artifact is priced with the
+    // notices it will contain, not only with its comparisons.
+    const artifact = planArtifact(settings.artifact, pages, memberSlots, radiusPx);
+    const budget = preflightArtifact(
+        artifact, members.length, radiusPx, settings.memoryBudgetBytes,
+    );
 
-    const comparablePages = shapes.length;
+    const comparablePages = pages.filter((p) => p.status === PLAN.READY_TO_COMPARE).length;
     let status: PlanStatus = PLAN.READY_TO_COMPARE;
     if (budget.refusal) {
         status = budget.refusal.status;
@@ -399,6 +595,19 @@ export interface RunOptions {
      * from a missing page they were never told about.
      */
     onPage?: (page: PageResult) => void | Promise<void>;
+    /**
+     * Observe each member's raster as its mask is made: the frame it was drawn
+     * into, and the size it would have had on its own. Read-only, and small.
+     */
+    onRaster?: (raster: MemberRaster) => void;
+}
+
+/** Which member could not be put in the frame, and why, for the user. */
+function renderFailure(page: number, label: string, error: unknown): string {
+    if (error instanceof RasterShapeError) {
+        return `ページ ${page} — ${label} を比較フレームに描画できませんでした（${error.message}）`;
+    }
+    return `ページ ${page} — ${label} を描画できませんでした`;
 }
 
 export async function runComparison(
@@ -407,7 +616,7 @@ export async function runComparison(
     signal: RunSignal,
     options: RunOptions = {},
 ): Promise<JobResult> {
-    const { onProgress, onPair, onPage } = options;
+    const { onProgress, onPair, onPage, onRaster } = options;
     const results: PageResult[] = [];
     const comparable = plan.pages.filter((p) => p.status === PLAN.READY_TO_COMPARE);
     let done = 0;
@@ -447,22 +656,17 @@ export async function runComparison(
             continue;
         }
 
+        // One frame for the page, fixed by the plan. Every mask below has its
+        // shape, and anything that does not is refused before it is compared.
+        const frame = pagePlan.frame;
+        if (!frame) {
+            throw new RasterShapeError(`page ${pagePlan.page} is ready without a frame`);
+        }
+        const { width, height } = frame;
         let referenceMask: Uint8Array;
-        let width = 0;
-        let height = 0;
         try {
-            const canvas = await renderUprightCanvas(
-                members[0].pdf, pagePlan.page, plan.renderScale,
-            );
-            width = canvas.width;
-            height = canvas.height;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-            referenceMask = inkMask(
-                ctx.getImageData(0, 0, width, height).data, width, height,
-            );
-            canvas.width = 1;
-            canvas.height = 1;
-        } catch {
+            referenceMask = await frameMask(members[0], pagePlan.page, frame, onRaster);
+        } catch (error) {
             // A member that cannot be read fails the whole operation. Comparing
             // the survivors produces the most alarming possible wrong answer:
             // with one layer left nothing matches, and the entire sheet is
@@ -472,9 +676,7 @@ export async function runComparison(
                 pages: results.concat({
                     page: pagePlan.page,
                     status: PLAN.RENDER_FAILED,
-                    reported: [
-                        `ページ ${pagePlan.page} — ${members[0].label} を描画できませんでした`,
-                    ],
+                    reported: [renderFailure(pagePlan.page, members[0].label, error)],
                     pairs: [],
                     verdict: null,
                 }),
@@ -492,25 +694,14 @@ export async function runComparison(
         for (let i = 1; i < members.length; i += 1) {
             let otherMask: Uint8Array;
             try {
-                const canvas = await renderUprightCanvas(
-                    members[i].pdf, pagePlan.page, plan.renderScale,
-                );
-                const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-                otherMask = inkMask(
-                    ctx.getImageData(0, 0, canvas.width, canvas.height).data,
-                    width, height,
-                );
-                canvas.width = 1;
-                canvas.height = 1;
-            } catch {
+                otherMask = await frameMask(members[i], pagePlan.page, frame, onRaster);
+            } catch (error) {
                 return {
                     status: PLAN.RENDER_FAILED,
                     pages: results.concat({
                         page: pagePlan.page,
                         status: PLAN.RENDER_FAILED,
-                        reported: [
-                            `ページ ${pagePlan.page} — ${members[i].label} を描画できませんでした`,
-                        ],
+                        reported: [renderFailure(pagePlan.page, members[i].label, error)],
                         pairs: [],
                         verdict: null,
                     }),
