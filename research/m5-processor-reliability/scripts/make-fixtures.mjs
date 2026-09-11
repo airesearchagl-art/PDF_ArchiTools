@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import {
     PDFDocument, PDFName, PDFNumber, PDFString, PDFHexString, PDFArray,
     StandardFonts, rgb, degrees,
-    pushGraphicsState, popGraphicsState, concatTransformationMatrix,
+    pushGraphicsState, popGraphicsState, concatTransformationMatrix, drawObject,
     setTextRenderingMode, TextRenderingMode,
 } from 'pdf-lib';
 
@@ -284,6 +284,9 @@ await annotated('annotation-a4', SHEET.A4, 0, 'a Square annotation with an appea
     const field = form.createTextField('m5.text');
     field.setText('M5-FIELD-VALUE');
     field.addToPage(page, { x: 80, y: 600, width: 260, height: 28, font });
+    // An explicit size in /DA, so an appearance a viewer regenerates has a
+    // font size to get wrong (0 would mean auto-fit).
+    field.setFontSize(14);
     const box = form.createCheckBox('m5.check');
     box.addToPage(page, { x: 380, y: 600, width: 20, height: 20 });
     box.check();
@@ -450,6 +453,167 @@ for (const angle of [0, 90, 180, 270]) {
         drawText(page, font, size, `MIXED-SIZE-${key}-M5`);
     }
     await write('mixed-sizes', doc, 'A4 portrait, A3 landscape, A1 portrait');
+}
+
+// ---------------------------------------------------------------------------
+// Semantics a Margin transform has to carry (RF-K4)
+// ---------------------------------------------------------------------------
+{
+    // Links and outline items that point *into* the document by coordinates.
+    // Moving the clickable box without moving the place it points to keeps
+    // the link and changes what it means.
+    const { doc, font } = await newDoc('M5 internal links');
+    const p1 = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    const p2 = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(p1, SHEET.A4, { colour: false });
+    drawVector(p2, SHEET.A4, { colour: false });
+    drawText(p1, font, SHEET.A4, 'LINK-SOURCE-M5');
+    drawText(p2, font, SHEET.A4, 'LINK-TARGET-M5');
+    const ctx = doc.context;
+    const named = ctx.obj([p2.ref, PDFName.of('FitH'), 500]);
+    doc.catalog.set(PDFName.of('Names'), ctx.obj({
+        Dests: ctx.obj({ Names: ctx.obj([PDFString.of('m5-named'), named]) }),
+    }));
+    addAnnots(doc, p1, [
+        { Type: 'Annot', Subtype: 'Link', Rect: [60, 200, 260, 230], Border: [0, 0, 0], F: 4,
+            Dest: ctx.obj([p2.ref, PDFName.of('XYZ'), 100, 700, 0]) },
+        { Type: 'Annot', Subtype: 'Link', Rect: [60, 250, 260, 280], Border: [0, 0, 0], F: 4,
+            A: { Type: 'Action', S: 'GoTo', D: PDFString.of('m5-named') } },
+        { Type: 'Annot', Subtype: 'Link', Rect: [60, 300, 260, 330], Border: [0, 0, 0], F: 4,
+            A: { Type: 'Action', S: 'GoTo', D: ctx.obj([p1.ref, PDFName.of('FitR'), 100, 100, 300, 300]) } },
+    ]);
+    const outlines = ctx.nextRef();
+    const item = ctx.register(ctx.obj({
+        Title: PDFString.of('M5 outline'), Parent: outlines,
+        Dest: ctx.obj([p2.ref, PDFName.of('XYZ'), 50, 400, null]),
+    }));
+    ctx.assign(outlines, ctx.obj({ Type: 'Outlines', First: item, Last: item, Count: 1 }));
+    doc.catalog.set(PDFName.of('Outlines'), outlines);
+    await write('internal-links', doc, 'GoTo links by /XYZ, by name (/FitH) and /FitR, and an outline item');
+}
+{
+    // An annotation straddling the CropBox edge: part of it is hidden, and a
+    // transform that scales it inward brings that part into view.
+    const { doc, font } = await newDoc('M5 partial crop');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'PARTIAL-CROP-M5');
+    const top = SHEET.A4.h - 100;
+    page.setCropBox(0, 0, SHEET.A4.w, top);
+    const ap = doc.context.register(doc.context.stream('1 0 0 rg 0 0 160 80 re f', {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 160, 80],
+    }));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Square', Rect: [200, top - 30, 360, top + 50], C: [1, 0, 0], F: 4,
+        Contents: PDFString.of('M5-PARTIAL'), AP: { N: ap },
+    }]);
+    await write('annotation-partial-crop', doc, 'a Square annotation half inside the CropBox');
+}
+{
+    // A visible, opaque annotation appearance where the overlay will go:
+    // whether the overlay fades it says which layer the overlay is on.
+    const { doc, font } = await newDoc('M5 overlap');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'OVERLAP-M5');
+    const ap = doc.context.register(doc.context.stream('0 0 1 rg 0 0 200 200 re f', {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 200, 200],
+    }));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Square', Rect: [200, 300, 400, 500], IC: [0, 0, 1], C: [0, 0, 1], F: 4,
+        Contents: PDFString.of('M5-OVERLAP'), AP: { N: ap },
+    }]);
+    await write('annotation-overlap', doc, 'an opaque blue annotation appearance over the drawing');
+}
+
+// ---------------------------------------------------------------------------
+// Images an optimiser has to plan across every use (RF-K3)
+// ---------------------------------------------------------------------------
+const BIG = colourPng(3000, 4243);
+async function sharedImage(name, order) {
+    const { doc, font } = await newDoc(`M5 ${name}`);
+    const image = await doc.embedPng(BIG);
+    for (const key of order) {
+        const page = doc.addPage([SHEET[key].w, SHEET[key].h]);
+        page.drawImage(image, { x: 0, y: 0, width: SHEET[key].w, height: SHEET[key].h });
+        drawText(page, font, SHEET[key], `SHARED-${key}-M5`);
+    }
+    await write(name, doc, `one image XObject drawn full-page on ${order.join(' then ')}`);
+}
+await sharedImage('shared-image-a4-a1', ['A4', 'A1']);
+await sharedImage('shared-image-a1-a4', ['A1', 'A4']);
+{
+    const { doc } = await newDoc('M5 repeated image');
+    const image = await doc.embedPng(BIG);
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    page.drawImage(image, { x: 20, y: 20, width: 100, height: 141 });
+    page.drawImage(image, { x: 0, y: 0, width: SHEET.A4.w, height: SHEET.A4.h });
+    await write('repeated-image', doc, 'the same image twice on one page: thumbnail, then full page');
+}
+{
+    // The image lives inside a Form XObject that two pages draw at two scales.
+    const { doc } = await newDoc('M5 form image');
+    const image = await doc.embedPng(BIG);
+    const ctx = doc.context;
+    const form = ctx.register(ctx.stream(`q ${SHEET.A4.w} 0 0 ${SHEET.A4.h} 0 0 cm /Im0 Do Q`, {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, SHEET.A4.w, SHEET.A4.h],
+        Resources: { XObject: { Im0: image.ref } },
+    }));
+    for (const key of ['A4', 'A1']) {
+        const page = doc.addPage([SHEET[key].w, SHEET[key].h]);
+        const scale = SHEET[key].w / SHEET.A4.w;
+        const nameOnPage = page.node.newXObject('Fm', form);
+        page.pushOperators(
+            pushGraphicsState(), concatTransformationMatrix(scale, 0, 0, scale, 0, 0),
+            drawObject(nameOnPage), popGraphicsState(),
+        );
+    }
+    await write('form-image', doc, 'an image inside a Form XObject drawn at A4 and at A1 scale');
+}
+{
+    // An image only an annotation appearance draws: a use the page content
+    // does not show, so its placed size is not known from the page.
+    const { doc, font } = await newDoc('M5 annotation image');
+    const image = await doc.embedPng(BIG);
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'ANNOT-IMAGE-M5');
+    const ap = doc.context.register(doc.context.stream('q 120 0 0 170 0 0 cm /Im0 Do Q', {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 120, 170], Resources: { XObject: { Im0: image.ref } },
+    }));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Stamp', Rect: [400, 600, 520, 770], F: 4, AP: { N: ap },
+    }]);
+    await write('annot-image', doc, 'an image drawn only by an annotation appearance');
+}
+{
+    // A scanned drawing at 300 dpi whose linework is one pixel wide: what a
+    // lossy resample does to the lines is the quality question.
+    // Paper grain, as a scanner records it: a raster that Flate stores
+    // poorly and JPEG stores well, which is where a recompressor acts.
+    const w = 2480;
+    const h = 3508;
+    const raw = Buffer.alloc(h * (1 + w * 3), 255);
+    let seed = 2463534242;
+    const grain = () => {
+        seed ^= seed << 13; seed >>>= 0; seed ^= seed >>> 17; seed ^= seed << 5; seed >>>= 0;
+        return seed >>> 28; // 0..15
+    };
+    for (let y = 0; y < h; y += 1) {
+        raw[y * (1 + w * 3)] = 0;
+        for (let x = 0; x < w; x += 1) {
+            const line = (x % 24 === 0) || (y % 24 === 0) || ((x + y) % 40 === 0 && x < w / 2)
+                || (y > h * 0.7 && y < h * 0.8 && x % 6 < 2 && (Math.floor(y / 7) % 2 === 0));
+            const v = line ? 20 + grain() : 236 + grain();
+            const i = y * (1 + w * 3) + 1 + x * 3;
+            raw[i] = v; raw[i + 1] = v; raw[i + 2] = Math.max(0, v - 4);
+        }
+    }
+    const { doc } = await newDoc('M5 fine-line scan');
+    const image = await doc.embedPng(pngOf(w, h, raw));
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    page.drawImage(image, { x: 0, y: 0, width: SHEET.A4.w, height: SHEET.A4.h });
+    await write('fine-line-scan', doc, 'a 300 dpi scan of one-pixel linework and a dense hatch');
 }
 
 // ---------------------------------------------------------------------------

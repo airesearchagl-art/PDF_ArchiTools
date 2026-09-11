@@ -22,8 +22,18 @@ import { PDFDocument } from 'pdf-lib';
 import { inspect, portable, visualDiff } from '/research/m5-processor-reliability/prototype/inspect.mjs';
 import { monochromeStructural } from '/research/m5-processor-reliability/prototype/mono-structure.mjs';
 import { marginInPlace } from '/research/m5-processor-reliability/prototype/margin-inplace.mjs';
-import { createOwner, runBatch, PLAN, RESULT } from '/research/m5-processor-reliability/prototype/job.mjs';
-import { optimizeStructural } from '/research/m5-processor-reliability/prototype/optimize-structure.mjs';
+import {
+  createOwner, runBatch, conformsToB3, aggregateMasqueradingAsB3, PLAN, FILE_RESULT, BATCH_RESULT, BATCH_POLICIES,
+} from '/research/m5-processor-reliability/prototype/job.mjs';
+import { optimizeStructural, planImageUses } from '/research/m5-processor-reliability/prototype/optimize-structure.mjs';
+import { readSourceFacts, planOperation, OPERATION_EFFECTS, H7_POLICIES } from '/research/m5-processor-reliability/prototype/source-facts.mjs';
+import { marginTransform } from '/research/m5-processor-reliability/prototype/margin-inplace.mjs';
+import { layerAboveAnnotations } from '/research/m5-processor-reliability/prototype/layer-stacking.mjs';
+import {
+  RASTER_MODEL, RASTER_LIMIT_CANDIDATES, RASTER_TERMS, rasterFacts, filePlan, runPlan, pagePixels,
+} from '/research/m5-processor-reliability/prototype/raster-budget.mjs';
+import { StandardFonts, PDFName, PDFArray, PDFDict, PDFRef } from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
 
 const FIXTURES = '/test-fixtures/m5-processor';
 const cache = new Map();
@@ -494,49 +504,477 @@ window.__m5 = {
     return out;
   },
 
-  /** The PLAN/RESULT + ownership prototype, wrapping production processLayer. */
-  async jobPrototype() {
+  /**
+   * RF-K1: facts, read without a verdict and without getForm(); then each H7
+   * candidate policy applied to them, operation by operation.
+   */
+  async sourceFacts() {
+    const names = ['text-a4', 'form-a4', 'signature-a4', 'xfa-a4', 'annotation-a4', 'metadata-a4', 'invalid', 'raster-a4'];
+    const original = PDFDocument.prototype.getForm;
+    let calls = 0;
+    // Reaching getForm() while reading facts is the defect, so make it loud.
+    PDFDocument.prototype.getForm = function trapped() { calls += 1; throw new Error('getForm() reached'); };
+    const facts = {};
+    try {
+      for (const n of names) facts[n] = await readSourceFacts(await bytesOf(n));
+    } finally {
+      PDFDocument.prototype.getForm = original;
+    }
+    // The control: M3's assessSource does reach it on an ordinary form, so
+    // the trap is live and a zero above means something.
+    let controlCalls = 0;
+    PDFDocument.prototype.getForm = function counted(...args) { controlCalls += 1; return original.apply(this, args); };
+    try { await assessSource(await bytesOf('form-a4')); } finally { PDFDocument.prototype.getForm = original; }
+    const m3 = {};
+    for (const n of names) {
+      const v = await assessSource(await bytesOf(n));
+      m3[n] = { supported: v.supported, codes: v.problems.map((p) => p.code), docReturned: v.doc !== null };
+    }
+    const matrix = {};
+    for (const [policyName, policy] of Object.entries(H7_POLICIES)) {
+      matrix[policyName] = {};
+      for (const n of ['signature-a4', 'xfa-a4', 'form-a4', 'text-a4', 'invalid']) {
+        matrix[policyName][n] = Object.fromEntries(Object.keys(OPERATION_EFFECTS)
+          .map((op) => [op, planOperation(facts[n], op, policy).status]));
+      }
+    }
+    return { facts, getFormCallsWhileReading: calls, getFormCallsByAssessSource: controlCalls, m3, matrix, effects: OPERATION_EFFECTS };
+  },
+
+  /** RF-K2: B1/B2/B3 as defined, around the unchanged production processLayer/processMonochrome. */
+  async batchPolicies() {
+    const policy = H7_POLICIES['refuse-if-dropped'];
     const plan = async (bytes) => {
-      const v = await assessSource(bytes);
-      if (v.supported) return { status: PLAN.READY };
-      const code = v.problems[0]?.code;
+      const p = planOperation(await readSourceFacts(bytes), 'layer', policy);
+      return { status: p.status, reason: p.reasons.join(', ') };
+    };
+    const layer = (file) => processLayer(file, DEFAULTS.layer);
+    const mono = (file) => processMonochrome(file, { dpi: 150, contrast: 1 });
+    const files = async (names) => Promise.all(names.map(async (n) => fileOf(n, await bytesOf(n))));
+    const collect = () => {
+      const units = [];
+      return { units, publish: async (u) => { units.push(u.kind === 'archive' ? { kind: 'archive', files: u.files.map((f) => f.name), manifest: u.manifest } : { kind: 'file', name: u.name }); } };
+    };
+    const out = { definitions: BATCH_POLICIES };
+    const mixed = ['batch-ok', 'invalid', 'text-a4', 'signature-a4'];
+    for (const p of ['B1', 'B2', 'B3']) {
+      const sink = collect();
+      const r = await runBatch(p, { files: await files(mixed), plan, run: layer, owner: createOwner(), publish: sink.publish });
+      out[p] = { ...r, units: sink.units, started: r.events.filter((e) => e.type === 'start').map((e) => e.name) };
+    }
+    // B3: one file cancelled by its own owner; the others stand.
+    {
+      const sink = collect();
+      const r = await runBatch('B3', {
+        files: await files(['batch-ok', 'long-8', 'text-a4']), plan, run: mono, owner: createOwner(), publish: sink.publish,
+        onFileStart: (name, own) => { if (name === 'long-8.pdf') setTimeout(() => own.supersede(), 20); },
+      });
+      out.B3fileCancel = { ...r, units: sink.units };
+    }
+    // Every policy: the whole batch superseded while its second file runs.
+    for (const p of ['B1', 'B2', 'B3']) {
+      const sink = collect();
+      const owner = createOwner();
+      const r = await runBatch(p, {
+        files: await files(['batch-ok', 'long-8', 'text-a4']), plan, run: mono, owner, publish: sink.publish,
+        onFileStart: (name) => { if (name === 'long-8.pdf') setTimeout(() => owner.supersede(), 20); },
+      });
+      out[`${p}superseded`] = { ...r, units: sink.units };
+    }
+    // The shape B3 must not be mistaken for, fed to the same checker.
+    const fake = await aggregateMasqueradingAsB3({ files: await files(['batch-ok', 'text-a4']), plan, run: layer, owner: createOwner(), publish: async () => {} });
+    const real = await runBatch('B3', { files: await files(['batch-ok', 'text-a4']), plan, run: layer, owner: createOwner(), publish: async () => {} });
+    out.conformance = { real: conformsToB3(real), fake: conformsToB3(fake) };
+    return out;
+  },
+
+  /** RF-K4: destinations, a partly clipped annotation, and a form widget, through Margin. */
+  async marginSemantics() {
+    const opts = { scale: 0.8, position: 'center' };
+    // -- destinations -----------------------------------------------------------
+    const readDests = async (bytes) => {
+      const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+      const res = (v) => (v instanceof PDFRef ? doc.context.lookup(v) : v);
+      const pageIndex = new Map(doc.getPages().map((p, i) => [p.ref.toString(), i + 1]));
+      const arr = (a) => {
+        const v = res(a);
+        if (!(v instanceof PDFArray)) return null;
+        return [pageIndex.get(v.get(0)?.toString()) ?? '?', res(v.get(1))?.decodeText?.(),
+          ...v.asArray().slice(2).map((x) => (x?.asNumber ? Math.round(x.asNumber() * 100) / 100 : null))];
+      };
+      const out = { links: [], named: null, outline: null, annots: 0 };
+      const annots = doc.getPages()[0].node.lookup(PDFName.of('Annots'));
+      if (annots instanceof PDFArray) {
+        out.annots = annots.size();
+        for (const a of annots.asArray()) {
+          const d = res(a);
+          const action = res(d.get(PDFName.of('A')));
+          out.links.push(arr(d.get(PDFName.of('Dest'))) ?? (action ? (arr(action.get(PDFName.of('D'))) ?? `name:${action.get(PDFName.of('D'))?.decodeText?.()}`) : null));
+        }
+      }
+      const names = res(doc.catalog.get(PDFName.of('Names')));
+      const tree = names instanceof PDFDict ? res(names.get(PDFName.of('Dests'))) : null;
+      const list = tree ? res(tree.get(PDFName.of('Names'))) : null;
+      out.named = list instanceof PDFArray ? arr(list.get(1)) : null;
+      const outlines = res(doc.catalog.get(PDFName.of('Outlines')));
+      out.outline = outlines instanceof PDFDict ? arr(res(outlines.get(PDFName.of('First'))).get(PDFName.of('Dest'))) : null;
+      return out;
+    };
+    const links = await bytesOf('internal-links');
+    const inplace = await marginInPlace(links, opts);
+    const production = await processMargin(fileOf('internal-links', links), opts);
+    const a4 = [0, 0, 595.28, 841.89];
+    const m = marginTransform(a4, 0, 0.8, 'center').matrix;
+    const expect = (x, y) => [Math.round((m[0] * x + m[4]) * 100) / 100, Math.round((m[3] * y + m[5]) * 100) / 100];
+    // What a reader resolves: PDF.js's own view of the named destination.
+    const readerNamed = async (bytes) => {
+      const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+      const d = await pdf.getDestination('m5-named');
+      await pdf.destroy();
+      return d ? d.slice(1).map((x) => (typeof x === 'number' ? Math.round(x * 100) / 100 : x?.name ?? x)) : null;
+    };
+    const destinations = {
+      before: await readDests(links),
+      inplace: inplace.bytes ? await readDests(inplace.bytes) : null,
+      inplaceStatus: inplace.status, movedDestinations: inplace.movedDestinations,
+      production: await readDests(production),
+      expected: { xyz: expect(100, 700), fitH: expect(0, 500)[1], fitR: [...expect(100, 100), ...expect(300, 300)], outline: expect(50, 400) },
+      readerNamedBefore: await readerNamed(links),
+      readerNamedAfter: inplace.bytes ? await readerNamed(inplace.bytes) : null,
+    };
+    // -- a partly clipped annotation, and the same page without it -------------
+    const partial = await bytesOf('annotation-partial-crop');
+    const refused = await marginInPlace(partial, opts);
+    const stripped = await PDFDocument.load(partial, { updateMetadata: false });
+    stripped.getPages()[0].node.delete(PDFName.of('Annots'));
+    const control = await marginInPlace(await stripped.save(), opts);
+    // -- a form widget ----------------------------------------------------------
+    const form = await bytesOf('form-a4');
+    const widget = async (bytes, regenerate) => {
+      let b = bytes;
+      if (regenerate) {
+        // A viewer that ignores the stored appearance and redraws it from
+        // /DA. Only for this measurement, on a copy, and only on a form
+        // with no XFA (getForm() would delete it).
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const helv = await doc.embedFont(StandardFonts.Helvetica);
+        doc.getForm().getTextField('m5.text').updateAppearances(helv);
+        b = await doc.save();
+      }
+      const doc = await PDFDocument.load(b, { updateMetadata: false });
+      const res = (v) => (v instanceof PDFRef ? doc.context.lookup(v) : v);
+      const acro = res(doc.catalog.get(PDFName.of('AcroForm')));
+      // `m5.text` is a hierarchy (m5 → text → widget): walk down to the first
+      // dictionary with a /Rect, keeping the nearest /DA on the way.
+      let node = res(res(acro.get(PDFName.of('Fields'))).get(0));
+      let daValue = null;
+      for (let depth = 0; node && node.get(PDFName.of('Rect')) === undefined && depth < 8; depth += 1) {
+        daValue = node.get(PDFName.of('DA')) ?? daValue;
+        const kids = res(node.get(PDFName.of('Kids')));
+        node = kids instanceof PDFArray ? res(kids.get(0)) : null;
+      }
+      const w = node;
+      const rect = res(w.get(PDFName.of('Rect'))).asArray().map((n) => n.asNumber());
+      const da = (w.get(PDFName.of('DA')) ?? daValue)?.decodeText?.() ?? null;
+      // Ink height inside the widget, rendered by PDF.js at 4x.
+      const pdf = await pdfjsLib.getDocument({ data: b.slice(), isEvalSupported: false }).promise;
+      const page = await pdf.getPage(1);
+      const vp = page.getViewport({ scale: 4 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = 'white'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise;
+      const [x0, y0, x1, y1] = vp.convertToViewportRectangle(rect);
+      const [l, t, r, bt] = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)].map(Math.round);
+      // 2.5 pt in from every edge: the border is not the text.
+      const inset = 10;
+      const px = ctx.getImageData(l + inset, t + inset, Math.max(1, r - l - 2 * inset), Math.max(1, bt - t - 2 * inset));
+      let top = Infinity; let bottom = -1;
+      for (let y = 0; y < px.height; y += 1) {
+        for (let x = 0; x < px.width; x += 1) {
+          const i = (y * px.width + x) * 4;
+          if (0.299 * px.data[i] + 0.587 * px.data[i + 1] + 0.114 * px.data[i + 2] < 128) { top = Math.min(top, y); bottom = y; }
+        }
+      }
+      canvas.width = 1; canvas.height = 1;
+      await pdf.destroy();
+      const value = (await readSourceFacts(b)).fieldCount;
+      return { rect, da, inkHeight: bottom >= top ? (bottom - top + 1) / 4 : 0, rectHeight: Math.abs(rect[3] - rect[1]), fields: value };
+    };
+    const scaled = await marginInPlace(form, opts);
+    const unscaled = await marginInPlace(form, { ...opts, scaleWidgetText: false });
+    const widgets = {
+      source: await widget(form, false), sourceRegenerated: await widget(form, true),
+      scaled: await widget(scaled.bytes, false), scaledRegenerated: await widget(scaled.bytes, true),
+      unscaledRegenerated: await widget(unscaled.bytes, true),
+      fieldValue: (await inspect(scaled.bytes, { render: false })).fields.find((f) => f.name === 'm5.text')?.value ?? null,
+    };
+    return {
+      destinations,
+      partial: { status: refused.status, refusals: refused.refusals, controlStatus: control.status },
+      widgets,
+    };
+  },
+
+  /** RF-K6: which layer the translucent overlay sits on, relative to an annotation. */
+  async layerStacking() {
+    const src = await bytesOf('annotation-overlap');
+    const production = await processLayer(fileOf('annotation-overlap', src), DEFAULTS.layer);
+    const above = await layerAboveAnnotations(src, DEFAULTS.layer);
+    const sample = async (bytes) => {
+      const r = await inspect(bytes);
+      const t = r.thumbs[0];
+      const at = (xPt, yPt) => {
+        const x = Math.round(xPt / 595.28 * t.width);
+        const y = Math.round((841.89 - yPt) / 841.89 * t.height);
+        const i = (y * t.width + x) * 4;
+        return [t.data[i], t.data[i + 1], t.data[i + 2]];
+      };
       return {
-        status: { signed: PLAN.SIGNATURE_UNSAFE, 'xfa-unsupported': PLAN.XFA_UNSAFE, encrypted: PLAN.ENCRYPTED }[code]
-          ?? PLAN.UNSUPPORTED_DOCUMENT,
-        reason: v.problems.map((p) => p.message).join(' / '),
+        annotationCentre: at(300, 400),
+        annots: r.pages[0].annots.map((a) => a.subtype),
+        thumb: t,
+        text: r.text.join(' ').includes('OVERLAP-M5'),
       };
     };
-    const run = (file) => processLayer(file, DEFAULTS.layer);
-    const files = async (names) => Promise.all(names.map(async (n) => fileOf(n, await bytesOf(n))));
+    const s = await sample(src);
+    const p = await sample(production);
+    const a = await sample(above);
+    return {
+      before: s.annotationCentre, production: p.annotationCentre, above: a.annotationCentre,
+      annotsBefore: s.annots, annotsProduction: p.annots, annotsAbove: a.annots,
+      contentProduction: overlayCoverage(s.thumb, p.thumb), contentAbove: overlayCoverage(s.thumb, a.thumb),
+      textKept: { production: p.text, above: a.text },
+    };
+  },
+
+  /** RF-K3: every use of every image, planned before anything is rewritten. */
+  async optimizePlanning() {
     const out = {};
-    for (const policy of ['B1', 'B2', 'B3']) {
-      const published = [];
-      const owner = createOwner();
-      const r = await runBatch({
-        files: await files(['batch-ok', 'invalid', 'text-a4', 'signature-a4']),
-        plan, run, owner, policy, publish: async (o) => { published.push(o.artifacts.map((a) => a.name)); },
-      });
-      out[policy] = { result: r.result, artifacts: r.artifacts.map((a) => a.name), manifest: r.manifest, published, results: r.results };
+    for (const name of ['shared-image-a4-a1', 'shared-image-a1-a4', 'repeated-image', 'form-image', 'annot-image']) {
+      const src = await bytesOf(name);
+      const doc = await PDFDocument.load(src, { updateMetadata: false });
+      const uses = [...planImageUses(doc).values()].map((e) => ({
+        width: e.stream.dict.lookup(PDFName.of('Width')).asNumber(),
+        height: e.stream.dict.lookup(PDFName.of('Height')).asNumber(),
+        uses: e.uses.map((u) => ({ page: u.page, needW: Math.ceil(u.w * 150 / 72), needH: Math.ceil(u.h * 150 / 72) })),
+        uncertain: e.uncertain,
+      }));
+      out[name] = { uses };
+      for (const planner of ['all-uses', 'first-use']) {
+        const r = await optimizeStructural(src, { dpi: 150, planner });
+        const rep = await inspect(r.bytes, { render: false });
+        out[name][planner] = {
+          images: [...new Set(rep.pages.flatMap((p) => p.images.map((i) => `${i.width}x${i.height}`)))],
+          decisions: r.report.decisions.map((d) => ({ action: d.action, to: d.to ?? null, from: [d.width, d.height], uncertain: d.uncertain.length })),
+          bytes: r.bytes.length,
+        };
+      }
     }
-    // Superseded part-way through: nothing may be published, under any policy.
-    const published = [];
-    const owner = createOwner();
-    const pending = runBatch({
-      files: await files(['long-8', 'batch-ok', 'text-a4']),
-      plan, run: (file) => processMonochrome(file, { dpi: 150, contrast: 1 }), owner, policy: 'B2',
-      publish: async (o) => { published.push(o.artifacts.map((a) => a.name)); },
-    });
-    setTimeout(() => owner.supersede(), 30);
-    const superseded = await pending;
-    out.superseded = { result: superseded.result, published, results: superseded.results };
-    // And the control: the same batch, not superseded, publishes once.
-    const controlPublished = [];
-    const control = await runBatch({
-      files: await files(['batch-ok', 'text-a4']), plan, run, owner: createOwner(), policy: 'B2',
-      publish: async (o) => { controlPublished.push(o.artifacts.map((a) => a.name)); },
-    });
-    out.control = { result: control.result, published: controlPublished };
     return out;
+  },
+
+  /**
+   * RF-K3: what lossy recompression does to one-pixel linework, measured at
+   * the scan's own 300 dpi against the source, for each variant a Human could
+   * choose.
+   */
+  async optimizeQuality() {
+    const src = await bytesOf('fine-line-scan');
+    const render = async (bytes, dpi) => {
+      const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+      const page = await pdf.getPage(1);
+      const vp = page.getViewport({ scale: dpi / 72 });
+      const c = document.createElement('canvas');
+      c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = 'white'; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvas: c, canvasContext: ctx, viewport: vp }).promise;
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      c.width = 1; c.height = 1;
+      await pdf.destroy();
+      const luma = new Uint8Array(d.length / 4);
+      for (let i = 0; i < luma.length; i += 1) luma[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+      return luma;
+    };
+    const compare = (a, b) => {
+      let ink = 0; let kept = 0; let spurious = 0; let se = 0;
+      for (let i = 0; i < a.length; i += 1) {
+        const ia = a[i] < 128; const ib = b[i] < 128;
+        if (ia) { ink += 1; if (ib) kept += 1; } else if (ib) spurious += 1;
+        se += (a[i] - b[i]) ** 2;
+      }
+      const mse = se / a.length;
+      return { lineInkKept: kept / ink, spuriousInk: spurious / ink, psnr: mse === 0 ? Infinity : 10 * Math.log10(255 * 255 / mse) };
+    };
+    const reference = await render(src, 300);
+    const variants = {
+      'O1 production @150': await processOptimize(fileOf('fine-line-scan', src), { dpi: 150 }),
+      'O2 lossless': await (await PDFDocument.load(src, { updateMetadata: false })).save({ useObjectStreams: true }),
+      'O3 JPEG q0.8 @150': (await optimizeStructural(src, { dpi: 150, quality: 0.8 })).bytes,
+      'O3 JPEG q0.92 @150': (await optimizeStructural(src, { dpi: 150, quality: 0.92 })).bytes,
+      'O3 JPEG q0.8 @300': (await optimizeStructural(src, { dpi: 300, quality: 0.8 })).bytes,
+      'O3 JPEG q0.92 @300': (await optimizeStructural(src, { dpi: 300, quality: 0.92 })).bytes,
+      'O3 lossless resample @150': (await optimizeStructural(src, { dpi: 150, codec: 'flate' })).bytes,
+    };
+    const out = { sourceBytes: src.length };
+    for (const [k, bytes] of Object.entries(variants)) {
+      out[k] = { bytes: bytes.length, ratio: bytes.length / src.length, ...compare(reference, await render(bytes, 300)) };
+    }
+    return out;
+  },
+
+  /** RF-K5: the JPEG encoder's worst case — full-resolution noise — at the quality production uses. */
+  jpegWorstCase() {
+    const out = [];
+    // xorshift32, high byte: an LCG's low bits have short periods, and a
+    // periodic "noise" is exactly what a JPEG encoder compresses well.
+    let seed = 2463534242;
+    const rand = () => {
+      seed ^= seed << 13; seed >>>= 0;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5; seed >>>= 0;
+      return seed >>> 24;
+    };
+    // Uniform noise, binary (0/255) noise, and a one-pixel checkerboard: the
+    // contents that leave a JPEG encoder least to discard.
+    const kinds = {
+      'rgb noise': (p, x, y) => [rand(), rand(), rand()],
+      'grey noise': () => { const v = rand(); return [v, v, v]; },
+      'binary rgb noise': () => [rand() & 1 ? 255 : 0, rand() & 1 ? 255 : 0, rand() & 1 ? 255 : 0],
+      'binary grey noise': () => { const v = rand() & 1 ? 255 : 0; return [v, v, v]; },
+      'checkerboard': (p, x, y) => { const v = (x + y) % 2 ? 255 : 0; return [v, v, v]; },
+      'colour checkerboard': (p, x, y) => ((x + y) % 2 ? [255, 0, 0] : [0, 0, 255]),
+    };
+    for (const [kind, gen] of Object.entries(kinds)) for (const [w, h] of [[1024, 1024], [2480, 3508]]) {
+      const grey = kind.includes('grey') || kind === 'checkerboard';
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      for (let i = 0, p = 0; i < img.data.length; i += 4, p += 1) {
+        const [r, g, b] = gen(p, p % w, Math.floor(p / w));
+        img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      const url = c.toDataURL('image/jpeg', 0.8);
+      c.width = 1; c.height = 1;
+      const b64 = url.length - 23;
+      const bytes = b64 * 3 / 4 - (url.endsWith('==') ? 2 : (url.endsWith('=') ? 1 : 0));
+      out.push({ kind, width: w, height: h, grey, bytes, bytesPerPixel: bytes / (w * h) });
+    }
+    return { samples: out, worst: Math.max(...out.map((s) => s.bytesPerPixel)), bound: RASTER_MODEL.jpegBytesPerPixelBound };
+  },
+
+  /**
+   * RF-K5: the Raster Budget model, validated against production runs, then
+   * applied to every sheet and offered resolution and to its boundaries.
+   */
+  async rasterBudget() {
+    // Validation: what production actually creates and writes, against the terms.
+    const dataUrls = [];
+    const canvases = [];
+    const origUrl = HTMLCanvasElement.prototype.toDataURL;
+    const origCtx = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.toDataURL = function patched(...a) { const u = origUrl.apply(this, a); dataUrls.push(u.length); return u; };
+    const counted = new WeakSet();
+    HTMLCanvasElement.prototype.getContext = function patched(...a) {
+      // Once per canvas: production asks for its context, and PDF.js may ask again.
+      if (this.width > 400 && !counted.has(this)) { counted.add(this); canvases.push([this.width, this.height]); }
+      return origCtx.apply(this, a);
+    };
+    const runs = [
+      ['monochrome', 'text-a4', 300], ['monochrome', 'raster-a4', 300], ['optimize', 'mixed-a4', 150],
+      ['monochrome', 'long-8', 150], ['both', 'text-a4', 150], ['optimize', 'vector-a1', 150], ['optimize', 'mixed-sizes', 72],
+    ];
+    const validation = [];
+    try {
+      for (const [op, name, dpi] of runs) {
+        dataUrls.length = 0; canvases.length = 0;
+        const src = await bytesOf(name);
+        const facts = await rasterFacts(src);
+        const plan = filePlan(facts, op, dpi);
+        const outBytes = await OPS[op](name, src, dpi);
+        const rep = await inspect(outBytes, { render: false });
+        const jpegs = rep.pages.map((p) => p.images[0]?.encodedBytes ?? 0);
+        validation.push({
+          op, name, dpi, pages: facts.pages.length,
+          outputBytes: outBytes.length, outputBound: plan.output,
+          jpegMax: Math.max(...jpegs), jpegBound: Math.max(...plan.pages.map((p) => p.jpeg)),
+          jpegPerPageWithinBound: jpegs.every((j, i) => j <= plan.pages[i].jpeg),
+          dataUrlExact: op === 'both' ? null : dataUrls.length === jpegs.length
+            && dataUrls.every((len, i) => len === 4 * Math.ceil(jpegs[i] / 3) + RASTER_MODEL.dataUrlPrefix),
+          canvasExact: canvases.slice(0, plan.pages.length).every((c, i) => {
+            const p = plan.pages[i];
+            return (c[0] === p.w && c[1] === p.h) || (c[0] === p.h && c[1] === p.w);
+          }),
+          canvases: canvases.slice(0, 3), planned: plan.pages.slice(0, 3).map((p) => [p.w, p.h]),
+        });
+      }
+    } finally {
+      HTMLCanvasElement.prototype.toDataURL = origUrl;
+      HTMLCanvasElement.prototype.getContext = origCtx;
+    }
+
+    // The model over every sheet and every resolution the UI offers.
+    const MIB = 1024 * 1024;
+    const sheets = { A4: [595.28, 841.89], A3: [841.89, 1190.55], A1: [1683.78, 2383.94], A0: [2383.94, 3370.39] };
+    const one = (wPt, hPt, pages = 1, sourceBytes = 50000) => ({
+      sourceBytes, pages: Array.from({ length: pages }, () => ({ wPt, hPt, imagePixels: 0, transparency: false })),
+    });
+    const limits = (memory, maxRasterPixels = RASTER_LIMIT_CANDIDATES.MAX_RASTER_PIXELS[1]) => ({
+      maxRasterPixels, memory, maxOutputBytes: RASTER_LIMIT_CANDIDATES.MAX_OUTPUT_BYTES[0],
+    });
+    const offered = { monochrome: [150, 300, 600], both: [150, 300, 600], optimize: [72, 150, 300] };
+    const table = [];
+    for (const [sheet, [w, h]] of Object.entries(sheets)) {
+      for (const [op, dpis] of Object.entries(offered)) {
+        for (const dpi of dpis) {
+          const at = (mem) => runPlan([{ name: 'x', facts: one(w, h) }], op, dpi, limits(mem));
+          const r = at(512 * MIB);
+          table.push({
+            sheet, op, dpi, megapixels: r.maxPixels / 1e6, peakMiB: r.peak / MIB, outputMiB: r.output / MIB,
+            at512: r.status, at1G: at(1024 * MIB).status, at2G: at(2048 * MIB).status,
+          });
+        }
+      }
+    }
+    // Which sheets and resolutions each raster-limit candidate admits (memory aside).
+    const candidates = RASTER_LIMIT_CANDIDATES.MAX_RASTER_PIXELS.map((limit) => ({
+      limitMpx: limit / 1e6,
+      admits: Object.entries(sheets).flatMap(([s, [w, h]]) => [72, 150, 300, 600]
+        .filter((dpi) => pagePixels(w, h, dpi).pixels <= limit).map((dpi) => `${s}@${dpi}`)),
+    }));
+
+    // Boundaries.
+    const search = (lo, hi, ok) => { while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) lo = mid; else hi = mid; } return [lo, hi]; };
+    // (a) the raster ceiling, isolated from memory by an unbounded budget.
+    const rasterAt = (width) => runPlan([{ name: 'x', facts: one(width, width * Math.SQRT2) }], 'monochrome', 300, limits(Infinity));
+    const [rLo, rHi] = search(100, 20000, (wPt) => rasterAt(wPt).status === 'READY');
+    // (b) pages of A4 at 300 dpi Monochrome under the default budget.
+    const pagesAt = (n, mem = 512 * MIB) => runPlan([{ name: 'x', facts: one(...sheets.A4, n) }], 'monochrome', 300, limits(mem));
+    const [pLo, pHi] = search(1, 400, (n) => pagesAt(n).status === 'READY');
+    // (c) files of one A4 page at 150 dpi Optimize, as a batch.
+    const filesAt = (k, mem = 512 * MIB) => runPlan(Array.from({ length: k }, (_, i) => ({ name: `f${i}`, facts: one(...sheets.A4) })), 'optimize', 150, limits(mem));
+    const [fLo, fHi] = search(1, 400, (k) => filesAt(k).status === 'READY');
+    // (d) the first memory-refused single page, at the presets.
+    const a1 = (mem) => runPlan([{ name: 'x', facts: one(...sheets.A1) }], 'monochrome', 300, limits(mem));
+    const pick = (r) => ({ status: r.status, reason: r.reason, peakMiB: r.peak / MIB, outputMiB: r.output / MIB });
+    return {
+      model: RASTER_MODEL, terms: RASTER_TERMS, limits: RASTER_LIMIT_CANDIDATES, validation, table, candidates,
+      boundaries: {
+        raster: { largestWidthPt: rLo, firstRefusedWidthPt: rHi, largest: pick(rasterAt(rLo)), firstRefused: pick(rasterAt(rHi)), pixelsLargest: rasterAt(rLo).maxPixels, pixelsFirst: rasterAt(rHi).maxPixels },
+        pages: { largest: pLo, firstRefused: pHi, atLargest: pick(pagesAt(pLo)), atFirst: pick(pagesAt(pHi)), firstAt1G: pick(pagesAt(pHi, 1024 * MIB)), firstAt2G: pick(pagesAt(pHi, 2048 * MIB)) },
+        files: { largest: fLo, firstRefused: fHi, atLargest: pick(filesAt(fLo)), atFirst: pick(filesAt(fHi)), firstAt1G: pick(filesAt(fHi, 1024 * MIB)) },
+        a1mono300: { at512: pick(a1(512 * MIB)), at1G: pick(a1(1024 * MIB)), at2G: pick(a1(2048 * MIB)) },
+        independence: {
+          rasterAt2G: pick(runPlan([{ name: 'x', facts: one(...sheets.A1) }], 'monochrome', 600, limits(2048 * MIB))),
+          rasterAtUnbounded: pick(runPlan([{ name: 'x', facts: one(...sheets.A0) }], 'monochrome', 600, limits(Infinity))),
+          outputAt2G: pick(pagesAt(pHi + 40, 2048 * MIB)),
+        },
+      },
+    };
   },
 };
 

@@ -13,18 +13,43 @@
  * transform. Page boxes, /Rotate, resources, the AcroForm, the XFA packet and
  * the Info/XMP metadata are untouched because nothing touches them.
  *
- * Refused rather than guessed:
+ * Semantics that point *at* a place on a page move with it: explicit
+ * destinations in links, GoTo actions, outline items and the named-destination
+ * tree are rewritten through the matrix of the page they point to, and a form
+ * widget's regenerable text (`/DA` font size, border width) is scaled with its
+ * rectangle so a viewer that redraws it draws it at the new size.
+ *
+ * Refused rather than guessed, before anything is changed:
  *   - content whose q/Q nesting underflows (the wrapper could be popped early);
  *   - an annotation this prototype does not know how to move;
- *   - an annotation outside the visible page that the scale would bring in.
+ *   - an annotation not wholly inside the visible page — scaling it inward
+ *     would bring its hidden part into view;
+ *   - a destination whose type is not one of the eight in the PDF
+ *     specification, that points at no page of this document, or that is a
+ *     structure destination.
  *
  * Research code. Not part of the app, and not a claim of readiness.
  */
 import {
     PDFDocument, PDFName, PDFDict, PDFArray, PDFRef, PDFNumber, PDFRawStream,
-    decodePDFRawStream,
+    PDFString, PDFHexString, PDFNull, decodePDFRawStream,
 } from 'pdf-lib';
 import { lex } from './mono-structure.mjs';
+
+/**
+ * Which operands of each destination type are coordinates, and on which axis.
+ * `null` operands stay null ("unchanged" in the specification).
+ */
+const DEST_AXES = {
+    XYZ: ['x', 'y', null],
+    Fit: [],
+    FitH: ['y'],
+    FitV: ['x'],
+    FitR: ['x', 'y', 'x', 'y'],
+    FitB: [],
+    FitBH: ['y'],
+    FitBV: ['x'],
+};
 
 const MOVABLE = new Set([
     'Text', 'Link', 'FreeText', 'Line', 'Square', 'Circle', 'Polygon', 'PolyLine',
@@ -85,7 +110,97 @@ function underflows(doc, page) {
     return false;
 }
 
-export async function marginInPlace(sourceBytes, { scale, position }) {
+/**
+ * Every explicit destination array the document can reach: link /Dest,
+ * GoTo /D, outline items, the /Dests dictionary and the /Names /Dests tree.
+ * Named references need no rewrite — the arrays they name are rewritten.
+ */
+function collectDestinations(doc, pages, refusals) {
+    const found = [];
+    const seen = new Set();
+    const take = (value, where) => {
+        const v = resolve(doc, value);
+        if (v instanceof PDFDict) { take(v.get(PDFName.of('D')), where); return; }
+        if (!(v instanceof PDFArray)) return; // a name or string: resolved in the tree
+        if (seen.has(v)) return;
+        seen.add(v);
+        found.push({ array: v, where });
+    };
+    const fromAction = (actionValue, where) => {
+        const a = resolve(doc, actionValue);
+        if (!(a instanceof PDFDict)) return;
+        const s = a.lookup(PDFName.of('S'))?.decodeText?.();
+        if (s === 'GoTo') {
+            if (a.get(PDFName.of('SD')) !== undefined) refusals.push(`${where}: structure destination (/SD)`);
+            take(a.get(PDFName.of('D')), where);
+        } else if (s === 'GoToE') {
+            refusals.push(`${where}: /GoToE into an embedded file`);
+        }
+        const next = a.get(PDFName.of('Next'));
+        if (next !== undefined) {
+            const list = resolve(doc, next);
+            (list instanceof PDFArray ? list.asArray() : [next]).forEach((n) => fromAction(n, `${where} /Next`));
+        }
+    };
+    pages.forEach((page, i) => {
+        const annots = page.node.lookup(PDFName.of('Annots'));
+        if (!(annots instanceof PDFArray)) return;
+        for (const aref of annots.asArray()) {
+            const a = resolve(doc, aref);
+            if (!(a instanceof PDFDict)) continue;
+            if (a.get(PDFName.of('Dest')) !== undefined) take(a.get(PDFName.of('Dest')), `p${i + 1} link /Dest`);
+            if (a.get(PDFName.of('A')) !== undefined) fromAction(a.get(PDFName.of('A')), `p${i + 1} link /A`);
+        }
+    });
+    const outlines = resolve(doc, doc.catalog.get(PDFName.of('Outlines')));
+    const visitOutline = (ref, depth) => {
+        let item = resolve(doc, ref);
+        const guard = new Set();
+        while (item instanceof PDFDict && !guard.has(item) && depth < 32) {
+            guard.add(item);
+            if (item.get(PDFName.of('Dest')) !== undefined) take(item.get(PDFName.of('Dest')), 'outline');
+            if (item.get(PDFName.of('A')) !== undefined) fromAction(item.get(PDFName.of('A')), 'outline');
+            if (item.get(PDFName.of('First')) !== undefined) visitOutline(item.get(PDFName.of('First')), depth + 1);
+            item = resolve(doc, item.get(PDFName.of('Next')));
+        }
+    };
+    if (outlines instanceof PDFDict && outlines.get(PDFName.of('First')) !== undefined) {
+        visitOutline(outlines.get(PDFName.of('First')), 0);
+    }
+    const dests = resolve(doc, doc.catalog.get(PDFName.of('Dests')));
+    if (dests instanceof PDFDict) for (const [, v] of dests.entries()) take(v, '/Dests');
+    const names = resolve(doc, doc.catalog.get(PDFName.of('Names')));
+    const tree = names instanceof PDFDict ? resolve(doc, names.get(PDFName.of('Dests'))) : null;
+    const visitTree = (node, depth) => {
+        const n = resolve(doc, node);
+        if (!(n instanceof PDFDict) || depth > 32) return;
+        const list = resolve(doc, n.get(PDFName.of('Names')));
+        if (list instanceof PDFArray) {
+            const arr = list.asArray();
+            for (let i = 1; i < arr.length; i += 2) take(arr[i], '/Names /Dests');
+        }
+        const kids = resolve(doc, n.get(PDFName.of('Kids')));
+        if (kids instanceof PDFArray) kids.asArray().forEach((k) => visitTree(k, depth + 1));
+    };
+    if (tree) visitTree(tree, 0);
+    return found;
+}
+
+/** Scale a /DA string's font size (`/Name size Tf`) by `s`. */
+function scaleDA(da, s) {
+    const tokens = lex(da);
+    for (let i = 2; i < tokens.length; i += 1) {
+        if (tokens[i].type === 'op' && tokens[i].value === 'Tf' && tokens[i - 1].type === 'number') {
+            const size = tokens[i - 1].value;
+            if (size === 0) return da; // auto-size already follows the rectangle
+            const t = tokens[i - 1];
+            return da.slice(0, t.start) + String(Math.round(size * s * 1000) / 1000) + da.slice(t.end);
+        }
+    }
+    return da;
+}
+
+export async function marginInPlace(sourceBytes, { scale, position, scaleWidgetText = true }) {
     const doc = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     const refusals = [];
     const pages = doc.getPages();
@@ -113,16 +228,29 @@ export async function marginInPlace(sourceBytes, { scale, position }) {
             }
             const flags = a.lookup(PDFName.of('F'))?.asNumber?.() ?? 0;
             const rect = a.lookup(PDFName.of('Rect'))?.asArray?.().map((n) => n.asNumber());
-            if (rect && (flags & HIDDEN) === 0) {
-                const outside = Math.max(rect[0], rect[2]) < vx0 - 1 || Math.min(rect[0], rect[2]) > vx1 + 1
-                    || Math.max(rect[1], rect[3]) < vy0 - 1 || Math.min(rect[1], rect[3]) > vy1 + 1;
-                if (outside && subtype !== 'Popup') {
-                    refusals.push(`${where}: /${subtype} outside the visible page would be brought into view`);
+            if (rect && (flags & HIDDEN) === 0 && subtype !== 'Popup') {
+                // Wholly inside, within a point. Anything else has a part the
+                // CropBox hides, and scaling it inward would show it.
+                const inside = Math.min(rect[0], rect[2]) >= vx0 - 1 && Math.max(rect[0], rect[2]) <= vx1 + 1
+                    && Math.min(rect[1], rect[3]) >= vy0 - 1 && Math.max(rect[1], rect[3]) <= vy1 + 1;
+                if (!inside) {
+                    refusals.push(`${where}: /${subtype} is not wholly inside the visible page; scaling would bring its hidden part into view`);
                 }
             }
         }
         return { page, visible, rotate, list, ...marginTransform(visible, rotate, scale, position) };
     });
+    const byPage = new Map(plans.map((p) => [p.page.ref.toString(), p]));
+    const destinations = collectDestinations(doc, pages, refusals);
+    for (const { array, where } of destinations) {
+        const target = array.get(0);
+        const type = resolve(doc, array.get(1))?.decodeText?.();
+        if (!(target instanceof PDFRef) || !byPage.has(target.toString())) {
+            refusals.push(`${where}: destination does not point at a page of this document`);
+        } else if (!(type in DEST_AXES)) {
+            refusals.push(`${where}: destination type /${type ?? '?'}`);
+        }
+    }
     if (refusals.length > 0) return { status: 'REFUSED', refusals: [...new Set(refusals)], bytes: null };
 
     let movedAnnotations = 0;
@@ -171,9 +299,61 @@ export async function marginInPlace(sourceBytes, { scale, position }) {
             if (rd instanceof PDFArray) {
                 annot.set(PDFName.of('RD'), doc.context.obj(rd.asArray().map((n) => PDFNumber.of(n.asNumber() * a))));
             }
+            // What a viewer regenerates from: the text size and the border.
+            if (scaleWidgetText) {
+                const da = annot.get(PDFName.of('DA'));
+                if (da instanceof PDFString || da instanceof PDFHexString) {
+                    annot.set(PDFName.of('DA'), PDFString.of(scaleDA(da.decodeText(), a)));
+                }
+                const bs = resolve(doc, annot.get(PDFName.of('BS')));
+                const bw = bs instanceof PDFDict ? bs.lookup(PDFName.of('W')) : null;
+                if (bw?.asNumber) bs.set(PDFName.of('W'), PDFNumber.of(bw.asNumber() * a));
+            }
             movedAnnotations += 1;
         }
     }
+    let scaledTexts = 0;
+    if (scaleWidgetText) {
+        // Field-level /DA (on a parent without its own widget) and the form's
+        // default. The scale is the same on every page, so one factor is right.
+        const acro = resolve(doc, doc.catalog.get(PDFName.of('AcroForm')));
+        const scaled = new Set();
+        const visit = (ref) => {
+            const d = resolve(doc, ref);
+            if (!(d instanceof PDFDict) || scaled.has(d)) return;
+            scaled.add(d);
+            const da = d.get(PDFName.of('DA'));
+            if ((da instanceof PDFString || da instanceof PDFHexString) && d.get(PDFName.of('Rect')) === undefined) {
+                d.set(PDFName.of('DA'), PDFString.of(scaleDA(da.decodeText(), scale)));
+                scaledTexts += 1;
+            }
+            const kids = resolve(doc, d.get(PDFName.of('Kids')));
+            if (kids instanceof PDFArray) kids.asArray().forEach(visit);
+        };
+        if (acro instanceof PDFDict) {
+            const da = acro.get(PDFName.of('DA'));
+            if (da instanceof PDFString || da instanceof PDFHexString) {
+                acro.set(PDFName.of('DA'), PDFString.of(scaleDA(da.decodeText(), scale)));
+                scaledTexts += 1;
+            }
+            const fields = resolve(doc, acro.get(PDFName.of('Fields')));
+            if (fields instanceof PDFArray) fields.asArray().forEach(visit);
+        }
+    }
+    // Destinations, through the matrix of the page each one points at.
+    let movedDestinations = 0;
+    for (const { array } of destinations) {
+        const plan = byPage.get(array.get(0).toString());
+        const [a, , , d, e, f] = plan.matrix;
+        const axes = DEST_AXES[resolve(doc, array.get(1)).decodeText()];
+        axes.forEach((axis, k) => {
+            const operand = resolve(doc, array.get(k + 2));
+            if (!axis || operand === undefined || operand === PDFNull || !operand.asNumber) return;
+            const v = operand.asNumber();
+            array.set(k + 2, PDFNumber.of(axis === 'x' ? a * v + e : d * v + f));
+        });
+        movedDestinations += 1;
+    }
     const bytes = await doc.save();
-    return { status: 'TRANSFORMED', refusals: [], bytes, movedAnnotations };
+    return { status: 'TRANSFORMED', refusals: [], bytes, movedAnnotations, movedDestinations, scaledTexts };
 }

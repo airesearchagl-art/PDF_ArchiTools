@@ -166,6 +166,39 @@ try {
     assert('it accepts ordinary forms, annotations and metadata', ['text-a4', 'form-a4', 'annotation-a4', 'metadata-a4', 'raster-a4'].every((k) => assess[k].supported));
     assert('and looking does not create an AcroForm', assess.__inspectionIsReadOnly === true);
 
+    // ---- 2b. facts, apart from policy (RF-K1) ------------------------------------
+    //
+    // assessSource's `supported` is the Annotator's verdict: XFA → refused, no
+    // document. The Processor's XFA policy is H7 and still open, so the
+    // Processor reads facts and applies a policy separately.
+    console.log('\n=== 2b. source facts, apart from any policy (RF-K1) ===');
+    const sf = await call('sourceFacts');
+    evidence.sections.sourceFacts = sf;
+    for (const [n, f] of Object.entries(sf.facts)) {
+        measure(`facts(${n})`, `readable ${f.readable}, encrypted ${f.encrypted}, pages ${f.pageCount}, AcroForm ${f.hasAcroForm}, XFA ${f.hasXfa}, fields ${f.fieldCount}, signature fields ${f.signatureFields.map((s) => `${s.name}${s.signed ? ' (signed)' : ''}`).join(',') || 'none'}, form ${f.formInspectionState}`);
+    }
+    probe('reading facts never reaches getForm() — trapped to throw, and it did not',
+        sf.getFormCallsWhileReading === 0 && sf.getFormCallsByAssessSource > 0,
+        `0 calls while reading facts; assessSource on an ordinary form called it ${sf.getFormCallsByAssessSource} time(s), so the trap was live`);
+    assert('facts agree with M3 on every fact M3 also reports',
+        sf.facts['signature-a4'].signatureFields.length === 1 && sf.m3['signature-a4'].codes.includes('signed')
+        && sf.facts['xfa-a4'].hasXfa && sf.m3['xfa-a4'].codes.includes('xfa-unsupported')
+        // pdf-lib's parser is lenient: the non-PDF loads, and fails at its pages
+        // -- where M3 also calls it unreadable.
+        && !(sf.facts.invalid.readable && sf.facts.invalid.pagesValid) && sf.m3.invalid.codes.includes('unreadable')
+        && sf.facts['form-a4'].fieldCount === 2 && sf.facts['form-a4'].formInspectionState === 'read');
+    probe('facts carry no verdict: an XFA document is described, not refused, until a policy is applied',
+        sf.facts['xfa-a4'].readable === true && sf.m3['xfa-a4'].docReturned === false
+        && sf.matrix['refuse-if-dropped']['xfa-a4'].layer === 'READY',
+        `M3 returns no document for it; under 'refuse-if-dropped' Layer plans READY`);
+    for (const [policy, rows] of Object.entries(sf.matrix)) {
+        measure(`H7 candidate '${policy}'`, ['signature-a4', 'xfa-a4', 'form-a4'].map((n) => `${n}: ${Object.entries(rows[n])
+            .filter(([op]) => ['layer', 'margin-inplace', 'monochrome-A', 'monochrome-C', 'optimize-O1', 'optimize-O3', 'normalize-size'].includes(op))
+            .map(([op, s]) => `${op}=${s}`).join(' ')}`).join(' | '));
+    }
+    probe('every candidate policy refuses a signed document for every operation, because every operation re-saves',
+        Object.values(sf.matrix).every((rows) => Object.values(rows['signature-a4']).every((s) => s === 'SIGNATURE_UNSAFE')));
+
     // ---- 3. the five legacy operations ----------------------------------------
     console.log('\n=== 3. baseline: the five target operations ===');
     const a4 = ['vector-a4', 'text-a4', 'raster-a4', 'ocr-a4', 'mixed-a4', 'transparency-a4', 'annotation-a4',
@@ -279,7 +312,7 @@ try {
             baselineFail('layer: a signed document is re-saved and its signature silently invalidated',
                 `signature ${r('signature-a4').signature}`,
                 'processLayer loads with pdf-lib and calls save() — a full re-serialisation — without inspecting the source',
-                'PLAN=SIGNATURE_UNSAFE via the existing assessSource before any byte is produced (H7)');
+                'PLAN=SIGNATURE_UNSAFE from the common SourceFacts reading (the M3 dictionary-level logic) under the adopted H7 policy, before any byte is produced');
         }
         if (r('metadata-a4').metadata.producer !== 'retained' || r('metadata-a4').metadata.modDate !== 'retained') {
             baselineFail('layer: document metadata is rewritten',
@@ -316,7 +349,7 @@ try {
         baselineFail('hardened lanes: a signed document is processed and its signature invalidated without a refusal',
             hardenedSig.map((r) => `${r.lane}: ${r.signature}`).join('; '),
             'neither normalizePageSize nor updateTitleBlocks inspects the source; both re-serialise with pdf-lib save()',
-            'a common PLAN step running assessSource *before* the lane — adds a refusal, removes nothing the lanes guarantee (not a redesign of either lane)');
+            'a common PLAN step reading SourceFacts and applying the adopted H7 policy *before* the lane — adds a refusal, removes nothing the lanes guarantee (not a redesign of either lane)');
     }
     const hardenedMeta = hardened.filter((r) => r.fixture === 'metadata-a4' && r.metadata && r.metadata.producer !== 'retained');
     if (hardenedMeta.length > 0) {
@@ -370,6 +403,53 @@ try {
         }
     }
 
+    // RF-K4: what a margin has to carry besides the drawing.
+    console.log('\n  -- Margin semantics (RF-K4) --');
+    const ms = await call('marginSemantics');
+    evidence.sections.marginSemantics = ms;
+    const d = ms.destinations;
+    console.log(`  destinations before ${JSON.stringify(d.before.links)} named ${JSON.stringify(d.before.named)} outline ${JSON.stringify(d.before.outline)}`);
+    console.log(`  in-place             ${JSON.stringify(d.inplace?.links)} named ${JSON.stringify(d.inplace?.named)} outline ${JSON.stringify(d.inplace?.outline)}`);
+    console.log(`  expected             XYZ ${JSON.stringify(d.expected.xyz)} FitH ${d.expected.fitH} FitR ${JSON.stringify(d.expected.fitR)} outline ${JSON.stringify(d.expected.outline)}`);
+    const near = (a, b) => Math.abs(a - b) < 0.02;
+    const xyz = d.inplace?.links[0];
+    const fitr = d.inplace?.links[2];
+    probe('in-place: a GoTo link keeps pointing at the same drawing — its /XYZ moves with the page it names',
+        d.inplaceStatus === 'TRANSFORMED' && xyz[0] === 2 && near(xyz[2], d.expected.xyz[0]) && near(xyz[3], d.expected.xyz[1]) && xyz[4] === 0,
+        `[p2 XYZ 100 700] -> ${JSON.stringify(xyz)}`);
+    assert('and so do /FitR, the named destination (as PDF.js resolves it) and the outline item',
+        fitr && d.expected.fitR.every((v, i) => near(fitr[i + 2], v))
+        && near(d.inplace.named[2], d.expected.fitH) && near(d.readerNamedAfter[1], d.expected.fitH)
+        && near(d.inplace.outline[2], d.expected.outline[0]) && near(d.inplace.outline[3], d.expected.outline[1])
+        && d.inplace.outline[4] === null,
+        `FitH 500 -> ${d.readerNamedAfter[1]} in PDF.js; outline null zoom stays null; ${d.movedDestinations} destinations moved`);
+    measure('production Margin on the same document', `links ${d.production.annots}, named ${JSON.stringify(d.production.named)}, outline ${JSON.stringify(d.production.outline)} — all left behind`);
+    probe('in-place refuses an annotation half outside the CropBox, before changing anything',
+        ms.partial.status === 'REFUSED' && ms.partial.refusals[0].includes('not wholly inside') && ms.partial.controlStatus === 'TRANSFORMED',
+        `${ms.partial.refusals[0]}; the same page without it transforms`);
+    const wg = ms.widgets;
+    measure('form widget text height (PDF.js, points)', `source ${wg.source.inkHeight}; in-place ${wg.scaled.inkHeight} (stored appearance); regenerated from /DA: scaled ${wg.scaledRegenerated.inkHeight}, unscaled ${wg.unscaledRegenerated.inkHeight}; /DA ${JSON.stringify(wg.source.da)} -> ${JSON.stringify(wg.scaled.da)}`);
+    const ratio = (x) => x / wg.source.inkHeight;
+    probe('in-place: a widget redrawn from /DA is drawn at the margin\'s scale, because /DA is scaled with it',
+        Math.abs(ratio(wg.scaled.inkHeight) - 0.8) < 0.06 && Math.abs(ratio(wg.scaledRegenerated.inkHeight) - 0.8) < 0.06
+        && Math.abs(ratio(wg.unscaledRegenerated.inkHeight) - 1) < 0.06 && wg.fieldValue === 'M5-FIELD-VALUE',
+        `stored ×${ratio(wg.scaled.inkHeight).toFixed(2)}, regenerated ×${ratio(wg.scaledRegenerated.inkHeight).toFixed(2)}; without scaling /DA a regenerated widget would be ×${ratio(wg.unscaledRegenerated.inkHeight).toFixed(2)} in a box ×0.8`);
+
+    // RF-K6: which layer the overlay is on.
+    console.log('\n=== 5d. Layer and annotation stacking (RF-K6) ===');
+    const ls = await call('layerStacking');
+    evidence.sections.layerStacking = ls;
+    measure('an opaque blue annotation under the white 50% layer',
+        `before ${JSON.stringify(ls.before)}; production ${JSON.stringify(ls.production)}; overlay-as-last-annotation ${JSON.stringify(ls.above)}`);
+    measure('annotations', `before ${ls.annotsBefore.join(',')}; production ${ls.annotsProduction.join(',')}; above ${ls.annotsAbove.join(',')}`);
+    assert('production puts the layer below every annotation: the annotation is not faded',
+        JSON.stringify(ls.production) === JSON.stringify(ls.before),
+        'annotations are painted after the page content the rectangle is drawn into');
+    probe('a layer above annotations exists without flattening: one more annotation, painted last',
+        ls.above[0] > 100 && ls.above[1] > 100 && ls.above[2] > 240 && ls.annotsAbove.length === ls.annotsBefore.length + 1
+        && ls.textKept.above === true && ls.contentAbove > 0.95,
+        `the blue fades to ${JSON.stringify(ls.above)}; the original annotation is kept; the layer is itself an annotation`);
+
     console.log('\n=== 5c. Optimize: what happens to size ===');
     const opt = await call('optimizeSizes', ['vector-a4', 'text-a4', 'raster-a4', 'ocr-a4', 'mixed-a4', 'form-a4', 'annotation-a4', 'vector-a1']);
     evidence.sections.optimize = opt;
@@ -384,6 +464,47 @@ try {
             && !String(r.O3at150.annotations).startsWith('lost')),
         Object.entries(opt).map(([n, r]) => `${n}:${r.O3at150.text}/${r.O3at150.vectors}`).join(' '));
     measure('O3 never makes a document larger here', `${o3NeverGrows}`);
+
+    // RF-K3: every use of a shared image, planned before any rewrite.
+    console.log('\n  -- O3 planning across every use (RF-K3) --');
+    const op3 = await call('optimizePlanning');
+    evidence.sections.optimizePlanning = op3;
+    for (const [n, r] of Object.entries(op3)) {
+        console.log(`  ${n.padEnd(20)} uses ${r.uses.map((u) => `${u.width}x${u.height}: ${u.uses.map((x) => `p${x.page} needs ${x.needW}x${x.needH}`).join(', ') || 'none'}${u.uncertain.length ? ` — uncertain (${u.uncertain[0]})` : ''}`).join('; ')}`);
+        console.log(`  ${''.padEnd(20)} all-uses ${r['all-uses'].images.join(',') || '(annotation only)'} | first-use ${r['first-use'].images.join(',') || '(annotation only)'}`);
+    }
+    const dims = (n, p) => op3[n][p].decisions.map((x) => (x.to ?? x.from).join('x')).join(',');
+    probe('the all-uses plan is the same whichever page comes first',
+        dims('shared-image-a4-a1', 'all-uses') === dims('shared-image-a1-a4', 'all-uses'),
+        `A4→A1 ${dims('shared-image-a4-a1', 'all-uses')}, A1→A4 ${dims('shared-image-a1-a4', 'all-uses')}`);
+    const meets = (n) => op3[n].uses.every((u) => {
+        const kept = op3[n]['all-uses'].decisions[0];
+        const [w, h] = kept.to ?? kept.from;
+        return u.uses.every((x) => w >= Math.min(u.width, x.needW) - 1 && h >= Math.min(u.height, x.needH) - 1);
+    });
+    probe('and keeps enough pixels for the most demanding use — shared across pages, repeated on a page, inside a reused form',
+        ['shared-image-a4-a1', 'shared-image-a1-a4', 'repeated-image', 'form-image'].every(meets),
+        `repeated-image -> ${dims('repeated-image', 'all-uses')}; form-image -> ${dims('form-image', 'all-uses')}`);
+    probe('an image whose use the plan cannot size is not downsampled',
+        op3['annot-image']['all-uses'].decisions[0].uncertain > 0 && op3['annot-image']['all-uses'].decisions[0].to === null,
+        'drawn only by an annotation appearance');
+    probe('the first-encounter planner it replaces was page-order dependent and undersampled',
+        dims('shared-image-a4-a1', 'first-use') !== dims('shared-image-a1-a4', 'first-use')
+        && dims('form-image', 'first-use') === '1240x1754',
+        `A4→A1 ${dims('shared-image-a4-a1', 'first-use')} for an A1 use needing ${op3['shared-image-a4-a1'].uses[0].uses[1].needW}px wide`);
+
+    // RF-K3: what recompression does to one-pixel linework.
+    console.log('\n  -- O3 lossy quality on a 300 dpi fine-line scan (RF-K3) --');
+    const oq = await call('optimizeQuality');
+    evidence.sections.optimizeQuality = oq;
+    for (const [k, v] of Object.entries(oq)) {
+        if (typeof v !== 'object') continue;
+        measure(`fine-line scan, ${k}`, `x${v.ratio.toFixed(3)} size; line ink kept ${(v.lineInkKept * 100).toFixed(1)}%, spurious ${(v.spuriousInk * 100).toFixed(1)}%, PSNR ${v.psnr === null ? '∞' : v.psnr.toFixed(1)} dB (at 300 dpi against the source)`);
+    }
+    assert('the quality measure can see loss and its absence: lossless keeps every line',
+        oq['O2 lossless'].lineInkKept === 1 && oq['O1 production @150'].lineInkKept < 0.5);
+    measure('what destroys linework is the target resolution, not JPEG',
+        `JPEG q0.8 at the scan's own 300 dpi keeps ${(oq['O3 JPEG q0.8 @300'].lineInkKept * 100).toFixed(0)}% at x${oq['O3 JPEG q0.8 @300'].ratio.toFixed(2)}; any resample to 150 dpi keeps ≈${(oq['O3 lossless resample @150'].lineInkKept * 100).toFixed(0)}–${(oq['O3 JPEG q0.8 @150'].lineInkKept * 100).toFixed(0)}%, lossless or not`);
 
     // ---- 6. large format -------------------------------------------------------
     console.log('\n=== 6. large format ===');
@@ -433,6 +554,48 @@ try {
         }
     }
 
+    // ---- 6b. the Raster Budget (RF-K5) -------------------------------------------
+    console.log('\n=== 6b. Raster Budget for the flattening operations (RF-K5) ===');
+    const jw = await call('jpegWorstCase');
+    evidence.sections.jpegWorstCase = jw;
+    for (const s of jw.samples) measure(`JPEG q0.8, ${s.kind} ${s.width}x${s.height}`, `${s.bytesPerPixel.toFixed(3)} B/px`);
+    probe('the JPEG bound holds against the worst content measured, with margin',
+        jw.worst * 1.25 <= jw.bound + 1e-9,
+        `worst ${jw.worst.toFixed(3)} B/px (x1.25 = ${(jw.worst * 1.25).toFixed(3)}); bound ${jw.bound}`);
+    const rb = await call('rasterBudget');
+    evidence.sections.rasterBudget = rb;
+    for (const [term, basis, source] of rb.terms) console.log(`    [${basis.padEnd(12)}] ${term} — ${source}`);
+    for (const v of rb.validation) {
+        measure(`model vs production: ${v.op} ${v.name} @${v.dpi}`, `output ${v.outputBytes.toLocaleString('en-US')} ≤ ${v.outputBound.toLocaleString('en-US')}; largest JPEG ${v.jpegMax.toLocaleString('en-US')} ≤ ${v.jpegBound.toLocaleString('en-US')}; data URL exact ${v.dataUrlExact}; canvas exact ${v.canvasExact}`);
+    }
+    probe('every production run sits inside the model: canvases as planned, data URLs to the byte, JPEGs and outputs under their bounds',
+        rb.validation.every((v) => v.canvasExact && v.jpegPerPageWithinBound && v.outputBytes <= v.outputBound && v.dataUrlExact !== false),
+        `${rb.validation.length} runs, ${rb.validation.reduce((n, v) => n + v.pages, 0)} pages`);
+    console.log('  sheet op          dpi     Mpx   peak MiB  out MiB  512 MiB            1 GiB              2 GiB');
+    for (const t of rb.table) {
+        console.log(`  ${t.sheet} ${t.op.padEnd(11)} ${String(t.dpi).padStart(3)} ${t.megapixels.toFixed(1).padStart(7)} ${t.peakMiB.toFixed(0).padStart(9)} ${t.outputMiB.toFixed(0).padStart(8)}  ${t.at512.padEnd(18)} ${t.at1G.padEnd(18)} ${t.at2G}`);
+    }
+    for (const cnd of rb.candidates) measure(`MAX_RASTER_PIXELS candidate ${cnd.limitMpx.toFixed(1)} Mpx admits`, cnd.admits.join(' '));
+    const bd = rb.boundaries;
+    probe('raster ceiling: the largest page it takes and the first it refuses, a point apart',
+        bd.raster.largest.status === 'READY' && bd.raster.firstRefused.status === 'OVER_RASTER_LIMIT'
+        && bd.raster.firstRefusedWidthPt === bd.raster.largestWidthPt + 1,
+        `${(bd.raster.pixelsLargest / 1e6).toFixed(2)} Mpx accepted, ${(bd.raster.pixelsFirst / 1e6).toFixed(2)} Mpx refused (memory unbounded, to isolate it)`);
+    probe('memory: A4 at 300 dpi Monochrome, pages — just under accepted, first over refused by name',
+        bd.pages.atLargest.status === 'READY' && bd.pages.atFirst.status === 'OVER_MEMORY_BUDGET' && bd.pages.firstRefused === bd.pages.largest + 1,
+        `${bd.pages.largest} pages ${bd.pages.atLargest.peakMiB.toFixed(0)} MiB; ${bd.pages.firstRefused} pages ${bd.pages.atFirst.peakMiB.toFixed(0)} MiB`);
+    probe('memory: a batch of one-page A4 files at 150 dpi Optimize — just under, first over, and 1 GiB takes it',
+        bd.files.atLargest.status === 'READY' && bd.files.atFirst.status === 'OVER_MEMORY_BUDGET' && bd.files.firstAt1G.status === 'READY',
+        `${bd.files.largest} files ${bd.files.atLargest.peakMiB.toFixed(0)} MiB; ${bd.files.firstRefused} files ${bd.files.atFirst.peakMiB.toFixed(0)} MiB`);
+    probe('A1 at 300 dpi Monochrome needs an explicit 1 GiB, and gets it',
+        bd.a1mono300.at512.status === 'OVER_MEMORY_BUDGET' && bd.a1mono300.at1G.status === 'READY',
+        `${bd.a1mono300.at512.peakMiB.toFixed(0)} MiB`);
+    probe('a larger memory budget buys past neither the raster ceiling nor the output ceiling',
+        bd.independence.rasterAt2G.status === 'OVER_RASTER_LIMIT' && bd.independence.rasterAtUnbounded.status === 'OVER_RASTER_LIMIT'
+        && bd.pages.firstAt1G.status === 'OVER_OUTPUT_BUDGET' && bd.pages.firstAt2G.status === 'OVER_OUTPUT_BUDGET'
+        && bd.independence.outputAt2G.status === 'OVER_OUTPUT_BUDGET',
+        `A1 @600 at 2 GiB: ${bd.independence.rasterAt2G.reason}; ${bd.pages.firstRefused} A4 pages at 1 GiB: ${bd.pages.firstAt1G.reason}`);
+
     // ---- 7. failure and atomicity (functions) ---------------------------------
     console.log('\n=== 7. failure ===');
     const failures = await call('failures');
@@ -443,20 +606,68 @@ try {
         Object.values(failures.midDocument).every((r) => r.bytes === 0) && Object.values(failures.invalid).every((r) => r.bytes === 0),
         'every failure is an exception with no bytes: atomic per file, by construction');
 
-    // ---- 8. the job prototype --------------------------------------------------
-    console.log('\n=== 8. PLAN/RESULT + ownership prototype ===');
-    const job = await call('jobPrototype');
-    evidence.sections.job = job;
-    for (const k of ['B1', 'B2', 'B3']) {
-        measure(`${k} on [ok, invalid, text, signed]`, `${job[k].result}; artifacts ${job[k].artifacts.join(', ') || 'none'}; published ${JSON.stringify(job[k].published)}; ${job[k].results.map((r) => `${r.name}:${r.plan}/${r.result}`).join(' ')}`);
+    // ---- 8. FileResult / BatchResult, B1 / B2 / B3 (RF-K2) ------------------------
+    console.log('\n=== 8. FileResult, BatchResult and the three batch policies (RF-K2) ===');
+    const bp = await call('batchPolicies');
+    evidence.sections.batchPolicies = bp;
+    for (const [k, def] of Object.entries(bp.definitions)) {
+        console.log(`  ${k} ${def.name}: ownership ${def.ownership}; publication ${def.publication}; download ${def.downloadTiming}; cancellation ${def.cancellation}; failure ${def.failurePropagation}; manifest ${def.manifest}; early publish ${def.earlyPublish}`);
     }
-    probe('B1: one failure and nothing is published', job.B1.result === 'FAILED' && job.B1.published.length === 0);
-    probe('B2: the partial archive names every failure and why',
-        job.B2.result === 'PARTIAL' && job.B2.manifest.failed === 2 && job.B2.manifest.failures.some((f) => f.plan === 'SIGNATURE_UNSAFE'),
-        JSON.stringify(job.B2.manifest.failures.map((f) => `${f.name}:${f.plan}`)));
-    probe('a superseded batch publishes nothing', job.superseded.result === 'CANCELLED' && job.superseded.published.length === 0,
-        job.superseded.results.map((r) => `${r.name}:${r.result}`).join(' '));
-    assert('while the same batch, not superseded, publishes once', job.control.published.length === 1);
+    const FILE = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+    const BATCH = ['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELLED'];
+    const rec = (o) => o.records.map((r) => `${r.name}:${r.plan ?? '-'}/${r.result}`).join(' ');
+    for (const k of ['B1', 'B2', 'B3', 'B3fileCancel', 'B1superseded', 'B2superseded', 'B3superseded']) {
+        measure(`${k}`, `${bp[k].result}; ${bp[k].published} publish(es) ${JSON.stringify(bp[k].units.map((u) => (u.kind === 'archive' ? `archive[${u.files.join(',')}]` : u.name)))}; ${rec(bp[k])}`);
+    }
+    const all = ['B1', 'B2', 'B3', 'B3fileCancel', 'B1superseded', 'B2superseded', 'B3superseded'].map((k) => bp[k]);
+    assert('every result is in its own vocabulary: FileResult per file, BatchResult per batch',
+        all.every((o) => BATCH.includes(o.result) && o.records.every((r) => FILE.includes(r.result))));
+    probe('B1: the first failure stops the batch, later files are not run, nothing is published',
+        bp.B1.result === 'FAILED' && bp.B1.published === 0 && bp.B1.started.length === 2
+        && bp.B1.records.slice(2).every((r) => r.result === 'CANCELLED'),
+        `started ${bp.B1.started.join(', ')}`);
+    probe('B2: one archive after the last file, the successes and a manifest naming every failure and why',
+        bp.B2.result === 'PARTIAL' && bp.B2.published === 1 && bp.B2.units[0].kind === 'archive'
+        && bp.B2.units[0].files.length === 2 && bp.B2.manifest.files.some((f) => f.plan === 'SIGNATURE_UNSAFE')
+        && bp.B2.manifest.files.some((f) => f.plan === 'UNSUPPORTED_DOCUMENT'),
+        JSON.stringify(bp.B2.manifest.files.map((f) => `${f.name}:${f.result}${f.plan !== 'READY' ? `(${f.plan})` : ''}`)));
+    probe('B3: one download per success, each before the next file starts — independent, not an archive',
+        bp.conformance.real.conforms && bp.B3.published === 2 && bp.B3.units.every((u) => u.kind === 'file'),
+        `${bp.B3.units.map((u) => u.name).join(', ')}`);
+    probe('B3: a file cancelled by its own owner cancels only itself',
+        bp.B3fileCancel.records.map((r) => r.result).join(',') === 'SUCCEEDED,CANCELLED,SUCCEEDED' && bp.B3fileCancel.published === 2
+        && bp.B3fileCancel.result === 'PARTIAL');
+    probe('an aggregate single publish cannot pass for B3',
+        bp.conformance.fake.conforms === false, bp.conformance.fake.problems.join('; '));
+    probe('a superseded batch: B1 and B2 publish nothing; B3 has published only what finished before it',
+        bp.B1superseded.published === 0 && bp.B2superseded.published === 0
+        && bp.B3superseded.published === 1 && bp.B3superseded.units[0].name === 'batch-ok.pdf'
+        && [bp.B1superseded, bp.B2superseded, bp.B3superseded].every((o) => o.result === 'CANCELLED'),
+        `B3 kept ${bp.B3superseded.units.map((u) => u.name).join(', ')}; ${rec(bp.B3superseded)}`);
+
+    // The planner's table of what each operation does to XFA and forms is a
+    // claim; here it is held against what was measured.
+    {
+        const measuredXfa = {
+            layer: row('layer', 'xfa-a4').xfa, 'monochrome-A': row('monochrome', 'xfa-a4').xfa,
+            both: row('both', 'xfa-a4').xfa, 'margin-embed': row('margin', 'xfa-a4').xfa,
+            'optimize-O1': row('optimize', 'xfa-a4').xfa, 'margin-inplace': margin['xfa-a4']['inplace:center'].xfa,
+            'normalize-size': hardened.find((r) => r.lane === 'normalize-size' && r.fixture === 'xfa-a4').xfa,
+            'title-block-update': hardened.find((r) => r.lane === 'title-block-update' && r.fixture === 'xfa-a4').xfa,
+        };
+        const measuredForm = {
+            layer: row('layer', 'form-a4').form, 'monochrome-A': row('monochrome', 'form-a4').form,
+            both: row('both', 'form-a4').form, 'margin-embed': row('margin', 'form-a4').form,
+            'optimize-O1': row('optimize', 'form-a4').form, 'margin-inplace': margin['form-a4']['inplace:center'].form,
+            'monochrome-C': mono['form-a4'].C.form,
+        };
+        const effects = sf.effects;
+        const xfaAgree = Object.entries(measuredXfa).every(([op, v]) => effects[op].keepsXfa === (v === 'retained'));
+        const formAgree = Object.entries(measuredForm).every(([op, v]) => effects[op].keepsForm === (v === 'retained with value'));
+        assert('the planner\'s operation-effects table matches what was measured for XFA and forms',
+            xfaAgree && formAgree,
+            Object.entries(measuredXfa).map(([op, v]) => `${op}:${v}`).join(' '));
+    }
 
     // ---- 9. the real UI: batches and lifecycle ----------------------------------
     console.log('\n=== 9. the Processor UI: batches ===');

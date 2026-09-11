@@ -66,7 +66,7 @@ Each is printed by the gate as `BASELINE-FAIL` with the measured detail.
    metadata without saying so.** Same root cause. → every output item is
    accounted for in the PLAN; a loss is refused or confirmed, never silent.
    *H5, H6, H7, H12.*
-3. **「最適化」 makes vector documents 12–463× larger.** A vector A4 at the
+3. **「最適化」 makes vector documents 11–153× larger at its default, up to 463×.** A vector A4 at the
    default 150 dpi goes from 1,315 B to 45,504 B; an A1 to 216 KB. Root cause:
    the operation is a rasterisation, not an optimisation. *H2.*
 4. **Margin leaves every page-level and document-level object behind**

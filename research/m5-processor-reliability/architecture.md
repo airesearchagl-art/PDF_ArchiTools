@@ -4,176 +4,223 @@
 Every recommendation cites the measurement it rests on (`baseline.md`,
 `measurements.md`); every open choice is a Human decision (`human-gate.json`).
 
-## 1. Two operation classes — the distinction fits
+Evidence strength: every number here comes from the **M5 research gate run
+locally on this branch** and committed as `evidence.json`. Core CI runs the
+existing backbone at the exact head; it does not run this gate.
 
-The research asked whether the Processor's operations fall into a
-structure-preserving class and an intentionally flattening class. Measured,
-they do, and cleanly:
+## 1. Two operation classes — the distinction fits
 
 | class | contract | operations today |
 | --- | --- | --- |
-| `STRUCTURE_PRESERVING_TRANSFORM` | the source document is the output document; only the named change is made; everything else — text, OCR, vectors, raster bytes, annotations, links, forms, XFA, boxes, `/Rotate`, metadata — survives or the run is refused | Layer (already, modulo signature/metadata), 図面サイズ統一, 図枠一括更新, **Margin (proposed in-place)**, **Monochrome C**, **Optimize O2/O3** |
-| `INTENTIONAL_FLATTENING_TRANSFORM` | a new document of page images; every loss is named in the PLAN and confirmed per run | Monochrome A, Optimize O1, Both (inherits Monochrome's losses — measured) |
+| `STRUCTURE_PRESERVING_TRANSFORM` | the source document is the output document; only the named change is made; everything else survives, or the run is refused | Layer, 図面サイズ統一, 図枠一括更新, **Margin in-place**, **Monochrome C**, **Optimize O2** (and O3 within its lossy contract, H2b) |
+| `INTENTIONAL_FLATTENING_TRANSFORM` | a new document of page images; every loss named in the PLAN and confirmed per run; inside the Raster Budget | Monochrome A, Optimize O1, Both |
 
-A flattening operation is not wrong. A flattening operation that reports
-「done」 without naming what it removed is (baseline defects 1–2).
+Both inherits every Monochrome loss (measured), so its contract is
+Monochrome's. Production Margin (`embedPage`) fits neither: it keeps the
+drawing and loses the document without saying so.
 
-**Both** is not a third class: it is Monochrome's contract followed by Layer's.
-Measured, it inherits every Monochrome loss and adds Layer's re-save, so its
-contract is Monochrome's.
+## 2. Facts first, policy second (RF-K1)
 
-## 2. One PLAN → RESULT orchestration
-
-Prototype: `prototype/job.mjs`, exercised in gate §8 around the unchanged
-production `processLayer`.
+`prototype/source-facts.mjs`:
 
 ```text
-PLAN   (decided before any output byte exists)
-  READY
-  UNSUPPORTED_DOCUMENT      unreadable, no pages
-  ENCRYPTED
-  SIGNATURE_UNSAFE          the operation re-serialises a signed document
-  XFA_UNSAFE                the operation would drop or cannot keep XFA
-  UNSUPPORTED_CONTENT       a structure-preserving planner met a construct it
-                            cannot transform (shading, pattern, ICC, Type3, …)
-  STRUCTURE_LOSS_REQUIRES_CONFIRMATION
-                            a flattening operation, with the list of losses
-  OVER_RASTER_LIMIT         a page's raster exceeds the browser canvas limit
-  OVER_MEMORY_BUDGET        the raster pipeline's peak exceeds the budget
-  CANCELLED
+SourceFacts  (read-only; never a verdict)
+  readable, loadError, encrypted
+  pageCount, pagesValid, pageError
+  hasAcroForm, hasXfa, sigFlags
+  fieldCount, signatureFields [{name, signed}]
+  formInspectionState  no-form | read | unreadable
 
-RESULT (decided after)
-  SUCCEEDED  → exactly one artifact
-  FAILED     → no artifact, typed reason
-  CANCELLED  → no artifact
+planOperation(facts, operation, policy) → PLAN status
 ```
 
-Invariant: **cannot safely process ≠ successful output.** Exceptions remain an
-implementation detail inside a runner; what the user sees is a typed PLAN or
-RESULT. (Today every refusal, including the hardened lanes' coded ones, is
-reduced to a message string in a catch — `PdfTools.tsx:152-156`.)
+The reading reuses M3's dictionary-level approach (load with
+`updateMetadata: false`, read `/AcroForm` and `/XFA` from the catalog) and
+walks the field tree as dictionaries too, so **`getForm()` is never called** —
+measured: trapped to throw while facts are read, and never reached, while M3's
+`assessSource` does reach it on an ordinary form. `assessSource`'s `supported`
+remains the Annotator's verdict (XFA → refused, no document); the Processor
+does not inherit it.
 
-### Source inspection — reuse, do not reinvent
+What each operation does to a document is itself data (`OPERATION_EFFECTS`:
+re-serialises, keeps XFA, keeps forms), held against the measurements by the
+gate. H7's candidate policies are data too:
 
-The existing M3 `assessSource` (`src/utils/annotator-save/source-assessment.ts`)
-is read-only (measured again here: looking does not create an AcroForm), refuses
-signed documents and XFA, and already distinguishes encrypted, unreadable and
-form-unreadable. It is the common PLAN step for every Processor operation; no
-new, weaker inspection is proposed. What each class does with its verdict is
-H7.
-
-### Raster preflight — for flattening operations only
-
-Per page, before the first render: pixel dimensions at the requested DPI
-against the **measured** canvas limit (A1/A0 @600 dpi do not allocate), and the
-pipeline's per-page peak (canvas + readback + JPEG + data URL + retained JPEG)
-plus the accumulated output against a memory budget. Refuse with the numbers;
-never lower the DPI to make it fit. The constants are to be measured for this
-pipeline (H8/H9); M4's are not reused.
-
-### Ownership and publish
-
-The F1-B/M4 owner token: captured when a run starts, re-read at every file
-boundary and immediately before the single publish. Unmount, a settings change
-and a file-list change supersede. The existing per-file functions cannot be
-interrupted mid-file (none yields), so a superseded file finishes computing and
-is discarded at the boundary — measured in the prototype: a batch superseded
-during its first file publishes nothing; the same batch not superseded
-publishes once.
-
-### Batch
-
-Three policies, all prototyped and measured; the choice is H4:
-
-- **B1** fail whole — any failure, no artifact;
-- **B2** explicit partial — successes ship with a manifest naming each failure
-  and its typed reason (e.g. `invalid.pdf: UNSUPPORTED_DOCUMENT`,
-  `signature-a4.pdf: SIGNATURE_UNSAFE`), in the archive and on screen;
-- **B3** independent jobs — no archive, per-file results.
-
-Today's behaviour is B2 without the manifest.
-
-### The hardened lanes inside it
-
-`normalizePageSize` and `updateTitleBlocks` enter unchanged: they are per-file
-functions with typed thrown errors (`PageSizeNormalizeError`, `TitleBlockError`)
-that map to `RESULT.FAILED` with their code. The orchestration adds, and only
-adds:
-
-- the common source inspection — today both lanes invalidate a signature
-  without refusing (measured);
-- ownership and a single publish;
-- the batch policy.
-
-It removes nothing either lane guarantees: annotation-exposure refusal,
-orientation refusal, vector preservation, `/Rotate` handling and the
-title-block Human workflow (representative page, measured orientation,
-readiness) stay where they are. Their own gates pass unchanged (339, 20, 122,
-31). An architecture that required weakening any of this would be rejected;
-none does.
-
-## 3. Monochrome
-
-| candidate | what it is | measured |
+| policy | signed | XFA |
 | --- | --- | --- |
-| **A** production | render → grey pixels → JPEG → new document | grey; removes text, OCR, vectors, annotations, links, forms, signature, XFA, metadata; ×86 on a vector page; A0 @300 ≈ 1 GiB RGBA per page; 600 dpi on A1/A0 fails mid-run |
-| **B** colour operators | rewrite `rg/RG/k/K/g/G/cs/CS/sc/scn` in every content stream, Form XObject and annotation appearance; refuse anything else | grey, and keeps text, vectors, annotations, links, forms, metadata, boxes; 1,108 B on the vector page; **refuses every page that draws an image** |
-| **C** hybrid | B plus exact re-encoding of Flate/DCT 8-bit DeviceRGB/Gray images as grey Flate; refuse other image classes | grey on all 14 inputs it accepted, including a saturated image (1.000 → 0.000) and production's own JPEG output; keeps the OCR layer; raster A4 147,665 B vs A's 1,176,256 B |
+| `annotator-equivalent` | refuse | refuse always |
+| `refuse-if-dropped` (recommended) | refuse | refuse only the operations that drop it |
+| `confirm-if-dropped` | refuse | a flattening may drop it, confirmed |
 
-B alone is not a contract: on any document with an image it refuses, and
-leaving the image in colour would be a partial conversion reported as
-success. **C is a coherent contract** — fail-closed, total planning before any
-write — on the synthetic corpus. What is not shown is how often real drawings
-hit its refusals (ICC colour spaces, shadings, patterns, Type3 fonts, soft
-masks, JBIG2/CCITT/JPX, 1-bit and 16-bit images). See `limitations.md`.
+Every candidate refuses a signed document for every operation — every
+operation re-serialises, so no signature survives (measured for Layer and both
+hardened lanes). Under `refuse-if-dropped`, Layer, Margin in-place, Monochrome
+C, Optimize O2/O3 and both hardened lanes plan an XFA document `READY`, and
+Monochrome A / Optimize O1 plan `XFA_UNSAFE`.
 
-**Recommended (not adopted):** M5 MVP keeps A, but as an explicit
-`INTENTIONAL_FLATTENING` operation with a confirmed loss list and a raster
-preflight; C is taken forward as a follow-up spike measured on real drawings.
-H1.
+## 3. PLAN → RESULT
 
-## 4. Optimize
+```text
+PLAN   (before any output byte)
+  READY
+  UNSUPPORTED_DOCUMENT · ENCRYPTED · SIGNATURE_UNSAFE · XFA_UNSAFE
+  UNSUPPORTED_CONTENT                  a structure-preserving planner met a construct it cannot transform
+  STRUCTURE_LOSS_REQUIRES_CONFIRMATION a flattening, with its losses listed
+  OVER_RASTER_LIMIT · OVER_MEMORY_BUDGET · OVER_OUTPUT_BUDGET
+  CANCELLED
 
-| meaning | contract | measured |
+FileResult   SUCCEEDED (one artifact) | FAILED (none) | CANCELLED (none)
+BatchResult  SUCCEEDED | PARTIAL | FAILED | CANCELLED
+```
+
+Invariant: **cannot safely process ≠ successful output.** Exceptions stay
+inside runners; the user sees a PLAN or a result. (Today every refusal —
+including the hardened lanes' coded ones — becomes a message string,
+`PdfTools.tsx:152-156`.)
+
+## 4. Batches (RF-K2)
+
+`prototype/job.mjs`, around the unchanged production functions:
+
+| | B1 fail whole | B2 explicit partial | B3 independent jobs |
+| --- | --- | --- | --- |
+| ownership | one batch owner | one batch owner | one owner per file, under a batch owner |
+| publication | one archive of every file, or nothing | one archive of the successes + manifest | one artifact per success, no archive |
+| download timing | once, after the last file | once, after the last file | as soon as each file succeeds |
+| cancellation | whole batch | whole batch | per file; the batch cancels what is not yet published |
+| failure propagation | first failure stops; later files CANCELLED unrun | none | none |
+| manifest | none (nothing published) | every file: PLAN, FileResult, reason — in the archive and on screen | none |
+| early publish | no | no | yes |
+
+Measured on `[ok, invalid, text, signed]`: B1 `FAILED`, 2 files started, 0
+published; B2 `PARTIAL`, 1 archive of 2 + a manifest naming
+`UNSUPPORTED_DOCUMENT` and `SIGNATURE_UNSAFE`; B3 `PARTIAL`, 2 downloads, each
+before the next file started. B3 with one file cancelled by its own owner: that
+file `CANCELLED`, the other two published. Whole batch superseded mid-run: B1
+and B2 publish nothing; B3 has published only the file that finished first. An
+aggregate single-publish run fed to the B3 conformance check is rejected
+(`1 publishes for 2 successes; publishes an archive`).
+
+## 5. The Raster Budget for flattening operations (RF-K5 — closed here)
+
+`prototype/raster-budget.mjs`. Three ceilings, checked in order, each
+independent; an explicit memory preset never moves the other two; nothing
+lowers the DPI.
+
+| ceiling | recommended | alternatives measured |
 | --- | --- | --- |
-| **O1** flatten (production) | every page becomes a JPEG at 72/150/300 dpi | text and structure removed on every document; 6 of 8 larger at the default, up to ×153; ×0.18–0.92 only on image-heavy pages |
-| **O2** lossless | re-save with object streams; nothing decoded | ×0.73–1.00; everything kept; never larger here |
-| **O3** preservation levels | O2 + recompress large decodable images to the target DPI as JPEG, only when smaller; keep everything else | ×0.39–0.86; text, OCR, vectors, annotations, forms kept on every document; never larger here |
+| `MAX_RASTER_PIXELS` per page | **128 Mi px (134.2 Mpx)** + a runtime canvas-allocation probe | 64 Mi / 256 Mi (admits in `measurements.md`) |
+| `MAX_OPERATION_MEMORY` | **512 MiB default, explicit 1 GiB / 2 GiB** | — |
+| `MAX_OUTPUT_BYTES` | **256 MiB** | 512 MiB |
 
-「最適化」 today is O1. A user reading 「解像度を調整してファイルサイズを削減します」
-does not expect a vector drawing to become 35× larger and unsearchable.
-**Recommended:** the name and the contract must agree — O1 renamed and
-confirmed as flattening, and 「最適化」 meaning O3 (with O2 as its floor). H2.
+The raster ceiling is a portable *policy* below what one machine allocated
+(139 Mpx yes, 279 Mpx no) — not that machine's limit.
 
-## 5. Margin
+Named terms (exact / conservative / inferred, listed in `measurements.md`):
+canvas 4·W·H; Monochrome's readback 4·W·H; PDF.js scratch 8·W·H where the page
+has groups, soft masks, patterns or shadings; 12 B per source-image pixel; JPEG
+≤ 1.0 B/px (measured worst case 0.783 B/px on binary RGB noise, ×≥1.25); data
+URL 4·⌈J/3⌉+23; the embedded JPEG kept until save; the save buffer; source
+bytes ×2; Both's Layer phase 3 × output; a single file's Blob; a batch's JSZip
+accumulation, concatenation and Blob.
+
+Validated against production on 7 runs / 16 pages: every canvas exactly as
+planned, every data URL exact to the byte, every JPEG and every output under
+its bound. Applied: A4 at 300 dpi Monochrome takes 30 pages at 512 MiB (the
+31st is refused by name; at 1 GiB and 2 GiB it is the output ceiling that
+refuses); a batch takes 49 one-page A4 files at 150 dpi Optimize (the 50th
+needs 1 GiB); A1 at 300 dpi Monochrome needs 1 GiB; A0 at 300 and A1/A0 at 600
+are refused by the raster ceiling at any memory.
+
+H8 and H9 therefore have concrete choices and are part of this Adoption Gate.
+
+## 6. Monochrome
 
 | candidate | measured |
 | --- | --- |
-| **production** `embedPage` into a new document | keeps text, OCR, vectors, raster bytes (as a Form XObject); loses annotations, links, widgets, AcroForm, XFA, metadata; drops `/Rotate` (90/270 come back portrait and turned, 180 upside down); replaces the CropBox with the MediaBox; reveals hidden content |
-| **in-place** `cm` wrapper + clip + annotation coordinate transform (`prototype/margin-inplace.mjs`) | keeps every measured property — text, OCR, annotations (moved), links, form value, XFA, metadata, `/Rotate`, CropBox; hidden content stays hidden; matches the independently computed expected picture on every rotation and crop fixture (mean difference 1.9–2.5) |
+| **A** production (rasterise) | grey; removes text, OCR, vectors, annotations, links, forms, signature, XFA, metadata; ×86 on a vector page |
+| **B** colour operators only | grey and keeps everything where it converts; refuses every page that draws an image |
+| **C** B + exact grey re-encoding of decodable images | grey on all 14 inputs it accepted (incl. a saturated image 1.000 → 0.000 and production's own JPEG output); keeps text, OCR, vectors, annotations, forms, metadata |
 
-The in-place candidate refuses what it cannot do safely: content whose q/Q
-nesting underflows, annotation types it does not know how to move, and
-annotations outside the visible page that the scale would bring into view.
-"Looks like vectors" is not "keeps the document": production's output renders
-almost identically on an unrotated page and still has lost every page-level
-object. **Recommended:** in-place. H3, H6.
+C is a coherent, fail-closed contract on the synthetic corpus; its refusal rate
+on real drawings is unmeasured. **Recommended:** MVP keeps A as an explicit,
+confirmed flattening inside the Raster Budget; C is a follow-up spike on real
+drawings. H1.
 
-## 6. Signatures, XFA, metadata
+## 7. Optimize (RF-K3)
 
-- Every Processor operation re-serialises. A signed document therefore cannot
-  be processed without invalidating the signature (measured for Layer and both
-  hardened lanes) or removing it (the flattening operations and Margin).
-  Refuse before any byte exists, via `assessSource`. H7.
-- XFA survives a plain pdf-lib load/save (Layer, both hardened lanes, the
-  in-place candidates — none calls `getForm()`), and is dropped by every
-  operation that builds a new document. H7.
-- Every operation that loads with pdf-lib defaults rewrites Producer and
-  ModDate; the rebuilding ones drop Title, Author and XMP entirely. H12.
+| meaning | contract | measured |
+| --- | --- | --- |
+| **O1** production | every page a JPEG | text and structure removed; vector documents ×11–153 at the default, up to ×463 |
+| **O2** lossless | re-save, nothing decoded | ×0.73–1.00; everything kept; never larger |
+| **O3** preservation levels | O2 + recompress decodable images, planned across every use, only when smaller | structure kept; ×0.39–0.86 on the corpus; **changes raster pixels** |
 
-## 7. Local only
+**Planning across every use.** O3 walks every content stream with its
+graphics-state stack and every Form XObject under its `/Matrix`, records the
+size each image is drawn at, and keeps enough pixels for its most demanding
+use. Measured: the same image drawn full-page on A4 and A1 gets the same plan in
+either page order (3000×4243 kept); inside a Form drawn at A4 and A1 scale, the
+same; repeated on one page, the full-page use decides (1240×1754). A use the
+walk cannot size (an annotation appearance, an underflowed stack, a degenerate
+matrix, an image never drawn) makes the image uncertain, and an uncertain image
+is never downsampled. The first-encounter planner it replaces produced
+1240×1754 for an A1 use needing 3508 px — page-order dependent.
 
-Every measurement ran with zero external HTTP(S) requests, workers included;
-PDF.js' worker is same-origin. Nothing proposed here needs a service, a CDN or
-a new dependency: the prototypes use pdf-lib (its own Flate) and PDF.js as
-already installed, and the browser's canvas and `createImageBitmap`.
+**The lossy contract is a Human decision (H2b).** On a 300 dpi scan of
+one-pixel linework: any resample to 150 dpi — JPEG or lossless — keeps only
+22–26% of the line ink; JPEG q0.8 at the scan's own resolution keeps 100% at
+×0.33 (PSNR 33.7 dB). **Recommended:** O2 is what 「最適化」 can promise now;
+O3 only once H2b fixes target-DPI semantics (never below the source without an
+explicit choice), quality (≥ 0.8) and skip-versus-recompress. H2a, H2b.
+
+## 8. Margin (RF-K4)
+
+In place: one `cm` scaling the content toward the chosen corner of the
+visible page, a clip that keeps hidden content hidden, and — the exact
+supported contract:
+
+| carried | refused before any change |
+| --- | --- |
+| annotation `/Rect`, `QuadPoints`, `Vertices`, `L`, `CL`, `InkList`, `/RD` | an annotation not wholly inside the visible page |
+| link `/Dest` and GoTo `/D` arrays — XYZ, Fit, FitH, FitV, FitR, FitB, FitBH, FitBV — through the matrix of the page they point to | a destination of any other type, or into no page of this document |
+| the `/Names /Dests` tree, `/Dests`, outline items | structure destinations (`/SD`), `/GoToE` |
+| widget `/DA` font size and `/BS /W`, field-level and form-level `/DA` | content whose q/Q nesting underflows; unknown annotation types |
+| `/Rotate`, CropBox, resources, AcroForm, XFA, Info, XMP — untouched | |
+
+Measured: `[p2 /XYZ 100 700]` → `[p2 /XYZ 139.53 644.19]` exactly as the
+target page's matrix gives; the named `/FitH 500` → 484.19 as PDF.js resolves
+it; the outline item and a `/FitR` likewise. A Square annotation half outside
+the CropBox is refused; the same page without it transforms. A widget's text is
+×0.78 of its source height in its stored appearance and ×0.78 again when a
+viewer regenerates it from the scaled `/DA` — unscaled it would be ×1.00 in a
+box ×0.8. Remote destinations (`/GoToR`) point into another file and are left
+unchanged. H3, H6.
+
+## 9. Layer (RF-K6)
+
+- **Extent (H13a):** draw over the visible page in its own coordinates;
+  production misses 61% of the ink when the MediaBox is not at (0,0).
+- **Stacking (H13b):** production puts the layer in the content stream, so
+  every annotation sits above it, unfaded (measured: an opaque blue annotation
+  stays `[0,0,255]`). "Above" is achievable without flattening only as one more
+  annotation, painted last (measured: the blue fades to `[128,128,255]`, the
+  original annotation is kept) — the layer is then itself an annotation.
+  **Recommended:** below, stated in the UI.
+
+## 10. Signatures, XFA, metadata, local-only
+
+- Signed → refuse, every operation (§2). XFA → per the adopted H7 policy.
+- Every pdf-lib-default load rewrites Producer/ModDate; rebuilt documents drop
+  Title, Author and XMP. H12.
+- Zero external HTTP(S) in every measurement; same-origin PDF.js worker; no new
+  dependency — pdf-lib, PDF.js, the browser's canvas and `createImageBitmap`.
+
+## 11. The hardened lanes inside it
+
+`normalizePageSize` and `updateTitleBlocks` enter unchanged: per-file functions
+with typed thrown errors mapped to `FileResult.FAILED` with their code. The
+orchestration only *adds* the SourceFacts step (today both invalidate a
+signature without refusing), ownership, the batch policy and a single publish.
+Their own guarantees — annotation-exposure refusal, orientation refusal, vector
+preservation, `/Rotate`, the title-block Human workflow — stay where they are;
+their gates pass unchanged (339, 20, 122, 31).
