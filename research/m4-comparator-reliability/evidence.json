@@ -1,0 +1,6031 @@
+{
+  "generated": "2026-09-10",
+  "base": "44cb82db7365e436c642f375852f22990c45a6ce",
+  "note": "Research measurements. Baseline numbers are the shipped comparator.",
+  "corpus": {
+    "base-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "identical-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "added-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 95
+    },
+    "removed-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 83
+    },
+    "offset-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "grey-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "colour-line-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "pale-hatch-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 209
+    },
+    "base-a3": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        842,
+        1191
+      ],
+      "rotate": 0,
+      "display": [
+        842,
+        1191
+      ],
+      "ops": 89
+    },
+    "base-a1": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        1684,
+        2384
+      ],
+      "rotate": 0,
+      "display": [
+        1684,
+        2384
+      ],
+      "ops": 89
+    },
+    "base-a0": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        2384,
+        3370
+      ],
+      "rotate": 0,
+      "display": [
+        2384,
+        3370
+      ],
+      "ops": 89
+    },
+    "landscape-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        842,
+        595
+      ],
+      "rotate": 0,
+      "display": [
+        842,
+        595
+      ],
+      "ops": 89
+    },
+    "nearly-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        598,
+        845
+      ],
+      "rotate": 0,
+      "display": [
+        598,
+        845
+      ],
+      "ops": 89
+    },
+    "same-ratio-larger": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        833,
+        1179
+      ],
+      "rotate": 0,
+      "display": [
+        833,
+        1179
+      ],
+      "ops": 89
+    },
+    "rotate-0": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "rotate-90": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 90,
+      "display": [
+        842,
+        595
+      ],
+      "ops": 89
+    },
+    "rotate-180": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 180,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "rotate-270": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 270,
+      "display": [
+        842,
+        595
+      ],
+      "ops": 89
+    },
+    "crop-origin-0": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        495,
+        741
+      ],
+      "rotate": 0,
+      "display": [
+        495,
+        741
+      ],
+      "ops": 89
+    },
+    "crop-origin-50-70": {
+      "pages": 1,
+      "view": [
+        50,
+        70,
+        545,
+        811
+      ],
+      "rotate": 0,
+      "display": [
+        495,
+        741
+      ],
+      "ops": 92
+    },
+    "mediabox-larger": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "three-pages": {
+      "pages": 3,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "two-pages": {
+      "pages": 2,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "three-pages-blank-third": {
+      "pages": 3,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "base-a4-copy": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "wall-at-y-a4": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "wall-at-y-a4-copy": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "dense-a": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 5400
+    },
+    "dense-b": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 5400
+    },
+    "sheet-plus-0-99": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        596,
+        843
+      ],
+      "rotate": 0,
+      "display": [
+        596,
+        843
+      ],
+      "ops": 89
+    },
+    "sheet-plus-1-01": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        596,
+        843
+      ],
+      "rotate": 0,
+      "display": [
+        596,
+        843
+      ],
+      "ops": 89
+    },
+    "rotate-0-copy": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 89
+    },
+    "crop-rot-90": {
+      "pages": 1,
+      "view": [
+        50,
+        70,
+        545,
+        811
+      ],
+      "rotate": 90,
+      "display": [
+        741,
+        495
+      ],
+      "ops": 92
+    },
+    "crop-rot-180": {
+      "pages": 1,
+      "view": [
+        50,
+        70,
+        545,
+        811
+      ],
+      "rotate": 180,
+      "display": [
+        495,
+        741
+      ],
+      "ops": 92
+    },
+    "crop-rot-270": {
+      "pages": 1,
+      "view": [
+        50,
+        70,
+        545,
+        811
+      ],
+      "rotate": 270,
+      "display": [
+        741,
+        495
+      ],
+      "ops": 92
+    },
+    "small-base": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 107
+    },
+    "small-base-copy": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 107
+    },
+    "small-digit": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 107
+    },
+    "small-fine-line": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 113
+    },
+    "small-symbol": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 108
+    },
+    "small-revision-mark": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 125
+    },
+    "small-hatch": {
+      "pages": 1,
+      "view": [
+        0,
+        0,
+        595,
+        842
+      ],
+      "rotate": 0,
+      "display": [
+        595,
+        842
+      ],
+      "ops": 227
+    }
+  },
+  "baseline": {
+    "identical drawing": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 26,
+      "ms": 98,
+      "memory": 60864160
+    },
+    "a wall added": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 8530,
+      "inkPixels": 88483,
+      "changeRatio": 0.09640269882350282,
+      "bounds": {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 32,
+      "ms": 80,
+      "memory": 60864160
+    },
+    "a wall removed": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 8530,
+      "inkPixels": 79953,
+      "changeRatio": 0.1066876790114192,
+      "bounds": {
+        "x": 166,
+        "y": 1115,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 26,
+      "ms": 75,
+      "memory": 60864160
+    },
+    "the drawing shifted 2pt": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 32242,
+      "inkPixels": 95519,
+      "changeRatio": 0.3375454098137543,
+      "bounds": {
+        "x": 263,
+        "y": 155,
+        "width": 718,
+        "height": 1181
+      },
+      "compositeMs": 49,
+      "ms": 108,
+      "memory": 60864160
+    },
+    "A4 vs A3, same drawing": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 2480,
+      "members": 2,
+      "changePixels": 231422,
+      "inkPixels": 232811,
+      "changeRatio": 0.994033787063326,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1651,
+        "height": 2315
+      },
+      "compositeMs": 106,
+      "ms": 188,
+      "memory": 121728320
+    },
+    "A4 vs A1, same drawing": {
+      "produced": true,
+      "dropped": [],
+      "width": 3507,
+      "height": 4966,
+      "members": 2,
+      "changePixels": 645956,
+      "inkPixels": 647223,
+      "changeRatio": 0.9980424057859502,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 3320,
+        "height": 4680
+      },
+      "compositeMs": 194,
+      "ms": 465,
+      "memory": 487641336
+    },
+    "portrait vs landscape": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 198563,
+      "inkPixels": 199977,
+      "changeRatio": 0.9929291868564885,
+      "bounds": {
+        "x": 39,
+        "y": 38,
+        "width": 1651,
+        "height": 1651
+      },
+      "compositeMs": 32,
+      "ms": 90,
+      "memory": 86044252
+    },
+    "A4 vs a sheet 3pt bigger": {
+      "produced": true,
+      "dropped": [],
+      "width": 1246,
+      "height": 1760,
+      "members": 2,
+      "changePixels": 99609,
+      "inkPixels": 131166,
+      "changeRatio": 0.7594117377979049,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1168,
+        "height": 1630
+      },
+      "compositeMs": 24,
+      "ms": 64,
+      "memory": 61402880
+    },
+    "same aspect, 1.4x": {
+      "produced": true,
+      "dropped": [],
+      "width": 1736,
+      "height": 2455,
+      "members": 2,
+      "changePixels": 226733,
+      "inkPixels": 228114,
+      "changeRatio": 0.9939460094514146,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1634,
+        "height": 2291
+      },
+      "compositeMs": 45,
+      "ms": 120,
+      "memory": 119332640
+    },
+    "/Rotate 0 vs 90": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 158339,
+      "inkPixels": 159447,
+      "changeRatio": 0.9930509824581208,
+      "bounds": {
+        "x": 39,
+        "y": 39,
+        "width": 1650,
+        "height": 1650
+      },
+      "compositeMs": 32,
+      "ms": 83,
+      "memory": 86044252
+    },
+    "/Rotate 0 vs 180": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 77762,
+      "inkPixels": 119493,
+      "changeRatio": 0.6507661536659051,
+      "bounds": {
+        "x": 45,
+        "y": 101,
+        "width": 1151,
+        "height": 1552
+      },
+      "compositeMs": 24,
+      "ms": 69,
+      "memory": 60864160
+    },
+    "/Rotate 0 vs 270": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 156982,
+      "inkPixels": 158230,
+      "changeRatio": 0.9921127472666371,
+      "bounds": {
+        "x": 39,
+        "y": 39,
+        "width": 1650,
+        "height": 1650
+      },
+      "compositeMs": 37,
+      "ms": 95,
+      "memory": 86044252
+    },
+    "crop origin (0,0) vs (50,70)": {
+      "produced": true,
+      "dropped": [],
+      "width": 1031,
+      "height": 1543,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 59636,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 19,
+      "ms": 53,
+      "memory": 44543324
+    },
+    "MediaBox larger, same CropBox": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 28,
+      "ms": 67,
+      "memory": 60864160
+    },
+    "black vs grey ink": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 11492,
+      "inkPixels": 79953,
+      "changeRatio": 0.14373444398584168,
+      "bounds": {
+        "x": 39,
+        "y": 65,
+        "width": 1162,
+        "height": 1624
+      },
+      "compositeMs": 28,
+      "ms": 68,
+      "memory": 60864160
+    },
+    "black vs cyan ink": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 10170,
+      "inkPixels": 79953,
+      "changeRatio": 0.12719972984128175,
+      "bounds": {
+        "x": 775,
+        "y": 1453,
+        "width": 90,
+        "height": 58
+      },
+      "compositeMs": 34,
+      "ms": 72,
+      "memory": 60864160
+    },
+    "a pale hatch added": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 43,
+      "inkPixels": 79953,
+      "changeRatio": 0.0005378159668805423,
+      "bounds": {
+        "x": 165,
+        "y": 331,
+        "width": 749,
+        "height": 42
+      },
+      "compositeMs": 27,
+      "ms": 78,
+      "memory": 60864160
+    }
+  },
+  "rotationUpright": {
+    "0 vs 90": {
+      "sameSize": true,
+      "width": 1241,
+      "height": 1754,
+      "ink": 79953,
+      "differing": 0,
+      "ratio": 0
+    },
+    "0 vs 180": {
+      "sameSize": true,
+      "width": 1241,
+      "height": 1754,
+      "ink": 79953,
+      "differing": 0,
+      "ratio": 0
+    },
+    "0 vs 270": {
+      "sameSize": true,
+      "width": 1241,
+      "height": 1754,
+      "ink": 79953,
+      "differing": 0,
+      "ratio": 0
+    }
+  },
+  "missingPage": {
+    "page 1": {
+      "production": {
+        "produced": true,
+        "dropped": [],
+        "width": 1240,
+        "height": 1753,
+        "members": 2,
+        "changePixels": 0,
+        "inkPixels": 80002,
+        "changeRatio": 0,
+        "bounds": null,
+        "compositeMs": 50,
+        "ms": 106,
+        "memory": 60864160
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "page 2": {
+      "production": {
+        "produced": true,
+        "dropped": [],
+        "width": 1240,
+        "height": 1753,
+        "members": 2,
+        "changePixels": 0,
+        "inkPixels": 80048,
+        "changeRatio": 0,
+        "bounds": null,
+        "compositeMs": 25,
+        "ms": 74,
+        "memory": 60864160
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "page 3": {
+      "production": {
+        "produced": true,
+        "dropped": [
+          "two-pages: page absent"
+        ],
+        "width": 1240,
+        "height": 1753,
+        "members": 1,
+        "changePixels": 80051,
+        "inkPixels": 80051,
+        "changeRatio": 1,
+        "bounds": null,
+        "compositeMs": 17,
+        "ms": 30,
+        "memory": 43474400
+      },
+      "strict": {
+        "status": "MISSING_PAGE",
+        "reported": [
+          "two-pages: この文書にこのページはありません"
+        ]
+      }
+    },
+    "blank page 3": {
+      "production": {
+        "produced": true,
+        "dropped": [],
+        "width": 1240,
+        "height": 1753,
+        "members": 2,
+        "changePixels": 80051,
+        "inkPixels": 80051,
+        "changeRatio": 1,
+        "bounds": {
+          "x": 39,
+          "y": 65,
+          "width": 1162,
+          "height": 1624
+        },
+        "compositeMs": 30,
+        "ms": 120,
+        "memory": 60864160
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    }
+  },
+  "renderFailure": {
+    "production": {
+      "produced": true,
+      "dropped": [
+        "added-line-a4: injected render failure"
+      ],
+      "width": 1240,
+      "height": 1753,
+      "members": 1,
+      "changePixels": 79953,
+      "inkPixels": 79953,
+      "changeRatio": 1,
+      "bounds": null,
+      "compositeMs": 21,
+      "ms": 33,
+      "memory": 43474400
+    },
+    "strict": {
+      "status": "RENDER_FAILED",
+      "reported": [
+        "added-line-a4: ページを描画できませんでした"
+      ]
+    },
+    "intact": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 8530,
+      "inkPixels": 88483,
+      "changeRatio": 0.09640269882350282,
+      "bounds": {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 32,
+      "ms": 83,
+      "memory": 60864160
+    }
+  },
+  "planThenVerdict": {
+    "identical": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "MATCH",
+      "ratio": 0,
+      "changePixels": 0,
+      "tolerance": 0
+    },
+    "a wall added": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "CHANGE",
+      "ratio": 0.09640269882350282,
+      "changePixels": 8530,
+      "tolerance": 0
+    },
+    "rotation only": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "MATCH",
+      "ratio": 0,
+      "changePixels": 0,
+      "tolerance": 0
+    },
+    "crop origin only": {
+      "plan": "READY_TO_COMPARE",
+      "verdict": "MATCH",
+      "ratio": 0,
+      "changePixels": 0,
+      "tolerance": 0
+    },
+    "a different sheet": {
+      "plan": "GEOMETRY_MISMATCH",
+      "verdict": null,
+      "reported": [
+        "base-a3: 595.3x841.9pt vs 841.9x1190.5pt"
+      ]
+    },
+    "a different sheet, aligned by a human": {
+      "plan": "UNSUPPORTED",
+      "implementationReady": false,
+      "requires": "alignment-architecture-sub-spike",
+      "recordedAlignment": {
+        "x": 12,
+        "y": -4,
+        "rotation": 0,
+        "scale": 1
+      },
+      "appliedAlignment": null,
+      "missingContract": [
+        "coordinate space",
+        "units",
+        "transform order",
+        "rotation pivot",
+        "uniform vs non-uniform scaling",
+        "bounds",
+        "validation",
+        "CropBox / upright interaction",
+        "memory and work after alignment",
+        "saved provenance",
+        "aligned MATCH/CHANGE round trip"
+      ],
+      "verdict": null,
+      "reported": [
+        "位置合わせ後の比較契約が未定義のため、この研究では比較できません"
+      ]
+    }
+  },
+  "multiMember": {
+    "four identical": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0,
+        "verdict": "MATCH"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "identical-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "base-a4-copy",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "base-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          }
+        ],
+        "verdict": "MATCH"
+      }
+    },
+    "three the same, one changed": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0.09640269882350282,
+        "verdict": "CHANGE"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "identical-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "base-a4-copy",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "added-line-a4",
+            "ratio": 0.09640269882350282,
+            "verdict": "CHANGE"
+          }
+        ],
+        "verdict": "CHANGE"
+      }
+    },
+    "two against two": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0,
+        "verdict": "MATCH"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "identical-a4",
+            "ratio": 0,
+            "verdict": "MATCH"
+          },
+          {
+            "member": "wall-at-y-a4",
+            "ratio": 0.19280539764700563,
+            "verdict": "CHANGE"
+          },
+          {
+            "member": "wall-at-y-a4-copy",
+            "ratio": 0.19280539764700563,
+            "verdict": "CHANGE"
+          }
+        ],
+        "verdict": "CHANGE"
+      }
+    },
+    "reference and three different": {
+      "members": 4,
+      "anyOtherLayer": {
+        "ratio": 0,
+        "verdict": "MATCH"
+      },
+      "referencePairs": {
+        "pairs": [
+          {
+            "member": "added-line-a4",
+            "ratio": 0.09640269882350282,
+            "verdict": "CHANGE"
+          },
+          {
+            "member": "removed-line-a4",
+            "ratio": 0.1066876790114192,
+            "verdict": "CHANGE"
+          },
+          {
+            "member": "wall-at-y-a4",
+            "ratio": 0.19280539764700563,
+            "verdict": "CHANGE"
+          }
+        ],
+        "verdict": "CHANGE"
+      }
+    },
+    "plans": {
+      "two": "READY_TO_COMPARE",
+      "fourTwoOnly": "UNSUPPORTED",
+      "fourReferencePairs": {
+        "status": "READY_TO_COMPARE",
+        "contract": "reference-pairs",
+        "pairs": 3
+      },
+      "one": "UNSUPPORTED",
+      "twoConsensus": {
+        "status": "UNSUPPORTED",
+        "contract": "consensus",
+        "deferred": true,
+        "reported": [
+          "全員一致（consensus）契約は未実装・未計測のため選択できません"
+        ]
+      },
+      "fourConsensus": {
+        "status": "UNSUPPORTED",
+        "contract": "consensus",
+        "deferred": true,
+        "reported": [
+          "全員一致（consensus）契約は未実装・未計測のため選択できません"
+        ]
+      },
+      "implemented": [
+        "two-only",
+        "reference-pairs"
+      ]
+    }
+  },
+  "geometryTolerance": {
+    "tolerancePt": 1,
+    "cases": {
+      "+0.99pt": {
+        "widths": [
+          595.28,
+          596.27
+        ],
+        "delta": 0.99,
+        "plan": "READY_TO_COMPARE"
+      },
+      "+1.01pt": {
+        "widths": [
+          595.28,
+          596.29
+        ],
+        "delta": 1.01,
+        "plan": "GEOMETRY_MISMATCH"
+      },
+      "+3.00pt": {
+        "widths": [
+          595.28,
+          598.28
+        ],
+        "delta": 3,
+        "plan": "GEOMETRY_MISMATCH"
+      }
+    }
+  },
+  "pipelines": {
+    "base-a4": {
+      "zoom 1, 300dpi": {
+        "previewScale": 4.17,
+        "previewCapped": false,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 4.17,
+        "reportCapped": false,
+        "reportPixels": 8699840,
+        "reportMegapixels": 8.7,
+        "reportWorkingSetMB": 244
+      },
+      "zoom 2, 300dpi": {
+        "previewScale": 8.33,
+        "previewCapped": false,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 8.33,
+        "reportCapped": false,
+        "reportPixels": 34806376,
+        "reportMegapixels": 34.8,
+        "reportWorkingSetMB": 975
+      },
+      "zoom 6, 600dpi": {
+        "previewScale": 12.63,
+        "previewCapped": true,
+        "exportScale": 8.33,
+        "exportCapped": false,
+        "reportScale": 50,
+        "reportCapped": false,
+        "reportPixels": 1252915580,
+        "reportMegapixels": 1252.9,
+        "reportWorkingSetMB": 35082
+      }
+    },
+    "base-a1": {
+      "zoom 1, 300dpi": {
+        "previewScale": 4.17,
+        "previewCapped": false,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 4.17,
+        "reportCapped": false,
+        "reportPixels": 69689928,
+        "reportMegapixels": 69.7,
+        "reportWorkingSetMB": 1951
+      },
+      "zoom 2, 300dpi": {
+        "previewScale": 4.46,
+        "previewCapped": true,
+        "exportScale": 4.17,
+        "exportCapped": false,
+        "reportScale": 8.33,
+        "reportCapped": false,
+        "reportPixels": 278759712,
+        "reportMegapixels": 278.8,
+        "reportWorkingSetMB": 7805
+      },
+      "zoom 6, 600dpi": {
+        "previewScale": 4.46,
+        "previewCapped": true,
+        "exportScale": 4.46,
+        "exportCapped": true,
+        "reportScale": 50,
+        "reportCapped": false,
+        "reportPixels": 10035076233,
+        "reportMegapixels": 10035.1,
+        "reportWorkingSetMB": 280982
+      }
+    },
+    "missingPageHandling": {
+      "preview": "skips the member (PdfComparator.tsx:173)",
+      "export": "skips the member, still adds the page (PdfComparator.tsx:316)",
+      "changeReport": "skips the whole page when fewer than 2 members render (PdfComparator.tsx:437)"
+    }
+  },
+  "adversarial": {
+    "matching, A4 150dpi, 0mm": {
+      "dpi": 150,
+      "millimetres": 0,
+      "radius": 0,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "compositeMs": 26,
+      "totalMs": 86
+    },
+    "matching, A4 150dpi, 0.5mm": {
+      "dpi": 150,
+      "millimetres": 0.5,
+      "radius": 3,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "compositeMs": 44,
+      "totalMs": 115
+    },
+    "NOT matching, A4 150dpi, 0mm": {
+      "dpi": 150,
+      "millimetres": 0,
+      "radius": 0,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 41116,
+      "changeRatio": 1,
+      "compositeMs": 37,
+      "totalMs": 98
+    },
+    "NOT matching, A4 150dpi, 0.5mm": {
+      "dpi": 150,
+      "millimetres": 0.5,
+      "radius": 3,
+      "width": 1240,
+      "height": 1753,
+      "pixels": 2173720,
+      "members": 2,
+      "inkPixels": 41116,
+      "changeRatio": 1,
+      "compositeMs": 39,
+      "totalMs": 109
+    },
+    "NOT matching, A4 300dpi, 0mm": {
+      "dpi": 300,
+      "millimetres": 0,
+      "radius": 0,
+      "width": 2480,
+      "height": 3507,
+      "pixels": 8697360,
+      "members": 2,
+      "inkPixels": 151411,
+      "changeRatio": 1,
+      "compositeMs": 131,
+      "totalMs": 338
+    },
+    "NOT matching, A4 300dpi, 0.5mm": {
+      "dpi": 300,
+      "millimetres": 0.5,
+      "radius": 6,
+      "width": 2480,
+      "height": 3507,
+      "pixels": 8697360,
+      "members": 2,
+      "inkPixels": 151411,
+      "changeRatio": 1,
+      "compositeMs": 186,
+      "totalMs": 570
+    }
+  },
+  "candidates": {
+    "identical drawing": {
+      "geometry": {
+        "identical": true,
+        "differences": [],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "renderRotation": 0,
+        "renderScaleX": 1,
+        "renderScaleY": 1,
+        "alignment": "canonical-upright-page-space",
+        "mappings": [
+          {
+            "member": "identical-a4",
+            "renderRotation": 0,
+            "sourceRotate": {
+              "reference": 0,
+              "other": 0
+            },
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleDelta": 0,
+            "translationPt": {
+              "x": 0,
+              "y": 0
+            },
+            "residualWidthPt": 0,
+            "residualHeightPt": 0,
+            "rigid": true,
+            "tolerancePt": 1
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "a wall added": {
+      "geometry": {
+        "identical": true,
+        "differences": [],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "renderRotation": 0,
+        "renderScaleX": 1,
+        "renderScaleY": 1,
+        "alignment": "canonical-upright-page-space",
+        "mappings": [
+          {
+            "member": "added-line-a4",
+            "renderRotation": 0,
+            "sourceRotate": {
+              "reference": 0,
+              "other": 0
+            },
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleDelta": 0,
+            "translationPt": {
+              "x": 0,
+              "y": 0
+            },
+            "residualWidthPt": 0,
+            "residualHeightPt": 0,
+            "rigid": true,
+            "tolerancePt": 1
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "/Rotate 0 vs 90": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "rotation",
+            "detail": "/Rotate 0 vs 90",
+            "recoverable": "automatic"
+          },
+          {
+            "kind": "orientation",
+            "detail": "595.3x841.9 vs 841.9x595.3",
+            "recoverable": "automatic"
+          }
+        ],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 841.89,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "renderRotation": 0,
+        "renderScaleX": 1,
+        "renderScaleY": 1,
+        "alignment": "canonical-upright-page-space",
+        "mappings": [
+          {
+            "member": "rotate-90",
+            "renderRotation": 0,
+            "sourceRotate": {
+              "reference": 0,
+              "other": 90
+            },
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleDelta": 0,
+            "translationPt": {
+              "x": 0,
+              "y": 0
+            },
+            "residualWidthPt": 0,
+            "residualHeightPt": 0,
+            "rigid": true,
+            "tolerancePt": 1
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "crop origin (0,0) vs (50,70)": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "crop-origin",
+            "detail": "(0, 0) vs (50, 70)",
+            "recoverable": "automatic"
+          }
+        ],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "renderRotation": 0,
+        "renderScaleX": 1,
+        "renderScaleY": 1,
+        "alignment": "canonical-upright-page-space",
+        "mappings": [
+          {
+            "member": "crop-origin-50-70",
+            "renderRotation": 0,
+            "sourceRotate": {
+              "reference": 0,
+              "other": 0
+            },
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleDelta": 0,
+            "translationPt": {
+              "x": 0,
+              "y": 0
+            },
+            "residualWidthPt": 0,
+            "residualHeightPt": 0,
+            "rigid": true,
+            "tolerancePt": 1
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 495,
+        "height": 741,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "MediaBox larger, same CropBox": {
+      "geometry": {
+        "identical": true,
+        "differences": [],
+        "automaticOnly": true
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "normalise": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "renderRotation": 0,
+        "renderScaleX": 1,
+        "renderScaleY": 1,
+        "alignment": "canonical-upright-page-space",
+        "mappings": [
+          {
+            "member": "mediabox-larger",
+            "renderRotation": 0,
+            "sourceRotate": {
+              "reference": 0,
+              "other": 0
+            },
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleDelta": 0,
+            "translationPt": {
+              "x": 0,
+              "y": 0
+            },
+            "residualWidthPt": 0,
+            "residualHeightPt": 0,
+            "rigid": true,
+            "tolerancePt": 1
+          }
+        ],
+        "reported": []
+      },
+      "human": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      },
+      "humanWithAlignment": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 595.28,
+        "height": 841.89,
+        "alignment": "upright-page-space",
+        "reported": []
+      }
+    },
+    "A4 vs A3, same drawing": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+            "sameAspect": true,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 841.89,
+        "height": 1190.55,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "base-a3: 595.3x841.9pt vs 841.9x1190.5pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "base-a3: 595.3x841.9pt vs 841.9x1190.5pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "base-a3: 595.3x841.9pt vs 841.9x1190.5pt（位置合わせを指定すると比較できます）"
+        ],
+        "implementationReady": false
+      },
+      "humanWithAlignment": {
+        "status": "UNSUPPORTED",
+        "problems": [
+          {
+            "member": "base-a3",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x1190.5pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "位置合わせ後の比較契約が未定義のため、この研究では比較できません"
+        ],
+        "implementationReady": false,
+        "requires": "alignment-architecture-sub-spike",
+        "recordedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "appliedAlignment": null,
+        "missingContract": [
+          "coordinate space",
+          "units",
+          "transform order",
+          "rotation pivot",
+          "uniform vs non-uniform scaling",
+          "bounds",
+          "validation",
+          "CropBox / upright interaction",
+          "memory and work after alignment",
+          "saved provenance",
+          "aligned MATCH/CHANGE round trip"
+        ]
+      }
+    },
+    "portrait vs landscape": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 841.9x595.3pt",
+            "sameAspect": false,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 841.89,
+        "height": 841.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "landscape-a4: 595.3x841.9pt vs 841.9x595.3pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "landscape-a4: 595.3x841.9pt vs 841.9x595.3pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "landscape-a4: 595.3x841.9pt vs 841.9x595.3pt（位置合わせを指定すると比較できます）"
+        ],
+        "implementationReady": false
+      },
+      "humanWithAlignment": {
+        "status": "UNSUPPORTED",
+        "problems": [
+          {
+            "member": "landscape-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 841.9x595.3pt",
+                "sameAspect": false,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "位置合わせ後の比較契約が未定義のため、この研究では比較できません"
+        ],
+        "implementationReady": false,
+        "requires": "alignment-architecture-sub-spike",
+        "recordedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "appliedAlignment": null,
+        "missingContract": [
+          "coordinate space",
+          "units",
+          "transform order",
+          "rotation pivot",
+          "uniform vs non-uniform scaling",
+          "bounds",
+          "validation",
+          "CropBox / upright interaction",
+          "memory and work after alignment",
+          "saved provenance",
+          "aligned MATCH/CHANGE round trip"
+        ]
+      }
+    },
+    "A4 vs a sheet 3pt bigger": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 598.3x844.9pt",
+            "sameAspect": true,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 598.28,
+        "height": 844.89,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "nearly-a4: 595.3x841.9pt vs 598.3x844.9pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "nearly-a4: 595.3x841.9pt vs 598.3x844.9pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "nearly-a4: 595.3x841.9pt vs 598.3x844.9pt（位置合わせを指定すると比較できます）"
+        ],
+        "implementationReady": false
+      },
+      "humanWithAlignment": {
+        "status": "UNSUPPORTED",
+        "problems": [
+          {
+            "member": "nearly-a4",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 598.3x844.9pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "位置合わせ後の比較契約が未定義のため、この研究では比較できません"
+        ],
+        "implementationReady": false,
+        "requires": "alignment-architecture-sub-spike",
+        "recordedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "appliedAlignment": null,
+        "missingContract": [
+          "coordinate space",
+          "units",
+          "transform order",
+          "rotation pivot",
+          "uniform vs non-uniform scaling",
+          "bounds",
+          "validation",
+          "CropBox / upright interaction",
+          "memory and work after alignment",
+          "saved provenance",
+          "aligned MATCH/CHANGE round trip"
+        ]
+      }
+    },
+    "same aspect, 1.4x": {
+      "geometry": {
+        "identical": false,
+        "differences": [
+          {
+            "kind": "sheet-size",
+            "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+            "sameAspect": true,
+            "recoverable": "human"
+          }
+        ],
+        "automaticOnly": false
+      },
+      "baseline": {
+        "status": "READY_TO_COMPARE",
+        "members": 2,
+        "droppedMembers": 0,
+        "width": 833.3919999999999,
+        "height": 1178.646,
+        "alignment": "top-left",
+        "reported": []
+      },
+      "strict": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "same-ratio-larger: 595.3x841.9pt vs 833.4x1178.6pt"
+        ]
+      },
+      "normalise": {
+        "status": "GEOMETRY_MISMATCH",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "same-ratio-larger: 595.3x841.9pt vs 833.4x1178.6pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+        ]
+      },
+      "human": {
+        "status": "ALIGNMENT_REQUIRED",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "same-ratio-larger: 595.3x841.9pt vs 833.4x1178.6pt（位置合わせを指定すると比較できます）"
+        ],
+        "implementationReady": false
+      },
+      "humanWithAlignment": {
+        "status": "UNSUPPORTED",
+        "problems": [
+          {
+            "member": "same-ratio-larger",
+            "differences": [
+              {
+                "kind": "sheet-size",
+                "detail": "595.3x841.9pt vs 833.4x1178.6pt",
+                "sameAspect": true,
+                "recoverable": "human"
+              }
+            ]
+          }
+        ],
+        "reported": [
+          "位置合わせ後の比較契約が未定義のため、この研究では比較できません"
+        ],
+        "implementationReady": false,
+        "requires": "alignment-architecture-sub-spike",
+        "recordedAlignment": {
+          "x": 12,
+          "y": -4,
+          "rotation": 0,
+          "scale": 1
+        },
+        "appliedAlignment": null,
+        "missingContract": [
+          "coordinate space",
+          "units",
+          "transform order",
+          "rotation pivot",
+          "uniform vs non-uniform scaling",
+          "bounds",
+          "validation",
+          "CropBox / upright interaction",
+          "memory and work after alignment",
+          "saved provenance",
+          "aligned MATCH/CHANGE round trip"
+        ]
+      }
+    }
+  },
+  "dpi": {
+    "base-a4": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 595,
+        "height": 842,
+        "megapixels": 0.5,
+        "estimatedBytes": 14027720,
+        "estimatedMB": 14,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 1240,
+        "height": 1754,
+        "megapixels": 2.17,
+        "estimatedBytes": 60898880,
+        "estimatedMB": 60.9,
+        "withinBudget": true
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 300,
+        "capped": false,
+        "width": 2480,
+        "height": 3508,
+        "megapixels": 8.7,
+        "estimatedBytes": 243595520,
+        "estimatedMB": 243.6,
+        "withinBudget": true
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 600,
+        "capped": false,
+        "width": 4961,
+        "height": 7016,
+        "megapixels": 34.81,
+        "estimatedBytes": 974578528,
+        "estimatedMB": 974.6,
+        "withinBudget": false
+      }
+    },
+    "base-a3": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 842,
+        "height": 1191,
+        "megapixels": 1,
+        "estimatedBytes": 28079016,
+        "estimatedMB": 28.1,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 1754,
+        "height": 2480,
+        "megapixels": 4.35,
+        "estimatedBytes": 121797760,
+        "estimatedMB": 121.8,
+        "withinBudget": true
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 300,
+        "capped": false,
+        "width": 3508,
+        "height": 4961,
+        "megapixels": 17.4,
+        "estimatedBytes": 487289264,
+        "estimatedMB": 487.3,
+        "withinBudget": true
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 600,
+        "capped": false,
+        "width": 7016,
+        "height": 9921,
+        "megapixels": 69.61,
+        "estimatedBytes": 1948960608,
+        "estimatedMB": 1949,
+        "withinBudget": false
+      }
+    },
+    "base-a1": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 1684,
+        "height": 2384,
+        "megapixels": 4.01,
+        "estimatedBytes": 112410368,
+        "estimatedMB": 112.4,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 3508,
+        "height": 4967,
+        "megapixels": 17.42,
+        "estimatedBytes": 487878608,
+        "estimatedMB": 487.9,
+        "withinBudget": true
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 300,
+        "capped": false,
+        "width": 7016,
+        "height": 9933,
+        "megapixels": 69.69,
+        "estimatedBytes": 1951317984,
+        "estimatedMB": 1951.3,
+        "withinBudget": false
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 321,
+        "capped": true,
+        "width": 7517,
+        "height": 10643,
+        "megapixels": 80,
+        "estimatedBytes": 2240096068,
+        "estimatedMB": 2240.1,
+        "withinBudget": false
+      }
+    },
+    "base-a0": {
+      "72": {
+        "requestedDpi": 72,
+        "actualDpi": 72,
+        "capped": false,
+        "width": 2384,
+        "height": 3370,
+        "megapixels": 8.03,
+        "estimatedBytes": 224954240,
+        "estimatedMB": 225,
+        "withinBudget": true
+      },
+      "150": {
+        "requestedDpi": 150,
+        "actualDpi": 150,
+        "capped": false,
+        "width": 4967,
+        "height": 7022,
+        "megapixels": 34.88,
+        "estimatedBytes": 976591672,
+        "estimatedMB": 976.6,
+        "withinBudget": false
+      },
+      "300": {
+        "requestedDpi": 300,
+        "actualDpi": 227,
+        "capped": true,
+        "width": 7522,
+        "height": 10635,
+        "megapixels": 80,
+        "estimatedBytes": 2239901160,
+        "estimatedMB": 2239.9,
+        "withinBudget": false
+      },
+      "600": {
+        "requestedDpi": 600,
+        "actualDpi": 227,
+        "capped": true,
+        "width": 7522,
+        "height": 10635,
+        "megapixels": 80,
+        "estimatedBytes": 2239901160,
+        "estimatedMB": 2239.9,
+        "withinBudget": false
+      }
+    }
+  },
+  "threshold": {
+    "pixelToMm": {
+      "72": 0.706,
+      "150": 0.339,
+      "300": 0.169,
+      "600": 0.085
+    },
+    "mmToPixel": {
+      "72": 1,
+      "150": 3,
+      "300": 6,
+      "600": 12
+    }
+  },
+  "ink": {
+    "black": {
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "dark grey": {
+      "rgb": [
+        64,
+        64,
+        64
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "mid grey": {
+      "rgb": [
+        140,
+        140,
+        140
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "pale grey": {
+      "rgb": [
+        210,
+        210,
+        210
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": false
+    },
+    "cad cyan": {
+      "rgb": [
+        0,
+        158,
+        217
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "cad yellow": {
+      "rgb": [
+        255,
+        225,
+        0
+      ],
+      "compositeSaysInk": true,
+      "boundsSaysInk": true
+    },
+    "pale yellow": {
+      "rgb": [
+        255,
+        255,
+        140
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": true
+    },
+    "near white": {
+      "rgb": [
+        245,
+        245,
+        245
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": false
+    },
+    "white": {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "compositeSaysInk": false,
+      "boundsSaysInk": false
+    }
+  },
+  "cost": {
+    "A4 150dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 34,
+      "ms": 102,
+      "memory": 60864160
+    },
+    "A4 150dpi, 2 layers, threshold 2": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 48,
+      "ms": 128,
+      "memory": 60864160
+    },
+    "A4 150dpi, 2 layers, threshold 4": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 59,
+      "ms": 144,
+      "memory": 60864160
+    },
+    "A4 300dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 2480,
+      "height": 3507,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 300848,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 171,
+      "ms": 425,
+      "memory": 243526080
+    },
+    "A4 150dpi, 4 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 1240,
+      "height": 1753,
+      "members": 4,
+      "changePixels": 8530,
+      "inkPixels": 88483,
+      "changeRatio": 0.09640269882350282,
+      "bounds": {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      "compositeMs": 77,
+      "ms": 203,
+      "memory": 95643680
+    },
+    "A3 150dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 1753,
+      "height": 2480,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 154247,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 86,
+      "ms": 220,
+      "memory": 121728320
+    },
+    "A1 150dpi, 2 layers, threshold 0": {
+      "produced": true,
+      "dropped": [],
+      "width": 3507,
+      "height": 4966,
+      "members": 2,
+      "changePixels": 0,
+      "inkPixels": 568537,
+      "changeRatio": 0,
+      "bounds": null,
+      "compositeMs": 264,
+      "ms": 754,
+      "memory": 487641336
+    }
+  },
+  "budget": {
+    "limitMB": 536.870912,
+    "cases": {
+      "A4 at 150dpi, 2 layers": {
+        "megapixels": 2.2,
+        "totalMB": 61,
+        "withinBudget": true
+      },
+      "A3 at 300dpi, 2 layers": {
+        "megapixels": 17.4,
+        "totalMB": 487,
+        "withinBudget": true
+      },
+      "A1 at 300dpi, 2 layers": {
+        "megapixels": 69.7,
+        "totalMB": 1951,
+        "withinBudget": false
+      },
+      "A1 at 300dpi, 4 layers": {
+        "megapixels": 69.7,
+        "totalMB": 3066,
+        "withinBudget": false
+      },
+      "A0 at 300dpi, 2 layers": {
+        "megapixels": 139.5,
+        "totalMB": 3906,
+        "withinBudget": false
+      },
+      "A0 at 600dpi, 2 layers": {
+        "megapixels": 558,
+        "totalMB": 15623,
+        "withinBudget": false
+      }
+    }
+  },
+  "determinism": {
+    "changePixels": [
+      8530,
+      8530
+    ],
+    "inkPixels": [
+      88483,
+      88483
+    ],
+    "bounds": [
+      {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      },
+      {
+        "x": 166,
+        "y": 677,
+        "width": 908,
+        "height": 50
+      }
+    ],
+    "identical": true
+  },
+  "rigidMapping": {
+    "/Rotate 0 vs 0": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "rotate-0-copy",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 0
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 1,
+        "y": 1,
+        "delta": 0,
+        "uniform": true
+      },
+      "upright": {
+        "width": 595.28,
+        "height": 841.89,
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "sourceRotate": 0,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "ratio": 0,
+      "width": 1241,
+      "height": 1754,
+      "sameSize": true
+    },
+    "/Rotate 0 vs 90": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "rotate-90",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 90
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 0.7070757462376319,
+        "y": 1.4142756349952963,
+        "delta": 0.7071998887576644,
+        "uniform": false
+      },
+      "upright": {
+        "width": 595.28,
+        "height": 841.89,
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "sourceRotate": 90,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "ratio": 0,
+      "width": 1241,
+      "height": 1754,
+      "sameSize": true
+    },
+    "/Rotate 0 vs 180": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "rotate-180",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 180
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 1,
+        "y": 1,
+        "delta": 0,
+        "uniform": true
+      },
+      "upright": {
+        "width": 595.28,
+        "height": 841.89,
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "sourceRotate": 180,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "ratio": 0,
+      "width": 1241,
+      "height": 1754,
+      "sameSize": true
+    },
+    "/Rotate 0 vs 270": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "rotate-270",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 270
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 0.7070757462376319,
+        "y": 1.4142756349952963,
+        "delta": 0.7071998887576644,
+        "uniform": false
+      },
+      "upright": {
+        "width": 595.28,
+        "height": 841.89,
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "sourceRotate": 270,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 79953,
+      "ratio": 0,
+      "width": 1241,
+      "height": 1754,
+      "sameSize": true
+    },
+    "crop origin only": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "crop-origin-50-70",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 0
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 1,
+        "y": 1,
+        "delta": 0,
+        "uniform": true
+      },
+      "upright": {
+        "width": 495,
+        "height": 741,
+        "origin": {
+          "x": 50,
+          "y": 70
+        },
+        "sourceRotate": 0,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 59677,
+      "ratio": 0,
+      "width": 1032,
+      "height": 1544,
+      "sameSize": true
+    },
+    "crop origin + /Rotate 90": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "crop-rot-90",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 90
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 0.6680161943319838,
+        "y": 1.496969696969697,
+        "delta": 0.8289535026377133,
+        "uniform": false
+      },
+      "upright": {
+        "width": 495,
+        "height": 741,
+        "origin": {
+          "x": 50,
+          "y": 70
+        },
+        "sourceRotate": 90,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 59677,
+      "ratio": 0,
+      "width": 1032,
+      "height": 1544,
+      "sameSize": true
+    },
+    "crop origin + /Rotate 180": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "crop-rot-180",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 180
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 1,
+        "y": 1,
+        "delta": 0,
+        "uniform": true
+      },
+      "upright": {
+        "width": 495,
+        "height": 741,
+        "origin": {
+          "x": 50,
+          "y": 70
+        },
+        "sourceRotate": 180,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 59677,
+      "ratio": 0,
+      "width": 1032,
+      "height": 1544,
+      "sameSize": true
+    },
+    "crop origin + /Rotate 270": {
+      "plan": "READY_TO_COMPARE",
+      "alignment": "canonical-upright-page-space",
+      "renderRotation": 0,
+      "mappings": [
+        {
+          "member": "crop-rot-270",
+          "rigid": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "scaleDelta": 0,
+          "renderRotation": 0,
+          "sourceRotate": {
+            "reference": 0,
+            "other": 270
+          },
+          "residualWidthPt": 0,
+          "residualHeightPt": 0
+        }
+      ],
+      "invariantHolds": true,
+      "displayPlane": {
+        "x": 0.6680161943319838,
+        "y": 1.496969696969697,
+        "delta": 0.8289535026377133,
+        "uniform": false
+      },
+      "upright": {
+        "width": 495,
+        "height": 741,
+        "origin": {
+          "x": 50,
+          "y": 70
+        },
+        "sourceRotate": 270,
+        "renderRotation": 0
+      },
+      "verdict": "MATCH",
+      "changePixels": 0,
+      "inkPixels": 59677,
+      "ratio": 0,
+      "width": 1032,
+      "height": 1544,
+      "sameSize": true
+    },
+    "a different physical sheet": {
+      "plan": "GEOMETRY_MISMATCH",
+      "mappings": [],
+      "invariantHolds": true,
+      "reported": [
+        "base-a3: 595.3x841.9pt vs 841.9x1190.5pt（用紙が異なるため、拡大して重ねると寸法が変わります）"
+      ],
+      "verdict": null,
+      "displayPlane": {
+        "x": 0.7070757462376319,
+        "y": 0.7071437570870606,
+        "delta": 0.00006801084942864577,
+        "uniform": false
+      }
+    }
+  },
+  "smallChanges": {
+    "cases": {
+      "nothing changed (control)": {
+        "changePixels": 0,
+        "inkPixels": 80531,
+        "ratio": 0,
+        "canonical": "MATCH",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": false
+      },
+      "one digit of a dimension": {
+        "changePixels": 51,
+        "inkPixels": 80556,
+        "ratio": 0.0006330999553105914,
+        "canonical": "CHANGE",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": true
+      },
+      "one short fine line added": {
+        "changePixels": 200,
+        "inkPixels": 80731,
+        "ratio": 0.002477363094721978,
+        "canonical": "CHANGE",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": true
+      },
+      "a symbol swapped": {
+        "changePixels": 394,
+        "inkPixels": 80800,
+        "ratio": 0.004876237623762376,
+        "canonical": "CHANGE",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": true
+      },
+      "a 4mm revision triangle added": {
+        "changePixels": 160,
+        "inkPixels": 80691,
+        "ratio": 0.0019828729350237326,
+        "canonical": "CHANGE",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": true
+      },
+      "a light hatch added": {
+        "changePixels": 43,
+        "inkPixels": 80531,
+        "ratio": 0.0005339558679266369,
+        "canonical": "CHANGE",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": true
+      },
+      "the pale hatch fixture": {
+        "changePixels": 43,
+        "inkPixels": 79953,
+        "ratio": 0.0005378159668805423,
+        "canonical": "CHANGE",
+        "underOldFloor": "MATCH",
+        "floorWouldHide": true
+      },
+      "a wall added, for scale": {
+        "changePixels": 8530,
+        "inkPixels": 88483,
+        "ratio": 0.09640269882350282,
+        "canonical": "CHANGE",
+        "underOldFloor": "CHANGE",
+        "floorWouldHide": false
+      }
+    },
+    "spatial": {
+      "nothing changed (control)": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "one digit of a dimension": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 51,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 51,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "a 4mm revision triangle": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 160,
+          "verdict": "CHANGE"
+        }
+      }
+    },
+    "spatialAtHigherDpi": {
+      "0mm": {
+        "radius": 0,
+        "changePixels": 186,
+        "verdict": "CHANGE"
+      },
+      "0.05mm": {
+        "radius": 1,
+        "changePixels": 96,
+        "verdict": "CHANGE"
+      },
+      "0.1mm": {
+        "radius": 1,
+        "changePixels": 96,
+        "verdict": "CHANGE"
+      },
+      "0.15mm": {
+        "radius": 2,
+        "changePixels": 49,
+        "verdict": "CHANGE"
+      },
+      "0.2mm": {
+        "radius": 2,
+        "changePixels": 49,
+        "verdict": "CHANGE"
+      },
+      "0.25mm": {
+        "radius": 3,
+        "changePixels": 18,
+        "verdict": "CHANGE"
+      },
+      "0.3mm": {
+        "radius": 4,
+        "changePixels": 1,
+        "verdict": "CHANGE"
+      },
+      "0.4mm": {
+        "radius": 5,
+        "changePixels": 0,
+        "verdict": "MATCH"
+      },
+      "0.5mm": {
+        "radius": 6,
+        "changePixels": 0,
+        "verdict": "MATCH"
+      }
+    },
+    "floor": 0,
+    "policy": {
+      "unit": "mm",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 0.15,
+      "step": 0.05,
+      "zeroAlwaysAvailable": true,
+      "requiresExplicitOptIn": true,
+      "supportedDpi": [
+        72,
+        150,
+        300,
+        450
+      ],
+      "meaningShownToTheUser": "同じ位置とみなす距離（mm）。0 は完全一致のみを一致とみなします。",
+      "disclosureWhenNonZero": "位置ずれだけでなく、寸法値・文字・記号・形状の変更も「一致」と判定される場合があります。"
+    },
+    "atTheDefault": {
+      "millimetres": 0,
+      "isDefault": true,
+      "radius": 0,
+      "verdict": "CHANGE"
+    }
+  },
+  "presentation": {
+    "a changed pair": {
+      "blue/red, black match, opaque": {
+        "verdict": "CHANGE",
+        "changePixels": 51,
+        "composite": {
+          "label": "blue/red, black match, opaque",
+          "compositeChangePixels": 51,
+          "compositeInkPixels": 80556,
+          "compositeRatio": 0.0006330999553105914
+        }
+      },
+      "grey/grey, grey match, faint": {
+        "verdict": "CHANGE",
+        "changePixels": 51,
+        "composite": {
+          "label": "grey/grey, grey match, faint",
+          "compositeChangePixels": 0,
+          "compositeInkPixels": 80556,
+          "compositeRatio": 0
+        }
+      },
+      "green/magenta, white match": {
+        "verdict": "CHANGE",
+        "changePixels": 51,
+        "composite": {
+          "label": "green/magenta, white match",
+          "compositeChangePixels": 51,
+          "compositeInkPixels": 51,
+          "compositeRatio": 1
+        }
+      }
+    },
+    "an identical pair": {
+      "blue/red, black match, opaque": {
+        "verdict": "MATCH",
+        "changePixels": 0,
+        "composite": {
+          "label": "blue/red, black match, opaque",
+          "compositeChangePixels": 0,
+          "compositeInkPixels": 80531,
+          "compositeRatio": 0
+        }
+      },
+      "grey/grey, grey match, faint": {
+        "verdict": "MATCH",
+        "changePixels": 0,
+        "composite": {
+          "label": "grey/grey, grey match, faint",
+          "compositeChangePixels": 0,
+          "compositeInkPixels": 80531,
+          "compositeRatio": 0
+        }
+      },
+      "green/magenta, white match": {
+        "verdict": "MATCH",
+        "changePixels": 0,
+        "composite": {
+          "label": "green/magenta, white match",
+          "compositeChangePixels": 0,
+          "compositeInkPixels": 0,
+          "compositeRatio": 0
+        }
+      }
+    }
+  },
+  "work": {
+    "limit": 12000000000,
+    "cases": {
+      "A4 300dpi, 2 members, radius 0": {
+        "scanUnits": 34789440,
+        "scanWithinBudget": true,
+        "pixels": 8697360,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 0,
+        "neighbourhoodBox": 1,
+        "groups": 1,
+        "units": 69578880,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 0
+        },
+        "effective": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 0
+        },
+        "degraded": false
+      },
+      "A4 300dpi, 2 members, radius 1": {
+        "scanUnits": 173947200,
+        "scanWithinBudget": true,
+        "pixels": 8697360,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 1,
+        "neighbourhoodBox": 9,
+        "groups": 1,
+        "units": 69578880,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 1
+        },
+        "effective": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 1
+        },
+        "degraded": false
+      },
+      "A4 300dpi, 2 members, radius 2": {
+        "scanUnits": 452262720,
+        "scanWithinBudget": true,
+        "pixels": 8697360,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 2,
+        "neighbourhoodBox": 25,
+        "groups": 1,
+        "units": 69578880,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 2
+        },
+        "effective": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 2
+        },
+        "degraded": false
+      },
+      "A4 300dpi, 2 members, 0.5mm": {
+        "scanUnits": 2957102400,
+        "scanWithinBudget": true,
+        "pixels": 8697360,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 6,
+        "neighbourhoodBox": 169,
+        "groups": 1,
+        "units": 69578880,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "effective": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "degraded": false
+      },
+      "A4 300dpi, 4 members, ref-pairs, 0.5mm": {
+        "scanUnits": 8871307200,
+        "scanWithinBudget": true,
+        "pixels": 8697360,
+        "members": 4,
+        "contract": "reference-pairs",
+        "radiusPx": 6,
+        "neighbourhoodBox": 169,
+        "groups": 3,
+        "units": 208736640,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 4,
+          "contract": "reference-pairs",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "effective": {
+          "widthPx": 2480,
+          "heightPx": 3507,
+          "members": 4,
+          "contract": "reference-pairs",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "degraded": false
+      },
+      "A3 300dpi, 2 members, 0.5mm": {
+        "scanUnits": 5917083920,
+        "scanWithinBudget": true,
+        "pixels": 17403188,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 6,
+        "neighbourhoodBox": 169,
+        "groups": 1,
+        "units": 139225504,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 3508,
+          "heightPx": 4961,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "effective": {
+          "widthPx": 3508,
+          "heightPx": 4961,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "degraded": false
+      },
+      "A1 300dpi, 2 members, 0.5mm": {
+        "scanUnits": 23694575520,
+        "scanWithinBudget": false,
+        "pixels": 69689928,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 6,
+        "neighbourhoodBox": 169,
+        "groups": 1,
+        "units": 557519424,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 7016,
+          "heightPx": 9933,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "effective": {
+          "widthPx": 7016,
+          "heightPx": 9933,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 6
+        },
+        "degraded": false
+      },
+      "A0 600dpi, 2 members, 0.5mm": {
+        "scanUnits": 698586380184,
+        "scanWithinBudget": false,
+        "pixels": 557976342,
+        "members": 2,
+        "contract": "two-only",
+        "radiusPx": 12,
+        "neighbourhoodBox": 625,
+        "groups": 1,
+        "units": 4463810736,
+        "withinBudget": true,
+        "refusal": null,
+        "requested": {
+          "widthPx": 19866,
+          "heightPx": 28087,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 12
+        },
+        "effective": {
+          "widthPx": 19866,
+          "heightPx": 28087,
+          "members": 2,
+          "contract": "two-only",
+          "algorithm": "separable-dilation",
+          "radiusPx": 12
+        },
+        "degraded": false
+      }
+    },
+    "byAlgorithm": {
+      "any-neighbour-scan": {
+        "units": 23694575520,
+        "withinBudget": false
+      },
+      "separable-dilation": {
+        "units": 557519424,
+        "withinBudget": true
+      }
+    },
+    "consensus": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "no work bound is derived for this contract"
+    },
+    "noAlgorithm": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "no comparison algorithm was selected, so no work bound exists"
+    },
+    "selectedAlgorithm": "separable-dilation",
+    "unrepresentable": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "the work this comparison would do is not representable"
+    },
+    "oneMember": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "no work bound is derived for this contract"
+    }
+  },
+  "cancellable": {
+    "width": 1241,
+    "height": 1754,
+    "pixels": 2176714,
+    "inkFraction": 0.009444511313842793,
+    "timings": {
+      "0mm": {
+        "radius": 0,
+        "box": 1,
+        "scanMs": 6,
+        "dilationMs": 3,
+        "scanChangePixels": 41116,
+        "dilationChangePixels": 41116,
+        "identical": true
+      },
+      "0.25mm": {
+        "radius": 1,
+        "box": 9,
+        "scanMs": 4,
+        "dilationMs": 27,
+        "scanChangePixels": 41116,
+        "dilationChangePixels": 41116,
+        "identical": true
+      },
+      "0.5mm": {
+        "radius": 3,
+        "box": 49,
+        "scanMs": 4,
+        "dilationMs": 28,
+        "scanChangePixels": 41116,
+        "dilationChangePixels": 41116,
+        "identical": true
+      }
+    },
+    "worstCase": {
+      "0.25mm": {
+        "radius": 1,
+        "box": 9,
+        "scanMs": 31,
+        "dilationMs": 29,
+        "identical": true,
+        "changePixels": 2173206
+      },
+      "0.5mm": {
+        "radius": 3,
+        "box": 49,
+        "scanMs": 71,
+        "dilationMs": 28,
+        "identical": true,
+        "changePixels": 2166190
+      }
+    },
+    "banded": {
+      "status": "READY_TO_COMPARE",
+      "bands": 31,
+      "changePixels": 41116,
+      "matchesDilation": true
+    },
+    "cancelled": {
+      "status": "CANCELLED",
+      "bands": 3,
+      "result": null,
+      "stoppedEarly": true
+    }
+  },
+  "compositeEquivalence": {
+    "two members, exact": {
+      "width": 1241,
+      "height": 1754,
+      "members": 2,
+      "radius": 0,
+      "matchOpacity": 1,
+      "bytes": 8706856,
+      "differingBytes": 0,
+      "identical": true
+    },
+    "two members, 0.5mm": {
+      "width": 1241,
+      "height": 1754,
+      "members": 2,
+      "radius": 3,
+      "matchOpacity": 1,
+      "bytes": 8706856,
+      "differingBytes": 0,
+      "identical": true
+    },
+    "two members, faint match colour": {
+      "width": 1241,
+      "height": 1754,
+      "members": 2,
+      "radius": 0,
+      "matchOpacity": 0.25,
+      "bytes": 8706856,
+      "differingBytes": 0,
+      "identical": true
+    },
+    "four members, 0.25mm": {
+      "width": 1241,
+      "height": 1754,
+      "members": 4,
+      "radius": 1,
+      "matchOpacity": 1,
+      "bytes": 8706856,
+      "differingBytes": 0,
+      "identical": true
+    }
+  },
+  "exportEncoding": {
+    "rows": {
+      "A4 150dpi, changed": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "jpegBytes": 78207,
+        "pngBytes": 67798,
+        "jpegBytesPerPixel": 0.0359,
+        "pngBytesPerPixel": 0.0311
+      },
+      "A4 300dpi, changed": {
+        "width": 2481,
+        "height": 3508,
+        "pixels": 8703348,
+        "jpegBytes": 218227,
+        "pngBytes": 243126,
+        "jpegBytesPerPixel": 0.0251,
+        "pngBytesPerPixel": 0.0279
+      },
+      "A4 150dpi, dense": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "jpegBytes": 108371,
+        "pngBytes": 69886,
+        "jpegBytesPerPixel": 0.0498,
+        "pngBytesPerPixel": 0.0321
+      },
+      "A3 150dpi, matched": {
+        "width": 1754,
+        "height": 2481,
+        "pixels": 4351674,
+        "jpegBytes": 115851,
+        "pngBytes": 126882,
+        "jpegBytesPerPixel": 0.0266,
+        "pngBytesPerPixel": 0.0292
+      }
+    },
+    "worstMeasured": 0.0498,
+    "isPerformanceEvidenceOnly": true
+  },
+  "ownedEncoder": {
+    "contract": {
+      "colourType": 6,
+      "bitDepth": 8,
+      "filter": 0,
+      "deflateStrategy": "stored",
+      "maxDeflateBlockBytes": 65535,
+      "maxIdatChunkBytes": 1048576
+    },
+    "strategies": {
+      "blob": {
+        "label": "Blob([bytes])",
+        "base64": false,
+        "bytesPerCharacter": 0,
+        "copiesOutput": true
+      },
+      "dataUrl": {
+        "label": "base64 data URL",
+        "base64": true,
+        "bytesPerCharacter": 2,
+        "copiesOutput": false
+      }
+    },
+    "budgetedStrategy": "blob",
+    "rows": {
+      "A4 150dpi, changed": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "encodedBytes": 8709434,
+        "predictedBytes": 8709434,
+        "exact": true,
+        "bytesPerPixel": 4.001,
+        "roundTripDifferingBytes": 0,
+        "roundTripLossless": true,
+        "encodeMs": 53,
+        "scratchBytes": 4965,
+        "browserPngBytesPerPixel": 0.0311,
+        "browserJpegBytesPerPixel": 0.0359
+      },
+      "A4 150dpi, dense": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "encodedBytes": 8709434,
+        "predictedBytes": 8709434,
+        "exact": true,
+        "bytesPerPixel": 4.001,
+        "roundTripDifferingBytes": 0,
+        "roundTripLossless": true,
+        "encodeMs": 48,
+        "scratchBytes": 4965,
+        "browserPngBytesPerPixel": 0.0321,
+        "browserJpegBytesPerPixel": 0.0498
+      },
+      "A3 150dpi, matched": {
+        "width": 1754,
+        "height": 2481,
+        "pixels": 4351674,
+        "encodedBytes": 17410762,
+        "predictedBytes": 17410762,
+        "exact": true,
+        "bytesPerPixel": 4.001,
+        "roundTripDifferingBytes": 0,
+        "roundTripLossless": true,
+        "encodeMs": 96,
+        "scratchBytes": 7017,
+        "browserPngBytesPerPixel": 0.0292,
+        "browserJpegBytesPerPixel": 0.0266
+      }
+    },
+    "boundIsExactNotEstimated": true
+  },
+  "phaseBudget": {
+    "limit": 536870912,
+    "limitMB": 536.9,
+    "cases": {
+      "A4 300dpi, 2 members, 0mm": {
+        "pixels": 8697360,
+        "members": 2,
+        "radiusPx": 0,
+        "phaseTotals": {
+          "render": 78276240,
+          "mask-extraction": 52184160,
+          "dilation": 17394720,
+          "comparison": 26092080,
+          "presentation": 121786203
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 121786203,
+        "peakMB": 122,
+        "bytesPerPixel": 14,
+        "withinBudget": true,
+        "refusal": null,
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 17394720,
+          "dilated": 0,
+          "composite": 34789440,
+          "encoderScratch": 9921,
+          "encodedOutput": 34796061,
+          "encodedHandoff": 34796061
+        }
+      },
+      "A4 300dpi, 2 members, 0.5mm": {
+        "pixels": 8697360,
+        "members": 2,
+        "radiusPx": 6,
+        "phaseTotals": {
+          "render": 78276240,
+          "mask-extraction": 52184160,
+          "dilation": 43510756,
+          "comparison": 43486800,
+          "presentation": 139180923
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 139180923,
+        "peakMB": 139,
+        "bytesPerPixel": 16,
+        "withinBudget": true,
+        "refusal": null,
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 17394720,
+          "dilated": 17394720,
+          "composite": 34789440,
+          "encoderScratch": 9921,
+          "encodedOutput": 34796061,
+          "encodedHandoff": 34796061
+        }
+      },
+      "A3 300dpi, 2 members, 0.5mm": {
+        "pixels": 17403188,
+        "members": 2,
+        "radiusPx": 6,
+        "phaseTotals": {
+          "render": 156628692,
+          "mask-extraction": 104419128,
+          "dilation": 87049824,
+          "comparison": 87015940,
+          "presentation": 278487303
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 278487303,
+        "peakMB": 278,
+        "bytesPerPixel": 16,
+        "withinBudget": true,
+        "refusal": null,
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 34806376,
+          "dilated": 34806376,
+          "composite": 69612752,
+          "encoderScratch": 14033,
+          "encodedOutput": 69623883,
+          "encodedHandoff": 69623883
+        }
+      },
+      "A2 300dpi, 2 members, 0.5mm": {
+        "pixels": 34806376,
+        "members": 2,
+        "radiusPx": 6,
+        "phaseTotals": {
+          "render": 313257384,
+          "mask-extraction": 208838256,
+          "dilation": 174079796,
+          "comparison": 174031880,
+          "presentation": 556960437
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 556960437,
+        "peakMB": 557,
+        "bytesPerPixel": 16,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "557 MB at the presentation phase, against a ceiling of 537 MB"
+        },
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 69612752,
+          "dilated": 69612752,
+          "composite": 139225504,
+          "encoderScratch": 19845,
+          "encodedOutput": 139244792,
+          "encodedHandoff": 139244792
+        }
+      },
+      "A1 300dpi, 2 members, 0.5mm": {
+        "pixels": 69689928,
+        "members": 2,
+        "radiusPx": 6,
+        "phaseTotals": {
+          "render": 627209352,
+          "mask-extraction": 418139568,
+          "dilation": 348517444,
+          "comparison": 348449640,
+          "presentation": 1115135805
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 1115135805,
+        "peakMB": 1115,
+        "bytesPerPixel": 16,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "1115 MB at the presentation phase, against a ceiling of 537 MB"
+        },
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 139379856,
+          "dilated": 139379856,
+          "composite": 278759712,
+          "encoderScratch": 28065,
+          "encodedOutput": 278794158,
+          "encodedHandoff": 278794158
+        }
+      },
+      "A1 300dpi, 4 members, 0.5mm": {
+        "pixels": 69689928,
+        "members": 4,
+        "radiusPx": 6,
+        "phaseTotals": {
+          "render": 766589208,
+          "mask-extraction": 557519424,
+          "dilation": 487897300,
+          "comparison": 487829496,
+          "presentation": 1254515661
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 1254515661,
+        "peakMB": 1255,
+        "bytesPerPixel": 18,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "1255 MB at the presentation phase, against a ceiling of 537 MB"
+        },
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 278759712,
+          "dilated": 139379856,
+          "composite": 278759712,
+          "encoderScratch": 28065,
+          "encodedOutput": 278794158,
+          "encodedHandoff": 278794158
+        }
+      },
+      "A0 600dpi, 2 members, 0.5mm": {
+        "pixels": 557976342,
+        "members": 2,
+        "radiusPx": 12,
+        "phaseTotals": {
+          "render": 5021787078,
+          "mask-extraction": 3347858052,
+          "dilation": 2790073530,
+          "comparison": 2789881710,
+          "presentation": 8928148889
+        },
+        "peakPhase": "presentation",
+        "peakWorkingSet": 8928148889,
+        "peakMB": 8928,
+        "bytesPerPixel": 16,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_MEMORY_BUDGET",
+          "reason": "8928 MB at the presentation phase, against a ceiling of 537 MB"
+        },
+        "memberProcessing": "serial",
+        "pairProcessing": "serial",
+        "referenceMaskReused": true,
+        "exportStrategy": "blob",
+        "encoder": "png-stored (owned)",
+        "encodedOutputIsExact": true,
+        "presentationContract": "reference-pairs, one visual per pair, serial",
+        "presentationLive": {
+          "masks": 1115952684,
+          "dilated": 1115952684,
+          "composite": 2231905368,
+          "encoderScratch": 79465,
+          "encodedOutput": 2232129344,
+          "encodedHandoff": 2232129344
+        }
+      }
+    },
+    "shippedModelA3": {
+      "totalMB": 487.3,
+      "withinBudget": true
+    },
+    "byStrategy": {
+      "blob": 278.5,
+      "dataUrl": 394.5
+    },
+    "a3Detail": {
+      "pixels": 17403188,
+      "members": 2,
+      "contract": "reference-pairs",
+      "radiusPx": 6,
+      "exportStrategy": "blob",
+      "encoder": "png-stored (owned)",
+      "encodedOutputIsExact": true,
+      "presentationContract": "reference-pairs, one visual per pair, serial",
+      "memberProcessing": "serial",
+      "pairProcessing": "serial",
+      "referenceMaskReused": true,
+      "phases": {
+        "render": {
+          "live": {
+            "memberCanvas": 69612752,
+            "pixelReadback": 69612752,
+            "masksAlreadyExtracted": 17403188
+          },
+          "total": 156628692
+        },
+        "mask-extraction": {
+          "live": {
+            "pixelReadback": 69612752,
+            "masks": 34806376
+          },
+          "total": 104419128
+        },
+        "dilation": {
+          "live": {
+            "masks": 34806376,
+            "dilatedReference": 17403188,
+            "dilatedOther": 17403188,
+            "dilationScratch": 17403188,
+            "dilationIndex": 33884
+          },
+          "total": 87049824
+        },
+        "comparison": {
+          "live": {
+            "masks": 34806376,
+            "dilated": 34806376,
+            "changeMask": 17403188
+          },
+          "total": 87015940
+        },
+        "presentation": {
+          "live": {
+            "masks": 34806376,
+            "dilated": 34806376,
+            "composite": 69612752,
+            "encoderScratch": 14033,
+            "encodedOutput": 69623883,
+            "encodedHandoff": 69623883
+          },
+          "total": 278487303
+        }
+      },
+      "peakPhase": "presentation",
+      "peakWorkingSet": 278487303,
+      "bytesPerPixel": 16.00208553743142
+    }
+  },
+  "spatialToleranceAcrossDpi": {
+    "supportedDpi": [
+      72,
+      150,
+      300,
+      450
+    ],
+    "sweep": [
+      0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.4,
+      0.5
+    ],
+    "rounding": {
+      "72": {
+        "0mm": 0,
+        "0.05mm": 0,
+        "0.1mm": 0,
+        "0.15mm": 0,
+        "0.2mm": 1,
+        "0.25mm": 1,
+        "0.3mm": 1,
+        "0.4mm": 1,
+        "0.5mm": 1
+      },
+      "150": {
+        "0mm": 0,
+        "0.05mm": 0,
+        "0.1mm": 1,
+        "0.15mm": 1,
+        "0.2mm": 1,
+        "0.25mm": 1,
+        "0.3mm": 2,
+        "0.4mm": 2,
+        "0.5mm": 3
+      },
+      "300": {
+        "0mm": 0,
+        "0.05mm": 1,
+        "0.1mm": 1,
+        "0.15mm": 2,
+        "0.2mm": 2,
+        "0.25mm": 3,
+        "0.3mm": 4,
+        "0.4mm": 5,
+        "0.5mm": 6
+      },
+      "450": {
+        "0mm": 0,
+        "0.05mm": 1,
+        "0.1mm": 2,
+        "0.15mm": 3,
+        "0.2mm": 4,
+        "0.25mm": 4,
+        "0.3mm": 5,
+        "0.4mm": 7,
+        "0.5mm": 9
+      }
+    },
+    "changed": {
+      "72": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 0,
+          "changePixels": 10,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "150": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 51,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 51,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 14,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "300": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 186,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 96,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 96,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 2,
+          "changePixels": 49,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 2,
+          "changePixels": 49,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 3,
+          "changePixels": 18,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 4,
+          "changePixels": 1,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 5,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 6,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "450": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 401,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 248,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 2,
+          "changePixels": 166,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 3,
+          "changePixels": 113,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 4,
+          "changePixels": 73,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 4,
+          "changePixels": 73,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 5,
+          "changePixels": 38,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 7,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 9,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      }
+    },
+    "control": {
+      "72": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "150": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "300": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 4,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 5,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 6,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      },
+      "450": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.1mm": {
+          "radius": 2,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.15mm": {
+          "radius": 3,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.2mm": {
+          "radius": 4,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.25mm": {
+          "radius": 4,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.3mm": {
+          "radius": 5,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.4mm": {
+          "radius": 7,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        "0.5mm": {
+          "radius": 9,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      }
+    },
+    "symbol": {
+      "72": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 0,
+          "changePixels": 112,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 1,
+          "changePixels": 32,
+          "verdict": "CHANGE"
+        }
+      },
+      "150": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 394,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 0,
+          "changePixels": 394,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 1,
+          "changePixels": 235,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 2,
+          "changePixels": 117,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 2,
+          "changePixels": 117,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 3,
+          "changePixels": 46,
+          "verdict": "CHANGE"
+        }
+      },
+      "300": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 1435,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 1122,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 1,
+          "changePixels": 1122,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 2,
+          "changePixels": 866,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 2,
+          "changePixels": 866,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 3,
+          "changePixels": 632,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 4,
+          "changePixels": 430,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 5,
+          "changePixels": 274,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 6,
+          "changePixels": 158,
+          "verdict": "CHANGE"
+        }
+      },
+      "450": {
+        "0mm": {
+          "radius": 0,
+          "changePixels": 3126,
+          "verdict": "CHANGE"
+        },
+        "0.05mm": {
+          "radius": 1,
+          "changePixels": 2648,
+          "verdict": "CHANGE"
+        },
+        "0.1mm": {
+          "radius": 2,
+          "changePixels": 2239,
+          "verdict": "CHANGE"
+        },
+        "0.15mm": {
+          "radius": 3,
+          "changePixels": 1871,
+          "verdict": "CHANGE"
+        },
+        "0.2mm": {
+          "radius": 4,
+          "changePixels": 1526,
+          "verdict": "CHANGE"
+        },
+        "0.25mm": {
+          "radius": 4,
+          "changePixels": 1526,
+          "verdict": "CHANGE"
+        },
+        "0.3mm": {
+          "radius": 5,
+          "changePixels": 1201,
+          "verdict": "CHANGE"
+        },
+        "0.4mm": {
+          "radius": 7,
+          "changePixels": 682,
+          "verdict": "CHANGE"
+        },
+        "0.5mm": {
+          "radius": 9,
+          "changePixels": 325,
+          "verdict": "CHANGE"
+        }
+      }
+    },
+    "largestSafeMm": {
+      "72": {
+        "contiguous": 0.15,
+        "anywhere": 0.15
+      },
+      "150": {
+        "contiguous": 0.25,
+        "anywhere": 0.25
+      },
+      "300": {
+        "contiguous": 0.3,
+        "anywhere": 0.3
+      },
+      "450": {
+        "contiguous": 0.3,
+        "anywhere": 0.3
+      }
+    },
+    "atDefault": {
+      "72": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 596,
+        "height": 842
+      },
+      "150": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 1241,
+        "height": 1754
+      },
+      "300": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 2481,
+        "height": 3508
+      },
+      "450": {
+        "millimetres": 0,
+        "radius": 0,
+        "changed": "CHANGE",
+        "control": "MATCH",
+        "width": 3721,
+        "height": 5262
+      }
+    },
+    "minimumSafeAcrossDpi": 0.15,
+    "policyMaximum": 0.15,
+    "policyMaximumIsSafeEverywhere": true
+  },
+  "pairPresentation": {
+    "four identical": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 0
+      },
+      "pairs": [
+        {
+          "member": "identical-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "base-a4-copy",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "base-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        }
+      ],
+      "overallVerdict": "MATCH",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 0
+    },
+    "three the same, one changed": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 8530
+      },
+      "pairs": [
+        {
+          "member": "identical-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "base-a4-copy",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "added-line-a4",
+          "shownAsChanged": 8530,
+          "changePixels": 8530,
+          "verdict": "CHANGE"
+        }
+      ],
+      "overallVerdict": "CHANGE",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 8530
+    },
+    "two against two": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 0
+      },
+      "pairs": [
+        {
+          "member": "identical-a4",
+          "shownAsChanged": 0,
+          "changePixels": 0,
+          "verdict": "MATCH"
+        },
+        {
+          "member": "wall-at-y-a4",
+          "shownAsChanged": 17060,
+          "changePixels": 17060,
+          "verdict": "CHANGE"
+        },
+        {
+          "member": "wall-at-y-a4-copy",
+          "shownAsChanged": 17060,
+          "changePixels": 17060,
+          "verdict": "CHANGE"
+        }
+      ],
+      "overallVerdict": "CHANGE",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 34120
+    },
+    "reference and three different": {
+      "members": 4,
+      "anyOtherMemberPresentation": {
+        "shownAsChanged": 0
+      },
+      "pairs": [
+        {
+          "member": "added-line-a4",
+          "shownAsChanged": 8530,
+          "changePixels": 8530,
+          "verdict": "CHANGE"
+        },
+        {
+          "member": "removed-line-a4",
+          "shownAsChanged": 8530,
+          "changePixels": 8530,
+          "verdict": "CHANGE"
+        },
+        {
+          "member": "wall-at-y-a4",
+          "shownAsChanged": 17060,
+          "changePixels": 17060,
+          "verdict": "CHANGE"
+        }
+      ],
+      "overallVerdict": "CHANGE",
+      "everyChangedPairIsVisible": true,
+      "visibleMatchesMask": true,
+      "totalShownByPairs": 34120
+    }
+  },
+  "jobWork": {
+    "limit": 12000000000,
+    "algorithm": "separable-dilation",
+    "perPageUnits": 69578880,
+    "pagesToExceed": 173,
+    "aggregateLabel": "173 pages, each below, the total above",
+    "jobs": {
+      "one page, below the ceiling": {
+        "requestedPages": 1,
+        "comparablePages": 1,
+        "skipped": [],
+        "perPageUnits": [
+          69578880
+        ],
+        "jobWorkUnits": 69578880,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "three pages, total below": {
+        "requestedPages": 3,
+        "comparablePages": 3,
+        "skipped": [],
+        "perPageUnits": [
+          69578880,
+          69578880,
+          69578880
+        ],
+        "jobWorkUnits": 208736640,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "173 pages, each below, the total above": {
+        "requestedPages": 173,
+        "comparablePages": 173,
+        "skipped": [],
+        "perPageUnits": [
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880,
+          69578880
+        ],
+        "jobWorkUnits": 12037146240,
+        "representable": true,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_WORK_BUDGET",
+          "reason": "173 pages total 12,037,146,240 work units, over a ceiling of 12,000,000,000; no single page is"
+        },
+        "everyPageWithinPageCeiling": true
+      },
+      "one page over on its own": {
+        "requestedPages": 1,
+        "comparablePages": 1,
+        "skipped": [],
+        "perPageUnits": [
+          12627783200
+        ],
+        "jobWorkUnits": 12627783200,
+        "representable": true,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_WORK_BUDGET",
+          "reason": "page 1 alone is 12,627,783,200 work units, over a ceiling of 12,000,000,000"
+        },
+        "everyPageWithinPageCeiling": false
+      },
+      "reference-pairs over three pages": {
+        "requestedPages": 3,
+        "comparablePages": 3,
+        "skipped": [],
+        "perPageUnits": [
+          208736640,
+          208736640,
+          208736640
+        ],
+        "jobWorkUnits": 626209920,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "a page that cannot be compared is still in the plan": {
+        "requestedPages": 3,
+        "comparablePages": 1,
+        "skipped": [
+          "page 2: MISSING_PAGE",
+          "page 3: RENDER_FAILED"
+        ],
+        "perPageUnits": [
+          69578880,
+          0,
+          0
+        ],
+        "jobWorkUnits": 69578880,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "an export range costs only the pages asked for": {
+        "requestedPages": 2,
+        "comparablePages": 2,
+        "skipped": [],
+        "perPageUnits": [
+          69578880,
+          69578880
+        ],
+        "jobWorkUnits": 139157760,
+        "representable": true,
+        "withinBudget": true,
+        "refusal": null,
+        "everyPageWithinPageCeiling": true
+      },
+      "arithmetic outside the safe-integer range": {
+        "requestedPages": 1,
+        "comparablePages": 1,
+        "skipped": [],
+        "perPageUnits": [
+          null
+        ],
+        "jobWorkUnits": null,
+        "representable": false,
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_WORK_BUDGET",
+          "reason": "the work this job would do is not representable"
+        },
+        "everyPageWithinPageCeiling": false
+      }
+    },
+    "noAlgorithm": {
+      "status": "OVER_WORK_BUDGET",
+      "reason": "no comparison algorithm was selected, so no work bound exists"
+    }
+  },
+  "outputBudget": {
+    "limit": 536870912,
+    "outputLimit": 268435456,
+    "mvpPagesAtA4300": 7,
+    "spoolChunkBytes": 4194304,
+    "publishChunkBytes": 4194304,
+    "selectedSink": "memory",
+    "deferredSink": "spool",
+    "paths": {
+      "memory": {
+        "implementationReady": true,
+        "ceiling": "MAX_OUTPUT_BYTES, checked in preflight",
+        "establishes": [
+          "the container that ships today",
+          "an explicit output ceiling",
+          "atomic publish, since nothing exists until save()"
+        ],
+        "missing": []
+      },
+      "spool": {
+        "implementationReady": false,
+        "requires": "output-writer-sub-spike",
+        "establishes": [
+          "browser-local staging with no external service",
+          "bounded chunked write and bounded chunked read",
+          "no artifact after a cancellation",
+          "no artifact after a supersession",
+          "run-scoped namespaces and ownership-aware cleanup"
+        ],
+        "missing": [
+          "a real comparison PDF assembled from the spool",
+          "a bounded streaming container writer",
+          "storage-quota preflight against a real quota",
+          "crash and tab-close orphan recovery",
+          "reopen validation: page count, dimensions, orientation",
+          "production integration"
+        ]
+      }
+    },
+    "shippedSink": "memory",
+    "lifetime": [
+      "compare pair",
+      "paint visual",
+      "encode",
+      "append to sink",
+      "release RGBA and encoded bytes"
+    ],
+    "storage": {
+      "5 pages, 4 members, spooled": {
+        "requiredBytes": 522000000,
+        "unknownQuota": {
+          "requiredBytes": 522000000,
+          "verdict": "unknown",
+          "availableBytes": null,
+          "refusal": null,
+          "reported": "0.5 GB of temporary output required; the browser reported no storage estimate"
+        },
+        "againstTwoGigabytes": {
+          "requiredBytes": 522000000,
+          "availableBytes": 1000000000,
+          "quotaBytes": 2000000000,
+          "usageBytes": 0,
+          "verdict": "within",
+          "refusal": null
+        },
+        "againstOneTerabyte": {
+          "requiredBytes": 522000000,
+          "availableBytes": 500000000000,
+          "quotaBytes": 1000000000000,
+          "usageBytes": 0,
+          "verdict": "within",
+          "refusal": null
+        }
+      },
+      "200 pages, 4 members, spooled": {
+        "requiredBytes": 20878000000,
+        "unknownQuota": {
+          "requiredBytes": 20878000000,
+          "verdict": "unknown",
+          "availableBytes": null,
+          "refusal": null,
+          "reported": "20.9 GB of temporary output required; the browser reported no storage estimate"
+        },
+        "againstTwoGigabytes": {
+          "requiredBytes": 20878000000,
+          "availableBytes": 1000000000,
+          "quotaBytes": 2000000000,
+          "usageBytes": 0,
+          "verdict": "insufficient",
+          "refusal": {
+            "status": "OVER_STORAGE_CAPACITY",
+            "reason": "20.9 GB of temporary output against 1.0 GB this origin may claim"
+          }
+        },
+        "againstOneTerabyte": {
+          "requiredBytes": 20878000000,
+          "availableBytes": 500000000000,
+          "quotaBytes": 1000000000000,
+          "usageBytes": 0,
+          "verdict": "within",
+          "refusal": null
+        }
+      }
+    },
+    "storageVerdicts": {
+      "WITHIN": "within",
+      "INSUFFICIENT": "insufficient",
+      "UNKNOWN": "unknown"
+    },
+    "cases": {
+      "1 page, 2 members, in RAM": {
+        "pages": 1,
+        "members": 2,
+        "sink": "memory",
+        "pairsPerPage": 1,
+        "visuals": 1,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 35,
+        "spooledMB": 0,
+        "perPagePeakMB": 139,
+        "duringLastPageMB": 139,
+        "publishPhaseMB": 70,
+        "jobPeakMB": 139,
+        "peakPhase": "the last page",
+        "withinBudget": true,
+        "refusal": null,
+        "retainedPerCompletedPageMB": 34.8
+      },
+      "5 pages, 2 members, in RAM": {
+        "pages": 5,
+        "members": 2,
+        "sink": "memory",
+        "pairsPerPage": 1,
+        "visuals": 5,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 174,
+        "spooledMB": 0,
+        "perPagePeakMB": 139,
+        "duringLastPageMB": 278,
+        "publishPhaseMB": 348,
+        "jobPeakMB": 348,
+        "peakPhase": "publish",
+        "withinBudget": true,
+        "refusal": null,
+        "retainedPerCompletedPageMB": 34.8
+      },
+      "5 pages, 4 members, in RAM": {
+        "pages": 5,
+        "members": 4,
+        "sink": "memory",
+        "pairsPerPage": 3,
+        "visuals": 15,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 522,
+        "spooledMB": 0,
+        "perPagePeakMB": 157,
+        "duringLastPageMB": 574,
+        "publishPhaseMB": 1044,
+        "jobPeakMB": 1044,
+        "peakPhase": "publish",
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_OUTPUT_BUDGET",
+          "reason": "15 visual(s) totalling 522 MB of finished output, against a ceiling of 268 MB"
+        },
+        "retainedPerCompletedPageMB": 104.4
+      },
+      "5 pages, 4 members, as data URLs": {
+        "pages": 5,
+        "members": 4,
+        "sink": "memory",
+        "pairsPerPage": 3,
+        "visuals": 15,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 522,
+        "spooledMB": 0,
+        "perPagePeakMB": 157,
+        "duringLastPageMB": 1270,
+        "publishPhaseMB": 1914,
+        "jobPeakMB": 1914,
+        "peakPhase": "publish",
+        "withinBudget": false,
+        "refusal": {
+          "status": "OVER_OUTPUT_BUDGET",
+          "reason": "15 visual(s) totalling 522 MB of finished output, against a ceiling of 268 MB"
+        },
+        "retainedPerCompletedPageMB": 278.4
+      },
+      "5 pages, 4 members, spooled": {
+        "pages": 5,
+        "members": 4,
+        "sink": "spool",
+        "pairsPerPage": 3,
+        "visuals": 15,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 522,
+        "spooledMB": 522,
+        "perPagePeakMB": 157,
+        "duringLastPageMB": 157,
+        "publishPhaseMB": 8,
+        "jobPeakMB": 157,
+        "peakPhase": "the last page",
+        "withinBudget": true,
+        "refusal": null,
+        "retainedPerCompletedPageMB": 0
+      },
+      "200 pages, 4 members, spooled": {
+        "pages": 200,
+        "members": 4,
+        "sink": "spool",
+        "pairsPerPage": 3,
+        "visuals": 600,
+        "perVisualMB": 34.8,
+        "totalOutputMB": 20878,
+        "spooledMB": 20878,
+        "perPagePeakMB": 157,
+        "duringLastPageMB": 157,
+        "publishPhaseMB": 8,
+        "jobPeakMB": 157,
+        "peakPhase": "the last page",
+        "withinBudget": true,
+        "refusal": null,
+        "retainedPerCompletedPageMB": 0
+      }
+    },
+    "shape": [
+      {
+        "page": 3,
+        "index": 0,
+        "reference": "reference",
+        "member": "member 2",
+        "title": "p3: reference vs member 2"
+      },
+      {
+        "page": 3,
+        "index": 1,
+        "reference": "reference",
+        "member": "member 3",
+        "title": "p3: reference vs member 3"
+      },
+      {
+        "page": 3,
+        "index": 2,
+        "reference": "reference",
+        "member": "member 4",
+        "title": "p3: reference vs member 4"
+      }
+    ]
+  },
+  "atomicPublish": {
+    "available": true,
+    "perVisualBytes": 8709434,
+    "width": 1241,
+    "height": 1754,
+    "writeChunkBytes": 4194304,
+    "publishChunkBytes": 4194304,
+    "partLargerThanChunk": true,
+    "completed": {
+      "runId": "a1",
+      "pages": 3,
+      "stagedParts": 3,
+      "spooledBytes": 26128302,
+      "spoolWritePeakBytes": 4194304,
+      "publishReadPeakBytes": 4194304,
+      "published": true,
+      "finalExists": true,
+      "finalSize": 26128302,
+      "dirsLeft": []
+    },
+    "cancelledMidway": {
+      "runId": "a2",
+      "pages": 3,
+      "stagedParts": 2,
+      "spooledBytes": 17418868,
+      "spoolWritePeakBytes": 4194304,
+      "publishReadPeakBytes": 0,
+      "published": false,
+      "finalExists": false,
+      "finalSize": 0,
+      "dirsLeft": []
+    },
+    "supersededBeforePublish": {
+      "runId": "a3",
+      "pages": 3,
+      "stagedParts": 3,
+      "spooledBytes": 26128302,
+      "spoolWritePeakBytes": 4194304,
+      "publishReadPeakBytes": 0,
+      "published": false,
+      "finalExists": false,
+      "finalSize": 0,
+      "dirsLeft": []
+    },
+    "publishPeakByParts": {
+      "one": 4194304,
+      "five": 4194304,
+      "oneSize": 8709434,
+      "fiveSize": 43547170
+    },
+    "isolation": {
+      "abandonedRun": "b1",
+      "publishingRun": "b2",
+      "abandonedSurvived": true,
+      "abandonedPartsIntact": true,
+      "secondPublished": true,
+      "secondFinalSize": 17418868,
+      "reclaimableWhileLive": [],
+      "reclaimableOnceReleased": [
+        "m4-spool-b1-g1"
+      ]
+    },
+    "storage": {
+      "quotaBytes": 1199517044736,
+      "usageBytes": 0,
+      "headroom": 0.5
+    }
+  },
+  "calibration": {
+    "algorithm": "separable-dilation",
+    "rows": {
+      "A4 150dpi, 0.15mm": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "radius": 1,
+        "units": 17413712,
+        "ms": 25.5,
+        "msPerUnit": 0.0000014643632558066885
+      },
+      "A4 150dpi, 0.5mm": {
+        "width": 1241,
+        "height": 1754,
+        "pixels": 2176714,
+        "radius": 3,
+        "units": 17413712,
+        "ms": 25.2,
+        "msPerUnit": 0.000001447135452968341
+      },
+      "A4 300dpi, 0.15mm": {
+        "width": 2481,
+        "height": 3508,
+        "pixels": 8703348,
+        "radius": 2,
+        "units": 69626784,
+        "ms": 110.8,
+        "msPerUnit": 0.0000015913416307870799
+      },
+      "A3 150dpi, 0.15mm": {
+        "width": 1754,
+        "height": 2481,
+        "pixels": 4351674,
+        "radius": 1,
+        "units": 34813392,
+        "ms": 51.8,
+        "msPerUnit": 0.0000014879331493185084
+      },
+      "A1 150dpi, 0.15mm": {
+        "width": 3508,
+        "height": 4967,
+        "pixels": 17424236,
+        "radius": 1,
+        "units": 139393888,
+        "ms": 264.5,
+        "msPerUnit": 0.0000018975006996002579
+      }
+    },
+    "worstMsPerUnit": 0.0000018975006996002579,
+    "ceiling": 12000000000,
+    "projectedWorstSeconds": 22.8
+  },
+  "asyncCancellation": {
+    "width": 1241,
+    "height": 1754,
+    "radius": 3,
+    "band": 512,
+    "expectedChangePixels": 41116,
+    "completed": {
+      "status": "READY_TO_COMPARE",
+      "bands": 18,
+      "publishable": true,
+      "changePixels": 41116,
+      "matchesDirect": true
+    },
+    "synchronousDriver": {
+      "status": "READY_TO_COMPARE",
+      "bands": 18,
+      "ms": 25,
+      "cancellationObserved": false,
+      "cancellationFlagAtEnd": false,
+      "produced": true
+    },
+    "asynchronousDriver": {
+      "status": "CANCELLED",
+      "bands": 4,
+      "ms": 24,
+      "reason": "cancelled",
+      "cancellationObserved": true,
+      "publishable": false,
+      "result": null,
+      "stoppedEarly": true
+    },
+    "supersededByOwnership": {
+      "status": "CANCELLED",
+      "bands": 3,
+      "reason": "superseded",
+      "publishable": false,
+      "result": null
+    }
+  },
+  "documentContract": {
+    "documents": [
+      "README.md",
+      "architecture.md",
+      "baseline.md",
+      "decision-matrix.md",
+      "limitations.md",
+      "measurements.md"
+    ],
+    "supersededValues": [
+      {
+        "needle": "14,785,512,000",
+        "why": "the five-page job example, costed under the rejected scan"
+      },
+      {
+        "needle": "2,957,102,400 units",
+        "why": "per-page work under the rejected scan"
+      },
+      {
+        "needle": "55 seconds",
+        "why": "H10 before it was calibrated against the selected algorithm"
+      },
+      {
+        "needle": "Match tolerance 0.5%",
+        "why": "the MATCH ratio floor, now fixed at zero"
+      },
+      {
+        "needle": "tolerance = 0.005",
+        "why": "the MATCH ratio floor, now fixed at zero"
+      },
+      {
+        "needle": "0.15 bytes per pixel",
+        "why": "the encoding allowance taken from a compression ratio"
+      },
+      {
+        "needle": "encodedImageUpperBound",
+        "why": "the bound that described an encoder nobody controls"
+      },
+      {
+        "needle": "dataUrlBytesPerPixel",
+        "why": "the measured-ratio allowance"
+      },
+      {
+        "needle": "**0.25 mm**",
+        "why": "the tolerance ceiling from before the 72 dpi sweep"
+      },
+      {
+        "needle": "| CHANGE | CHANGE | CHANGE | CHANGE |",
+        "why": "the candidate table from before plan and verdict were separated"
+      },
+      {
+        "needle": "every member's dilation",
+        "why": "the all-member presentation"
+      },
+      {
+        "needle": "234 MB",
+        "why": "the shipped-model working set, not the phase model"
+      },
+      {
+        "needle": "three billion",
+        "why": "per-page work under the rejected scan, rounded"
+      },
+      {
+        "needle": "neighbourhood reads",
+        "why": "the rejected scan, described rather than counted"
+      }
+    ],
+    "required": [
+      {
+        "doc": "architecture.md",
+        "needle": "separable-dilation",
+        "why": "the selected algorithm, named"
+      },
+      {
+        "doc": "architecture.md",
+        "needle": "69,578,880",
+        "why": "the current A4 300 dpi work figure"
+      },
+      {
+        "doc": "architecture.md",
+        "needle": "comparison-kernel",
+        "why": "what H10 actually bounds"
+      },
+      {
+        "doc": "decision-matrix.md",
+        "needle": "separable-dilation",
+        "why": "the selected algorithm, named"
+      },
+      {
+        "doc": "measurements.md",
+        "needle": "69,578,880",
+        "why": "the current A4 300 dpi work figure"
+      },
+      {
+        "doc": "measurements.md",
+        "needle": "comparison-kernel",
+        "why": "what H10 actually bounds"
+      },
+      {
+        "doc": "limitations.md",
+        "needle": "Output Writer Sub-Spike",
+        "why": "the spool path is conditional until that spike is done"
+      },
+      {
+        "doc": "limitations.md",
+        "needle": "no comparison PDF was assembled",
+        "why": "the spool prototype does not claim a container"
+      },
+      {
+        "doc": "README.md",
+        "needle": "H11",
+        "why": "the output sink decision is on the Human Gate"
+      }
+    ]
+  }
+}
