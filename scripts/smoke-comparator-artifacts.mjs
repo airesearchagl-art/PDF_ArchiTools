@@ -147,8 +147,16 @@ async function settle(page, timeoutMs = 120000) {
     await wait(250);
 }
 
+// A file that has been set aside for later inspection is no longer a download
+// this run is waiting for, but it is still needed on disk.
 const finished = () => fs.readdirSync(DOWNLOADS)
-    .filter((f) => !f.endsWith('.crdownload'));
+    .filter((f) => !f.endsWith('.crdownload') && !f.startsWith('kept-'));
+
+/** Set a captured artifact aside, so the next click starts from an empty tray. */
+function keep(name) {
+    fs.renameSync(path.join(DOWNLOADS, name), path.join(DOWNLOADS, `kept-${name}`));
+    return `kept-${name}`;
+}
 
 /** Wait for Chrome to finish writing a download, or report that none came. */
 async function download(timeoutMs = 120000) {
@@ -448,8 +456,15 @@ try {
     await upload(absent, ['three-pages', 'two-pages']);
     await absent.click('[data-testid="export-pdf"]');
     const absentFile = await download();
+    // The report is the other presentation that has to keep it. Pages 1 and 2
+    // match, so without the notice there would be nothing in the file at all --
+    // and "no changes found" is not what happened.
+    const keptExport = keep(absentFile.name);
+    await absent.click('[data-testid="change-report"]');
+    const absentReport = await download();
     await absent.close();
-    const absentPdf = await inspect(absentFile.name);
+    const absentReportPdf = await inspect(absentReport.name);
+    const absentPdf = await inspect(keptExport);
     for (const p of absentPdf.pages) {
         console.log(`  page ${p.index}: ${p.widthPt}x${p.heightPt}pt  ink ${p.inked}`
             + `  "${p.text}"`);
@@ -465,7 +480,7 @@ try {
         + 'has no glyphs for it');
     const glyphs = await (await inspectorPage()).evaluate(
         (args) => window.__artifacts.noticeProof(...args),
-        [`/test-fixtures/comparator-downloads/${absentFile.name}`, 3,
+        [`/test-fixtures/comparator-downloads/${keptExport}`, 3,
             ['Page 3 — MISSING_PAGE', 'ページ 3 — two-pages.pdf に対応ページがありません'],
             ['Page 3 — MISSING_PAGE', 'ページ 3 — 比較は正常に完了しました'],
             1240, 1754],
@@ -481,6 +496,15 @@ try {
     probe('and a different sentence does not match it, so this measures glyphs',
         glyphs.otherSentence < 0.75,
         `${(glyphs.otherSentence * 100).toFixed(1)}%`);
+    console.log(`  report: ${absentReportPdf.numPages} page(s), `
+        + `ink ${absentReportPdf.pages[0].inked}, text "${
+            absentReportPdf.pages[0].text}"`);
+    probe('the Change Report keeps it too, rather than reporting no changes',
+        absentReportPdf.numPages === 1
+        && absentReportPdf.pages[0].text === ''
+        && absentReportPdf.pages[0].inked > 200,
+        'two matching pages and one page nobody could compare is not '
+        + '"no changes found"');
     clearDownloads();
 
     // ---- a member that cannot be drawn ----------------------------------------
