@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'vite';
 import puppeteer from 'puppeteer';
+import { PDFDocument, rgb } from 'pdf-lib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5205;
@@ -284,6 +285,49 @@ const countPaints = (page) => page.evaluate(() => {
 });
 const paints = (page) => page.evaluate(() => window.__paints);
 
+/** Choose a memory budget through the panel a user would open. */
+async function setMemory(page, bytes) {
+    await page.evaluate(() => {
+        if (document.querySelector('[data-testid="memory-budget"]')) return;
+        [...document.querySelectorAll('button')]
+            .find((b) => b.getAttribute('title') === 'Export Settings')?.click();
+    });
+    await page.waitForSelector('[data-testid="memory-budget"]');
+    await page.select('[data-testid="memory-budget"]', String(bytes));
+}
+
+/**
+ * Count every canvas given a context at a notice's size, from before anything
+ * runs. A notice is drawn into exactly such a canvas and into nothing else, so
+ * "no notice raster was allocated" is measured rather than inferred.
+ */
+const countNoticeRasters = (page) => page.evaluate(() => {
+    window.__noticeRasters = 0;
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function patched(...args) {
+        if (this.width === 1240 && (this.height === 1754 || this.height === 620)) {
+            window.__noticeRasters += 1;
+        }
+        return original.apply(this, args);
+    };
+});
+const noticeRasters = (page) => page.evaluate(() => window.__noticeRasters);
+
+/** The 24pt sheet of `tiny-1`, repeated: page 1 compares, the rest are notices. */
+async function writeTiny(pages) {
+    const doc = await PDFDocument.create();
+    doc.setCreationDate(new Date(Date.UTC(2026, 0, 1)));
+    doc.setModificationDate(new Date(Date.UTC(2026, 0, 1)));
+    for (let n = 0; n < pages; n += 1) {
+        doc.addPage([24, 24]).drawRectangle({
+            x: 4, y: 4, width: 16, height: 16, borderColor: rgb(0, 0, 0), borderWidth: 1,
+        });
+    }
+    const name = `tiny-${pages}`;
+    fs.writeFileSync(path.join(FIXTURES, `${name}.pdf`), await doc.save({ useObjectStreams: false }));
+    return name;
+}
+
 let exitCode = 1;
 try {
     // ---- the file a four-member comparison writes ----------------------------
@@ -392,6 +436,31 @@ try {
         byOrder.pages.filter((p) => p.coloured > 500).map((p) => p.index)
             .join(',') === '4',
         'page 4 of the file is p2 against the member that differs on p2');
+    clearDownloads();
+
+    // ---- a CHANGE is written as itself ------------------------------------------
+    //
+    // jsPDF names an image it was not given a name for by hashing the first
+    // half of its bytes, and reuses any earlier image with that name. A stored
+    // PNG's first half is the top half of the sheet, so a CHANGE whose change
+    // is all in the lower half used to be written as the MATCH picture before
+    // it -- under a caption saying CHANGE.
+    console.log('\n=== a change in the lower half ===');
+    const lower = await openComparator();
+    await upload(lower, ['base-a4', 'identical-a4', 'removed-line-a4']);
+    await lower.click('[data-testid="export-pdf"]');
+    const lowerFile = await download();
+    await lower.close();
+    const lowerPdf = await inspect(lowerFile.name);
+    for (const p of lowerPdf.pages) {
+        console.log(`  page ${p.index}: colour ${p.coloured}  "${p.text}"`);
+    }
+    check('the MATCH pair is written as a MATCH',
+        lowerPdf.numPages === 2 && lowerPdf.pages[0].text.endsWith('— MATCH')
+        && lowerPdf.pages[0].coloured === 0);
+    probe('and the CHANGE after it carries its own picture, not the MATCH one',
+        lowerPdf.pages[1].text.endsWith('— CHANGE') && lowerPdf.pages[1].coloured > 1000,
+        `${lowerPdf.pages[1].coloured} coloured pixels on the CHANGE page`);
     clearDownloads();
 
     // ---- the Change Report ----------------------------------------------------
@@ -511,6 +580,77 @@ try {
         'two matching pages and one page nobody could compare is not '
         + '"no changes found"');
     clearDownloads();
+
+    // ---- a notice costs what an image costs --------------------------------------
+    //
+    // The shared sheet is 24pt square, so the comparison is next to nothing and
+    // everything the file would hold is notices. The planner finds the longest
+    // such document each file can take under an explicit 1 GiB -- at the
+    // default the memory ceiling speaks first -- and the gate writes documents
+    // exactly one page either side of it and puts them through the real UI.
+    console.log('\n=== notices, at the output ceiling ===');
+    const GIB = 1024 * 1024 * 1024;
+    const MAX_OUTPUT = 256 * 1024 * 1024;
+    for (const [kind, button, label] of [
+        ['COMPARISON_PDF', 'export-pdf', 'Comparison PDF'],
+        ['CHANGE_REPORT', 'change-report', 'Change Report'],
+    ]) {
+        const largest = await (await inspectorPage()).evaluate(
+            (k, limit) => window.__artifacts.noticeBoundary(k, limit), kind, GIB,
+        );
+        const under = await writeTiny(largest);
+        const over = await writeTiny(largest + 1);
+        console.log(`  ${label}: the planner takes ${largest} pages; writing ${under} and ${over}`);
+
+        // One page over: refused before any notice is drawn, and no file.
+        const refused = await openComparator();
+        await countNoticeRasters(refused);
+        await setMemory(refused, GIB);
+        await upload(refused, ['tiny-1', over]);
+        await refused.click(`[data-testid="${button}"]`);
+        const status = await waitForStatus(refused, '[data-testid="refusal-status"]');
+        const reason = await refused.evaluate(() => document
+            .querySelector('[data-testid="preflight-refusal"]')?.textContent ?? '');
+        const overFiles = await noDownload();
+        const drawn = await noticeRasters(refused);
+        await refused.close();
+        probe(`${label}: one notice past the ceiling is OVER_OUTPUT_BUDGET in the UI`,
+            status === 'OVER_OUTPUT_BUDGET', `${status}: ${reason.slice(0, 100)}`);
+        probe(`${label}: refused before a single notice raster was allocated`,
+            drawn === 0, `${drawn} notice-sized canvases`);
+        probe(`${label}: and nothing was downloaded`,
+            overFiles.length === 0,
+            overFiles.length === 0 ? 'no file' : overFiles.join(', '));
+
+        // Exactly at the boundary: the file is written, holds every notice, and
+        // is inside the ceiling.
+        const accepted = await openComparator();
+        await setMemory(accepted, GIB);
+        await upload(accepted, ['tiny-1', under]);
+        await accepted.click(`[data-testid="${button}"]`);
+        const underFile = await download(600000);
+        const underStatus = await accepted.evaluate(() => document
+            .querySelector('[data-testid="refusal-status"]')?.textContent ?? null);
+        await accepted.close();
+        // The pair on page 1 matches, so the report writes only the notices.
+        const expectedPages = kind === 'COMPARISON_PDF' ? largest : largest - 1;
+        const underPages = underFile
+            ? await (await inspectorPage()).evaluate(
+                (url) => window.__artifacts.pageCount(url),
+                `/test-fixtures/comparator-downloads/${underFile.name}`,
+            )
+            : null;
+        check(`${label}: the document at the boundary is written`,
+            underFile !== null && underStatus === null,
+            underFile ? `${underFile.name}, ${(underFile.size / (1024 * 1024)).toFixed(1)} MiB`
+                : `no file (${underStatus})`);
+        check(`${label}: with every notice in it, and inside the output ceiling`,
+            underPages === expectedPages && underFile.size <= MAX_OUTPUT,
+            `${underPages} pages (expected ${expectedPages}), `
+            + `${underFile?.size.toLocaleString('en-US')} of ${MAX_OUTPUT.toLocaleString('en-US')} bytes`);
+        clearDownloads();
+        for (const name of [under, over]) fs.rmSync(path.join(FIXTURES, `${name}.pdf`), { force: true });
+    }
 
     // ---- a member that cannot be drawn ----------------------------------------
     //

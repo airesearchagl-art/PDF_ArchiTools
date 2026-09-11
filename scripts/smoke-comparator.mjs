@@ -157,6 +157,87 @@ try {
         && geometry['same aspect 1.4x'].plan === 'GEOMETRY_MISMATCH',
         'proportions do not make it the same paper');
 
+    // ---- one frame per compared page (RF-J1) -----------------------------------
+    //
+    // A sheet inside the geometry tolerance is accepted -- and then it has to be
+    // drawn into the same raster as the reference, or its buffer is read with a
+    // row stride it was not written with and every row after the first is
+    // sheared. These fixtures carry the A4 drawing unchanged on a sheet a
+    // sub-point larger, so anything the comparison finds is the frame's doing.
+    console.log('\n=== one frame per compared page ===');
+    const frames = await page.evaluate(() => window.__comparator.canonicalFrame());
+    const describeFrame = (r) => `${r.plan}  frame ${r.frame?.width ?? '-'}x${
+        r.frame?.height ?? '-'}  rasters ${r.rasters.map((x) => `${x.slot}:${x.width}x${
+        x.height} (own ${x.naturalWidth}x${x.naturalHeight})`).join(', ')}  ${
+        r.verdict ?? '—'} ${r.changePixels ?? ''}`;
+    for (const key of ['isolated', 'isolated300', 'reversed', 'isolatedOver',
+        'proportional', 'proportionalOver', 'userUnit']) {
+        console.log(`  ${key.padEnd(17)} ${describeFrame(frames[key])}`);
+    }
+    const sameFrame = (r) => r.rasters.length === 2 && r.rasters.every(
+        (x) => x.width === r.frame.width && x.height === r.frame.height
+            && x.maskLength === r.frame.width * r.frame.height,
+    ) && r.pairWidth === r.frame.width && r.pairHeight === r.frame.height;
+    check('+0.99pt with the drawing unchanged is the same sheet',
+        frames.isolated.plan === 'READY_TO_COMPARE'
+        && frames.isolated.residual.widthPt > 0.98 && frames.isolated.residual.widthPt < 1,
+        `residual ${frames.isolated.residual.widthPt.toFixed(2)} x `
+        + `${frames.isolated.residual.heightPt.toFixed(2)} pt`);
+    check('and every member is drawn into the reference frame, not its own',
+        sameFrame(frames.isolated)
+        && frames.isolated.rasters[1].naturalWidth !== frames.isolated.frame.width,
+        `both ${frames.isolated.frame.width}x${frames.isolated.frame.height}; the member's `
+        + `own raster would have been ${frames.isolated.rasters[1].naturalWidth}x`
+        + `${frames.isolated.rasters[1].naturalHeight}`);
+    check('so the physically identical drawing is a MATCH at 0 px',
+        frames.isolated.verdict === 'MATCH' && frames.isolated.changePixels === 0,
+        `${frames.isolated.changePixels} differing of ${frames.isolated.inkPixels} ink pixels`);
+    check('and at 300 dpi, where the residual is more pixels',
+        sameFrame(frames.isolated300)
+        && frames.isolated300.verdict === 'MATCH' && frames.isolated300.changePixels === 0,
+        `${frames.isolated300.frame.width}x${frames.isolated300.frame.height}, own `
+        + `${frames.isolated300.rasters[1].naturalWidth}x`
+        + `${frames.isolated300.rasters[1].naturalHeight}`);
+    check('and when the member is the shorter sheet, the strip it lacks is paper',
+        sameFrame(frames.reversed)
+        && frames.reversed.verdict === 'MATCH' && frames.reversed.changePixels === 0,
+        `member's own ${frames.reversed.rasters[1].naturalWidth}x`
+        + `${frames.reversed.rasters[1].naturalHeight} padded to `
+        + `${frames.reversed.frame.width}x${frames.reversed.frame.height}`);
+    probe('+1.01pt with the drawing unchanged is refused, with no verdict',
+        frames.isolatedOver.plan === 'GEOMETRY_MISMATCH'
+        && frames.isolatedOver.verdict === null && frames.isolatedOver.rasters.length === 0,
+        frames.isolatedOver.reported.join('; '));
+    check('the proportional +0.99pt pair is compared in one frame too',
+        frames.proportional.plan === 'READY_TO_COMPARE' && sameFrame(frames.proportional),
+        `${frames.proportional.verdict}, ${frames.proportional.changePixels} differing px -- `
+        + 'its drawing is scaled with its sheet, so this is a real difference');
+    probe('and the proportional +1.01pt pair is refused',
+        frames.proportionalOver.plan === 'GEOMETRY_MISMATCH'
+        && frames.proportionalOver.verdict === null);
+    probe('a page in units other than the point is declined, by name',
+        frames.userUnit.plan === 'GEOMETRY_MISMATCH' && frames.userUnit.verdict === null
+        && frames.userUnit.reported.some((l) => l.includes('UserUnit')),
+        frames.userUnit.reported.join('; '));
+    // The old path: the member's natural raster, handed over with the
+    // reference's width and height supplied separately.
+    probe("a member's natural raster cannot be made into a mask of the reference's frame",
+        frames.probes.inkMaskRefusal !== null
+        && !frames.probes.inkMaskRefusal.startsWith('not a shape error'),
+        `${frames.probes.naturalSize.width}x${frames.probes.naturalSize.height} into `
+        + `${frames.isolated.frame.width}x${frames.isolated.frame.height}: `
+        + `${frames.probes.inkMaskRefusal}`);
+    probe('which is standing in front of a sheared comparison, not a harmless one',
+        frames.probes.shearedChangePixels > 1000,
+        `read with the wrong stride, the identical drawing differs in `
+        + `${frames.probes.shearedChangePixels} pixels`);
+    probe('masks of two different frames cannot be compared, banded, or painted',
+        [frames.probes.compareRefusal, frames.probes.bandedRefusal,
+            frames.probes.paintRefusal].every(
+            (r) => r !== null && !r.startsWith('not a shape error'),
+        ),
+        frames.probes.compareRefusal ?? 'compared');
+
     // ---- geometry primitives -------------------------------------------------
     const units = await page.evaluate(() => window.__comparator.geometryUnits());
     probe('a display-plane mapping would have stretched a quarter turn',
@@ -427,6 +508,9 @@ try {
         lifetime.maxLiveVisuals === 1
         && lifetime.maxLiveBytes === lifetime.oneVisualBytes,
         `${lifetime.maxLiveBytes.toLocaleString('en-US')} bytes = one visual`);
+    check('and the production sink lets go of it before jsPDF ingests it',
+        lifetime.releasedBySink === lifetime.pairs,
+        `${lifetime.releasedBySink}/${lifetime.pairs} composites released inside the sink`);
     check('and it has released that one by the time the job ends',
         lifetime.stillHeld === 0,
         'the sink took it, so the run does not keep it');
@@ -443,6 +527,207 @@ try {
         lifetime.withinBudget === true
         && lifetime.modelledPeak >= lifetime.oneVisualBytes + lifetime.predictedEncoded,
         `${(lifetime.modelledPeak / 1e6).toFixed(1)} MB modelled`);
+
+    // ---- notices are priced (RF-J2) ---------------------------------------------
+    //
+    // A page nobody could compare is written as a notice image, and an image
+    // costs what its size costs. Here the comparison is a 24pt square and
+    // everything else is notices: the job a budget that priced only
+    // comparisons would have waved through.
+    console.log('\n=== a notice costs what an image costs ===');
+    const notices = await page.evaluate(() => window.__comparator.noticeBudget());
+    const mib = (b) => `${(b / (1024 * 1024)).toFixed(2)} MiB`;
+    for (const kind of ['COMPARISON_PDF', 'CHANGE_REPORT']) {
+        const n = notices[kind];
+        console.log(`  ${kind.padEnd(15)} notice ${n.notice.width}x${n.notice.height}  `
+            + `largest accepted ${n.largest} pages (${n.under.notices} notices, `
+            + `${mib(n.under.outputBytes)})  first refused ${n.first} pages (`
+            + `${n.over.notices} notices, ${mib(n.over.outputBytes)})`);
+        console.log(`  ${''.padEnd(15)} pair output ${n.over.pairOutput} bytes, notice output `
+            + `${mib(n.over.noticeOutput)}; at 512 MiB ${n.overAtDefault}, at 2 GiB `
+            + `${n.overAtTwoGiB}`);
+    }
+    const cp = notices.COMPARISON_PDF;
+    const cr = notices.CHANGE_REPORT;
+    check('each file prices the notice it draws, not one notice for both',
+        cp.under.noticeSize?.join('x') === '1240x1754'
+        && cr.under.noticeSize?.join('x') === '1240x620',
+        'Comparison PDF 1240x1754, Change Report 1240x620');
+    for (const [label, n] of [['Comparison PDF', cp], ['Change Report', cr]]) {
+        check(`${label}: the comparison is next to nothing, the notices are the job`,
+            n.over.pairOutput < 64 * 1024 && n.over.noticeOutput > 256 * 1024 * 1024
+            && n.under.noticeOutput <= 256 * 1024 * 1024,
+            `pairs ${n.over.pairOutput} bytes; notices alone ${mib(n.over.noticeOutput)} `
+            + `over, ${mib(n.under.noticeOutput)} under`);
+        check(`${label}: just under the output ceiling is accepted`,
+            n.under.refusal === null && n.under.status === 'READY_TO_COMPARE'
+            && n.under.outputBytes <= 256 * 1024 * 1024,
+            `${n.largest} pages, ${mib(n.under.outputBytes)} of 256 MiB at an explicit 1 GiB`);
+        probe(`${label}: one notice more is OVER_OUTPUT_BUDGET`,
+            n.over.refusal === 'OVER_OUTPUT_BUDGET' && n.first === n.largest + 1
+            && n.over.notices === n.under.notices + 1,
+            n.over.reason ?? '');
+        probe(`${label}: and the refused plan reaches no sink, so no notice is drawn`,
+            n.sinkCallsOnRefused === 0,
+            'the engine returns the refusal without rendering or drawing anything');
+        probe(`${label}: nor does a larger memory budget buy past it`,
+            n.overAtTwoGiB === 'OVER_OUTPUT_BUDGET',
+            'at 2 GiB it is still the output ceiling that refuses');
+        check(`${label}: at the default budget the same job is refused for memory first`,
+            n.overAtDefault === 'OVER_MEMORY_BUDGET',
+            'every notice is held by the container until the file is saved');
+        check(`${label}: the MISSING_PAGE notices stay in the plan, each in its page's place`,
+            n.over.order[0].endsWith('PAIR_VISUAL')
+            && n.over.order.slice(1).every((o, i) => o === `${i + 2}:MISSING_PAGE_NOTICE`),
+            `${n.over.order.length} items, p1 compared, p2-p${n.first} notices`);
+    }
+
+    console.log('\n=== every item, in its place ===');
+    const mixed = await page.evaluate(() => window.__comparator.mixedOrder());
+    for (const kind of ['COMPARISON_PDF', 'CHANGE_REPORT']) {
+        const m = mixed[kind];
+        console.log(`  ${kind.padEnd(15)} planned  ${m.planned.map(
+            (i) => `p${i.page}${i.slot === null ? ':' + i.kind.split('_')[0] : `/s${i.slot}`}`,
+        ).join(' ')}`);
+        console.log(`  ${''.padEnd(15)} written  ${m.appended.map(
+            (i) => `p${i.page}${i.slot === null ? ':' + i.kind.split('_')[0] : `/s${i.slot}`}`,
+        ).join(' ')}`);
+    }
+    const mcp = mixed.COMPARISON_PDF;
+    const mcr = mixed.CHANGE_REPORT;
+    check('the mixed job has every kind of page, with a notice between comparisons',
+        mcp.pages.map((p) => p.status).join(',')
+            === 'READY_TO_COMPARE,GEOMETRY_MISMATCH,READY_TO_COMPARE,MISSING_PAGE',
+        mcp.pages.map((p) => `p${p.page} ${p.status} ${p.verdicts.join('/')}`).join('; '));
+    const sameItem = (a, b) => a.kind === b.kind && a.page === b.page && a.slot === b.slot;
+    check('Comparison PDF: what was written is exactly what was planned, in order',
+        mcp.appended.length === mcp.planned.length
+        && mcp.appended.every((a, i) => sameItem(a, mcp.planned[i])
+            && a.width === mcp.planned[i].width && a.height === mcp.planned[i].height)
+        && mcp.images === mcp.appended.length,
+        `${mcp.appended.length} items: page order, then slot order, notices in place`);
+    check('Change Report: the notices and the CHANGE crops, in planned order, none unplanned',
+        mcr.appended.every((a) => mcr.planned.some((p) => sameItem(a, p)
+            && a.width <= p.width && a.height <= p.height))
+        && mcr.appended.map((a) => mcr.planned.findIndex((p) => sameItem(a, p)))
+            .every((index, i, all) => i === 0 || index > all[i - 1])
+        && mcr.planned.filter((p) => p.emitted === 'always')
+            .every((p) => mcr.appended.some((a) => sameItem(a, p)))
+        && mcr.appended.filter((a) => a.kind === 'PAIR_VISUAL')
+            .every((a) => mcr.pairVerdicts[`${a.page}:${a.slot}`] === 'CHANGE')
+        && mcr.images === mcr.appended.length,
+        `${mcr.appended.length} of ${mcr.planned.length} planned items written`);
+    probe('in both, the MISSING_PAGE notice is last and the mismatch sits between pages 1 and 3',
+        [mcp, mcr].every((m) => {
+            const pages = m.appended.map((a) => `${a.page}:${a.kind}`);
+            return pages[pages.length - 1] === '4:MISSING_PAGE_NOTICE'
+                && pages.indexOf('2:GEOMETRY_MISMATCH_NOTICE')
+                    > pages.findLastIndex((p) => p.startsWith('1:'))
+                && pages.indexOf('2:GEOMETRY_MISMATCH_NOTICE')
+                    < pages.findIndex((p) => p.startsWith('3:'));
+        }),
+        'a missing page is always a suffix: no member lacks page n and has page n+1');
+
+    // ---- the production container (RF-J3) --------------------------------------
+    console.log('\n=== the container the files are built in ===');
+    const alias = await page.evaluate(() => window.__comparator.aliasProbe());
+    console.log(`  ${alias.verdicts.join(' then ')}, change from row ${alias.firstChangeRow} `
+        + `of ${alias.height}: jsPDF without an alias stored ${alias.rawImages} image(s); `
+        + `the sink stored ${alias.sinkImages} (${alias.aliases.join(', ')})`);
+    probe('jsPDF, left to name images itself, stores a lower-half CHANGE as the MATCH before it',
+        alias.verdicts.join(',') === 'MATCH,CHANGE'
+        && alias.firstChangeRow > alias.height / 2 && alias.rawImages === 1,
+        'its alias hashes only the first half of the bytes (jspdf.es.js:9095)');
+    check('so the sink names every image, and the CHANGE is stored as itself',
+        alias.sinkImages === 2 && alias.secondCarriesChange === true,
+        alias.aliases.join(', '));
+
+    const prod = await page.evaluate(() => window.__comparator.productionMemory());
+    console.log(`  jsPDF running ${prod.version.running}, modelled ${prod.version.modelled}`);
+    console.log(`  A4 at 300 dpi, two members, frame ${prod.model.frame.join('x')}:`);
+    console.log(`    per image: owned PNG ${mib(prod.model.item.encodedBytes)}, jsPDF ingest `
+        + `peak ${mib(prod.model.ingest.peak)} (${prod.model.ingest.peakStep}), retained `
+        + `${mib(prod.measured.retainedPerImage)}, file ${mib(prod.measured.filePerImage)}`);
+    console.log(`    item steps: ${Object.entries(prod.model.item.steps)
+        .map(([k, v]) => `${k} ${mib(v)}`).join(', ')}`);
+    console.log(`    kernel peak ${mib(prod.model.kernel.peakWorkingSet)} (`
+        + `${prod.model.kernel.peakPhase}), sink peak ${mib(prod.model.sinkPeak)}, retained `
+        + `${mib(prod.model.retainedTotal)}, during run ${mib(prod.model.duringRun)}`);
+    console.log(`    at publish: ${Object.entries(prod.model.publish)
+        .map(([k, v]) => `${k} ${mib(v)}`).join(' + ')} = ${mib(prod.model.atPublish)}`);
+    for (const t of prod.terms) {
+        console.log(`    [${t.basis.padEnd(12)}] ${t.term} -- ${t.source}`);
+    }
+    console.log(`  512 MiB: largest ${prod.largest.pages} pages (${mib(prod.largest.jobPeak)}, `
+        + `${prod.largest.peakPhase}); first refused ${prod.firstOver.pages} pages `
+        + `(${mib(prod.firstOver.jobPeak)}) ${prod.firstOver.refusal}`);
+    console.log(`  the same ${prod.firstOver.pages} pages: 1 GiB ${prod.atOneGiB.refusal ?? 'accepted'}, `
+        + `2 GiB ${prod.atTwoGiB.refusal ?? 'accepted'}; asked again at 512 MiB `
+        + `${prod.askedAgain.refusal}`);
+    console.log(`  1 GiB stops at ${prod.outputBoundary.largest} pages: `
+        + `${prod.outputBoundary.first} pages is ${prod.outputAtOne.refusal} `
+        + `(${mib(prod.outputAtOne.outputBytes)}), at 2 GiB ${prod.outputAtTwo.refusal}`);
+    console.log(`  173 pages: ${prod.workAtTwo.refusal} at 2 GiB, ${prod.workAtMachine.refusal} `
+        + 'at 64 GiB');
+    console.log(`  built the ${prod.largest.pages}-page job: ${prod.measured.images} images, `
+        + `${prod.measured.retainedChars.toLocaleString('en-US')} retained chars, file `
+        + `${prod.measured.fileBytes.toLocaleString('en-US')} bytes (modelled `
+        + `${prod.measured.modelledFileBytes.toLocaleString('en-US')}), max char code `
+        + `${prod.measured.maxCharCode}`);
+
+    check('the container running is the one the model was derived from',
+        prod.version.running === prod.version.modelled && prod.version.running === '3.0.4',
+        `jsPDF ${prod.version.running}`);
+    check('512 MiB takes a real multi-page A4 job through the Comparison PDF',
+        prod.largest.refusal === null && prod.largest.pages >= 2
+        && prod.largest.jobPeak <= 512 * 1024 * 1024,
+        `${prod.largest.pages} pages at 300 dpi, modelled ${mib(prod.largest.jobPeak)}`);
+    probe('and the next page is refused by name, before anything is drawn',
+        prod.firstOver.refusal === 'OVER_MEMORY_BUDGET'
+        && prod.firstOver.pages === prod.largest.pages + 1
+        && prod.firstOver.jobPeak > 512 * 1024 * 1024,
+        prod.firstOver.reason ?? '');
+    check('the same job is accepted once a person selects 1 GiB, or 2 GiB',
+        prod.atOneGiB.refusal === null && prod.atTwoGiB.refusal === null
+        && prod.presets.includes(1024 * 1024 * 1024)
+        && prod.presets.includes(2 * 1024 * 1024 * 1024),
+        'both are offered presets; neither is chosen for the user');
+    probe('and asking again at the default still refuses, because nothing was raised',
+        prod.askedAgain.refusal === 'OVER_MEMORY_BUDGET');
+    probe('a larger budget does not buy past the output ceiling',
+        prod.outputAtOne.refusal === 'OVER_OUTPUT_BUDGET'
+        && prod.outputAtTwo.refusal === 'OVER_OUTPUT_BUDGET',
+        `${prod.outputBoundary.first} pages, ${mib(prod.outputAtOne.outputBytes)}`);
+    probe('nor past the work ceiling',
+        prod.workAtTwo.refusal === 'OVER_WORK_BUDGET'
+        && prod.workAtMachine.refusal === 'OVER_WORK_BUDGET',
+        `${prod.workAtTwo.workUnits?.toLocaleString('en-US')} units`);
+    check('the model has a term for every buffer on the jsPDF path, and says what each rests on',
+        ['inflate', 'unfilter', 'split', 'stringify'].every((s) => s in prod.model.ingest.steps)
+        && ['retained images', 'content strings', 'rope flatten', 'joined document',
+            'ArrayBuffer', 'Blob'].every((s) => s in prod.model.publish)
+        && prod.terms.every((t) => ['exact', 'conservative', 'inferred'].includes(t.basis)),
+        `${prod.terms.length} named terms`);
+    // Measured against the real jsPDF document the production sink built.
+    check('measured: jsPDF keeps one image per item, each under its own name',
+        prod.measured.images === prod.measured.appended
+        && prod.measured.distinctAliases === prod.measured.images,
+        `${prod.measured.images} images, ${prod.measured.distinctAliases} aliases`);
+    check('measured: what it keeps is the colour string the model priced, and no SMask',
+        prod.measured.retainedChars === prod.measured.modelledRetainedChars
+        && prod.measured.noSMask === true,
+        `${prod.measured.retainedChars.toLocaleString('en-US')} characters = 3 bytes per pixel`);
+    check('measured: the file is no larger than the model said',
+        prod.measured.fileBytes <= prod.measured.modelledFileBytes
+        && prod.measured.fileBytes >= prod.measured.imageStreamBytes,
+        `${prod.measured.fileBytes.toLocaleString('en-US')} <= `
+        + `${prod.measured.modelledFileBytes.toLocaleString('en-US')} bytes`);
+    check('measured: every character of it is one byte wide',
+        prod.measured.maxCharCode < 256,
+        `max char code ${prod.measured.maxCharCode}; V8's one-byte strings are inferred from this`);
+    check('measured: the owned PNGs are exactly what the plan counted',
+        prod.measured.encodedBytes === prod.measured.modelledEncoded,
+        `${prod.measured.encodedBytes.toLocaleString('en-US')} bytes`);
 
     // ---- the encoder ---------------------------------------------------------
     console.log('\n=== the owned encoder ===');

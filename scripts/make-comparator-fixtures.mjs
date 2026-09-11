@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    PDFDocument, StandardFonts, rgb, degrees,
+    PDFDocument, PDFName, PDFNumber, StandardFonts, rgb, degrees,
     pushGraphicsState, popGraphicsState, concatTransformationMatrix,
 } from 'pdf-lib';
 
@@ -432,6 +432,29 @@ for (const [name, delta] of [['sheet-plus-0-99', 0.99], ['sheet-plus-1-01', 1.01
     });
 }
 
+// The pair above scales the drawing with the sheet, so it is a different
+// drawing as well as a different sheet, and its change count mixes the two.
+// These isolate the sheet: the drawing is the A4 drawing, at the A4 drawing's
+// coordinates, and only the page boundary is a sub-point larger. Whatever
+// differs in the comparison is the frame's doing and nothing else's.
+for (const [name, delta] of [
+    ['sheet-plus-0-99-same-drawing', 0.99], ['sheet-plus-1-01-same-drawing', 1.01],
+]) {
+    await make(name, `the A4 drawing, unchanged, on a sheet ${delta}pt larger`,
+        async (doc, font) => {
+            drawPlan(doc.addPage([SHEET.A4.w + delta, SHEET.A4.h + delta]), SHEET.A4, font);
+        });
+}
+
+// A page whose unit is not the point. PDF.js draws it at scale x UserUnit, so
+// it cannot be put in a frame planned in points without either misstating its
+// size or drawing it at a scale nobody chose.
+await make('userunit-2', 'the A4 drawing, declared in units of two points', async (doc, font) => {
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawPlan(page, SHEET.A4, font);
+    page.node.set(PDFName.of('UserUnit'), PDFNumber.of(2));
+});
+
 // ---------------------------------------------------------------------------
 // Page counts, and the difference between blank and absent
 // ---------------------------------------------------------------------------
@@ -471,6 +494,44 @@ await make('three-pages-changed', 'three pages, with a wall added on page 2 only
                 { label: `PLAN ${n}`, extraLine: n === 2 });
         }
     });
+
+// A page nobody could compare still costs an image. Here the one sheet both
+// documents have is tiny, so the comparison contributes next to nothing, and
+// everything the artifact holds is notices -- which is the job a budget that
+// priced only comparisons would have waved through.
+const TINY = { w: 24, h: 24 };
+function drawTiny(page) {
+    page.drawRectangle({
+        x: 4, y: 4, width: 16, height: 16, borderColor: rgb(0, 0, 0), borderWidth: 1,
+    });
+}
+await make('tiny-1', 'one 24pt sheet', async (doc) => {
+    drawTiny(doc.addPage([TINY.w, TINY.h]));
+});
+await make('tiny-120', 'the same 24pt sheet, and 119 pages the other does not have',
+    async (doc) => {
+        for (let n = 0; n < 120; n += 1) drawTiny(doc.addPage([TINY.w, TINY.h]));
+    });
+
+// Every kind of page in one job, in an order with something on either side of
+// the notice: compared, refused as a different sheet, compared and changed,
+// and absent from the other members.
+await make('four-pages-a3-second', 'A4, then A3, then A4 with a wall added, then A4',
+    async (doc, font) => {
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font, { label: 'PLAN 1' });
+        drawPlan(doc.addPage([SHEET.A3.w, SHEET.A3.h]), SHEET.A3, font, { label: 'PLAN 2' });
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font,
+            { label: 'PLAN 3', extraLine: true });
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font, { label: 'PLAN 4' });
+    });
+
+// Long enough to find where each ceiling stops by choosing a page range, with
+// real pages under the planner rather than shapes handed to it.
+await make('a4-180', '180 A4 pages of the same drawing', async (doc, font) => {
+    for (let n = 1; n <= 180; n += 1) {
+        drawPlan(doc.addPage([SHEET.A4.w, SHEET.A4.h]), SHEET.A4, font, { label: `PLAN ${n}` });
+    }
+});
 
 fs.writeFileSync(path.join(OUT, 'corpus.json'), `${JSON.stringify({
     files: written, sheets: SHEET,

@@ -13,16 +13,22 @@
  * comparator a user runs.
  */
 import * as pdfjsLib from 'pdfjs-dist';
+import jsPDF from 'jspdf';
 import {
   PLAN, RESULT, SPATIAL_TOLERANCE_POLICY, SPATIAL_TOLERANCE_DISCLOSURE,
   MATCH_RATIO_FLOOR, GEOMETRY_TOLERANCE_PT, MAX_COMPARISON_WORK_UNITS,
   MAX_OUTPUT_BYTES, DEFAULT_MEMORY_BUDGET_BYTES, MEMORY_BUDGET_PRESETS,
   COMPARISON_ALGORITHM, MULTI_MEMBER_CONTRACT, pixelRadiusFor,
-  planComparison, runComparison, paintPair, verdictFor,
+  ARTIFACT, ARTIFACT_ITEM, NOTICE_RASTER,
+  planComparison, runComparison, paintPair, verdictFor, renderUprightCanvas,
   pageGeometry, canonicalMapping, compareGeometry, mappingsAreRigid,
-  inkMask, dilateMask, isInk, INK_THRESHOLD,
+  inkMask, dilateMask, isInk, INK_THRESHOLD, RasterShapeError,
+  pairChangeMask, pairChangeMaskSteps,
   encodePngStored, pngStoredSize, PNG_STORED_CONTRACT,
-  preflightPages, estimateWork, estimateOutput, estimatePhaseMemory,
+  planArtifact, preflightArtifact, itemCost, jsPdfIngest, jsPdfRetained,
+  jsPdfFileBytes, JSPDF_CONTAINER, MEMORY_TERMS,
+  estimateWork, estimatePhaseMemory,
+  createComparisonPdf, createChangeReport, containerVersion,
 } from '/src/utils/comparator/index.ts';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -61,8 +67,38 @@ function settings(overrides = {}) {
     memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES,
     matchColor: [0, 0, 0],
     matchOpacity: 1,
+    // The engine has no default artifact; the semantic checks are previews.
+    artifact: ARTIFACT.PREVIEW,
     ...overrides,
   };
+}
+
+const MIB = 1024 * 1024;
+const GIB = 1024 * MIB;
+
+/** A plan over synthetic compared pages, for the pure budget arithmetic. */
+function synthetic(kind, shapes, limit, members = 2, radiusPx = 0) {
+  const pages = shapes.map((s, i) => ({
+    page: i + 1, status: s.status ?? PLAN.READY_TO_COMPARE,
+    width: s.width ?? 0, height: s.height ?? 0,
+  }));
+  const slots = Array.from({ length: members }, (_, i) => i);
+  return preflightArtifact(planArtifact(kind, pages, slots, radiusPx), members, radiusPx, limit);
+}
+
+/** The pages 1..n, which is what a range export of "1-n" asks for. */
+const firstPages = (n) => Array.from({ length: n }, (_, i) => i + 1);
+
+/** The first n for which `accepts(n)` is false, searching up from `from`. */
+async function firstRefused(from, to, accepts) {
+  let lo = from;
+  let hi = to;
+  if (!(await accepts(lo))) return { largest: null, first: lo };
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (await accepts(mid)) lo = mid; else hi = mid;
+  }
+  return { largest: lo, first: hi };
 }
 
 const alwaysOwner = { isCancelled: () => false, isOwner: () => true };
@@ -293,26 +329,26 @@ window.__comparator = {
     };
   },
 
-  /** Every budget, as the planner answers it. */
+  /** Every budget, as the planner answers it, for the file the export builds. */
   async budgets() {
-    const a4 = { width: 2480, height: 3507, members: 2, radiusPx: 0 };
+    const kind = ARTIFACT.COMPARISON_PDF;
+    const a4 = { width: 2480, height: 3507 };
     // A sheet large enough to exceed the working set without exceeding the
     // output ceiling, so the memory refusal can be reached on its own.
-    const big = { width: 6000, height: 8000, members: 2, radiusPx: 0 };
-    const gib = 1024 * 1024 * 1024;
+    const big = { width: 6000, height: 8000 };
     const repeat = (n, shape) => Array.from({ length: n }, () => shape);
 
     // And the same job through the real engine, to show it refuses rather than
     // quietly rendering something smaller.
     const engineRefusal = await compare(['base-a1', 'base-a1'], {
-      dpi: 450, memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES,
+      dpi: 450, memoryBudgetBytes: DEFAULT_MEMORY_BUDGET_BYTES, artifact: kind,
     });
 
     return {
       defaultBudget: DEFAULT_MEMORY_BUDGET_BYTES,
       memory: {
-        atDefault: preflightPages([big], DEFAULT_MEMORY_BUDGET_BYTES),
-        afterExplicitRaise: preflightPages([big], 2 * gib),
+        atDefault: synthetic(kind, [big], DEFAULT_MEMORY_BUDGET_BYTES),
+        afterExplicitRaise: synthetic(kind, [big], 2 * GIB),
       },
       engineRefusal: {
         plan: engineRefusal.plan,
@@ -322,21 +358,21 @@ window.__comparator = {
         pages: engineRefusal.pages.length,
       },
       work: {
-        oneA4Page: estimateWork({ ...a4, pages: 1 }).jobUnits,
-        atCeiling: preflightPages(repeat(173, a4), 64 * gib).refusal?.status ?? null,
-        justUnder: preflightPages(repeat(2, a4), 8 * gib).refusal?.status ?? null,
+        oneA4Page: estimateWork({ ...a4, members: 2, radiusPx: 0, pages: 1 }).jobUnits,
+        atCeiling: synthetic(kind, repeat(173, a4), 64 * GIB).refusal?.status ?? null,
+        justUnder: synthetic(kind, repeat(2, a4), 8 * GIB).refusal?.status ?? null,
         unrepresentable: estimateWork({
           width: 30000000, height: 30000000, members: 4, pages: 4, radiusPx: 0,
         }).representable,
       },
       output: {
-        perVisual: estimateOutput({ ...a4, pages: 1 }).perVisualBytes,
+        perVisual: itemCost(kind, ARTIFACT_ITEM.PAIR_VISUAL, a4.width, a4.height).outputBytes,
         ceiling: MAX_OUTPUT_BYTES,
         // Seven A4 pages is the documented MVP capacity; nine is over it.
-        seven: preflightPages(repeat(7, a4), 8 * gib).refusal?.status ?? null,
-        nine: preflightPages(repeat(9, a4), 8 * gib).refusal?.status ?? null,
+        seven: synthetic(kind, repeat(7, a4), 8 * GIB).refusal?.status ?? null,
+        nine: synthetic(kind, repeat(9, a4), 8 * GIB).refusal?.status ?? null,
       },
-      memoryPhases: estimatePhaseMemory(a4),
+      memoryPhases: estimatePhaseMemory({ ...a4, members: 2, radiusPx: 0 }),
     };
   },
 
@@ -344,18 +380,17 @@ window.__comparator = {
    * The memory ceiling as a boundary, not as an assertion.
    *
    * "512 MiB by default" is only a ceiling if there is a largest job it takes
-   * and a first job it will not. So this finds the boundary to the pixel, shows
-   * the step past it refused by name, shows an explicit preset accepting that
-   * same job, shows that nothing moved the budget on the tool's own initiative,
-   * and shows that a larger budget buys nothing against the other two ceilings.
+   * and a first job it will not. So this finds the boundary to the pixel, for
+   * the Comparison PDF the export builds, shows the step past it refused by
+   * name, shows an explicit preset accepting that same job, shows that nothing
+   * moved the budget on the tool's own initiative, and shows that a larger
+   * budget buys nothing against the other two ceilings.
    */
   memoryBoundary() {
-    const gib = 1024 * 1024 * 1024;
-    const sheet = (width) => ({
-      width, height: Math.round(width * Math.SQRT2), members: 2, radiusPx: 0,
-    });
+    const kind = ARTIFACT.COMPARISON_PDF;
+    const sheet = (width) => ({ width, height: Math.round(width * Math.SQRT2) });
     const accepts = (width, limit) =>
-      preflightPages([sheet(width)], limit).refusal === null;
+      synthetic(kind, [sheet(width)], limit).refusal === null;
 
     // To the pixel: a ceiling described as "about" is one nobody can test.
     let lo = 100;
@@ -364,14 +399,16 @@ window.__comparator = {
       const mid = Math.floor((lo + hi) / 2);
       if (accepts(mid, DEFAULT_MEMORY_BUDGET_BYTES)) lo = mid; else hi = mid;
     }
-    const largest = preflightPages([sheet(lo)], DEFAULT_MEMORY_BUDGET_BYTES);
-    const firstOver = preflightPages([sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
-    const raised = preflightPages([sheet(hi)], gib);
+    const largest = synthetic(kind, [sheet(lo)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const firstOver = synthetic(kind, [sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const raised = synthetic(kind, [sheet(hi)], GIB);
     // Asked again, at the default, after a larger budget has been used once.
-    const askedAgain = preflightPages([sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
+    const askedAgain = synthetic(kind, [sheet(hi)], DEFAULT_MEMORY_BUDGET_BYTES);
 
-    const a4 = { width: 2480, height: 3507, members: 2, radiusPx: 0 };
+    const a4 = { width: 2480, height: 3507 };
     const repeat = (n) => Array.from({ length: n }, () => a4);
+    const gib = GIB;
+    const preflightPages = (shapes, limit) => synthetic(kind, shapes, limit);
 
     return {
       largestAccepted: {
@@ -406,21 +443,25 @@ window.__comparator = {
    * What a job actually holds, against what the budget said it would.
    *
    * A ceiling computed from a model is a ceiling only while the code keeps to
-   * the model. The export path is a sink — paint, encode, append, release — so
+   * the model. The export path is a sink — paint, encode, release, append — so
    * however many pages it writes, the live full-resolution visuals should never
-   * be more than one. The encoded bytes that *do* accumulate are the ones the
-   * preflight added up, and because the encoder's size is exact, "should" here
-   * means equal, not close.
+   * be more than one, and that one should be gone before jsPDF ingests it. The
+   * sink here is the production one, writing a real jsPDF document; the
+   * encoded bytes are the ones the preflight added up, and because the encoder
+   * is exact, "should" here means equal, not close.
    */
   async bufferLifetime() {
     const names = ['three-pages', 'three-pages-copy', 'three-pages-changed'];
     const set = await members(names);
-    const plan = await planComparison(set, settings({ pages: [1, 2, 3] }));
+    const plan = await planComparison(set, settings({
+      pages: [1, 2, 3], artifact: ARTIFACT.COMPARISON_PDF,
+    }));
+    const sink = createComparisonPdf(150);
 
     const seen = [];
     let maxLiveVisuals = 0;
     let maxLiveBytes = 0;
-    let encodedBytes = 0;
+    let releasedBySink = 0;
     await runComparison(plan, set, alwaysOwner, {
       onPair: (pair) => {
         // Counted with the pair still in hand, which is the worst moment.
@@ -430,10 +471,14 @@ window.__comparator = {
         maxLiveBytes = Math.max(
           maxLiveBytes, live.reduce((n, p) => n + p.pixels.length, 0),
         );
-        encodedBytes += encodePngStored(pair.pixels, pair.width, pair.height).length;
+        sink.onPair(pair);
+        // Before the sink returns, which is before the engine lets go of it.
+        if (pair.pixels === null) releasedBySink += 1;
       },
+      onPage: sink.onPage,
     });
     const stillHeld = seen.filter((p) => p.pixels !== null).length;
+    const encodedBytes = sink.appended.reduce((n, item) => n + item.encodedBytes, 0);
 
     // The control: the same job with no sink, which is what a presentation
     // that collected every pair and then wrote them all out would hold.
@@ -441,24 +486,382 @@ window.__comparator = {
     const held = retained.pages.flatMap((page) => page.pairs)
       .filter((pair) => pair.pixels !== null);
 
-    const shape = {
-      width: plan.pages[0].width, height: plan.pages[0].height,
-      members: names.length, radiusPx: plan.radiusPx,
-    };
-    const preflight = preflightPages([shape, shape, shape], DEFAULT_MEMORY_BUDGET_BYTES);
-
+    const preflight = plan.preflight;
+    const oneVisualBytes = plan.pages[0].width * plan.pages[0].height * 4;
     return {
       pairs: seen.length,
       maxLiveVisuals,
       maxLiveBytes,
+      releasedBySink,
       stillHeld,
       encodedBytes,
-      predictedEncoded: preflight.output.totalEncodedBytes,
-      oneVisualBytes: shape.width * shape.height * 4,
+      predictedEncoded: preflight.output.encodedBytes,
+      oneVisualBytes,
       retainedVisuals: held.length,
       retainedBytes: held.reduce((n, pair) => n + pair.pixels.length, 0),
       modelledPeak: preflight.jobPeak,
       withinBudget: preflight.withinBudget,
+    };
+  },
+
+  /**
+   * One frame per compared page, and nothing else can reach a verdict.
+   *
+   * The isolated fixtures carry the A4 drawing at the A4 drawing's coordinates
+   * on a sheet a sub-point larger, so whatever differs is the frame's doing.
+   * The negative probes hand the mask builder what the old path handed it —
+   * the member's natural raster, with the reference's width and height
+   * supplied separately — and require a refusal, not a picture.
+   */
+  async canonicalFrame() {
+    const run = async (names, overrides = {}) => {
+      const set = await members(names);
+      const plan = await planComparison(set, settings(overrides));
+      const rasters = [];
+      const result = plan.refusal ? null : await runComparison(plan, set, alwaysOwner, {
+        onRaster: (r) => rasters.push(r),
+      });
+      const page = result?.pages[0];
+      const pair = page?.pairs[0];
+      return {
+        plan: plan.pages[0]?.status ?? plan.status,
+        reported: plan.pages[0]?.reported ?? [],
+        frame: plan.pages[0]?.frame ?? null,
+        residual: plan.pages[0]?.mappings[0]
+          ? {
+            widthPt: plan.pages[0].mappings[0].residualWidthPt,
+            heightPt: plan.pages[0].mappings[0].residualHeightPt,
+          }
+          : null,
+        rasters,
+        status: page?.status ?? null,
+        verdict: page?.verdict ?? null,
+        changePixels: pair?.changePixels ?? null,
+        inkPixels: pair?.inkPixels ?? null,
+        pairWidth: pair?.width ?? null,
+        pairHeight: pair?.height ?? null,
+      };
+    };
+
+    const isolated = await run(['base-a4', 'sheet-plus-0-99-same-drawing']);
+    const isolated300 = await run(['base-a4', 'sheet-plus-0-99-same-drawing'], { dpi: 300 });
+    // The reference is the larger sheet: the member is a sub-point short, so
+    // the strip it does not cover is paper.
+    const reversed = await run(['sheet-plus-0-99-same-drawing', 'base-a4']);
+    const isolatedOver = await run(['base-a4', 'sheet-plus-1-01-same-drawing']);
+    const proportional = await run(['base-a4', 'sheet-plus-0-99']);
+    const proportionalOver = await run(['base-a4', 'sheet-plus-1-01']);
+    const userUnit = await run(['base-a4', 'userunit-2']);
+
+    // ---- the old path, handed to the new guard -------------------------------
+    const frame = isolated.frame;
+    const memberPdf = await open('sheet-plus-0-99-same-drawing');
+    const natural = await renderUprightCanvas(memberPdf, 1, frame.scale);
+    const naturalData = natural.getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, natural.width, natural.height).data;
+    const naturalSize = { width: natural.width, height: natural.height };
+    natural.width = 1;
+    natural.height = 1;
+    const refusalOf = (fn) => {
+      try { fn(); return null; } catch (e) {
+        return e instanceof RasterShapeError ? e.message : `not a shape error: ${e}`;
+      }
+    };
+    const inkMaskRefusal = refusalOf(
+      () => inkMask(naturalData, frame.width, frame.height),
+    );
+    // What that call used to return, computed here by hand with the old
+    // loop, so the probe can show the guard is standing in front of something.
+    const sheared = new Uint8Array(frame.width * frame.height);
+    for (let p = 0; p < sheared.length; p += 1) sheared[p] = isInk(naturalData, p * 4) ? 1 : 0;
+    const referencePdf = await open('base-a4');
+    const referenceCanvas = await renderUprightCanvas(referencePdf, 1, frame.scale);
+    const referenceMask = inkMask(
+      referenceCanvas.getContext('2d', { willReadFrequently: true })
+        .getImageData(0, 0, frame.width, frame.height).data,
+      frame.width, frame.height,
+    );
+    referenceCanvas.width = 1;
+    referenceCanvas.height = 1;
+    const shearedChange = pairChangeMask(referenceMask, sheared, referenceMask, sheared);
+    const naturalMask = new Uint8Array(naturalSize.width * naturalSize.height);
+    const compareRefusal = refusalOf(
+      () => pairChangeMask(referenceMask, naturalMask, referenceMask, naturalMask),
+    );
+    const bandedRefusal = refusalOf(
+      () => pairChangeMaskSteps(referenceMask, naturalMask, frame.width, frame.height, 0),
+    );
+    const paintRefusal = refusalOf(() => paintPair(
+      referenceMask, naturalMask, referenceMask, naturalMask,
+      [0, 0, 1], [1, 0, 0], frame.width, frame.height, [0, 0, 0], 1,
+    ));
+
+    return {
+      isolated, isolated300, reversed, isolatedOver, proportional, proportionalOver,
+      userUnit,
+      probes: {
+        naturalSize,
+        inkMaskRefusal,
+        compareRefusal,
+        bandedRefusal,
+        paintRefusal,
+        shearedChangePixels: shearedChange.changePixels,
+      },
+    };
+  },
+
+  /**
+   * A page nobody could compare is not free.
+   *
+   * The one sheet both documents have is 24pt square, so the comparison is
+   * next to nothing and everything the file holds is notices. The boundary is
+   * found through the production planner by choosing how many pages to ask
+   * for, for each file separately, because the two files draw notices of
+   * different sizes. It is found under an explicit 1 GiB, because at the
+   * default the memory ceiling speaks first — which is itself checked.
+   */
+  async noticeBudget() {
+    const set = await members(['tiny-1', 'tiny-120']);
+    const planFor = (kind, n, limit) => planComparison(set, settings({
+      pages: firstPages(n), artifact: kind, memoryBudgetBytes: limit,
+    }));
+    const describe = (plan) => {
+      const items = plan.preflight.artifact.items;
+      const sum = (pred) => items.filter(pred).reduce((n, i) => n + i.cost.outputBytes, 0);
+      return {
+        status: plan.status,
+        refusal: plan.refusal?.status ?? null,
+        reason: plan.refusal?.reason ?? null,
+        achievable: plan.refusal?.achievable ?? null,
+        pages: plan.pages.length,
+        notices: plan.preflight.output.notices,
+        visuals: plan.preflight.output.visuals,
+        outputBytes: plan.preflight.output.outputBytes,
+        pairOutput: sum((i) => i.kind === ARTIFACT_ITEM.PAIR_VISUAL),
+        noticeOutput: sum((i) => i.kind !== ARTIFACT_ITEM.PAIR_VISUAL),
+        noticeSize: items.find((i) => i.kind === ARTIFACT_ITEM.MISSING_PAGE_NOTICE)
+          ? [items.find((i) => i.kind === ARTIFACT_ITEM.MISSING_PAGE_NOTICE).width,
+            items.find((i) => i.kind === ARTIFACT_ITEM.MISSING_PAGE_NOTICE).height]
+          : null,
+        jobPeak: plan.preflight.jobPeak,
+        order: items.map((i) => `${i.page}:${i.kind}`),
+      };
+    };
+
+    const out = {};
+    for (const kind of [ARTIFACT.COMPARISON_PDF, ARTIFACT.CHANGE_REPORT]) {
+      const bound = await firstRefused(2, 120,
+        async (n) => (await planFor(kind, n, GIB)).refusal === null);
+      const under = await planFor(kind, bound.largest, GIB);
+      const over = await planFor(kind, bound.first, GIB);
+
+      // The refused plan, handed to the engine anyway: nothing may reach a sink.
+      let sinkCalls = 0;
+      await runComparison(over, set, alwaysOwner, {
+        onPair: () => { sinkCalls += 1; },
+        onPage: () => { sinkCalls += 1; },
+      });
+
+      out[kind] = {
+        notice: NOTICE_RASTER[kind],
+        largest: bound.largest,
+        first: bound.first,
+        under: describe(under),
+        over: describe(over),
+        overAtDefault: (await planFor(kind, bound.first, DEFAULT_MEMORY_BUDGET_BYTES))
+          .refusal?.status ?? null,
+        overAtTwoGiB: (await planFor(kind, bound.first, 2 * GIB)).refusal?.status ?? null,
+        sinkCallsOnRefused: sinkCalls,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * Every kind of page in one job, through the production sinks.
+   *
+   * The plan lists what the file will contain, in order; the sink records what
+   * it wrote, in order. They have to be the same list — for the Change Report,
+   * the same list less the pairs that did not change.
+   */
+  async mixedOrder() {
+    const names = ['four-pages-a3-second', 'three-pages', 'three-pages-changed'];
+    const out = {};
+    for (const kind of [ARTIFACT.COMPARISON_PDF, ARTIFACT.CHANGE_REPORT]) {
+      const set = await members(names);
+      const plan = await planComparison(set, settings({ pages: [1, 2, 3, 4], artifact: kind }));
+      const sink = kind === ARTIFACT.COMPARISON_PDF ? createComparisonPdf(150) : createChangeReport();
+      const run = await runComparison(plan, set, alwaysOwner, {
+        onPair: sink.onPair, onPage: sink.onPage,
+      });
+      const images = sink.doc.internal.collections.addImage_images ?? {};
+      out[kind] = {
+        refusal: plan.refusal?.status ?? null,
+        pages: run.pages.map((p) => ({
+          page: p.page, status: p.status, verdicts: p.pairs.map((q) => q.verdict),
+        })),
+        planned: plan.preflight.artifact.items.map((i) => ({
+          kind: i.kind, page: i.page, slot: i.slot, emitted: i.emitted,
+          width: i.width, height: i.height,
+        })),
+        appended: sink.appended.map((i) => ({
+          kind: i.kind, page: i.page, slot: i.slot, width: i.width, height: i.height,
+        })),
+        pairVerdicts: Object.fromEntries(run.pages.flatMap((p) => p.pairs.map(
+          (q) => [`${q.page}:${q.slot}`, q.verdict],
+        ))),
+        images: Object.keys(images).length,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * jsPDF, asked directly: the alias it invents reuses images.
+   *
+   * Two real composites from one comparison — a MATCH, and a CHANGE whose
+   * change lies in the lower half of the sheet — handed to jsPDF the way the
+   * export used to hand them over, with no alias. Then the same two through
+   * the production sink.
+   */
+  async aliasProbe() {
+    const set = await members(['base-a4', 'identical-a4', 'removed-line-a4']);
+    const plan = await planComparison(set, settings());
+    const run = await runComparison(plan, set, alwaysOwner);
+    const [match, change] = run.pages[0].pairs;
+    const firstChangeRow = change.bounds.y;
+
+    const raw = new jsPDF({ unit: 'pt' });
+    raw.addImage(encodePngStored(match.pixels, match.width, match.height),
+      'PNG', 0, 0, match.width / 2, match.height / 2);
+    raw.addPage();
+    raw.addImage(encodePngStored(change.pixels, change.width, change.height),
+      'PNG', 0, 0, change.width / 2, change.height / 2);
+    const rawImages = Object.keys(raw.internal.collections.addImage_images).length;
+
+    const sink = createComparisonPdf(150);
+    const verdicts = [match.verdict, change.verdict];
+    sink.onPair(match);
+    sink.onPair(change);
+    const stored = Object.values(sink.doc.internal.collections.addImage_images);
+    // Does the second stored image carry the change? Its colour string, at a
+    // row of the change, differs from the first's.
+    const rowStart = firstChangeRow * change.width * 3;
+    const rowEnd = rowStart + change.width * 3;
+    const differs = stored.length === 2
+      && stored[0].data.slice(rowStart, rowEnd) !== stored[1].data.slice(rowStart, rowEnd);
+    return {
+      verdicts,
+      firstChangeRow,
+      height: change.height,
+      rawImages,
+      sinkImages: stored.length,
+      aliases: stored.map((s) => s.alias),
+      secondCarriesChange: differs,
+    };
+  },
+
+  /**
+   * The production container, under the ceiling that bounds it.
+   *
+   * Through the real planner, over real A4 pages at 300 dpi and the Comparison
+   * PDF the export builds: the largest page count 512 MiB takes, the first it
+   * refuses, the same job at the explicit presets, and the other two ceilings
+   * standing whatever the memory. Then the largest accepted job is actually
+   * built by the production sink, and the jsPDF document it produced is
+   * measured against the terms the model priced it with.
+   */
+  async productionMemory() {
+    const kind = ARTIFACT.COMPARISON_PDF;
+    const set = await members(['a4-180', 'a4-180']);
+    const planFor = (n, limit) => planComparison(set, settings({
+      pages: firstPages(n), dpi: 300, artifact: kind, memoryBudgetBytes: limit,
+    }));
+    const summary = (plan) => ({
+      pages: plan.pages.length,
+      status: plan.status,
+      refusal: plan.refusal?.status ?? null,
+      reason: plan.refusal?.reason ?? null,
+      jobPeak: plan.preflight.jobPeak,
+      peakPhase: plan.preflight.peakPhase,
+      limit: plan.preflight.memoryLimit,
+      outputBytes: plan.preflight.output.outputBytes,
+      workUnits: plan.preflight.work.jobUnits,
+    });
+
+    const at512 = await firstRefused(1, 60,
+      async (n) => (await planFor(n, DEFAULT_MEMORY_BUDGET_BYTES)).refusal === null);
+    const largest = await planFor(at512.largest, DEFAULT_MEMORY_BUDGET_BYTES);
+    const firstOver = await planFor(at512.first, DEFAULT_MEMORY_BUDGET_BYTES);
+    const atOneGiB = await planFor(at512.first, GIB);
+    const atTwoGiB = await planFor(at512.first, 2 * GIB);
+    const askedAgain = await planFor(at512.first, DEFAULT_MEMORY_BUDGET_BYTES);
+    const at1 = await firstRefused(at512.first, 60,
+      async (n) => (await planFor(n, GIB)).refusal === null);
+    const outputAtOne = await planFor(at1.first, GIB);
+    const outputAtTwo = await planFor(at1.first, 2 * GIB);
+    const workAtTwo = await planFor(173, 2 * GIB);
+    const workAtMachine = await planFor(173, 64 * GIB);
+
+    // ---- build the largest accepted job, and measure what jsPDF holds -------
+    const sink = createComparisonPdf(300);
+    const run = await runComparison(largest, set, alwaysOwner, {
+      onPair: sink.onPair, onPage: sink.onPage,
+    });
+    const stored = Object.values(sink.doc.internal.collections.addImage_images);
+    const text = sink.doc.output();
+    let maxCharCode = 0;
+    for (let i = 0; i < text.length; i += 1) {
+      const code = text.charCodeAt(i);
+      if (code > maxCharCode) maxCharCode = code;
+    }
+    const items = largest.preflight.artifact.items;
+    const memory = largest.preflight.memory;
+    const w = largest.pages[0].width;
+    const h = largest.pages[0].height;
+
+    return {
+      version: { running: containerVersion(), modelled: JSPDF_CONTAINER.version },
+      terms: MEMORY_TERMS,
+      largest: summary(largest),
+      firstOver: summary(firstOver),
+      atOneGiB: summary(atOneGiB),
+      atTwoGiB: summary(atTwoGiB),
+      askedAgain: summary(askedAgain),
+      outputBoundary: { largest: at1.largest, first: at1.first },
+      outputAtOne: summary(outputAtOne),
+      outputAtTwo: summary(outputAtTwo),
+      workAtTwo: summary(workAtTwo),
+      workAtMachine: summary(workAtMachine),
+      presets: MEMORY_BUDGET_PRESETS.map((p) => p.bytes),
+      model: {
+        frame: [w, h],
+        ingest: jsPdfIngest(w, h),
+        item: items[0].cost,
+        kernel: memory.kernel,
+        sinkPeak: memory.sinkPeak,
+        retainedTotal: memory.retainedTotal,
+        duringRun: memory.duringRun,
+        publish: memory.publish,
+        atPublish: memory.atPublish,
+      },
+      measured: {
+        runStatus: run.status,
+        appended: sink.appended.length,
+        images: stored.length,
+        distinctAliases: new Set(stored.map((s) => s.alias)).size,
+        retainedChars: stored.reduce((n, s) => n + s.data.length, 0),
+        modelledRetainedChars: items.reduce((n, i) => n + i.width * i.height * 3, 0),
+        noSMask: stored.every((s) => s.sMask === undefined),
+        fileBytes: text.length,
+        modelledFileBytes: largest.preflight.output.fileBytes,
+        imageStreamBytes: stored.reduce((n, s) => n + s.data.length, 0),
+        maxCharCode,
+        encodedBytes: sink.appended.reduce((n, i) => n + i.encodedBytes, 0),
+        modelledEncoded: largest.preflight.output.encodedBytes,
+        retainedPerImage: jsPdfRetained(w, h),
+        filePerImage: jsPdfFileBytes(w, h),
+      },
     };
   },
 

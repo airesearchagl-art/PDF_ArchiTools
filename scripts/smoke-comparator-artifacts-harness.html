@@ -16,7 +16,7 @@
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import {
-  INK_THRESHOLD, planComparison, runComparison,
+  ARTIFACT, INK_THRESHOLD, planComparison, runComparison,
 } from '/src/utils/comparator/index.ts';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -228,7 +228,7 @@ window.__artifacts = {
     }
     const plan = await planComparison(members, {
       pages, dpi, toleranceMm, memoryBudgetBytes: 512 * 1024 * 1024,
-      matchColor: [0.75, 0.75, 0.75], matchOpacity: 1,
+      matchColor: [0.75, 0.75, 0.75], matchOpacity: 1, artifact: ARTIFACT.PREVIEW,
     });
     if (plan.refusal) return { refusal: plan.refusal, pages: [] };
     const run = await runComparison(plan, members, {
@@ -249,6 +249,46 @@ window.__artifacts = {
       })),
     };
   },
+};
+
+/**
+ * The longest document the production planner accepts for a notice-only job.
+ *
+ * The one sheet both documents share is 24pt square; every further page of the
+ * longer one is a notice. Found by asking for 1..n pages of `tiny-120`, under
+ * the given budget, so the gate can write documents exactly at the boundary
+ * and put them through the real UI.
+ */
+window.__artifacts.noticeBoundary = async (kind, memoryBudgetBytes) => {
+  const members = [];
+  for (const [i, name] of ['tiny-1', 'tiny-120'].entries()) {
+    const data = new Uint8Array(
+      await (await fetch(`/test-fixtures/comparator/${name}.pdf`)).arrayBuffer(),
+    );
+    members.push({
+      slot: i, label: `${name}.pdf`, color: COLOURS[i],
+      pdf: await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise,
+    });
+  }
+  const accepts = async (n) => (await planComparison(members, {
+    pages: Array.from({ length: n }, (_, i) => i + 1), dpi: 150, toleranceMm: 0,
+    memoryBudgetBytes, matchColor: [0.75, 0.75, 0.75], matchOpacity: 0.7, artifact: kind,
+  })).refusal === null;
+  let lo = 1;
+  let hi = 120;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (await accepts(mid)) lo = mid; else hi = mid;
+  }
+  return lo;
+};
+
+/** How many pages a written file has, reopened with PDF.js. */
+window.__artifacts.pageCount = async (url) => {
+  const pdf = await load(url);
+  const n = pdf.numPages;
+  await pdf.destroy();
+  return n;
 };
 
 document.getElementById('state').textContent = 'ready';
