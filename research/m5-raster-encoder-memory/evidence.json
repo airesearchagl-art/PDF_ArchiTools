@@ -1,8 +1,8 @@
 {
- "ranAt": "2026-09-12T04:48:58.882Z",
+ "ranAt": "2026-09-12T09:23:29.076Z",
  "ranBy": "M5 raster encoder / memory sub-spike gate (local run on the spike branch)",
  "productionBase": "78b5bd5ee676ee72621bccf9524225cd4ce8482a",
- "testedResearchHead": "faf8cd41d04f38bdbe0b31182e1be44900d696c1",
+ "testedResearchHead": "54374aa64e23b542d1f1955298c66c5d4d2d9c32",
  "researchBranchAtRun": "research/m5-raster-encoder-memory-spike",
  "workingTreeDirty": false,
  "dirtinessScope": "research/m5-raster-encoder-memory, untracked files included",
@@ -104,89 +104,89 @@
    "150": {
     "drawing-a4": {
      "sourceBytes": 1776,
-     "monochromeBytes": 53575,
-     "monochromeMs": 79.1000000089407,
+     "monochromeBytes": 53576,
+     "monochromeMs": 84.3999999910593,
      "optimizeBytes": 53864,
-     "optimizeMs": 66.5
+     "optimizeMs": 66.6000000089407
     },
     "hatch-a4": {
      "sourceBytes": 6275,
      "monochromeBytes": 329544,
-     "monochromeMs": 80.19999998807907,
+     "monochromeMs": 79,
      "optimizeBytes": 329544,
-     "optimizeMs": 71.6000000089407
+     "optimizeMs": 56.19999998807907
     },
     "fine-line-a4": {
      "sourceBytes": 6537998,
      "monochromeBytes": 374985,
-     "monochromeMs": 243.59999999403954,
+     "monochromeMs": 253.1000000089407,
      "optimizeBytes": 374985,
-     "optimizeMs": 164.29999999701977
+     "optimizeMs": 174.3999999910593
     },
     "grey-scan-a4": {
      "sourceBytes": 1979104,
      "monochromeBytes": 328192,
-     "monochromeMs": 120.70000000298023,
+     "monochromeMs": 121.20000000298023,
      "optimizeBytes": 328192,
-     "optimizeMs": 92.59999999403954
+     "optimizeMs": 94.09999999403954
     },
     "colour-scan-a4": {
      "sourceBytes": 1619592,
      "monochromeBytes": 124786,
-     "monochromeMs": 95.8999999910593,
+     "monochromeMs": 111.40000000596046,
      "optimizeBytes": 132198,
-     "optimizeMs": 85.79999999701977
+     "optimizeMs": 84
     },
     "photo-a4": {
      "sourceBytes": 5425311,
      "monochromeBytes": 65896,
-     "monochromeMs": 109.3999999910593,
+     "monochromeMs": 129.30000001192093,
      "optimizeBytes": 81524,
-     "optimizeMs": 102.90000000596046
+     "optimizeMs": 118.79999999701977
     }
    },
    "300": {
     "drawing-a4": {
      "sourceBytes": 1776,
      "monochromeBytes": 139657,
-     "monochromeMs": 114.8999999910593,
+     "monochromeMs": 139.59999999403954,
      "optimizeBytes": 140185,
-     "optimizeMs": 85
+     "optimizeMs": 94.5
     },
     "hatch-a4": {
      "sourceBytes": 6275,
      "monochromeBytes": 1192095,
-     "monochromeMs": 138.80000001192093,
+     "monochromeMs": 143,
      "optimizeBytes": 1192095,
-     "optimizeMs": 103.5
+     "optimizeMs": 114.70000000298023
     },
     "fine-line-a4": {
      "sourceBytes": 6537998,
      "monochromeBytes": 1449990,
-     "monochromeMs": 325.20000000298023,
+     "monochromeMs": 385.1000000089407,
      "optimizeBytes": 1449990,
-     "optimizeMs": 210.3999999910593
+     "optimizeMs": 245.5
     },
     "grey-scan-a4": {
      "sourceBytes": 1979104,
      "monochromeBytes": 1237588,
-     "monochromeMs": 204.1000000089407,
+     "monochromeMs": 232.20000000298023,
      "optimizeBytes": 1237588,
-     "optimizeMs": 154.79999999701977
+     "optimizeMs": 165.29999999701977
     },
     "colour-scan-a4": {
      "sourceBytes": 1619592,
      "monochromeBytes": 706164,
-     "monochromeMs": 190.69999998807907,
+     "monochromeMs": 212,
      "optimizeBytes": 720530,
-     "optimizeMs": 144.20000000298023
+     "optimizeMs": 163.40000000596046
     },
     "photo-a4": {
      "sourceBytes": 5425311,
      "monochromeBytes": 400037,
-     "monochromeMs": 194.3999999910593,
+     "monochromeMs": 222,
      "optimizeBytes": 435239,
-     "optimizeMs": 152.90000000596046
+     "optimizeMs": 176.09999999403954
     }
    }
   },
@@ -296,6 +296,68 @@
     "ratio": 1.0003066723066172
    }
   ],
+  "blockBound": [
+   {
+    "n": 16382,
+    "content": "noise",
+    "storedBytes": 16393
+   },
+   {
+    "n": 16382,
+    "content": "uniform",
+    "storedBytes": 39
+   },
+   {
+    "n": 16383,
+    "content": "noise",
+    "storedBytes": 16394
+   },
+   {
+    "n": 16383,
+    "content": "uniform",
+    "storedBytes": 39
+   },
+   {
+    "n": 16384,
+    "content": "noise",
+    "storedBytes": 16395
+   },
+   {
+    "n": 16384,
+    "content": "uniform",
+    "storedBytes": 39
+   },
+   {
+    "n": 32766,
+    "content": "noise",
+    "storedBytes": 32782
+   },
+   {
+    "n": 32766,
+    "content": "uniform",
+    "storedBytes": 54
+   },
+   {
+    "n": 32767,
+    "content": "noise",
+    "storedBytes": 32783
+   },
+   {
+    "n": 32767,
+    "content": "uniform",
+    "storedBytes": 54
+   },
+   {
+    "n": 32768,
+    "content": "noise",
+    "storedBytes": 32784
+   },
+   {
+    "n": 32768,
+    "content": "uniform",
+    "storedBytes": 52
+   }
+  ],
   "sizes": {
    "drawing-a4": {
     "E1-jpeg": {
@@ -311,7 +373,7 @@
        "sizeExact": null
       }
      ],
-     "elapsedMs": 33.099999994039536,
+     "elapsedMs": 31.899999991059303,
      "allExact": true
     },
     "E2-png-embed": {
@@ -326,7 +388,7 @@
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 173.29999999701977,
+     "elapsedMs": 188.09999999403954,
      "allExact": true
     },
     "E3-gray-raw": {
@@ -344,7 +406,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 20.099999994039536,
+     "elapsedMs": 26.900000005960464,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -362,7 +424,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 42.599999994039536,
+     "elapsedMs": 41.79999999701977,
      "allExact": true
     },
     "E3-rgb-raw": {
@@ -380,7 +442,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 20.100000008940697,
+     "elapsedMs": 20.599999994039536,
      "allExact": true
     },
     "E3-rgb-flate": {
@@ -398,7 +460,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 59.79999999701977,
+     "elapsedMs": 58.79999999701977,
      "allExact": true
     }
    },
@@ -416,7 +478,7 @@
        "sizeExact": null
       }
      ],
-     "elapsedMs": 123,
+     "elapsedMs": 125.79999999701977,
      "allExact": true
     },
     "E2-png-embed": {
@@ -431,7 +493,7 @@
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 660.3000000119209,
+     "elapsedMs": 689.3999999910593,
      "allExact": true
     },
     "E3-gray-raw": {
@@ -449,7 +511,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 123.5,
+     "elapsedMs": 132.20000000298023,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -467,7 +529,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 487.20000000298023,
+     "elapsedMs": 536.9000000059605,
      "allExact": true
     },
     "E3-rgb-raw": {
@@ -485,7 +547,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 107.70000000298023,
+     "elapsedMs": 132.29999999701977,
      "allExact": true
     },
     "E3-rgb-flate": {
@@ -503,7 +565,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 508.20000000298023,
+     "elapsedMs": 565.0999999940395,
      "allExact": true
     }
    },
@@ -521,7 +583,7 @@
        "sizeExact": null
       }
      ],
-     "elapsedMs": 69,
+     "elapsedMs": 87.70000000298023,
      "allExact": true
     },
     "E2-png-embed": {
@@ -536,7 +598,7 @@
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 541.7999999970198,
+     "elapsedMs": 552.5,
      "allExact": true
     },
     "E3-gray-raw": {
@@ -554,7 +616,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 42.79999999701977,
+     "elapsedMs": 56.79999999701977,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -572,7 +634,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 154.40000000596046,
+     "elapsedMs": 171.59999999403954,
      "allExact": true
     },
     "E3-rgb-raw": {
@@ -590,7 +652,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 50.6000000089407,
+     "elapsedMs": 48.20000000298023,
      "allExact": true
     },
     "E3-rgb-flate": {
@@ -608,7 +670,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 441.20000000298023,
+     "elapsedMs": 491.20000000298023,
      "allExact": true
     }
    },
@@ -626,7 +688,7 @@
        "sizeExact": null
       }
      ],
-     "elapsedMs": 71.1000000089407,
+     "elapsedMs": 78.1000000089407,
      "allExact": true
     },
     "E2-png-embed": {
@@ -641,7 +703,7 @@
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 546,
+     "elapsedMs": 588.7000000029802,
      "allExact": true
     },
     "E3-gray-raw": {
@@ -659,7 +721,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 61.20000000298023,
+     "elapsedMs": 60,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -677,7 +739,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 166.8999999910593,
+     "elapsedMs": 165.09999999403954,
      "allExact": true
     },
     "E3-rgb-raw": {
@@ -695,7 +757,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 57.1000000089407,
+     "elapsedMs": 54.20000000298023,
      "allExact": true
     },
     "E3-rgb-flate": {
@@ -713,7 +775,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 310.70000000298023,
+     "elapsedMs": 324.40000000596046,
      "allExact": true
     }
    }
@@ -733,7 +795,7 @@
        "sizeExact": null
       }
      ],
-     "elapsedMs": 93.40000000596046,
+     "elapsedMs": 99.70000000298023,
      "allExact": true
     },
     "E2-png-embed": {
@@ -748,7 +810,7 @@
        "scratchBytes": 9921
       }
      ],
-     "elapsedMs": 572,
+     "elapsedMs": 604.4000000059605,
      "allExact": true
     },
     "E3-gray-raw": {
@@ -766,7 +828,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 76.20000000298023,
+     "elapsedMs": 65.40000000596046,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -784,7 +846,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 113.6000000089407,
+     "elapsedMs": 146.5,
      "allExact": true
     },
     "E3-rgb-raw": {
@@ -802,7 +864,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 60.29999999701977,
+     "elapsedMs": 73.09999999403954,
      "allExact": true
     },
     "E3-rgb-flate": {
@@ -820,7 +882,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 172.5,
+     "elapsedMs": 194.90000000596046,
      "allExact": true
     }
    },
@@ -838,12 +900,12 @@
        "sizeExact": null
       }
      ],
-     "elapsedMs": 175.29999999701977,
+     "elapsedMs": 217.8999999910593,
      "allExact": true
     },
     "E2-png-embed": {
-     "outputBytes": 3153083,
-     "bytesPerPixel": 0.36253334345134614,
+     "outputBytes": 3153084,
+     "bytesPerPixel": 0.3625334584287646,
      "pages": [
       {
        "width": 2480,
@@ -853,7 +915,7 @@
        "scratchBytes": 9921
       }
      ],
-     "elapsedMs": 1233.7999999970198,
+     "elapsedMs": 1273.7000000029802,
      "allExact": true
     },
     "E3-gray-raw": {
@@ -871,7 +933,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 107.29999999701977,
+     "elapsedMs": 103.29999999701977,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -889,7 +951,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 474.6000000089407,
+     "elapsedMs": 491.79999999701977,
      "allExact": true
     },
     "E3-rgb-raw": {
@@ -907,7 +969,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 105.90000000596046,
+     "elapsedMs": 122.29999999701977,
      "allExact": true
     },
     "E3-rgb-flate": {
@@ -925,7 +987,7 @@
        "sizeExact": true
       }
      ],
-     "elapsedMs": 821.4000000059605,
+     "elapsedMs": 877.9000000059605,
      "allExact": true
     }
    }
@@ -1199,8 +1261,8 @@
      "inkKept": 0.8965907389228133,
      "spurious": 0.0014716879217534064,
      "psnr": 28.394617124482142,
-     "outputBytes": 58554,
-     "sizeRatio": 32.9695945945946
+     "outputBytes": 58553,
+     "sizeRatio": 32.969031531531535
     },
     "E3-gray-raw": {
      "comparable": true,
@@ -1456,16 +1518,16 @@
       "source": "png.js:22; dropped when fully opaque"
      },
      {
-      "name": "pako deflate state (window, head, prev, pending_buf)",
-      "bytes": 262144,
+      "name": "pako per-call state (10 arrays)",
+      "bytes": 267160,
       "basis": "EXACT",
-      "source": "pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8"
+      "source": "pako 1.0.11 deflate.js:1195-1221, 1376-1389"
      },
      {
       "name": "output chunks, each pinning a full 16 KiB buffer",
       "bytes": 26116096,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays"
+      "source": "lib/deflate.js:243 + common.js:34-38, subarray not copy"
      },
      {
       "name": "flattenChunks result, allocated while the chunks are live",
@@ -1540,22 +1602,28 @@
       "source": "width * height * 1, converted from the readback"
      },
      {
-      "name": "pako deflate state (window, head, prev, pending_buf)",
-      "bytes": 262144,
+      "name": "pako per-call state (10 arrays)",
+      "bytes": 267160,
       "basis": "EXACT",
-      "source": "pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8"
+      "source": "pako 1.0.11 deflate.js:1195-1221, 1376-1389"
      },
      {
       "name": "output chunks, each pinning a full 16 KiB buffer",
       "bytes": 8716288,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays"
+      "source": "lib/deflate.js:243 + common.js:34-38, subarray not copy"
      },
      {
       "name": "flattenChunks result, allocated while the chunks are live",
       "bytes": 8700021,
       "basis": "SOURCE_DERIVED_BOUND",
       "source": "common.js:54-72"
+     },
+     {
+      "name": "the readback, still reachable while deflate runs",
+      "bytes": 34789440,
+      "basis": "CONSERVATIVE_BOUND",
+      "source": "the prototype holds the ImageData across the flateStream call"
      }
     ]
    },
@@ -1596,11 +1664,11 @@
     ]
    },
    "E3-rgb-flate": {
-    "peakBytes": 78570371,
+    "peakBytes": 113364827,
     "peakStep": "deflate",
     "encodedBytes": 26100051,
     "bytesPerPixelEncoded": 3.0009164850023455,
-    "bytesPerPixelPeak": 9.03381842306171,
+    "bytesPerPixelPeak": 13.03439514979258,
     "admissible": true,
     "unknown": [],
     "measuredOnly": [],
@@ -1624,22 +1692,28 @@
       "source": "width * height * 3, converted from the readback"
      },
      {
-      "name": "pako deflate state (window, head, prev, pending_buf)",
-      "bytes": 262144,
+      "name": "pako per-call state (10 arrays)",
+      "bytes": 267160,
       "basis": "EXACT",
-      "source": "pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8"
+      "source": "pako 1.0.11 deflate.js:1195-1221, 1376-1389"
      },
      {
       "name": "output chunks, each pinning a full 16 KiB buffer",
       "bytes": 26116096,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays"
+      "source": "lib/deflate.js:243 + common.js:34-38, subarray not copy"
      },
      {
       "name": "flattenChunks result, allocated while the chunks are live",
       "bytes": 26100051,
       "basis": "SOURCE_DERIVED_BOUND",
       "source": "common.js:54-72"
+     },
+     {
+      "name": "the readback, still reachable while deflate runs",
+      "bytes": 34789440,
+      "basis": "CONSERVATIVE_BOUND",
+      "source": "the prototype holds the ImageData across the flateStream call"
      }
     ]
    },
@@ -2043,14 +2117,14 @@
   "batches": {
    "E1-jpeg-hard": {
     "512": {
-     "files": 4,
-     "firstOver": 5,
+     "files": 3,
+     "firstOver": 4,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 6,
      "firstOver": 7,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 6,
@@ -2060,14 +2134,14 @@
    },
    "E1-jpeg-planning": {
     "512": {
-     "files": 82,
-     "firstOver": 83,
+     "files": 61,
+     "firstOver": 62,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 123,
      "firstOver": 124,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 123,
@@ -2077,14 +2151,14 @@
    },
    "E2-png-embed": {
     "512": {
-     "files": 27,
-     "firstOver": 28,
+     "files": 20,
+     "firstOver": 21,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 41,
      "firstOver": 42,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 41,
@@ -2094,14 +2168,14 @@
    },
    "E3-gray-raw": {
     "512": {
-     "files": 82,
-     "firstOver": 83,
+     "files": 61,
+     "firstOver": 62,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 123,
      "firstOver": 124,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 123,
@@ -2111,14 +2185,14 @@
    },
    "E3-gray-flate": {
     "512": {
-     "files": 82,
-     "firstOver": 83,
+     "files": 61,
+     "firstOver": 62,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 123,
      "firstOver": 124,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 123,
@@ -2128,14 +2202,14 @@
    },
    "E3-rgb-raw": {
     "512": {
-     "files": 27,
-     "firstOver": 28,
+     "files": 20,
+     "firstOver": 21,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 41,
      "firstOver": 42,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 41,
@@ -2145,14 +2219,14 @@
    },
    "E3-rgb-flate": {
     "512": {
-     "files": 27,
-     "firstOver": 28,
+     "files": 20,
+     "firstOver": 21,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 41,
      "firstOver": 42,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 41,
@@ -2169,7 +2243,7 @@
     "1024": {
      "files": 6,
      "firstOver": 7,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 6,
@@ -2179,14 +2253,14 @@
    },
    "E4-jspdf-planning": {
     "512": {
-     "files": 82,
-     "firstOver": 83,
+     "files": 61,
+     "firstOver": 62,
      "reason": "OVER_MEMORY_BUDGET"
     },
     "1024": {
      "files": 123,
      "firstOver": 124,
-     "reason": "OVER_OUTPUT_BUDGET"
+     "reason": "OVER_MEMORY_BUDGET"
     },
     "2048": {
      "files": 123,
@@ -2220,11 +2294,11 @@
   ]
  },
  "summary": {
-  "assertions": 15,
+  "assertions": 16,
   "assertionsFailed": 0,
-  "probes": 12,
+  "probes": 14,
   "probesFailed": 0,
-  "measurements": 117,
+  "measurements": 139,
   "baselineFails": 1,
   "humanOpen": 2,
   "external": 0,
@@ -2325,7 +2399,7 @@
    "kind": "MEASURE",
    "name": "production monochrome drawing-a4 @150/@300",
    "ok": null,
-   "detail": "53,575 B / 139,657 B"
+   "detail": "53,576 B / 139,657 B"
   },
   {
    "kind": "MEASURE",
@@ -2475,9 +2549,153 @@
   },
   {
    "kind": "MEASURE",
-   "name": "the pako state every deflate allocates, whatever the input",
+   "name": "pako per-call state: window",
    "ok": null,
-   "detail": "262,144 B = window 65,536 + head 65,536 + prev 65,536 + pending_buf 65,536"
+   "detail": "65,536 B — deflate.js:1376, Buf8(w_size * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: head",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1377, Buf16(hash_size)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: prev",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1378, Buf16(w_size)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: pending_buf",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1385-1389, Buf8(lit_bufsize * 4)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: dyn_ltree",
+   "ok": null,
+   "detail": "2,292 B — deflate.js:1195, Buf16(HEAP_SIZE * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: dyn_dtree",
+   "ok": null,
+   "detail": "244 B — deflate.js:1196, Buf16((2*D_CODES+1) * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: bl_tree",
+   "ok": null,
+   "detail": "156 B — deflate.js:1197, Buf16((2*BL_CODES+1) * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: bl_count",
+   "ok": null,
+   "detail": "32 B — deflate.js:1207, Buf16(MAX_BITS + 1)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: heap",
+   "ok": null,
+   "detail": "1,146 B — deflate.js:1211, Buf16(2*L_CODES + 1)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: depth",
+   "ok": null,
+   "detail": "1,146 B — deflate.js:1220, Buf16(2*L_CODES + 1)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state, in total",
+   "ok": null,
+   "detail": "267,160 B across 10 arrays"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,382 B of noise",
+   "ok": null,
+   "detail": "stored 16,393 B; bound 16,393 B; previous bound 16,393 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,382 B of uniform",
+   "ok": null,
+   "detail": "stored 39 B; bound 16,393 B; previous bound 16,393 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,383 B of noise",
+   "ok": null,
+   "detail": "stored 16,394 B; bound 16,394 B; previous bound 16,394 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,383 B of uniform",
+   "ok": null,
+   "detail": "stored 39 B; bound 16,394 B; previous bound 16,394 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,384 B of noise",
+   "ok": null,
+   "detail": "stored 16,395 B; bound 16,400 B; previous bound 16,395 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,384 B of uniform",
+   "ok": null,
+   "detail": "stored 39 B; bound 16,400 B; previous bound 16,395 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,766 B of noise",
+   "ok": null,
+   "detail": "stored 32,782 B; bound 32,782 B; previous bound 32,782 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,766 B of uniform",
+   "ok": null,
+   "detail": "stored 54 B; bound 32,782 B; previous bound 32,782 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,767 B of noise",
+   "ok": null,
+   "detail": "stored 32,783 B; bound 32,788 B; previous bound 32,783 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,767 B of uniform",
+   "ok": null,
+   "detail": "stored 54 B; bound 32,788 B; previous bound 32,783 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,768 B of noise",
+   "ok": null,
+   "detail": "stored 32,784 B; bound 32,789 B; previous bound 32,784 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,768 B of uniform",
+   "ok": null,
+   "detail": "stored 52 B; bound 32,789 B; previous bound 32,784 B"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every probed size stays inside the corrected bound",
+   "ok": true,
+   "detail": "bound = n + 5*ceil(n/16383) + 6, from _tr_tally returning at last_lit === lit_bufsize - 1 (trees.js:1211)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the divisor had to be lit_bufsize - 1, and the two bounds differ where it matters",
+   "ok": true,
+   "detail": "no probed case exceeded the previous bound, but it is arithmetically too small at these sizes (e.g. 16,384 B: 16,400 vs 16,395), so the corrected divisor is adopted on the derivation rather than on a lucky fixture"
   },
   {
    "kind": "MEASURE",
@@ -2813,7 +3031,7 @@
    "kind": "MEASURE",
    "name": "A4 @300, E3-rgb-flate",
    "ok": null,
-   "detail": "peak 74.9 MiB at \"deflate\" (9.0 B/px), stream 3.001 B/px, admissible: true"
+   "detail": "peak 108.1 MiB at \"deflate\" (13.0 B/px), stream 3.001 B/px, admissible: true"
   },
   {
    "kind": "MEASURE",
@@ -2891,7 +3109,7 @@
    "kind": "PROBE",
    "name": "the simplified batch model claims READY where the source-derived one refuses",
    "ok": true,
-   "detail": "10 one-page A4 @300 files, the most the simplified model accepts — simplified: READY at 497.7 MiB; full: REFUSED OVER_MEMORY_BUDGET at 746.6 MiB (sources + accumulated chunks + the concat result)"
+   "detail": "10 one-page A4 @300 files, the most the simplified model accepts — simplified: READY at 497.7 MiB; full: REFUSED OVER_MEMORY_BUDGET at 995.4 MiB (sources + accumulated chunks + the concat result)"
   },
   {
    "kind": "MEASURE",
@@ -2909,7 +3127,7 @@
    "kind": "MEASURE",
    "name": "B2 term: StreamHelper dataArray, every emitted chunk",
    "ok": null,
-   "detail": "248.9 MiB — SOURCE_DERIVED_BOUND (StreamHelper.js:79-104)"
+   "detail": "248.9 MiB — SOURCE_DERIVED_BOUND (StreamHelper.js:79-104; cleared only in the end handler)"
   },
   {
    "kind": "MEASURE",
@@ -2925,9 +3143,15 @@
   },
   {
    "kind": "MEASURE",
-   "name": "B2 term: Blob copy",
+   "name": "B2 term: Blob copy, built before dataArray is cleared",
    "ok": null,
    "detail": "248.9 MiB — CONSERVATIVE_BOUND (the browser's own copy of the archive)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the previous batch model claims READY where the overlapping one refuses",
+   "ok": true,
+   "detail": "6 one-page A4 @300 files, the most the previous model accepts — previous: READY at 447.9 MiB (sources + 2 x archive); corrected: REFUSED OVER_MEMORY_BUDGET at 597.3 MiB (sources + chunks + concat + Blob copy, all live at the handoff)"
   },
   {
    "kind": "MEASURE",
@@ -2939,7 +3163,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E1-jpeg-hard",
    "ok": null,
-   "detail": "512 MiB: 4 (5 refused, OVER_MEMORY_BUDGET); 1 GiB: 6; 2 GiB: 6"
+   "detail": "512 MiB: 3 (4 refused, OVER_MEMORY_BUDGET); 1 GiB: 6; 2 GiB: 6"
   },
   {
    "kind": "MEASURE",
@@ -2951,7 +3175,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E1-jpeg-planning",
    "ok": null,
-   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "MEASURE",
@@ -2963,7 +3187,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E2-png-embed",
    "ok": null,
-   "detail": "512 MiB: 27 (28 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+   "detail": "512 MiB: 20 (21 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
   },
   {
    "kind": "MEASURE",
@@ -2975,7 +3199,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E3-gray-raw",
    "ok": null,
-   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "MEASURE",
@@ -2987,7 +3211,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E3-gray-flate",
    "ok": null,
-   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "MEASURE",
@@ -2999,7 +3223,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E3-rgb-raw",
    "ok": null,
-   "detail": "512 MiB: 27 (28 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+   "detail": "512 MiB: 20 (21 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
   },
   {
    "kind": "MEASURE",
@@ -3011,7 +3235,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E3-rgb-flate",
    "ok": null,
-   "detail": "512 MiB: 27 (28 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+   "detail": "512 MiB: 20 (21 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
   },
   {
    "kind": "MEASURE",
@@ -3035,7 +3259,7 @@
    "kind": "MEASURE",
    "name": "B2 one-page A4 @150 files, E4-jspdf-planning",
    "ok": null,
-   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "PROBE",
@@ -3113,7 +3337,7 @@
    "kind": "ASSERT",
    "name": "the evidence is bound to committed source: the research tree is clean, untracked files included",
    "ok": true,
-   "detail": "tested head faf8cd41d04f38bdbe0b31182e1be44900d696c1"
+   "detail": "tested head 54374aa64e23b542d1f1955298c66c5d4d2d9c32"
   }
  ]
 }
