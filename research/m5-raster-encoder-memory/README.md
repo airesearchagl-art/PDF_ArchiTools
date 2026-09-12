@@ -31,19 +31,31 @@ internal working memory is bounded by nothing at all.
   to **66.4 MiB** at A4 300 dpi. The first round priced the readback alone and
   claimed 8 B/px for a pipeline that was using 11; both orderings are now
   modelled and the gate measures which one the code performs.
-- **The deflate bound is pako's, not DEFLATE's**: `n + 5·⌈n/16384⌉ + 6`, from
-  `_tr_flush_block`'s stored-block fallback and `lit_bufsize`. Incompressible
-  noise lands on it **exactly** (2,175,631 B and 6,526,881 B); uniform content
-  reaches ×0.001. pako's own state — 262,144 B — and its 16 KiB output chunks,
-  pinned by `shrinkBuf`'s subarray, are terms in the model.
+- **The deflate bound is pako's, not DEFLATE's**: `n + 5·⌈n/16383⌉ + 6`. The
+  divisor is `lit_bufsize - 1`, because `_tr_tally` increments `last_lit` and
+  then returns `(s.last_lit === s.lit_bufsize - 1)` — the flush comes on the
+  16,383rd literal. Probed at 16,382 / 16,383 / 16,384 / 32,766 / 32,767 /
+  32,768 bytes: every measured size is inside the corrected bound, and the
+  previous `/16384` expression, while never violated there, was met **exactly,
+  with zero slack**, at three of them. On whole pages, incompressible noise
+  lands on the bound to the byte (2,175,631 B and 6,526,881 B) and uniform
+  content reaches ×0.001. pako's per-call state is **ten arrays, 267,160 B** —
+  not the four large buffers (262,144 B) the first round counted — and its
+  16 KiB output chunks, pinned by `shrinkBuf`'s subarray, are terms too.
 - **The capacity the old estimate promised survives.** Inside 512 MiB the owned
   DeviceGray path takes **30 A4 pages at 300 dpi and 123 at 150**, against the
   **0 and 6** the only fail-closed JPEG term allowed. Optimize keeps colour, so
   it carries 10 and 41.
-- **Batches are smaller than the first round said.** Priced from JSZip's own
-  path — sources held, every chunk accumulated in `dataArray`, the archive
-  allocated while that array is live — a 512 MiB batch takes **82** one-page
-  A4 @150 DeviceGray files, not 123, and **27** in DeviceRGB.
+- **Batches are smaller than either earlier model said.** Priced from JSZip's
+  own path, with the sources, the accumulated chunks, the concatenated archive
+  and the Blob copy all live at the handoff — the Blob is built before
+  `dataArray` is cleared — a 512 MiB batch takes **61** one-page A4 @150
+  DeviceGray files and **20** in DeviceRGB.
+- **`FlateDecode` is not free for colour.** Pricing the readback as still
+  reachable while deflate runs (nothing promises it is collected first) moves
+  DeviceRGB + `FlateDecode` to **108.1 MiB** a page at A4 300 dpi, against
+  66.4 MiB for the raw stream. DeviceGray is unaffected, so Monochrome keeps
+  the filter and Optimize is recommended raw.
 - **Reusing M4's owned PNG encoder (E2) does not close H8.** Its size is exact,
   but pdf-lib's PNG path decodes and re-expands it: peak **132.7 MiB**, twice
   E3's, for a file no smaller.

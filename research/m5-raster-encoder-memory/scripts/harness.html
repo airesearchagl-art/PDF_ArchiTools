@@ -336,6 +336,26 @@ window.__m5e = {
   },
 
   /**
+   * RF-N1-A. Deflate buffers of exact lengths through the same pdf-lib path an
+   * image stream uses, and report what the object carries. Used to probe the
+   * block-count bound at and around the literal-buffer boundary, where an
+   * off-by-one in the divisor would show.
+   */
+  async deflateSizes(lengths) {
+    const rows = [];
+    for (const n of lengths) {
+      for (const [content, make] of [['noise', () => noiseSamples(n)], ['uniform', () => new Uint8Array(n).fill(255)]]) {
+        const doc = await PDFDocument.create();
+        const bytes = make();
+        const stream = doc.context.flateStream(bytes, {});
+        doc.context.register(stream);
+        rows.push({ n, content, storedBytes: stream.getContentsSize() });
+      }
+    }
+    return rows;
+  },
+
+  /**
    * RF-M2. What jsPDF 3.0.4 actually exposes, checked at runtime rather than
    * inferred from a package name.
    */

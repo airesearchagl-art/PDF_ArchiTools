@@ -23,9 +23,10 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'vite';
 import puppeteer from 'puppeteer';
 import {
-    CANDIDATES, pagePlan, filePlan, batchPlan, naiveBatchPlan, preflight, admissibleForHardContract,
-    deflateUpperBound, pakoDeflateTerms, rawSampleBytes, ORDERING,
-    CEILINGS, REFUSAL, PAKO, PAKO_STATE_BYTES,
+    CANDIDATES, pagePlan, filePlan, batchPlan, naiveBatchPlan, oldBatchPlan,
+    preflight, admissibleForHardContract,
+    deflateUpperBound, oldDeflateUpperBound, rawSampleBytes, ORDERING,
+    CEILINGS, REFUSAL, PAKO, PAKO_STATE_BYTES, PAKO_STATE_TERMS,
 } from '../prototype/encoders.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -209,8 +210,33 @@ try {
     probe('and incompressible content stays inside the bound rather than merely inside the samples',
         noisyFlate.every((r) => r.storedBytes > r.sampleBytes && r.storedBytes <= r.modelBound),
         `noise expands to ${fmt(noisyFlate[0].storedBytes)} B from ${fmt(noisyFlate[0].sampleBytes)} B, under ${fmt(noisyFlate[0].modelBound)} B`);
-    measure('the pako state every deflate allocates, whatever the input',
-        `${fmt(PAKO_STATE_BYTES)} B = window ${fmt(PAKO.windowBytes)} + head ${fmt(PAKO.headBytes)} + prev ${fmt(PAKO.prevBytes)} + pending_buf ${fmt(PAKO.pendingBufBytes)}`);
+    // RF-N1-B: every array a DeflateState allocates, not only the four large ones.
+    for (const t of PAKO_STATE_TERMS) measure(`pako per-call state: ${t.name}`, `${fmt(t.bytes)} B — ${t.source}`);
+    measure('pako per-call state, in total', `${fmt(PAKO_STATE_BYTES)} B across ${PAKO_STATE_TERMS.length} arrays`);
+
+    // ---- 5b. RF-N1-A: the block count, at the boundary --------------------------
+    console.log('\n=== 5b. the block-count bound, probed at the literal-buffer boundary (RF-N1-A) ===');
+    const edgeSizes = [16382, 16383, 16384, 32766, 32767, 32768];
+    const edges = await call('deflateSizes', edgeSizes);
+    evidence.sections.blockBound = edges;
+    for (const r of edges) {
+        measure(`deflate ${fmt(r.n)} B of ${r.content}`,
+            `stored ${fmt(r.storedBytes)} B; bound ${fmt(deflateUpperBound(r.n))} B; `
+            + `previous bound ${fmt(oldDeflateUpperBound(r.n))} B`);
+    }
+    assert('every probed size stays inside the corrected bound',
+        edges.every((r) => r.storedBytes <= deflateUpperBound(r.n)),
+        `bound = n + 5*ceil(n/${PAKO.literalsPerBlock}) + 6, from _tr_tally returning at last_lit === lit_bufsize - 1 (trees.js:1211)`);
+    const brokenByOld = edges.filter((r) => r.storedBytes > oldDeflateUpperBound(r.n));
+    probe('the divisor had to be lit_bufsize - 1, and the two bounds differ where it matters',
+        edgeSizes.some((n) => deflateUpperBound(n) > oldDeflateUpperBound(n))
+        && brokenByOld.every((r) => r.storedBytes <= deflateUpperBound(r.n)),
+        brokenByOld.length > 0
+            ? `${brokenByOld.length} probed case(s) exceed the previous bound: `
+            + brokenByOld.map((r) => `${fmt(r.n)} B ${r.content} stored ${fmt(r.storedBytes)} > ${fmt(oldDeflateUpperBound(r.n))}`).join('; ')
+            : `no probed case exceeded the previous bound, but it is arithmetically too small at these sizes `
+            + `(e.g. ${fmt(16384)} B: ${fmt(deflateUpperBound(16384))} vs ${fmt(oldDeflateUpperBound(16384))}), `
+            + 'so the corrected divisor is adopted on the derivation rather than on a lucky fixture');
 
     // ---- 6. candidates, end to end ---------------------------------------------
     console.log('\n=== 6. the candidates over the same rendered pages ===');
@@ -335,6 +361,21 @@ try {
         + `${naiveVerdict.status} at ${miB(naiveBatch.peakBytes)}; full: ${fullVerdict.status} `
         + `${fullVerdict.reason ?? ''} at ${miB(fullBatch.peakBytes)} (sources + accumulated chunks + the concat result)`);
     for (const t of fullBatch.terms) measure(`B2 term: ${t.name}`, `${miB(t.bytes)} — ${t.basis} (${t.source})`);
+
+    // RF-N2: the previous round priced sources + 2 x archive in its steps while
+    // listing a Blob copy among its terms. The steps and the terms have to
+    // describe the same moment.
+    const [oldLargest] = search(0, 2000, (n) => n === 0
+        || preflight(oldBatchPlan('E3-rgb-raw', ...A4, 300, 1, n), batchLimits).status === 'READY');
+    const oldB = oldBatchPlan('E3-rgb-raw', ...A4, 300, 1, oldLargest);
+    const newB = batchPlan('E3-rgb-raw', ...A4, 300, 1, oldLargest);
+    const oldV = preflight(oldB, batchLimits);
+    const newV = preflight(newB, batchLimits);
+    probe('the previous batch model claims READY where the overlapping one refuses',
+        oldV.status === 'READY' && newV.status === 'REFUSED',
+        `${oldLargest} one-page A4 @300 files, the most the previous model accepts — previous: ${oldV.status} at `
+        + `${miB(oldB.peakBytes)} (sources + 2 x archive); corrected: ${newV.status} ${newV.reason ?? ''} at `
+        + `${miB(newB.peakBytes)} (sources + chunks + concat + Blob copy, all live at the handoff)`);
 
     // ---- 11. boundaries ---------------------------------------------------------
     console.log('\n=== 11. boundaries, per candidate and per preset ===');

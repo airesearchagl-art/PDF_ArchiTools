@@ -2,20 +2,22 @@
  * The encoding paths a flattening Processor operation could use, priced against
  * what the code actually does.
  *
- * The first round of this spike priced the *steps* and quietly assumed the
- * canvas was gone by the time the samples were allocated. It was not: the
- * prototype released it only after the stream had been written, so the real
- * live set during conversion was canvas + ImageData + samples. Both orderings
- * are modelled here, kept apart by name, and the gate proves which one the code
- * performs.
+ * Two rounds of correction are baked in here, and both are worth stating
+ * because both were cases of the model being tidier than the program:
+ *
+ *  - the canvas was released only after the stream was written, so the live set
+ *    during conversion was canvas + ImageData + samples, not the readback alone;
+ *  - the deflate path was priced as if the readback were already gone and as if
+ *    pako's state were four arrays and its blocks 16,384 literals long. None of
+ *    those was true.
  *
  * Every term carries its basis, and one rule decides adoption:
  *
  *   an adopted H8 model may contain no UNKNOWN term, and no term whose only
  *   basis is a measurement.
  *
- * Sources are pinned and cited per term: pdf-lib 1.17.1, its nested pako
- * 1.0.11, JSZip 3.10.1 (nested pako 1.0.11), jsPDF 3.0.4.
+ * Sources are pinned and cited per term: pdf-lib 1.17.1, the pako 1.0.11 it
+ * resolves from its own node_modules, JSZip 3.10.1, jsPDF 3.0.4.
  */
 
 export const BASIS = {
@@ -32,87 +34,111 @@ export const term = (name, bytes, basis, source) => ({ name, bytes, basis, sourc
 // Format and library arithmetic
 // ---------------------------------------------------------------------------
 
-/**
- * Baseline JPEG's own worst case, per pixel (ITU-T T.81): per 8x8 block a DC
- * coefficient of at most 16 + 11 bits and 63 ACs of at most 16 + 10 bits each,
- * doubled by 0xFF byte stuffing, three blocks per 64 pixels without
- * subsampling. Independent of any encoder.
- */
 export const JPEG_FORMAT_UPPER_BOUND = 20;
-/** M5's measured worst case at q0.8. Performance evidence, never a bound. */
 export const JPEG_MEASURED_WORST = 0.783;
 export const JPEG_PLANNING_RATIO = 1.0;
 
 /**
- * pako 1.0.11, as pdf-lib and JSZip both resolve it, at pdf-lib's defaults
- * (level 6, windowBits 15, memLevel 8). Every constant below is an assignment
- * in that source, not a guess:
+ * pako 1.0.11 at pdf-lib's defaults (level 6, windowBits 15, memLevel 8).
+ * Every constant is an assignment in that source.
  *
- *   w_size      = 1 << 15                        deflate.js:1368
- *   hash_size   = 1 << (memLevel + 7) = 1 << 15  deflate.js:1371-1372
- *   window      = Buf8(w_size * 2)               deflate.js:1376   65,536 B
- *   head        = Buf16(hash_size)               deflate.js:1377   65,536 B
- *   prev        = Buf16(w_size)                  deflate.js:1378   65,536 B
- *   lit_bufsize = 1 << (memLevel + 6) = 16,384   deflate.js:1383
- *   pending_buf = Buf8(lit_bufsize * 4)          deflate.js:1385-1389  65,536 B
- *   chunkSize   = 16,384                         deflate.js (Deflate):126
+ *   w_size          = 1 << 15                       deflate.js:1368
+ *   hash_size       = 1 << (memLevel + 7)           deflate.js:1371-1372
+ *   lit_bufsize     = 1 << (memLevel + 6) = 16,384  deflate.js:1383
+ *   LENGTH_CODES 29, LITERALS 256 → L_CODES 286, HEAP_SIZE 573
+ *                                                   deflate.js:89-99
+ *   chunkSize       = 16,384                        lib/deflate.js:126
  */
 export const PAKO = {
     version: '1.0.11',
-    windowBytes: 65536,
-    headBytes: 65536,
-    prevBytes: 65536,
-    pendingBufBytes: 65536,
     litBufsize: 16384,
+    /**
+     * How many literals a block actually holds.
+     *
+     * `_tr_tally` increments `last_lit` and then returns
+     * `(s.last_lit === s.lit_bufsize - 1)` (trees.js:1171, 1211), so the flush
+     * is requested on the **16,383rd** literal, not the 16,384th. For
+     * incompressible input — one literal per byte — that is the largest number
+     * of input bytes a block can cover, and it is the divisor the block count
+     * has to use.
+     */
+    literalsPerBlock: 16383,
     outputChunkBytes: 16384,
+    windowBytes: 65536,      // Buf8(w_size * 2)                  deflate.js:1376
+    headBytes: 65536,        // Buf16(hash_size)                  deflate.js:1377
+    prevBytes: 65536,        // Buf16(w_size)                     deflate.js:1378
+    pendingBufBytes: 65536,  // Buf8(lit_bufsize * 4)             deflate.js:1385-1389
 };
-/** The fixed deflate state, allocated once per `pako.deflate()` call. */
-export const PAKO_STATE_BYTES = PAKO.windowBytes + PAKO.headBytes
-    + PAKO.prevBytes + PAKO.pendingBufBytes; // 262,144
 
 /**
- * The upper bound on what pako 1.0.11 emits, derived from its own block
- * lifecycle rather than from DEFLATE's 65,535-byte stored-block limit.
+ * Every array a DeflateState allocates, not only the four large ones.
  *
- * `_tr_flush_block` (trees.js:1073-1131) computes `opt_lenb` and `static_lenb`
- * and emits a **stored** block whenever `stored_len + 4 <= opt_lenb`, so no
- * block is ever worse than stored: 5 bytes of framing (3-bit header padded to a
- * byte, then LEN and NLEN) over the block's own bytes. A block is flushed at
- * the latest when `lit_bufsize` literals have accumulated — 16,384 of them,
- * which for incompressible input is 16,384 input bytes — so that is the
- * smallest span the bound may assume. The zlib wrapper adds a 2-byte header and
- * a 4-byte Adler-32.
+ * The first round called 262,144 B "the pako state"; it is the four big
+ * buffers and nothing else. These six Huffman-tree arrays are allocated per
+ * call too (deflate.js:1195-1221), all `Buf16`, two bytes an element.
+ */
+export const PAKO_STATE_TERMS = [
+    term('window', PAKO.windowBytes, BASIS.EXACT, 'deflate.js:1376, Buf8(w_size * 2)'),
+    term('head', PAKO.headBytes, BASIS.EXACT, 'deflate.js:1377, Buf16(hash_size)'),
+    term('prev', PAKO.prevBytes, BASIS.EXACT, 'deflate.js:1378, Buf16(w_size)'),
+    term('pending_buf', PAKO.pendingBufBytes, BASIS.EXACT, 'deflate.js:1385-1389, Buf8(lit_bufsize * 4)'),
+    term('dyn_ltree', 573 * 2 * 2, BASIS.EXACT, 'deflate.js:1195, Buf16(HEAP_SIZE * 2)'),
+    term('dyn_dtree', (2 * 30 + 1) * 2 * 2, BASIS.EXACT, 'deflate.js:1196, Buf16((2*D_CODES+1) * 2)'),
+    term('bl_tree', (2 * 19 + 1) * 2 * 2, BASIS.EXACT, 'deflate.js:1197, Buf16((2*BL_CODES+1) * 2)'),
+    term('bl_count', 16 * 2, BASIS.EXACT, 'deflate.js:1207, Buf16(MAX_BITS + 1)'),
+    term('heap', 573 * 2, BASIS.EXACT, 'deflate.js:1211, Buf16(2*L_CODES + 1)'),
+    term('depth', 573 * 2, BASIS.EXACT, 'deflate.js:1220, Buf16(2*L_CODES + 1)'),
+];
+export const PAKO_STATE_BYTES = PAKO_STATE_TERMS.reduce((n, t) => n + t.bytes, 0);
+
+/**
+ * The upper bound on what pako 1.0.11 emits, from its own block lifecycle.
+ *
+ * `_tr_flush_block` emits a **stored** block whenever `stored_len + 4 <=
+ * opt_lenb` (trees.js:1122-1131), so no block is worse than stored: five bytes
+ * of framing over its own bytes. A block covers at most `literalsPerBlock`
+ * input bytes when nothing compresses (trees.js:1211). The zlib wrapper adds a
+ * two-byte header and a four-byte Adler-32.
  */
 export function deflateUpperBound(n) {
+    const blocks = Math.max(1, Math.ceil(n / PAKO.literalsPerBlock));
+    return n + 5 * blocks + 6;
+}
+
+/**
+ * The bound as the previous round stated it, dividing by `lit_bufsize` itself.
+ * Kept so the gate can show where the two differ and whether any measured case
+ * actually breaks it.
+ */
+export function oldDeflateUpperBound(n) {
     const blocks = Math.max(1, Math.ceil(n / PAKO.litBufsize));
     return n + 5 * blocks + 6;
 }
 
 /**
- * What pako holds while deflating `n` bytes down to at most `bound`.
+ * What pako holds while deflating `n` bytes.
  *
  * `Deflate.push` allocates a fresh `Buf8(chunkSize)` every time the output
- * fills (deflate.js:243) and hands it to `onData` through `shrinkBuf`, which
- * returns **`buf.subarray(0, size)` without copying** (common.js:34-38) — so
- * every accumulated chunk pins its whole 16 KiB buffer, not just its bytes.
- * `onEnd` then calls `flattenChunks`, which allocates the result **while all
- * chunks are still live** (common.js:54-72).
+ * fills (lib/deflate.js:243) and hands it on through `shrinkBuf`, which returns
+ * `buf.subarray(0, size)` **without copying** (common.js:34-38) — so every
+ * accumulated chunk pins its whole 16 KiB buffer. `onEnd` then calls
+ * `flattenChunks`, which allocates the result while all the chunks are still
+ * live (common.js:54-72).
  */
 export function pakoDeflateTerms(n) {
     const bound = deflateUpperBound(n);
     const chunks = Math.max(1, Math.ceil(bound / PAKO.outputChunkBytes));
-    const pinned = chunks * PAKO.outputChunkBytes;
     return [
-        term('pako deflate state (window, head, prev, pending_buf)', PAKO_STATE_BYTES, BASIS.EXACT,
-            'pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8'),
-        term('output chunks, each pinning a full 16 KiB buffer', pinned, BASIS.SOURCE_DERIVED_BOUND,
-            'deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays'),
-        term('flattenChunks result, allocated while the chunks are live', bound, BASIS.SOURCE_DERIVED_BOUND,
-            'common.js:54-72'),
+        term('pako per-call state (10 arrays)', PAKO_STATE_BYTES, BASIS.EXACT,
+            'pako 1.0.11 deflate.js:1195-1221, 1376-1389'),
+        term('output chunks, each pinning a full 16 KiB buffer', chunks * PAKO.outputChunkBytes,
+            BASIS.SOURCE_DERIVED_BOUND, 'lib/deflate.js:243 + common.js:34-38, subarray not copy'),
+        term('flattenChunks result, allocated while the chunks are live', bound,
+            BASIS.SOURCE_DERIVED_BOUND, 'common.js:54-72'),
     ];
 }
+const pakoDeflateBytes = (n) => pakoDeflateTerms(n).reduce((acc, t) => acc + t.bytes, 0);
 
-/** The M4 stored-PNG contract, restated so this model can price it. */
 export const PNG_STORED = { maxDeflateBlockBytes: 65535, maxIdatChunkBytes: 1 << 20 };
 
 export function pngStoredSize(width, height) {
@@ -128,17 +154,7 @@ export const base64Chars = (n) => 4 * Math.ceil(n / 3);
 export const jpegDataUrlChars = (n) => base64Chars(n) + 23;
 export const rawSampleBytes = (width, height, components) => width * height * components;
 
-/** Dictionary, `stream`/`endstream`, object header and xref entry. Conservative. */
 export const STREAM_OVERHEAD_BYTES = 512;
-
-/**
- * V8's heap cost for an ordinary JS array of small integers, per element.
- *
- * Used only to *show* that a term is engine-dependent, never to bound one: a
- * packed SMI array stores tagged values and grows by reallocation, and neither
- * the factor nor the growth policy is specified anywhere this architecture
- * controls. Any term priced with it is UNKNOWN by construction.
- */
 export const JS_ARRAY_ELEMENT_BYTES_V8 = 8;
 
 // ---------------------------------------------------------------------------
@@ -148,17 +164,8 @@ export const JS_ARRAY_ELEMENT_BYTES_V8 = 8;
 const CANVAS = (w, h) => term('canvas (PDF.js render target)', 4 * w * h, BASIS.EXACT, 'canvas.width * height * RGBA');
 const READBACK = (w, h) => term('getImageData readback', 4 * w * h, BASIS.EXACT, 'ImageData.data');
 
-/**
- * Two orderings, because they are two different live sets.
- *
- * `canvas-held`   — convert and write while the canvas is still allocated.
- *                   This is what the first prototype did.
- * `canvas-released` — release the canvas (width = height = 0) as soon as the
- *                   readback exists, before any sample buffer is allocated.
- */
 export const ORDERING = { HELD: 'canvas-held', RELEASED: 'canvas-released' };
 
-/** E1 — production: canvas JPEG, base64, pdf-lib `embedJpg`. */
 function e1(width, height, mode, ordering) {
     const px = width * height;
     const jpeg = Math.ceil(px * (mode === 'hard' ? JPEG_FORMAT_UPPER_BOUND : JPEG_PLANNING_RATIO));
@@ -177,14 +184,12 @@ function e1(width, height, mode, ordering) {
     const steps = {
         render: 4 * px,
         readback: 8 * px,
-        // toDataURL reads the canvas, so the canvas cannot be released first.
         encode: 4 * px + 4 * px + jpeg + url,
         embed: url + jpeg + jpeg,
     };
     return { terms, steps, encodedBytes: jpeg, retained: jpeg, fileBytes: jpeg + STREAM_OVERHEAD_BYTES, canvasLive };
 }
 
-/** E2 — the owned stored PNG, embedded through pdf-lib's PNG path. */
 function e2(width, height, ordering) {
     const px = width * height;
     const png = pngStoredSize(width, height);
@@ -205,14 +210,13 @@ function e2(width, height, ordering) {
         term('alphaChannel', alpha, BASIS.SOURCE_DERIVED_BOUND, 'png.js:22; dropped when fully opaque'),
         ...pakoDeflateTerms(rgb),
     ];
-    const pako = pakoDeflateTerms(rgb).reduce((n, t) => n + t.bytes, 0);
     const steps = {
         render: 4 * px,
         readback: 8 * px,
         encode: held + 4 * px + png + pngStoredScratch(width),
         decode: png + png + inflated + 4 * px,
         split: png + 4 * px + 4 * px + rgb + alpha,
-        deflate: rgb + alpha + pako,
+        deflate: rgb + alpha + pakoDeflateBytes(rgb),
     };
     return { terms, steps, encodedBytes: png, retained: deflated, fileBytes: deflated + STREAM_OVERHEAD_BYTES, canvasLive: held };
 }
@@ -220,10 +224,17 @@ function e2(width, height, ordering) {
 /**
  * E3 — an owned image XObject.
  *
- * `context.stream(bytes, dict)` stores the array **as given**: `typedArrayFor`
+ * `context.stream(bytes, dict)` stores the array as given: `typedArrayFor`
  * returns a Uint8Array unchanged (arrays.js:9-11) and `PDFRawStream` assigns it
- * to `contents` (PDFRawStream.js:10). Nothing copies it on the write path, so
- * the retained term is the samples themselves.
+ * to `contents` (PDFRawStream.js:10).
+ *
+ * The deflate step is priced with the **readback still live**. The prototype
+ * converts the readback into samples and then calls `flateStream` with the
+ * `ImageData` still referenced by the calling frame; nothing in JavaScript
+ * promises it is collected in between, so a fail-closed model must assume it is
+ * not. Releasing it is a restructuring a production implementation could make —
+ * and would have to make explicitly, and prove — before claiming the smaller
+ * number.
  */
 function e3(width, height, components, filter, ordering) {
     const px = width * height;
@@ -238,9 +249,10 @@ function e3(width, height, components, filter, ordering) {
     const steps = { render: 4 * px, readback: 8 * px, convert: held + 4 * px + samples };
     if (filter === 'flate') {
         stored = deflateUpperBound(samples);
-        const pako = pakoDeflateTerms(samples);
-        terms.push(...pako);
-        steps.deflate = samples + pako.reduce((n, t) => n + t.bytes, 0);
+        terms.push(...pakoDeflateTerms(samples));
+        terms.push(term('the readback, still reachable while deflate runs', 4 * px, BASIS.CONSERVATIVE_BOUND,
+            'the prototype holds the ImageData across the flateStream call'));
+        steps.deflate = 4 * px + samples + pakoDeflateBytes(samples);
         steps.retain = stored;
     } else {
         terms.push(term('stream bytes, retained until save', samples, BASIS.EXACT,
@@ -251,22 +263,14 @@ function e3(width, height, components, filter, ordering) {
 }
 
 /**
- * E4 — jsPDF 3.0.4's bundled `JPEGEncoder`.
+ * E4 — jsPDF 3.0.4's bundled `JPEGEncoder` (jspdf.es.js:15515).
  *
- * It exists (jspdf.es.js:15515). Two facts decide its admissibility, and
- * neither is "it does not exist":
- *
- *  - **no supported path reaches it.** `jspdf.es.js` exports only AcroForm*,
- *    GState, ShadingPattern, TilingPattern and jsPDF (line 24183). The encoder
- *    is module-internal, called only by `processGIF89A` (16067), `processBMP`
- *    (16354) and `processWEBP` (20194) — i.e. reachable only by handing jsPDF a
- *    GIF, BMP or WEBP *file*. `processRGBA`, the one that takes canvas pixels,
- *    does not use it (20241-20272). Reuse would mean depending on an unexported
- *    bundled internal.
- *  - **its output cannot be bounded in memory.** `byteout = []` is an ordinary
- *    JS array pushed one byte at a time (15529, 15651) and converted with
- *    `new Uint8Array(byteout)` at the end (16016). Its heap cost is the
- *    engine's, and its growth policy is the engine's.
+ * It exists. It is inadmissible for two reasons, neither of them absence: no
+ * supported path reaches it with raw pixels (not exported at :24183, called
+ * only by processGIF89A/processBMP/processWEBP, each taking an encoded image
+ * file, while `processRGBA` does not use it), and its output is built in an
+ * ordinary JS array one byte at a time (15529, 15651) before
+ * `new Uint8Array(byteout)` (16016).
  */
 function e4(width, height, mode, ordering) {
     const px = width * height;
@@ -331,10 +335,6 @@ export function pagePlan(candidate, widthPt, heightPt, dpi, ordering = ORDERING.
     };
 }
 
-/**
- * A file of N identical pages. pdf-lib holds every page's stream until
- * `save()`, and `save()` assembles the whole document in one buffer.
- */
 export function filePlan(candidate, widthPt, heightPt, dpi, pages, ordering = ORDERING.RELEASED) {
     const page = pagePlan(candidate, widthPt, heightPt, dpi, ordering);
     const retained = page.retained * pages;
@@ -351,45 +351,63 @@ export function filePlan(candidate, widthPt, heightPt, dpi, pages, ordering = OR
 /**
  * A B2 batch, priced from JSZip 3.10.1's own generation path.
  *
- * `generateInternalStream` defaults to `compression: "STORE"` (object.js:321),
- * so nothing is deflated; what accumulates is copies. With `streamFiles` false
- * (object.js:320) `ZipFileWorker` buffers each file's chunks in `contentBuffer`
- * to compute its size and CRC before writing it (ZipFileWorker.js:337-339,
- * 365-366). `StreamHelper.accumulate` collects every emitted chunk in
- * `dataArray` (StreamHelper.js:79-104) and then `concat` allocates the whole
- * archive with `new Uint8Array(totalLength)` **while `dataArray` is still live**
- * (StreamHelper.js:46-62). For a Blob, `transformTo('arraybuffer', …)` returns
- * `input.buffer` without copying (utils.js:273-275); the Blob constructor then
- * copies, which is the browser's and is priced conservatively.
+ * `generateInternalStream` defaults to `compression: "STORE"` and
+ * `streamFiles: false` (object.js:320-321). `StreamHelper.accumulate` collects
+ * every emitted chunk in `dataArray`, `concat` allocates the whole archive with
+ * `new Uint8Array(totalLength)` **while `dataArray` is still live**, and only
+ * the `end` handler afterwards clears it (StreamHelper.js:46-104). The Blob is
+ * constructed inside that same handler, from `input.buffer` — which copies
+ * nothing (utils.js:273-275) — but the Blob itself is the browser's own copy.
+ *
+ * So the widest live set is all four at once: the sources the batch still
+ * holds, the accumulated chunks, the concatenated archive, and the Blob copy.
+ * Pricing `sources + 2 × archive` while separately claiming a Blob copy
+ * describes two different moments as if they were one.
  */
 export function batchPlan(candidate, widthPt, heightPt, dpi, pagesPerFile, files, ordering = ORDERING.RELEASED) {
     const file = filePlan(candidate, widthPt, heightPt, dpi, pagesPerFile, ordering);
-    const sources = file.outputBytes * files;          // the PDFs, held until the archive
-    const archive = sources + 1024 * files + 1024;     // STORE: the archive is the sources plus records
-    const largestFile = file.outputBytes;              // ZipFileWorker.contentBuffer, one file at a time
+    const sources = file.outputBytes * files;
+    const archive = sources + 1024 * files + 1024;
+    const largestFile = file.outputBytes;
     const steps = {
         'last file produced': file.outputBytes * (files - 1) + file.peakBytes,
         'zip accumulating': sources + largestFile + archive,
         'zip concat': sources + archive + archive,
-        'blob handoff': sources + archive + archive,
+        'blob handoff': sources + archive + archive + archive,
     };
     const { step, live } = peakOf(steps);
     const terms = [
         term('output PDFs held as ZIP sources', sources, BASIS.EXACT, 'B2 holds every success until the archive'),
         term("ZipFileWorker.contentBuffer, one file's chunks", largestFile, BASIS.CONSERVATIVE_BOUND,
             'ZipFileWorker.js:337-339, 365-366 with streamFiles false'),
-        term('StreamHelper dataArray, every emitted chunk', archive, BASIS.SOURCE_DERIVED_BOUND, 'StreamHelper.js:79-104'),
+        term('StreamHelper dataArray, every emitted chunk', archive, BASIS.SOURCE_DERIVED_BOUND,
+            'StreamHelper.js:79-104; cleared only in the end handler'),
         term('concat result, allocated while dataArray is live', archive, BASIS.SOURCE_DERIVED_BOUND, 'StreamHelper.js:46-62'),
         term('arraybuffer view for the Blob', 0, BASIS.EXACT, 'utils.js:273-275 returns input.buffer, no copy'),
-        term('Blob copy', archive, BASIS.CONSERVATIVE_BOUND, "the browser's own copy of the archive"),
+        term('Blob copy, built before dataArray is cleared', archive, BASIS.CONSERVATIVE_BOUND, "the browser's own copy of the archive"),
     ];
     return { candidate, ordering, files, file, heldBytes: sources, outputBytes: archive, steps, terms, peakStep: step, peakBytes: live };
 }
 
 /**
- * The batch model the first round used: the largest file plus one archive.
- * Kept so the gate can show it says READY where the full model refuses.
+ * The batch model the previous round used: sources plus two archives, with a
+ * Blob copy listed as a term but never in any step. Kept so the gate can show
+ * the file count where the two disagree.
  */
+export function oldBatchPlan(candidate, widthPt, heightPt, dpi, pagesPerFile, files, ordering = ORDERING.RELEASED) {
+    const file = filePlan(candidate, widthPt, heightPt, dpi, pagesPerFile, ordering);
+    const sources = file.outputBytes * files;
+    const archive = sources + 1024 * files + 1024;
+    const steps = {
+        'last file produced': file.outputBytes * (files - 1) + file.peakBytes,
+        'zip accumulating': sources + file.outputBytes + archive,
+        'zip concat': sources + archive + archive,
+    };
+    const { step, live } = peakOf(steps);
+    return { candidate, files, file, outputBytes: archive, steps, peakStep: step, peakBytes: live, old: true };
+}
+
+/** One page priced as if a file were one page: the simplest wrong model. */
 export function naiveBatchPlan(candidate, widthPt, heightPt, dpi, pagesPerFile, files, ordering = ORDERING.RELEASED) {
     const file = filePlan(candidate, widthPt, heightPt, dpi, pagesPerFile, ordering);
     const held = file.outputBytes * files;
@@ -423,7 +441,6 @@ export function preflight(plan, { maxRasterPixels, memory, maxOutputBytes } = {}
     return { status: 'READY', peak: plan.peakBytes, output: plan.outputBytes, limits };
 }
 
-/** An UNKNOWN term is not a small term; it is an unbounded one. */
 export function admissibleForHardContract(plan) {
     const unknown = plan.terms.filter((t) => t.basis === BASIS.UNKNOWN);
     const measured = plan.terms.filter((t) => t.basis === BASIS.MEASURED_ONLY);

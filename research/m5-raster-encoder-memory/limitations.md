@@ -42,17 +42,36 @@
 ## Of the models
 
 - **The DEFLATE bound is pako's, not the format's.** It is
-  `n + 5·⌈n/16384⌉ + 6`, derived from pako 1.0.11's own block lifecycle —
+  `n + 5·⌈n/16383⌉ + 6`, derived from pako 1.0.11's own block lifecycle —
   `_tr_flush_block` falls back to a stored block whenever `stored_len + 4 ≤
-  opt_lenb` (trees.js:1073-1131), and a block is flushed at the latest when
-  `lit_bufsize` = 16,384 literals have accumulated. A different deflater, or a
-  different `memLevel`, would need the bound re-derived. The *typical* sizes are
-  pako's too and would change with any other implementation.
+  opt_lenb` (trees.js:1073-1131), and `_tr_tally` increments `last_lit` and then
+  returns `(s.last_lit === s.lit_bufsize - 1)` (trees.js:1171, 1211), so a block
+  is flushed on the **16,383rd** literal. The divisor is `lit_bufsize - 1`, not
+  `lit_bufsize`: the previous round's `⌈n/16384⌉` counts one block too few at
+  multiples of the buffer size. It was **not** shown to be violated — probed at
+  16,382 / 16,383 / 16,384 / 32,766 / 32,767 / 32,768 bytes of incompressible
+  input, every measured size sat inside it, though at three of those sizes it
+  was met exactly, with zero slack. The corrected divisor is adopted on the
+  derivation, not on a counter-example, and is never smaller than the old one.
+  A different deflater, or a different `memLevel`, would need the bound
+  re-derived, and the *typical* sizes are pako's too.
 - **pako's retained output is larger than its output.** `shrinkBuf` returns
   `buf.subarray(0, size)` without copying (common.js:34-38), so every
   accumulated chunk pins a full 16 KiB buffer; `flattenChunks` then allocates
   the result while all of them are still live (common.js:54-72). The model
   prices that, but it is a property of this pako, not of DEFLATE.
+- **The per-call deflate state is ten arrays, not four.** Besides `window`,
+  `head`, `prev` and `pending_buf`, a `DeflateState` allocates `dyn_ltree`,
+  `dyn_dtree`, `bl_tree`, `bl_count`, `heap` and `depth` (deflate.js:1195-1221).
+  The previous round called the four large buffers "the pako state"; they are
+  262,144 B of a larger total. The six tree arrays are small and fixed, but they
+  are counted rather than waved away.
+- **The readback is priced as live while deflate runs.** The prototype converts
+  the `ImageData` into samples and then calls `flateStream` with the `ImageData`
+  still referenced by the calling frame. Nothing in JavaScript promises it has
+  been collected by then, so a fail-closed model assumes it has not. A
+  production implementation could restructure to drop it first — but it would
+  have to do so explicitly, and prove it, before claiming the smaller peak.
 - **The V8 array factor is used only to show engine dependence.** E4's
   `byteout` is priced at 8 bytes per element to demonstrate that the term is the
   engine's; that number is not a bound and is never used as one. Any term priced

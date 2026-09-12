@@ -100,24 +100,32 @@ all from that source:
 
 | term | bytes | source |
 | --- | --- | --- |
-| fixed deflate state | **262,144** (window 65,536 + head 65,536 + prev 65,536 + pending_buf 65,536) | deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8 |
+| per-call state, **ten arrays** | **267,160** — window, head, prev, pending_buf at 65,536 each, plus dyn_ltree 2,292, dyn_dtree 244, bl_tree 156, bl_count 32, heap 1,146, depth 1,146 | deflate.js:1195-1221, 1376-1389 at level 6 / windowBits 15 / memLevel 8 |
 | output chunks | `⌈bound/16384⌉ × 16,384` | `Deflate.push` allocates `Buf8(16384)` (deflate.js:243) and `shrinkBuf` hands on a **subarray, not a copy** (common.js:34-38), so each chunk pins its whole buffer |
 | flattened result | the output | `flattenChunks` allocates it while the chunks are still live (common.js:54-72) |
+| the readback | 4·W·H | still referenced by the calling frame while `flateStream` runs; nothing promises it is collected first, so a fail-closed model keeps it |
 
 **The size bound is pako's, not DEFLATE's.** `_tr_flush_block` emits a stored
 block whenever `stored_len + 4 ≤ opt_lenb` (trees.js:1073-1131), so no block is
-worse than stored — 5 bytes of framing over its own bytes — and a block is
-flushed at the latest when `lit_bufsize` = 16,384 literals have accumulated
-(deflate.js:1383). With the 2-byte zlib header and the 4-byte Adler-32:
+worse than stored — 5 bytes of framing over its own bytes. `_tr_tally`
+increments `last_lit` and then returns `(s.last_lit === s.lit_bufsize - 1)`
+(trees.js:1171, 1211), so the flush is requested on the **16,383rd** literal:
+the divisor is `lit_bufsize - 1`, not `lit_bufsize`. With the 2-byte zlib header
+and the 4-byte Adler-32:
 
 ```text
-bound(n) = n + 5·⌈n / 16384⌉ + 6
+bound(n) = n + 5·⌈n / 16383⌉ + 6
 ```
 
-Measured against it on 1240×1754: incompressible noise deflates to **exactly**
+Probed at 16,382 / 16,383 / 16,384 / 32,766 / 32,767 / 32,768 bytes of
+incompressible input, every measured size is inside it. The previous `/16384`
+expression was **not violated** in that range — but at 16,384, 32,767 and
+32,768 bytes it was met *exactly*, with zero slack. The corrected divisor is
+adopted on the derivation rather than on a fixture, and it is never smaller.
+
+On whole pages, 1240×1754: incompressible noise deflates to **exactly**
 2,175,631 B in DeviceGray and **exactly** 6,526,881 B in DeviceRGB — the bound,
-to the byte — while uniform content reaches ×0.001. A bound that the worst case
-touches and the best case falls far below is the right shape.
+to the byte — while uniform content reaches ×0.001.
 
 ## 6. The lifetime, term by term
 
@@ -127,14 +135,16 @@ touches and the best case falls far below is the right shape.
 | readback | canvas + ImageData = 8·W·H | EXACT |
 | convert | ImageData + samples (canvas already released) | EXACT |
 | embed, raw | samples, kept by reference | EXACT |
-| embed, flate | samples + pako state + pinned chunks + result | EXACT / SOURCE_DERIVED |
+| embed, flate | **readback** + samples + pako state + pinned chunks + result | EXACT / SOURCE_DERIVED / CONSERVATIVE |
 | retain until save | one stream per page | EXACT |
 | save | every retained stream + the output buffer | EXACT + conservative overhead |
 | publish | output × 2 | CONSERVATIVE_BOUND |
 
 Peaks for one A4 page at 300 dpi: **66.4 MiB (8.0 B/px)** at the readback for
-DeviceGray raw and flate and DeviceRGB raw; **74.9 MiB (9.0 B/px)** at the
-deflate step for DeviceRGB flate.
+DeviceGray raw and flate and DeviceRGB raw; **108.1 MiB (13.0 B/px)** at the
+deflate step for DeviceRGB flate. Keeping the readback in the deflate step is
+what moved that last figure from 74.9 MiB: DeviceGray is untouched, because its
+samples are a third the size and the readback still dominates.
 
 ## 7. The rule that decides admissibility
 
@@ -172,10 +182,16 @@ collects every emitted chunk in `dataArray` (StreamHelper.js:79-104), and
 `concat` allocates the whole archive with `new Uint8Array(totalLength)` **while
 `dataArray` is still live** (StreamHelper.js:46-62). The Blob conversion itself
 copies nothing — `transformTo('arraybuffer', …)` returns `input.buffer`
-(utils.js:273-275) — but the Blob constructor's own copy is priced
-conservatively.
+(utils.js:273-275) — but the Blob constructor's own copy is the browser's, and
+it is made **inside the same `end` handler, before `dataArray` is cleared**.
 
-A real three-file archive: sources 28,974 B, archive 29,556 B, +194 B per file
+So the widest live set is four things at once: the sources the batch still
+holds, the accumulated chunks, the concatenated archive and the Blob copy.
+Pricing `sources + 2 × archive` while separately listing a Blob copy among the
+terms describes two different moments as if they were one; the steps and the
+terms now describe the same moment.
+
+A real three-file archive: sources 28,971 B, archive 29,553 B, +194 B per file
 of records — STORE behaving as the model assumes.
 
 The consequence is a **job** ceiling, not a per-file one. A model that prices

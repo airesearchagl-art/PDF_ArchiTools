@@ -118,6 +118,12 @@ export function encodeOwnedPage(doc, page, ctx, {
         ? rgbaToGray(readback.data, { contrast })
         : rgbaToRgb(readback.data);
 
+    // `readback` is still referenced by this frame while `drawFullPageImage`
+    // runs, and with `filter: 'flate'` that call deflates synchronously.
+    // Nothing in JavaScript promises the ImageData is collected in between, so
+    // the model prices the deflate step with it live. Releasing it would be a
+    // restructuring a production implementation could make — and would have to
+    // make explicitly, and prove — before claiming the smaller number.
     const drawn = drawFullPageImage(doc, page, { samples, width, height, colourSpace, filter });
 
     return {
