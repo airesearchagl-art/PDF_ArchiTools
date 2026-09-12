@@ -1,10 +1,12 @@
 {
- "ranAt": "2026-09-12T02:44:08.356Z",
+ "ranAt": "2026-09-12T04:48:58.882Z",
  "ranBy": "M5 raster encoder / memory sub-spike gate (local run on the spike branch)",
  "productionBase": "78b5bd5ee676ee72621bccf9524225cd4ce8482a",
- "researchHeadAtRun": "78b5bd5ee676ee72621bccf9524225cd4ce8482a",
+ "testedResearchHead": "faf8cd41d04f38bdbe0b31182e1be44900d696c1",
  "researchBranchAtRun": "research/m5-raster-encoder-memory-spike",
  "workingTreeDirty": false,
+ "dirtinessScope": "research/m5-raster-encoder-memory, untracked files included",
+ "dirtyPaths": [],
  "coreCiRunsThisGate": false,
  "sections": {
   "corpus": {
@@ -103,230 +105,351 @@
     "drawing-a4": {
      "sourceBytes": 1776,
      "monochromeBytes": 53575,
-     "monochromeMs": 83.20000000298023,
-     "optimizeBytes": 53863,
-     "optimizeMs": 64.3999999910593
+     "monochromeMs": 79.1000000089407,
+     "optimizeBytes": 53864,
+     "optimizeMs": 66.5
     },
     "hatch-a4": {
      "sourceBytes": 6275,
-     "monochromeBytes": 329543,
-     "monochromeMs": 83.70000000298023,
-     "optimizeBytes": 329543,
-     "optimizeMs": 69.1000000089407
+     "monochromeBytes": 329544,
+     "monochromeMs": 80.19999998807907,
+     "optimizeBytes": 329544,
+     "optimizeMs": 71.6000000089407
     },
     "fine-line-a4": {
      "sourceBytes": 6537998,
-     "monochromeBytes": 374984,
-     "monochromeMs": 246.20000000298023,
-     "optimizeBytes": 374984,
-     "optimizeMs": 161.5
+     "monochromeBytes": 374985,
+     "monochromeMs": 243.59999999403954,
+     "optimizeBytes": 374985,
+     "optimizeMs": 164.29999999701977
     },
     "grey-scan-a4": {
      "sourceBytes": 1979104,
-     "monochromeBytes": 328191,
-     "monochromeMs": 122.1000000089407,
-     "optimizeBytes": 328191,
-     "optimizeMs": 92
+     "monochromeBytes": 328192,
+     "monochromeMs": 120.70000000298023,
+     "optimizeBytes": 328192,
+     "optimizeMs": 92.59999999403954
     },
     "colour-scan-a4": {
      "sourceBytes": 1619592,
-     "monochromeBytes": 124785,
-     "monochromeMs": 113.3999999910593,
-     "optimizeBytes": 132197,
-     "optimizeMs": 82.79999999701977
+     "monochromeBytes": 124786,
+     "monochromeMs": 95.8999999910593,
+     "optimizeBytes": 132198,
+     "optimizeMs": 85.79999999701977
     },
     "photo-a4": {
      "sourceBytes": 5425311,
-     "monochromeBytes": 65895,
-     "monochromeMs": 112.79999999701977,
-     "optimizeBytes": 81523,
-     "optimizeMs": 101.40000000596046
+     "monochromeBytes": 65896,
+     "monochromeMs": 109.3999999910593,
+     "optimizeBytes": 81524,
+     "optimizeMs": 102.90000000596046
     }
    },
    "300": {
     "drawing-a4": {
      "sourceBytes": 1776,
-     "monochromeBytes": 139656,
-     "monochromeMs": 136.09999999403954,
-     "optimizeBytes": 140184,
-     "optimizeMs": 97.5
+     "monochromeBytes": 139657,
+     "monochromeMs": 114.8999999910593,
+     "optimizeBytes": 140185,
+     "optimizeMs": 85
     },
     "hatch-a4": {
      "sourceBytes": 6275,
-     "monochromeBytes": 1192094,
-     "monochromeMs": 150.8999999910593,
-     "optimizeBytes": 1192094,
-     "optimizeMs": 110.79999999701977
+     "monochromeBytes": 1192095,
+     "monochromeMs": 138.80000001192093,
+     "optimizeBytes": 1192095,
+     "optimizeMs": 103.5
     },
     "fine-line-a4": {
      "sourceBytes": 6537998,
-     "monochromeBytes": 1449989,
-     "monochromeMs": 333.90000000596046,
-     "optimizeBytes": 1449989,
-     "optimizeMs": 222.20000000298023
+     "monochromeBytes": 1449990,
+     "monochromeMs": 325.20000000298023,
+     "optimizeBytes": 1449990,
+     "optimizeMs": 210.3999999910593
     },
     "grey-scan-a4": {
      "sourceBytes": 1979104,
-     "monochromeBytes": 1237587,
-     "monochromeMs": 207.59999999403954,
+     "monochromeBytes": 1237588,
+     "monochromeMs": 204.1000000089407,
      "optimizeBytes": 1237588,
-     "optimizeMs": 166.79999999701977
+     "optimizeMs": 154.79999999701977
     },
     "colour-scan-a4": {
      "sourceBytes": 1619592,
      "monochromeBytes": 706164,
-     "monochromeMs": 219.40000000596046,
+     "monochromeMs": 190.69999998807907,
      "optimizeBytes": 720530,
-     "optimizeMs": 146.70000000298023
+     "optimizeMs": 144.20000000298023
     },
     "photo-a4": {
      "sourceBytes": 5425311,
      "monochromeBytes": 400037,
-     "monochromeMs": 212.5,
+     "monochromeMs": 194.3999999910593,
      "optimizeBytes": 435239,
-     "optimizeMs": 161.5
+     "optimizeMs": 152.90000000596046
     }
    }
   },
+  "orderings": {
+   "canvas-held": {
+    "width": 2480,
+    "height": 3507,
+    "pixels": 8697360,
+    "convertLiveBytes": 95670960,
+    "convertLiveBytesPerPixel": 11,
+    "canvasReleasedBeforeConvert": false,
+    "sampleBytes": 26092080,
+    "storedBytes": 26092080,
+    "outputBytes": 26093018
+   },
+   "canvas-released": {
+    "width": 2480,
+    "height": 3507,
+    "pixels": 8697360,
+    "convertLiveBytes": 60881520,
+    "convertLiveBytesPerPixel": 7,
+    "canvasReleasedBeforeConvert": true,
+    "sampleBytes": 26092080,
+    "storedBytes": 26092080,
+    "outputBytes": 26093018
+   }
+  },
+  "streams": [
+   {
+    "colourSpace": "DeviceGray",
+    "content": "uniform",
+    "filter": "none",
+    "sampleBytes": 2174960,
+    "storedBytes": 2174960,
+    "sameArray": true,
+    "modelBound": 2174960,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceGray",
+    "content": "uniform",
+    "filter": "flate",
+    "sampleBytes": 2174960,
+    "storedBytes": 2130,
+    "sameArray": false,
+    "modelBound": 2175631,
+    "ratio": 0.0009793283554640085
+   },
+   {
+    "colourSpace": "DeviceGray",
+    "content": "noise",
+    "filter": "none",
+    "sampleBytes": 2174960,
+    "storedBytes": 2174960,
+    "sameArray": true,
+    "modelBound": 2174960,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceGray",
+    "content": "noise",
+    "filter": "flate",
+    "sampleBytes": 2174960,
+    "storedBytes": 2175631,
+    "sameArray": false,
+    "modelBound": 2175631,
+    "ratio": 1.0003085114208996
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "uniform",
+    "filter": "none",
+    "sampleBytes": 6524880,
+    "storedBytes": 6524880,
+    "sameArray": true,
+    "modelBound": 6524880,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "uniform",
+    "filter": "flate",
+    "sampleBytes": 6524880,
+    "storedBytes": 6358,
+    "sameArray": false,
+    "modelBound": 6526881,
+    "ratio": 0.0009744240507105112
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "noise",
+    "filter": "none",
+    "sampleBytes": 6524880,
+    "storedBytes": 6524880,
+    "sameArray": true,
+    "modelBound": 6524880,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "noise",
+    "filter": "flate",
+    "sampleBytes": 6524880,
+    "storedBytes": 6526881,
+    "sameArray": false,
+    "modelBound": 6526881,
+    "ratio": 1.0003066723066172
+   }
+  ],
   "sizes": {
    "drawing-a4": {
     "E1-jpeg": {
-     "outputBytes": 53575,
-     "bytesPerPixel": 0.024646688625949983,
+     "outputBytes": 53576,
+     "bytesPerPixel": 0.02464714866680161,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 52624,
+       "storedBytes": 52624,
        "dataUrlChars": 70191,
-       "dataUrlExact": true
+       "dataUrlExact": true,
+       "sizeExact": null
       }
      ],
-     "elapsedMs": 27.5,
+     "elapsedMs": 33.099999994039536,
      "allExact": true
     },
     "E2-png-embed": {
-     "outputBytes": 19144,
-     "bytesPerPixel": 0.008807022063559244,
+     "outputBytes": 19145,
+     "bytesPerPixel": 0.008807482104410872,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 8697457,
+       "storedBytes": 8697457,
        "sizeExact": true,
-       "modelAgrees": true,
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 186.1000000089407,
+     "elapsedMs": 173.29999999701977,
      "allExact": true
     },
     "E3-gray-raw": {
-     "outputBytes": 2174656,
-     "bytesPerPixel": 1.0004305982371235,
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 2173720,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 34.6000000089407,
+     "elapsedMs": 20.099999994039536,
      "allExact": true
     },
     "E3-gray-flate": {
-     "outputBytes": 9657,
-     "bytesPerPixel": 0.0044426145041679705,
+     "outputBytes": 9658,
+     "bytesPerPixel": 0.004443074545019598,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 8710,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 38.79999999701977,
+     "elapsedMs": 42.599999994039536,
      "allExact": true
     },
     "E3-rgb-raw": {
-     "outputBytes": 6522095,
-     "bytesPerPixel": 3.000430138196272,
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 6521160,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 32.5,
+     "elapsedMs": 20.100000008940697,
      "allExact": true
     },
     "E3-rgb-flate": {
-     "outputBytes": 19187,
-     "bytesPerPixel": 0.008826803820179231,
+     "outputBytes": 19188,
+     "bytesPerPixel": 0.00882726386103086,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 18239,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 61.5,
+     "elapsedMs": 59.79999999701977,
      "allExact": true
     }
    },
    "fine-line-a4": {
     "E1-jpeg": {
-     "outputBytes": 374984,
-     "bytesPerPixel": 0.17250795870673316,
+     "outputBytes": 374985,
+     "bytesPerPixel": 0.1725084187475848,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 374026,
+       "storedBytes": 374026,
        "dataUrlChars": 498727,
-       "dataUrlExact": true
+       "dataUrlExact": true,
+       "sizeExact": null
       }
      ],
-     "elapsedMs": 128.20000000298023,
+     "elapsedMs": 123,
      "allExact": true
     },
     "E2-png-embed": {
-     "outputBytes": 1475282,
-     "bytesPerPixel": 0.6786899876709052,
+     "outputBytes": 1475283,
+     "bytesPerPixel": 0.6786904477117568,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 8697457,
+       "storedBytes": 8697457,
        "sizeExact": true,
-       "modelAgrees": true,
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 616.7000000029802,
+     "elapsedMs": 660.3000000119209,
      "allExact": true
     },
     "E3-gray-raw": {
-     "outputBytes": 2174656,
-     "bytesPerPixel": 1.0004305982371235,
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 2173720,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 113.1000000089407,
+     "elapsedMs": 123.5,
      "allExact": true
     },
     "E3-gray-flate": {
@@ -336,228 +459,261 @@
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 859703,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 457.29999999701977,
+     "elapsedMs": 487.20000000298023,
      "allExact": true
     },
     "E3-rgb-raw": {
-     "outputBytes": 6522095,
-     "bytesPerPixel": 3.000430138196272,
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 6521160,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 117.1000000089407,
+     "elapsedMs": 107.70000000298023,
      "allExact": true
     },
     "E3-rgb-flate": {
-     "outputBytes": 1475276,
-     "bytesPerPixel": 0.6786872274257955,
+     "outputBytes": 1475277,
+     "bytesPerPixel": 0.678687687466647,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 1474320,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 527.6999999880791,
+     "elapsedMs": 508.20000000298023,
      "allExact": true
     }
    },
    "grey-scan-a4": {
     "E1-jpeg": {
-     "outputBytes": 328191,
-     "bytesPerPixel": 0.1509812671365217,
+     "outputBytes": 328192,
+     "bytesPerPixel": 0.15098172717737335,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 327236,
+       "storedBytes": 327236,
        "dataUrlChars": 436339,
-       "dataUrlExact": true
+       "dataUrlExact": true,
+       "sizeExact": null
       }
      ],
-     "elapsedMs": 67.30000001192093,
+     "elapsedMs": 69,
      "allExact": true
     },
     "E2-png-embed": {
-     "outputBytes": 1977679,
-     "bytesPerPixel": 0.9098131314060689,
+     "outputBytes": 1977680,
+     "bytesPerPixel": 0.9098135914469205,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 8697457,
+       "storedBytes": 8697457,
        "sizeExact": true,
-       "modelAgrees": true,
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 579,
+     "elapsedMs": 541.7999999970198,
      "allExact": true
     },
     "E3-gray-raw": {
-     "outputBytes": 2174656,
-     "bytesPerPixel": 1.0004305982371235,
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 2173720,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 58.79999999701977,
+     "elapsedMs": 42.79999999701977,
      "allExact": true
     },
     "E3-gray-flate": {
-     "outputBytes": 1196167,
-     "bytesPerPixel": 0.5502856853688608,
+     "outputBytes": 1196168,
+     "bytesPerPixel": 0.5502861454097124,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 1195211,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 168.69999998807907,
+     "elapsedMs": 154.40000000596046,
      "allExact": true
     },
     "E3-rgb-raw": {
-     "outputBytes": 6522095,
-     "bytesPerPixel": 3.000430138196272,
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 6521160,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 45.1000000089407,
+     "elapsedMs": 50.6000000089407,
      "allExact": true
     },
     "E3-rgb-flate": {
-     "outputBytes": 1977674,
-     "bytesPerPixel": 0.9098108312018107,
+     "outputBytes": 1977675,
+     "bytesPerPixel": 0.9098112912426624,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 1976719,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 437.79999999701977,
+     "elapsedMs": 441.20000000298023,
      "allExact": true
     }
    },
    "photo-a4": {
     "E1-jpeg": {
-     "outputBytes": 65903,
-     "bytesPerPixel": 0.03031807224481534,
+     "outputBytes": 65904,
+     "bytesPerPixel": 0.030318532285666968,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 64952,
+       "storedBytes": 64952,
        "dataUrlChars": 86627,
-       "dataUrlExact": true
+       "dataUrlExact": true,
+       "sizeExact": null
       }
      ],
-     "elapsedMs": 70.30000001192093,
+     "elapsedMs": 71.1000000089407,
      "allExact": true
     },
     "E2-png-embed": {
-     "outputBytes": 1606898,
-     "bytesPerPixel": 0.7392387243987266,
+     "outputBytes": 1606899,
+     "bytesPerPixel": 0.7392391844395783,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 8697457,
+       "storedBytes": 8697457,
        "sizeExact": true,
-       "modelAgrees": true,
        "scratchBytes": 4961
       }
      ],
-     "elapsedMs": 576.2999999970198,
+     "elapsedMs": 546,
      "allExact": true
     },
     "E3-gray-raw": {
-     "outputBytes": 2174656,
-     "bytesPerPixel": 1.0004305982371235,
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 2173720,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 59.8999999910593,
+     "elapsedMs": 61.20000000298023,
      "allExact": true
     },
     "E3-gray-flate": {
-     "outputBytes": 1340755,
-     "bytesPerPixel": 0.6168020720239957,
+     "outputBytes": 1340756,
+     "bytesPerPixel": 0.6168025320648474,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 2173720,
+       "storedBytes": 1339799,
        "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 161,
+     "elapsedMs": 166.8999999910593,
      "allExact": true
     },
     "E3-rgb-raw": {
-     "outputBytes": 6522095,
-     "bytesPerPixel": 3.000430138196272,
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 6521160,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 55.20000000298023,
+     "elapsedMs": 57.1000000089407,
      "allExact": true
     },
     "E3-rgb-flate": {
-     "outputBytes": 5421964,
-     "bytesPerPixel": 2.494324936054322,
+     "outputBytes": 5421965,
+     "bytesPerPixel": 2.4943253960951735,
      "pages": [
       {
        "width": 1240,
        "height": 1753,
-       "streamBytes": 6521160,
+       "storedBytes": 5421008,
        "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 332.09999999403954,
+     "elapsedMs": 310.70000000298023,
      "allExact": true
     }
    }
@@ -565,111 +721,124 @@
   "sizes300": {
    "drawing-a4": {
     "E1-jpeg": {
-     "outputBytes": 139656,
-     "bytesPerPixel": 0.016057286348961065,
+     "outputBytes": 139657,
+     "bytesPerPixel": 0.0160574013263795,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 138699,
+       "storedBytes": 138699,
        "dataUrlChars": 184955,
-       "dataUrlExact": true
+       "dataUrlExact": true,
+       "sizeExact": null
       }
      ],
-     "elapsedMs": 96.5,
+     "elapsedMs": 93.40000000596046,
      "allExact": true
     },
     "E2-png-embed": {
-     "outputBytes": 58553,
-     "bytesPerPixel": 0.006732272781625689,
+     "outputBytes": 58554,
+     "bytesPerPixel": 0.006732387759044124,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 34796061,
+       "storedBytes": 34796061,
        "sizeExact": true,
-       "modelAgrees": true,
        "scratchBytes": 9921
       }
      ],
-     "elapsedMs": 570.4000000059605,
+     "elapsedMs": 572,
      "allExact": true
     },
     "E3-gray-raw": {
-     "outputBytes": 8698297,
-     "bytesPerPixel": 1.0001077338410735,
+     "outputBytes": 8698298,
+     "bytesPerPixel": 1.000107848818492,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 8697360,
+       "storedBytes": 8697360,
        "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 72.29999999701977,
+     "elapsedMs": 76.20000000298023,
      "allExact": true
     },
     "E3-gray-flate": {
-     "outputBytes": 31929,
-     "bytesPerPixel": 0.003671113993211733,
+     "outputBytes": 31930,
+     "bytesPerPixel": 0.003671228970630168,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 8697360,
+       "storedBytes": 30980,
        "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 115.29999999701977,
+     "elapsedMs": 113.6000000089407,
      "allExact": true
     },
     "E3-rgb-raw": {
-     "outputBytes": 26093016,
-     "bytesPerPixel": 3.0001076188636553,
+     "outputBytes": 26093018,
+     "bytesPerPixel": 3.0001078488184922,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 26092080,
+       "storedBytes": 26092080,
        "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 62.80000001192093,
+     "elapsedMs": 60.29999999701977,
      "allExact": true
     },
     "E3-rgb-flate": {
-     "outputBytes": 58630,
-     "bytesPerPixel": 0.006741126042845185,
+     "outputBytes": 58631,
+     "bytesPerPixel": 0.00674124102026362,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 26092080,
+       "storedBytes": 57683,
        "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 204.09999999403954,
+     "elapsedMs": 172.5,
      "allExact": true
     }
    },
    "grey-scan-a4": {
     "E1-jpeg": {
-     "outputBytes": 1237587,
-     "bytesPerPixel": 0.1422945583487403,
+     "outputBytes": 1237588,
+     "bytesPerPixel": 0.14229467332615875,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 1236628,
+       "storedBytes": 1236628,
        "dataUrlChars": 1648863,
-       "dataUrlExact": true
+       "dataUrlExact": true,
+       "sizeExact": null
       }
      ],
-     "elapsedMs": 202.8999999910593,
+     "elapsedMs": 175.29999999701977,
      "allExact": true
     },
     "E2-png-embed": {
@@ -679,73 +848,84 @@
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 34796061,
+       "storedBytes": 34796061,
        "sizeExact": true,
-       "modelAgrees": true,
        "scratchBytes": 9921
       }
      ],
-     "elapsedMs": 1375.0999999940395,
+     "elapsedMs": 1233.7999999970198,
      "allExact": true
     },
     "E3-gray-raw": {
-     "outputBytes": 8698297,
-     "bytesPerPixel": 1.0001077338410735,
+     "outputBytes": 8698298,
+     "bytesPerPixel": 1.000107848818492,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 8697360,
+       "storedBytes": 8697360,
        "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 102.6000000089407,
+     "elapsedMs": 107.29999999701977,
      "allExact": true
     },
     "E3-gray-flate": {
-     "outputBytes": 1436055,
-     "bytesPerPixel": 0.16511389663070172,
+     "outputBytes": 1436056,
+     "bytesPerPixel": 0.16511401160812017,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 8697360,
+       "storedBytes": 1435098,
        "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 516.6000000089407,
+     "elapsedMs": 474.6000000089407,
      "allExact": true
     },
     "E3-rgb-raw": {
-     "outputBytes": 26093016,
-     "bytesPerPixel": 3.0001076188636553,
+     "outputBytes": 26093018,
+     "bytesPerPixel": 3.0001078488184922,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 26092080,
+       "storedBytes": 26092080,
        "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 114.90000000596046,
+     "elapsedMs": 105.90000000596046,
      "allExact": true
     },
     "E3-rgb-flate": {
-     "outputBytes": 3153077,
-     "bytesPerPixel": 0.36253265358683556,
+     "outputBytes": 3153078,
+     "bytesPerPixel": 0.362532768564254,
      "pages": [
       {
        "width": 2480,
        "height": 3507,
-       "streamBytes": 26092080,
+       "storedBytes": 3152121,
        "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
        "sizeExact": true
       }
      ],
-     "elapsedMs": 894.8999999910593,
+     "elapsedMs": 821.4000000059605,
      "allExact": true
     }
    }
@@ -757,45 +937,40 @@
      "inkKept": 0.8394827041147402,
      "spurious": 0.005468752586628096,
      "psnr": 22.91636153336089,
-     "outputBytes": 53575,
-     "sizeRatio": 30.166103603603602,
-     "refPixels": 8697360
+     "outputBytes": 53576,
+     "sizeRatio": 30.166666666666668
     },
     "E2-png-embed": {
      "comparable": true,
      "inkKept": 0.8391707292723914,
      "spurious": 0.0054624855562687095,
      "psnr": 22.919476604496992,
-     "outputBytes": 19144,
-     "sizeRatio": 10.77927927927928,
-     "refPixels": 8697360
+     "outputBytes": 19145,
+     "sizeRatio": 10.779842342342342
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.8391707292723914,
      "spurious": 0.0054624855562687095,
      "psnr": 22.919635550085115,
-     "outputBytes": 2174656,
-     "sizeRatio": 1224.4684684684685,
-     "refPixels": 8697360
+     "outputBytes": 2174657,
+     "sizeRatio": 1224.4690315315315
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.8391707292723914,
      "spurious": 0.0054624855562687095,
      "psnr": 22.919635550085115,
-     "outputBytes": 9657,
-     "sizeRatio": 5.4375,
-     "refPixels": 8697360
+     "outputBytes": 9658,
+     "sizeRatio": 5.438063063063063
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.8391707292723914,
      "spurious": 0.0054624855562687095,
      "psnr": 22.919476815064918,
-     "outputBytes": 19187,
-     "sizeRatio": 10.80349099099099,
-     "refPixels": 8697360
+     "outputBytes": 19188,
+     "sizeRatio": 10.804054054054054
     }
    },
    "hatch-a4": {
@@ -804,45 +979,40 @@
      "inkKept": 0.47327329699554993,
      "spurious": 0.06925335343530999,
      "psnr": 13.590674874887487,
-     "outputBytes": 329543,
-     "sizeRatio": 52.51681274900398,
-     "refPixels": 8697360
+     "outputBytes": 329544,
+     "sizeRatio": 52.516972111553784
     },
     "E2-png-embed": {
      "comparable": true,
      "inkKept": 0.4763014456118177,
      "spurious": 0.0694077250742102,
      "psnr": 13.585403977843086,
-     "outputBytes": 26329,
-     "sizeRatio": 4.195856573705179,
-     "refPixels": 8697360
+     "outputBytes": 26330,
+     "sizeRatio": 4.19601593625498
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.4763014456118177,
      "spurious": 0.0694077250742102,
      "psnr": 13.583694869301159,
-     "outputBytes": 2174656,
-     "sizeRatio": 346.5587250996016,
-     "refPixels": 8697360
+     "outputBytes": 2174657,
+     "sizeRatio": 346.5588844621514
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.4763014456118177,
      "spurious": 0.0694077250742102,
      "psnr": 13.583694869301159,
-     "outputBytes": 11780,
-     "sizeRatio": 1.8772908366533865,
-     "refPixels": 8697360
+     "outputBytes": 11781,
+     "sizeRatio": 1.8774501992031873
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.4763014456118177,
      "spurious": 0.0694077250742102,
      "psnr": 13.585403977843086,
-     "outputBytes": 26324,
-     "sizeRatio": 4.195059760956175,
-     "refPixels": 8697360
+     "outputBytes": 26325,
+     "sizeRatio": 4.195219123505976
     }
    },
    "fine-line-a4": {
@@ -851,27 +1021,24 @@
      "inkKept": 0.08806080535232742,
      "spurious": 0.005812234913734383,
      "psnr": 15.894959532865546,
-     "outputBytes": 374984,
-     "sizeRatio": 0.05735456021858679,
-     "refPixels": 8697360
+     "outputBytes": 374985,
+     "sizeRatio": 0.05735471317060666
     },
     "E2-png-embed": {
      "comparable": true,
      "inkKept": 0.03519291817902534,
      "spurious": 0.0012207667180314668,
      "psnr": 15.91059866401566,
-     "outputBytes": 1475282,
-     "sizeRatio": 0.2256473617764949,
-     "refPixels": 8697360
+     "outputBytes": 1475283,
+     "sizeRatio": 0.22564751472851474
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.03519291817902534,
      "spurious": 0.0012207667180314668,
      "psnr": 15.91056885029735,
-     "outputBytes": 2174656,
-     "sizeRatio": 0.33261802772041227,
-     "refPixels": 8697360
+     "outputBytes": 2174657,
+     "sizeRatio": 0.33261818067243215
     },
     "E3-gray-flate": {
      "comparable": true,
@@ -879,17 +1046,15 @@
      "spurious": 0.0012207667180314668,
      "psnr": 15.91056885029735,
      "outputBytes": 860658,
-     "sizeRatio": 0.13163937951648197,
-     "refPixels": 8697360
+     "sizeRatio": 0.13163937951648197
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.03519291817902534,
      "spurious": 0.0012207667180314668,
      "psnr": 15.91059866401566,
-     "outputBytes": 1475276,
-     "sizeRatio": 0.22564644406437567,
-     "refPixels": 8697360
+     "outputBytes": 1475277,
+     "sizeRatio": 0.22564659701639553
     }
    },
    "grey-scan-a4": {
@@ -898,9 +1063,8 @@
      "inkKept": 0.9009737307609648,
      "spurious": 0.009017132551848512,
      "psnr": 20.54387293050457,
-     "outputBytes": 328191,
-     "sizeRatio": 0.16582807169304897,
-     "refPixels": 8697360
+     "outputBytes": 328192,
+     "sizeRatio": 0.1658285769722056
     },
     "E2-png-embed": {
      "comparable": true,
@@ -908,35 +1072,31 @@
      "spurious": 0.009017132551848512,
      "psnr": 20.531191480490847,
      "outputBytes": 1977680,
-     "sizeRatio": 0.9992804824809611,
-     "refPixels": 8697360
+     "sizeRatio": 0.9992804824809611
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.9009737307609648,
      "spurious": 0.009017132551848512,
      "psnr": 20.5303598698639,
-     "outputBytes": 2174656,
-     "sizeRatio": 1.0988083496370074,
-     "refPixels": 8697360
+     "outputBytes": 2174657,
+     "sizeRatio": 1.098808854916164
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.9009737307609648,
      "spurious": 0.009017132551848512,
      "psnr": 20.5303598698639,
-     "outputBytes": 1196167,
-     "sizeRatio": 0.6043982529467881,
-     "refPixels": 8697360
+     "outputBytes": 1196168,
+     "sizeRatio": 0.6043987582259447
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.9009737307609648,
      "spurious": 0.009017132551848512,
      "psnr": 20.531191480490847,
-     "outputBytes": 1977674,
-     "sizeRatio": 0.9992774508060213,
-     "refPixels": 8697360
+     "outputBytes": 1977675,
+     "sizeRatio": 0.9992779560851779
     }
    },
    "colour-scan-a4": {
@@ -946,8 +1106,7 @@
      "spurious": 0.0005702879954376961,
      "psnr": 37.56637592747049,
      "outputBytes": 124786,
-     "sizeRatio": 0.07704779969276213,
-     "refPixels": 8697360
+     "sizeRatio": 0.07704779969276213
     },
     "E2-png-embed": {
      "comparable": true,
@@ -955,35 +1114,31 @@
      "spurious": 0.0005702879954376961,
      "psnr": 37.60693086041396,
      "outputBytes": 1678383,
-     "sizeRatio": 1.0362998829334795,
-     "refPixels": 8697360
+     "sizeRatio": 1.0362998829334795
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.9998099040015208,
      "spurious": 0.0005702879954376961,
      "psnr": 37.593065879718665,
-     "outputBytes": 2174656,
-     "sizeRatio": 1.3427184130324181,
-     "refPixels": 8697360
+     "outputBytes": 2174657,
+     "sizeRatio": 1.342719030471872
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.9998099040015208,
      "spurious": 0.0005702879954376961,
      "psnr": 37.593065879718665,
-     "outputBytes": 1195086,
-     "sizeRatio": 0.7378932471881807,
-     "refPixels": 8697360
+     "outputBytes": 1195087,
+     "sizeRatio": 0.7378938646276346
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.9998099040015208,
      "spurious": 0.0005702879954376961,
      "psnr": 37.76153004639708,
-     "outputBytes": 1618379,
-     "sizeRatio": 0.9992510459424349,
-     "refPixels": 8697360
+     "outputBytes": 1618380,
+     "sizeRatio": 0.9992516633818888
     }
    },
    "photo-a4": {
@@ -993,44 +1148,39 @@
      "spurious": 0.011603974083856059,
      "psnr": 43.48181201921684,
      "outputBytes": 65904,
-     "sizeRatio": 0.012147506382583413,
-     "refPixels": 8697360
+     "sizeRatio": 0.012147506382583413
     },
     "E2-png-embed": {
      "comparable": true,
      "inkKept": 0.99641636101107,
      "spurious": 0.011122689006272697,
      "psnr": 43.598973280299475,
-     "outputBytes": 1606898,
-     "sizeRatio": 0.2961854168360118,
-     "refPixels": 8697360
+     "outputBytes": 1606899,
+     "sizeRatio": 0.2961856011572424
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.9973968101173386,
      "spurious": 0.016669589798613403,
      "psnr": 43.840263525074135,
-     "outputBytes": 2174656,
-     "sizeRatio": 0.40083527008866404,
-     "refPixels": 8697360
+     "outputBytes": 2174657,
+     "sizeRatio": 0.40083545440989465
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.9973968101173386,
      "spurious": 0.016669589798613403,
      "psnr": 43.840263525074135,
-     "outputBytes": 1340755,
-     "sizeRatio": 0.24712961155590896,
-     "refPixels": 8697360
+     "outputBytes": 1340756,
+     "sizeRatio": 0.24712979587713957
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.9951579174480939,
      "spurious": 0.005943586992406735,
      "psnr": 44.210327768350794,
-     "outputBytes": 5421964,
-     "sizeRatio": 0.9993830768411248,
-     "refPixels": 8697360
+     "outputBytes": 5421965,
+     "sizeRatio": 0.9993832611623555
     }
    }
   },
@@ -1041,45 +1191,40 @@
      "inkKept": 0.8965366632834728,
      "spurious": 0.0014723973968884313,
      "psnr": 28.416015184139294,
-     "outputBytes": 139656,
-     "sizeRatio": 78.63513513513513,
-     "refPixels": 8697360
+     "outputBytes": 139657,
+     "sizeRatio": 78.6356981981982
     },
     "E2-png-embed": {
      "comparable": true,
      "inkKept": 0.8965907389228133,
      "spurious": 0.0014716879217534064,
      "psnr": 28.394617124482142,
-     "outputBytes": 58553,
-     "sizeRatio": 32.969031531531535,
-     "refPixels": 8697360
+     "outputBytes": 58554,
+     "sizeRatio": 32.9695945945946
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.8965907389228133,
      "spurious": 0.0014718061676092437,
      "psnr": 28.39071264753642,
-     "outputBytes": 8698297,
-     "sizeRatio": 4897.689752252252,
-     "refPixels": 8697360
+     "outputBytes": 8698298,
+     "sizeRatio": 4897.690315315315
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.8965907389228133,
      "spurious": 0.0014718061676092437,
      "psnr": 28.39071264753642,
-     "outputBytes": 31929,
-     "sizeRatio": 17.97804054054054,
-     "refPixels": 8697360
+     "outputBytes": 31930,
+     "sizeRatio": 17.978603603603602
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.8965907389228133,
      "spurious": 0.0014716879217534064,
      "psnr": 28.39465544555121,
-     "outputBytes": 58630,
-     "sizeRatio": 33.012387387387385,
-     "refPixels": 8697360
+     "outputBytes": 58631,
+     "sizeRatio": 33.012950450450454
     }
    },
    "fine-line-a4": {
@@ -1088,45 +1233,40 @@
      "inkKept": 0.7634303139258366,
      "spurious": 0.011547210709712185,
      "psnr": 19.499946314518482,
-     "outputBytes": 1449989,
-     "sizeRatio": 0.22177874633794625,
-     "refPixels": 8697360
+     "outputBytes": 1449990,
+     "sizeRatio": 0.22177889928996614
     },
     "E2-png-embed": {
      "comparable": true,
      "inkKept": 0.7640083288768532,
      "spurious": 0.011564890695907265,
      "psnr": 19.528751006871094,
-     "outputBytes": 6535793,
-     "sizeRatio": 0.9996627407961887,
-     "refPixels": 8697360
+     "outputBytes": 6535794,
+     "sizeRatio": 0.9996628937482086
     },
     "E3-gray-raw": {
      "comparable": true,
      "inkKept": 0.7645453821384277,
      "spurious": 0.011596738890217579,
      "psnr": 19.530247870545537,
-     "outputBytes": 8698297,
-     "sizeRatio": 1.3304220955711519,
-     "refPixels": 8697360
+     "outputBytes": 8698298,
+     "sizeRatio": 1.3304222485231718
     },
     "E3-gray-flate": {
      "comparable": true,
      "inkKept": 0.7645453821384277,
      "spurious": 0.011596738890217579,
      "psnr": 19.530247870545537,
-     "outputBytes": 3923728,
-     "sizeRatio": 0.6001421230168623,
-     "refPixels": 8697360
+     "outputBytes": 3923729,
+     "sizeRatio": 0.6001422759688823
     },
     "E3-rgb-flate": {
      "comparable": true,
      "inkKept": 0.7640083288768532,
      "spurious": 0.011564890695907265,
      "psnr": 19.528751006871094,
-     "outputBytes": 6535788,
-     "sizeRatio": 0.9996619760360893,
-     "refPixels": 8697360
+     "outputBytes": 6535789,
+     "sizeRatio": 0.9996621289881092
     }
    }
   },
@@ -1136,6 +1276,7 @@
     "peakStep": "embed",
     "encodedBytes": 173947200,
     "bytesPerPixelEncoded": 20,
+    "bytesPerPixelPeak": 66.66666931114729,
     "admissible": false,
     "unknown": [
      "the browser JPEG encoder's working memory"
@@ -1170,13 +1311,13 @@
       "name": "embedJpg decoded bytes",
       "bytes": 173947200,
       "basis": "EXACT",
-      "source": "pdf-lib decodes the base64 back to Uint8Array"
+      "source": "pdf-lib decodes the base64 back to a Uint8Array"
      },
      {
-      "name": "JpegEmbedder retains imageData",
+      "name": "JpegEmbedder retains imageData until save",
       "bytes": 173947200,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "JpegEmbedder.js:30, kept until save"
+      "source": "JpegEmbedder.js:30"
      },
      {
       "name": "the browser JPEG encoder's working memory",
@@ -1187,10 +1328,11 @@
     ]
    },
    "E1-jpeg-planning": {
-    "peakBytes": 69578880,
-    "peakStep": "readback",
+    "peakBytes": 89872743,
+    "peakStep": "encode",
     "encodedBytes": 8697360,
     "bytesPerPixelEncoded": 1,
+    "bytesPerPixelPeak": 10.333335977813958,
     "admissible": false,
     "unknown": [
      "the browser JPEG encoder's working memory"
@@ -1215,7 +1357,7 @@
       "name": "JPEG bytes",
       "bytes": 8697360,
       "basis": "MEASURED_ONLY",
-      "source": "M5 measured worst case x1.28"
+      "source": "M5 measured worst case, evidence only"
      },
      {
       "name": "data URL string",
@@ -1227,13 +1369,13 @@
       "name": "embedJpg decoded bytes",
       "bytes": 8697360,
       "basis": "EXACT",
-      "source": "pdf-lib decodes the base64 back to Uint8Array"
+      "source": "pdf-lib decodes the base64 back to a Uint8Array"
      },
      {
-      "name": "JpegEmbedder retains imageData",
+      "name": "JpegEmbedder retains imageData until save",
       "bytes": 8697360,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "JpegEmbedder.js:30, kept until save"
+      "source": "JpegEmbedder.js:30"
      },
      {
       "name": "the browser JPEG encoder's working memory",
@@ -1248,6 +1390,7 @@
     "peakStep": "decode",
     "encodedBytes": 34796061,
     "bytesPerPixelEncoded": 4.0007612654874585,
+    "bytesPerPixelPeak": 16.001925756781368,
     "admissible": true,
     "unknown": [],
     "measuredOnly": [],
@@ -1271,10 +1414,10 @@
       "source": "pngStoredSize; encodePngStored asserts it"
      },
      {
-      "name": "PNG encoder scratch",
+      "name": "PNG encoder scratch (one row, in place)",
       "bytes": 9921,
-      "basis": "CONSERVATIVE_BOUND",
-      "source": "writes one row in place"
+      "basis": "EXACT",
+      "source": "encoderScratchBytes"
      },
      {
       "name": "UPNG copy of the PNG",
@@ -1313,10 +1456,22 @@
       "source": "png.js:22; dropped when fully opaque"
      },
      {
-      "name": "deflated image stream",
-      "bytes": 26094081,
+      "name": "pako deflate state (window, head, prev, pending_buf)",
+      "bytes": 262144,
+      "basis": "EXACT",
+      "source": "pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8"
+     },
+     {
+      "name": "output chunks, each pinning a full 16 KiB buffer",
+      "bytes": 26116096,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "pako.deflate; stored-block worst case"
+      "source": "deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays"
+     },
+     {
+      "name": "flattenChunks result, allocated while the chunks are live",
+      "bytes": 26100051,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "common.js:54-72"
      }
     ]
    },
@@ -1325,6 +1480,7 @@
     "peakStep": "readback",
     "encodedBytes": 8697360,
     "bytesPerPixelEncoded": 1,
+    "bytesPerPixelPeak": 8,
     "admissible": true,
     "unknown": [],
     "measuredOnly": [],
@@ -1345,21 +1501,22 @@
       "name": "DeviceGray samples",
       "bytes": 8697360,
       "basis": "EXACT",
-      "source": "width * height * 1, taken from the readback"
+      "source": "width * height * 1, converted from the readback"
      },
      {
-      "name": "stream bytes (retained until save)",
+      "name": "stream bytes, retained until save",
       "bytes": 8697360,
       "basis": "EXACT",
-      "source": "context.stream keeps the array as given"
+      "source": "context.stream keeps the array as given: arrays.js:9-11, PDFRawStream.js:10"
      }
     ]
    },
    "E3-gray-flate": {
     "peakBytes": 69578880,
     "peakStep": "readback",
-    "encodedBytes": 8698031,
-    "bytesPerPixelEncoded": 1.0000771498477699,
+    "encodedBytes": 8700021,
+    "bytesPerPixelEncoded": 1.0003059549104556,
+    "bytesPerPixelPeak": 8,
     "admissible": true,
     "unknown": [],
     "measuredOnly": [],
@@ -1380,13 +1537,25 @@
       "name": "DeviceGray samples",
       "bytes": 8697360,
       "basis": "EXACT",
-      "source": "width * height * 1, taken from the readback"
+      "source": "width * height * 1, converted from the readback"
      },
      {
-      "name": "deflated stream",
-      "bytes": 8698031,
+      "name": "pako deflate state (window, head, prev, pending_buf)",
+      "bytes": 262144,
+      "basis": "EXACT",
+      "source": "pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8"
+     },
+     {
+      "name": "output chunks, each pinning a full 16 KiB buffer",
+      "bytes": 8716288,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "pako.deflate; stored-block worst case"
+      "source": "deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays"
+     },
+     {
+      "name": "flattenChunks result, allocated while the chunks are live",
+      "bytes": 8700021,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "common.js:54-72"
      }
     ]
    },
@@ -1395,6 +1564,7 @@
     "peakStep": "readback",
     "encodedBytes": 26092080,
     "bytesPerPixelEncoded": 3,
+    "bytesPerPixelPeak": 8,
     "admissible": true,
     "unknown": [],
     "measuredOnly": [],
@@ -1415,21 +1585,22 @@
       "name": "DeviceRGB samples",
       "bytes": 26092080,
       "basis": "EXACT",
-      "source": "width * height * 3, taken from the readback"
+      "source": "width * height * 3, converted from the readback"
      },
      {
-      "name": "stream bytes (retained until save)",
+      "name": "stream bytes, retained until save",
       "bytes": 26092080,
       "basis": "EXACT",
-      "source": "context.stream keeps the array as given"
+      "source": "context.stream keeps the array as given: arrays.js:9-11, PDFRawStream.js:10"
      }
     ]
    },
    "E3-rgb-flate": {
-    "peakBytes": 69578880,
-    "peakStep": "readback",
-    "encodedBytes": 26094081,
-    "bytesPerPixelEncoded": 3.0002300698142883,
+    "peakBytes": 78570371,
+    "peakStep": "deflate",
+    "encodedBytes": 26100051,
+    "bytesPerPixelEncoded": 3.0009164850023455,
+    "bytesPerPixelPeak": 9.03381842306171,
     "admissible": true,
     "unknown": [],
     "measuredOnly": [],
@@ -1450,16 +1621,188 @@
       "name": "DeviceRGB samples",
       "bytes": 26092080,
       "basis": "EXACT",
-      "source": "width * height * 3, taken from the readback"
+      "source": "width * height * 3, converted from the readback"
      },
      {
-      "name": "deflated stream",
-      "bytes": 26094081,
+      "name": "pako deflate state (window, head, prev, pending_buf)",
+      "bytes": 262144,
+      "basis": "EXACT",
+      "source": "pako 1.0.11 deflate.js:1376-1389 at level 6 / windowBits 15 / memLevel 8"
+     },
+     {
+      "name": "output chunks, each pinning a full 16 KiB buffer",
+      "bytes": 26116096,
       "basis": "SOURCE_DERIVED_BOUND",
-      "source": "pako.deflate; stored-block worst case"
+      "source": "deflate.js:243 + common.js:34-38 — shrinkBuf returns a subarray, so the buffer stays"
+     },
+     {
+      "name": "flattenChunks result, allocated while the chunks are live",
+      "bytes": 26100051,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "common.js:54-72"
+     }
+    ]
+   },
+   "E4-jspdf-hard": {
+    "peakBytes": 1565524800,
+    "peakStep": "convert",
+    "encodedBytes": 173947200,
+    "bytesPerPixelEncoded": 20,
+    "bytesPerPixelPeak": 180,
+    "admissible": false,
+    "unknown": [
+     "bitcode + category lookup arrays",
+     "byteout, one JS array element per output byte",
+     "reachable only through an unexported internal"
+    ],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "rawImageData the encoder reads",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "the RGBA readback, handed in as {data, width, height}"
+     },
+     {
+      "name": "bitcode + category lookup arrays",
+      "bytes": 1048560,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15525-15526 new Array(65535) x2 — ordinary JS arrays"
+     },
+     {
+      "name": "byteout, one JS array element per output byte",
+      "bytes": 1391577600,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15529, 15651 — engine-dependent storage and growth"
+     },
+     {
+      "name": "new Uint8Array(byteout)",
+      "bytes": 173947200,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "jspdf.es.js:16016"
+     },
+     {
+      "name": "reachable only through an unexported internal",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:24183 exports; call sites 16067 / 16354 / 20194 are GIF, BMP and WEBP"
+     }
+    ]
+   },
+   "E4-jspdf-planning": {
+    "peakBytes": 105416880,
+    "peakStep": "encode",
+    "encodedBytes": 8697360,
+    "bytesPerPixelEncoded": 1,
+    "bytesPerPixelPeak": 12.120560721874224,
+    "admissible": false,
+    "unknown": [
+     "bitcode + category lookup arrays",
+     "byteout, one JS array element per output byte",
+     "reachable only through an unexported internal"
+    ],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "rawImageData the encoder reads",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "the RGBA readback, handed in as {data, width, height}"
+     },
+     {
+      "name": "bitcode + category lookup arrays",
+      "bytes": 1048560,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15525-15526 new Array(65535) x2 — ordinary JS arrays"
+     },
+     {
+      "name": "byteout, one JS array element per output byte",
+      "bytes": 69578880,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15529, 15651 — engine-dependent storage and growth"
+     },
+     {
+      "name": "new Uint8Array(byteout)",
+      "bytes": 8697360,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "jspdf.es.js:16016"
+     },
+     {
+      "name": "reachable only through an unexported internal",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:24183 exports; call sites 16067 / 16354 / 20194 are GIF, BMP and WEBP"
      }
     ]
    }
+  },
+  "jspdf": {
+   "exported": [
+    "AcroForm",
+    "AcroFormAppearance",
+    "AcroFormButton",
+    "AcroFormCheckBox",
+    "AcroFormChoiceField",
+    "AcroFormComboBox",
+    "AcroFormEditBox",
+    "AcroFormListBox",
+    "AcroFormPasswordField",
+    "AcroFormPushButton",
+    "AcroFormRadioButton",
+    "AcroFormTextField",
+    "GState",
+    "ShadingPattern",
+    "TilingPattern",
+    "default",
+    "jsPDF"
+   ],
+   "jpegEncoderExported": false,
+   "jpegEncoderOnApi": false,
+   "jpegEncoderOnInstance": false,
+   "processorsReachingIt": [
+    "processGIF89A",
+    "processBMP",
+    "processWEBP"
+   ],
+   "processRGBA": true,
+   "addImageAcceptsRawPixels": true
+  },
+  "zip": {
+   "files": 3,
+   "key": "E3-gray-flate",
+   "dpi": 150,
+   "sourceBytesTotal": 28974,
+   "archiveBytes": 29556,
+   "archiveOverPerFile": 194,
+   "perFileBytes": [
+    9658,
+    9658,
+    9658
+   ]
   },
   "boundaries": {
    "E1-jpeg-hard": {
@@ -1643,43 +1986,213 @@
      "firstOver150": 42,
      "reason150": "OVER_OUTPUT_BUDGET"
     }
+   },
+   "E4-jspdf-hard": {
+    "512": {
+     "pages300": 0,
+     "firstOver300": 1,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 3,
+     "firstOver150": 4,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 0,
+     "firstOver300": 1,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 1,
+     "firstOver300": 2,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-planning": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
    }
   },
   "batches": {
    "E1-jpeg-hard": {
-    "files": 6,
-    "firstOver": 7,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 4,
+     "firstOver": 5,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    },
    "E1-jpeg-planning": {
-    "files": 123,
-    "firstOver": 124,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 82,
+     "firstOver": 83,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    },
    "E2-png-embed": {
-    "files": 41,
-    "firstOver": 42,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 27,
+     "firstOver": 28,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    },
    "E3-gray-raw": {
-    "files": 123,
-    "firstOver": 124,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 82,
+     "firstOver": 83,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    },
    "E3-gray-flate": {
-    "files": 123,
-    "firstOver": 124,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 82,
+     "firstOver": 83,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    },
    "E3-rgb-raw": {
-    "files": 41,
-    "firstOver": 42,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 27,
+     "firstOver": 28,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    },
    "E3-rgb-flate": {
-    "files": 41,
-    "firstOver": 42,
-    "reason": "OVER_MEMORY_BUDGET"
+    "512": {
+     "files": 27,
+     "firstOver": 28,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-hard": {
+    "512": {
+     "files": 3,
+     "firstOver": 4,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-planning": {
+    "512": {
+     "files": 82,
+     "firstOver": 83,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
    }
   },
   "canvasProbes": [
@@ -1704,31 +2217,14 @@
     "pixels": 278739846,
     "allocates": false
    }
-  ],
-  "e4": {
-   "id": "E4",
-   "rejected": true,
-   "reason": "no JPEG encoder exists in the pinned dependencies, and adding or writing one is a dependency decision for a Human Gate; bounding an unowned encoder is what blocked H8 in the first place",
-   "dependencies": [
-    "@pdf-lib/fontkit",
-    "file-saver",
-    "jspdf",
-    "jszip",
-    "lucide-react",
-    "pdf-lib",
-    "pdfjs-dist",
-    "react",
-    "react-dom",
-    "tesseract.js"
-   ]
-  }
+  ]
  },
  "summary": {
-  "assertions": 11,
+  "assertions": 15,
   "assertionsFailed": 0,
-  "probes": 11,
+  "probes": 12,
   "probesFailed": 0,
-  "measurements": 94,
+  "measurements": 117,
   "baselineFails": 1,
   "humanOpen": 2,
   "external": 0,
@@ -1829,37 +2325,37 @@
    "kind": "MEASURE",
    "name": "production monochrome drawing-a4 @150/@300",
    "ok": null,
-   "detail": "53,575 B / 139,656 B (83 ms / 136 ms)"
+   "detail": "53,575 B / 139,657 B"
   },
   {
    "kind": "MEASURE",
    "name": "production monochrome hatch-a4 @150/@300",
    "ok": null,
-   "detail": "329,543 B / 1,192,094 B (84 ms / 151 ms)"
+   "detail": "329,544 B / 1,192,095 B"
   },
   {
    "kind": "MEASURE",
    "name": "production monochrome fine-line-a4 @150/@300",
    "ok": null,
-   "detail": "374,984 B / 1,449,989 B (246 ms / 334 ms)"
+   "detail": "374,985 B / 1,449,990 B"
   },
   {
    "kind": "MEASURE",
    "name": "production monochrome grey-scan-a4 @150/@300",
    "ok": null,
-   "detail": "328,191 B / 1,237,587 B (122 ms / 208 ms)"
+   "detail": "328,192 B / 1,237,588 B"
   },
   {
    "kind": "MEASURE",
    "name": "production monochrome colour-scan-a4 @150/@300",
    "ok": null,
-   "detail": "124,785 B / 706,164 B (113 ms / 219 ms)"
+   "detail": "124,786 B / 706,164 B"
   },
   {
    "kind": "MEASURE",
    "name": "production monochrome photo-a4 @150/@300",
    "ok": null,
-   "detail": "65,895 B / 400,037 B (113 ms / 213 ms)"
+   "detail": "65,896 B / 400,037 B"
   },
   {
    "kind": "BASELINE-FAIL",
@@ -1868,6 +2364,120 @@
    "detail": "its model still contains an UNKNOWN term: the browser JPEG encoder's working memory",
    "rootCause": "canvas.toDataURL(\"image/jpeg\", 0.8) is the browser's encoder: neither its output size nor its working memory follows from anything this architecture owns",
    "architecture": "replace the encoding step with an owned one (E3) whose stream size is the sample count"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "conversion live set, canvas-held",
+   "ok": null,
+   "detail": "91.2 MiB = 11.0 B/px (canvas released first: false)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "conversion live set, canvas-released",
+   "ok": null,
+   "detail": "58.1 MiB = 7.0 B/px (canvas released first: true)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the released ordering really does drop the canvas before converting",
+   "ok": true,
+   "detail": "measured on the prototype, not assumed"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the model matches the code, in both orderings",
+   "ok": true,
+   "detail": "held 95,670,960 B, released 60,881,520 B — both predicted exactly"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the first round's model fails against the ordering the first round's code performed",
+   "ok": true,
+   "detail": "holding the canvas costs 11.0 B/px at conversion, not the 8 B/px the readback alone suggests"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "what the restructuring is worth, A4 @300 DeviceRGB",
+   "ok": null,
+   "detail": "91.2 MiB held vs 66.4 MiB released"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray uniform none",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,174,960 B (x1.000), bound 2,174,960 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray uniform flate",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,130 B (x0.001), bound 2,175,631 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray noise none",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,174,960 B (x1.000), bound 2,174,960 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray noise flate",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,175,631 B (x1.000), bound 2,175,631 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB uniform none",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,524,880 B (x1.000), bound 6,524,880 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB uniform flate",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,358 B (x0.001), bound 6,526,881 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB noise none",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,524,880 B (x1.000), bound 6,524,880 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB noise flate",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,526,881 B (x1.000), bound 6,526,881 B"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "a raw stream is the samples, and pdf-lib keeps the very array it was handed",
+   "ok": true,
+   "detail": "context.stream: typedArrayFor returns a Uint8Array unchanged (arrays.js:9-11), PDFRawStream assigns it (PDFRawStream.js:10)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every deflated stream is under the pako-derived bound",
+   "ok": true,
+   "detail": "bound = n + 5*ceil(n/16,384) + 6, from pako 1.0.11's own block lifecycle"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the measurement is of the compressed stream, not of the samples: a substitution would be caught",
+   "ok": true,
+   "detail": "noise deflates to x1.000 and uniform to x0.0010 — a check that read samples.length would report the same number for both"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and incompressible content stays inside the bound rather than merely inside the samples",
+   "ok": true,
+   "detail": "noise expands to 2,175,631 B from 2,174,960 B, under 2,175,631 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "the pako state every deflate allocates, whatever the input",
+   "ok": null,
+   "detail": "262,144 B = window 65,536 + head 65,536 + prev 65,536 + pending_buf 65,536"
   },
   {
    "kind": "MEASURE",
@@ -1907,27 +2517,9 @@
   },
   {
    "kind": "ASSERT",
-   "name": "every owned candidate wrote exactly the bytes its contract predicts",
+   "name": "every owned candidate wrote exactly what its contract predicts",
    "ok": true,
    "detail": "raw streams are the sample count; the stored PNG is pngStoredSize, to the byte"
-  },
-  {
-   "kind": "PROBE",
-   "name": "and the production path is the one whose size could only be observed",
-   "ok": true,
-   "detail": "the data URL length is exact given J — but J itself is only known after the fact"
-  },
-  {
-   "kind": "ASSERT",
-   "name": "a raw DeviceGray stream is one byte per pixel, by construction",
-   "ok": true,
-   "detail": "2,173,720 B for 1240x1753"
-  },
-  {
-   "kind": "PROBE",
-   "name": "a deflated stream stays under DEFLATE's own stored-block bound",
-   "ok": true,
-   "detail": "the bound holds by derivation; the measurement is a sanity check on it"
   },
   {
    "kind": "MEASURE",
@@ -2185,43 +2777,55 @@
    "kind": "MEASURE",
    "name": "A4 @300, E1-jpeg-hard",
    "ok": null,
-   "detail": "peak 553.0 MiB at \"embed\", stream 20.000 B/px, hard-contract admissible: false (the browser JPEG encoder's working memory)"
+   "detail": "peak 553.0 MiB at \"embed\" (66.7 B/px), stream 20.000 B/px, admissible: false (the browser JPEG encoder's working memory)"
   },
   {
    "kind": "MEASURE",
    "name": "A4 @300, E1-jpeg-planning",
    "ok": null,
-   "detail": "peak 66.4 MiB at \"readback\", stream 1.000 B/px, hard-contract admissible: false (the browser JPEG encoder's working memory; JPEG bytes)"
+   "detail": "peak 85.7 MiB at \"encode\" (10.3 B/px), stream 1.000 B/px, admissible: false (the browser JPEG encoder's working memory; JPEG bytes)"
   },
   {
    "kind": "MEASURE",
    "name": "A4 @300, E2-png-embed",
    "ok": null,
-   "detail": "peak 132.7 MiB at \"decode\", stream 4.001 B/px, hard-contract admissible: true"
+   "detail": "peak 132.7 MiB at \"decode\" (16.0 B/px), stream 4.001 B/px, admissible: true"
   },
   {
    "kind": "MEASURE",
    "name": "A4 @300, E3-gray-raw",
    "ok": null,
-   "detail": "peak 66.4 MiB at \"readback\", stream 1.000 B/px, hard-contract admissible: true"
+   "detail": "peak 66.4 MiB at \"readback\" (8.0 B/px), stream 1.000 B/px, admissible: true"
   },
   {
    "kind": "MEASURE",
    "name": "A4 @300, E3-gray-flate",
    "ok": null,
-   "detail": "peak 66.4 MiB at \"readback\", stream 1.000 B/px, hard-contract admissible: true"
+   "detail": "peak 66.4 MiB at \"readback\" (8.0 B/px), stream 1.000 B/px, admissible: true"
   },
   {
    "kind": "MEASURE",
    "name": "A4 @300, E3-rgb-raw",
    "ok": null,
-   "detail": "peak 66.4 MiB at \"readback\", stream 3.000 B/px, hard-contract admissible: true"
+   "detail": "peak 66.4 MiB at \"readback\" (8.0 B/px), stream 3.000 B/px, admissible: true"
   },
   {
    "kind": "MEASURE",
    "name": "A4 @300, E3-rgb-flate",
    "ok": null,
-   "detail": "peak 66.4 MiB at \"readback\", stream 3.000 B/px, hard-contract admissible: true"
+   "detail": "peak 74.9 MiB at \"deflate\" (9.0 B/px), stream 3.001 B/px, admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E4-jspdf-hard",
+   "ok": null,
+   "detail": "peak 1493.0 MiB at \"convert\" (180.0 B/px), stream 20.000 B/px, admissible: false (bitcode + category lookup arrays; byteout, one JS array element per output byte; reachable only through an unexported internal)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E4-jspdf-planning",
+   "ok": null,
+   "detail": "peak 100.5 MiB at \"encode\" (12.1 B/px), stream 1.000 B/px, admissible: false (bitcode + category lookup arrays; byteout, one JS array element per output byte; reachable only through an unexported internal)"
   },
   {
    "kind": "PROBE",
@@ -2233,55 +2837,97 @@
    "kind": "PROBE",
    "name": "a measured compression ratio cannot masquerade as a hard bound",
    "ok": true,
-   "detail": "the planning model is 486.6 MiB cheaper and is classified MEASURED_ONLY, so it cannot be adopted as a bound"
+   "detail": "the planning model is cheaper on the same page and is classified MEASURED_ONLY, so it cannot be adopted as a bound"
   },
   {
    "kind": "ASSERT",
-   "name": "every owned candidate's model is free of unknowns",
+   "name": "every owned candidate's model is free of unknowns, deflate included",
    "ok": true,
-   "detail": "exact or source-derived, every term"
-  },
-  {
-   "kind": "PROBE",
-   "name": "a partial model cannot claim READY: pricing one page admits a job the complete model refuses",
-   "ok": true,
-   "detail": "40 A4 pages at 300 dpi — complete: REFUSED OVER_MEMORY_BUDGET (peak 1990.7 MiB, it holds every page until save); one-page model: READY (peak 66.4 MiB)"
+   "detail": "exact or source-derived, every term — the pako state and its chunk pinning included"
   },
   {
    "kind": "MEASURE",
-   "name": "what the production path carries as text",
+   "name": "what jsPDF exports",
    "ok": null,
-   "detail": "JPEG 64,952 B becomes a data URL of 86,627 characters (x1.33), then is decoded back to 64,952 B"
+   "detail": "AcroForm, AcroFormAppearance, AcroFormButton, AcroFormCheckBox, AcroFormChoiceField, AcroFormComboBox, AcroFormEditBox, AcroFormListBox, AcroFormPasswordField, AcroFormPushButton, AcroFormRadioButton, AcroFormTextField, GState, ShadingPattern, TilingPattern, default, jsPDF"
   },
   {
    "kind": "MEASURE",
-   "name": "what an owned path carries",
+   "name": "where its JPEGEncoder is reachable from",
    "ok": null,
-   "detail": "2,173,720 B of samples, handed to pdf-lib as a Uint8Array; no string exists"
-  },
-  {
-   "kind": "PROBE",
-   "name": "the base64 step is a real term, not a rounding error",
-   "ok": true,
-   "detail": "4*ceil(J/3)+23 predicted the string exactly, and it is 33.4% larger than the bytes"
-  },
-  {
-   "kind": "MEASURE",
-   "name": "grey vs colour vs RGBA PNG, drawing-a4 @150",
-   "ok": null,
-   "detail": "gray raw 2.1 MiB, gray flate 0.0 MiB, rgb raw 6.2 MiB, rgb flate 0.0 MiB, owned PNG through pdf-lib 0.0 MiB, production JPEG 0.1 MiB"
-  },
-  {
-   "kind": "MEASURE",
-   "name": "grey vs colour vs RGBA PNG, grey-scan-a4 @150",
-   "ok": null,
-   "detail": "gray raw 2.1 MiB, gray flate 1.1 MiB, rgb raw 6.2 MiB, rgb flate 1.9 MiB, owned PNG through pdf-lib 1.9 MiB, production JPEG 0.3 MiB"
+   "detail": "exported: false; on jsPDF.API: false; on an instance: false; plugins that call it: processGIF89A, processBMP, processWEBP (each takes an encoded image file)"
   },
   {
    "kind": "ASSERT",
-   "name": "a grayscale owned stream is a quarter of the RGBA PNG and a third of the RGB one, exactly",
+   "name": "the encoder exists in the bundle but no supported path reaches it with raw pixels",
    "ok": true,
-   "detail": "1 B/px against 3 B/px against 4.001 B/px"
+   "detail": "jspdf.es.js:15515 defines it; :24183 does not export it; processGIF89A/processBMP/processWEBP call it with decoded image files; processRGBA, the one that takes canvas pixels, does not (20241-20272)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and its output representation cannot be bounded either",
+   "ok": true,
+   "detail": "byteout is an ordinary JS array pushed one byte at a time (15529, 15651) before new Uint8Array(byteout) (16016)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "E4 verdict",
+   "ok": null,
+   "detail": "the encoder exists and is real; it is inadmissible for a hard H8 contract on two independent grounds — no stable public API reaches it, and its working memory is the engine's, not ours"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "a real B2 archive",
+   "ok": null,
+   "detail": "3 files, sources 28,974 B, archive 29,556 B (+194 B per file of records)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "STORE means the archive is the sources plus records, which is what the model assumes",
+   "ok": true,
+   "detail": "JSZip generateInternalStream defaults to compression STORE (object.js:321)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the simplified batch model claims READY where the source-derived one refuses",
+   "ok": true,
+   "detail": "10 one-page A4 @300 files, the most the simplified model accepts — simplified: READY at 497.7 MiB; full: REFUSED OVER_MEMORY_BUDGET at 746.6 MiB (sources + accumulated chunks + the concat result)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: output PDFs held as ZIP sources",
+   "ok": null,
+   "detail": "248.8 MiB — EXACT (B2 holds every success until the archive)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: ZipFileWorker.contentBuffer, one file's chunks",
+   "ok": null,
+   "detail": "24.9 MiB — CONSERVATIVE_BOUND (ZipFileWorker.js:337-339, 365-366 with streamFiles false)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: StreamHelper dataArray, every emitted chunk",
+   "ok": null,
+   "detail": "248.9 MiB — SOURCE_DERIVED_BOUND (StreamHelper.js:79-104)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: concat result, allocated while dataArray is live",
+   "ok": null,
+   "detail": "248.9 MiB — SOURCE_DERIVED_BOUND (StreamHelper.js:46-62)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: arraybuffer view for the Blob",
+   "ok": null,
+   "detail": "0.0 MiB — EXACT (utils.js:273-275 returns input.buffer, no copy)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: Blob copy",
+   "ok": null,
+   "detail": "248.9 MiB — CONSERVATIVE_BOUND (the browser's own copy of the archive)"
   },
   {
    "kind": "MEASURE",
@@ -2291,9 +2937,21 @@
   },
   {
    "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E1-jpeg-hard",
+   "ok": null,
+   "detail": "512 MiB: 4 (5 refused, OVER_MEMORY_BUDGET); 1 GiB: 6; 2 GiB: 6"
+  },
+  {
+   "kind": "MEASURE",
    "name": "A4 pages inside 512 MiB, E1-jpeg-planning",
    "ok": null,
    "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E1-jpeg-planning",
+   "ok": null,
+   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "MEASURE",
@@ -2303,9 +2961,21 @@
   },
   {
    "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E2-png-embed",
+   "ok": null,
+   "detail": "512 MiB: 27 (28 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+  },
+  {
+   "kind": "MEASURE",
    "name": "A4 pages inside 512 MiB, E3-gray-raw",
    "ok": null,
    "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-gray-raw",
+   "ok": null,
+   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "MEASURE",
@@ -2315,9 +2985,21 @@
   },
   {
    "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-gray-flate",
+   "ok": null,
+   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+  },
+  {
+   "kind": "MEASURE",
    "name": "A4 pages inside 512 MiB, E3-rgb-raw",
    "ok": null,
    "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-rgb-raw",
+   "ok": null,
+   "detail": "512 MiB: 27 (28 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
   },
   {
    "kind": "MEASURE",
@@ -2327,45 +3009,33 @@
   },
   {
    "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E1-jpeg-hard",
+   "name": "B2 one-page A4 @150 files, E3-rgb-flate",
    "ok": null,
-   "detail": "6 accepted, 7 refused (OVER_MEMORY_BUDGET)"
+   "detail": "512 MiB: 27 (28 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
   },
   {
    "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E1-jpeg-planning",
+   "name": "A4 pages inside 512 MiB, E4-jspdf-hard",
    "ok": null,
-   "detail": "123 accepted, 124 refused (OVER_MEMORY_BUDGET)"
+   "detail": "@300: 0 (1 refused, OVER_MEMORY_BUDGET); @150: 3 (4 refused, OVER_MEMORY_BUDGET)"
   },
   {
    "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E2-png-embed",
+   "name": "B2 one-page A4 @150 files, E4-jspdf-hard",
    "ok": null,
-   "detail": "41 accepted, 42 refused (OVER_MEMORY_BUDGET)"
+   "detail": "512 MiB: 3 (4 refused, OVER_MEMORY_BUDGET); 1 GiB: 6; 2 GiB: 6"
   },
   {
    "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-gray-raw",
+   "name": "A4 pages inside 512 MiB, E4-jspdf-planning",
    "ok": null,
-   "detail": "123 accepted, 124 refused (OVER_MEMORY_BUDGET)"
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
   },
   {
    "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-gray-flate",
+   "name": "B2 one-page A4 @150 files, E4-jspdf-planning",
    "ok": null,
-   "detail": "123 accepted, 124 refused (OVER_MEMORY_BUDGET)"
-  },
-  {
-   "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-rgb-raw",
-   "ok": null,
-   "detail": "41 accepted, 42 refused (OVER_MEMORY_BUDGET)"
-  },
-  {
-   "kind": "MEASURE",
-   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-rgb-flate",
-   "ok": null,
-   "detail": "41 accepted, 42 refused (OVER_MEMORY_BUDGET)"
+   "detail": "512 MiB: 82 (83 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
   },
   {
    "kind": "PROBE",
@@ -2416,28 +3086,16 @@
    "detail": "134.2 Mpx policy, 279 Mpx refused by the browser"
   },
   {
-   "kind": "MEASURE",
-   "name": "E4 rejected, with the reason",
-   "ok": null,
-   "detail": "no JPEG encoder exists in the pinned dependencies, and adding or writing one is a dependency decision for a Human Gate; bounding an unowned encoder is what blocked H8 in the first place"
-  },
-  {
-   "kind": "ASSERT",
-   "name": "no pinned dependency contains a JPEG encoder",
-   "ok": true,
-   "detail": "@pdf-lib/fontkit, file-saver, jspdf, jszip, lucide-react, pdf-lib, pdfjs-dist, react, react-dom, tesseract.js — pdf-lib parses JPEG, pdfjs decodes it, jsPDF embeds it, none writes one"
-  },
-  {
    "kind": "HUMAN-OPEN",
    "name": "H8 Raster encoder and operation memory: which encoding path, and which memory contract?",
    "ok": null,
-   "detail": "recommendation: H8-A for Monochrome, H8-B for Optimize — adopt an owned image XObject (E3), written by pdf-lib itself: DeviceGray for Monochrome and DeviceRGB for Optimize, FlateDecode for the file size and no filter where the encoded size has to be exact. One A4 page at 300 dpi then peaks at 66.4 MiB, at the readback — every term EXACT or source-derived, no encoder in the model at all. Monochrome keeps the capacity the estimate used to promise: 30 pages at 300 dpi and 123 at 150 inside 512 MiB, against 30/123 estimated and 0/6 that the only fail-closed JPEG term allowed. Optimize keeps colour and so carries 10/41 — a smaller product limit, honestly bounded."
+   "detail": "recommendation: H8-A for Monochrome, H8-B for Optimize — an owned image XObject, written by pdf-lib itself, with the canvas released before the samples are allocated. One A4 page at 300 dpi peaks at 66.4 MiB (8.0 B/px) at \"readback\", every term EXACT or source-derived. Inside 512 MiB: DeviceGray raw 30 pages @300 and 123 @150, DeviceGray FlateDecode 30/123, DeviceRGB 10/41; against 30/123 that the unadoptable estimate promised and 0/6 that the only fail-closed JPEG term allowed."
   },
   {
    "kind": "HUMAN-OPEN",
    "name": "H8-file-size Is a larger PDF acceptable as the price of an exact memory contract?",
    "ok": null,
-   "detail": "recommendation: measured at 150 dpi on the grey scan: production JPEG 0.3 MiB, owned DeviceGray FlateDecode 1.1 MiB, owned DeviceGray raw 2.1 MiB. FlateDecode keeps the guarantee and most of the size; raw keeps the size exact before the page is rendered. MAX_OUTPUT_BYTES is enforced on the finished artifact either way."
+   "detail": "recommendation: measured at 150 dpi on the grey scan: production JPEG 0.3 MiB, owned DeviceGray FlateDecode 1.1 MiB, owned DeviceGray raw 2.1 MiB. FlateDecode keeps the guarantee — its whole lifetime is now source-derived — and most of the size; raw keeps the size exact before the page is rendered."
   },
   {
    "kind": "ASSERT",
@@ -2450,6 +3108,12 @@
    "name": "no page error during the run",
    "ok": true,
    "detail": "none"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the evidence is bound to committed source: the research tree is clean, untracked files included",
+   "ok": true,
+   "detail": "tested head faf8cd41d04f38bdbe0b31182e1be44900d696c1"
   }
  ]
 }
