@@ -1,10 +1,11 @@
 # Measurements
 
 Every number below is a line in `evidence.json`, produced by
-`scripts/research-gate.mjs` on this branch. Sizes and peaks that are arithmetic
-say so; everything else was measured in a headless Chrome on one machine.
+`scripts/research-gate.mjs` from the committed source head it records. Sizes
+and peaks that are arithmetic say so; everything else was measured in a
+headless Chrome on one machine.
 
-**Gate:** ASSERT 11/11 · PROBE 11/11 · MEASURE 94 · BASELINE-FAIL 1 ·
+**Gate:** ASSERT 15/15 · PROBE 12/12 · MEASURE 117 · BASELINE-FAIL 1 ·
 HUMAN-OPEN 2 · external HTTP(S) 0 · page errors 0.
 
 ## The corpus
@@ -15,6 +16,49 @@ with thin witness lines and small dimension strings, hairline hatching, 300 dpi
 one-pixel linework on paper grain, a greyscale scan, a colour scan,
 photographic gradients, four vector pages, and an A3 sheet.
 
+## What is live while the samples are made
+
+A4 at 300 dpi, DeviceRGB, measured in the prototype and predicted exactly by
+the model in both orderings:
+
+| | live at conversion | per pixel | page peak |
+| --- | --- | --- | --- |
+| canvas held to the end | 91.2 MiB | **11.0 B/px** | 91.2 MiB |
+| canvas released first | 58.1 MiB | **7.0 B/px** | **66.4 MiB** |
+
+The first round priced the readback alone and so claimed 8 B/px for a pipeline
+that was using 11. The prototype now releases the canvas as soon as the
+readback exists, and the gate measures which ordering the code performed rather
+than taking the model's word for it.
+
+## What the PDF object actually carries
+
+Read back from the object with `PDFRawStream.getContentsSize()`, 1240 × 1754:
+
+| colour space | content | filter | samples | stored | ratio | bound |
+| --- | --- | --- | --- | --- | --- | --- |
+| DeviceGray | uniform | none | 2,174,960 | 2,174,960 | ×1.000 | 2,174,960 |
+| DeviceGray | uniform | flate | 2,174,960 | **2,130** | ×0.001 | 2,175,631 |
+| DeviceGray | noise | none | 2,174,960 | 2,174,960 | ×1.000 | 2,174,960 |
+| DeviceGray | noise | flate | 2,174,960 | **2,175,631** | ×1.000 | **2,175,631** |
+| DeviceRGB | uniform | none | 6,524,880 | 6,524,880 | ×1.000 | 6,524,880 |
+| DeviceRGB | uniform | flate | 6,524,880 | **6,358** | ×0.001 | 6,526,881 |
+| DeviceRGB | noise | none | 6,524,880 | 6,524,880 | ×1.000 | 6,524,880 |
+| DeviceRGB | noise | flate | 6,524,880 | **6,526,881** | ×1.000 | **6,526,881** |
+
+Two things follow. A raw stream is the samples, and pdf-lib keeps *the very
+array it was handed* — checked by identity, not by size. And incompressible
+content lands **exactly on** the pako-derived bound, while compressible content
+reaches ×0.001: a bound the worst case touches and the best case falls far
+below. A check that read `samples.length` instead would have reported the same
+number for both rows of each pair.
+
+**The deflater's own state**, allocated by every `pako.deflate` call whatever
+the input: **262,144 B** = window 65,536 + head 65,536 + prev 65,536 +
+pending_buf 65,536 (pako 1.0.11, deflate.js:1376-1389). Its output chunks each
+pin a full 16,384 B buffer because `shrinkBuf` returns a subarray without
+copying, and `flattenChunks` allocates the result while they are still live.
+
 ## The owned PNG encoder's size contract (E2)
 
 | | encoded | per pixel |
@@ -23,8 +67,7 @@ photographic gradients, four vector pages, and an A3 sheet.
 | 1240 × 1754 | 8,702,418 B | 4.001 |
 | 2480 × 3508 | 34,805,987 B | 4.001 |
 
-The model, the production function (`src/utils/comparator/png.ts`) and the
-bytes actually written agree exactly, at every size.
+Model, production function and bytes written agree exactly at every size.
 
 ## E1 — production, as the baseline
 
@@ -41,7 +84,7 @@ bytes actually written agree exactly, at every size.
 
 ## Output size, per candidate
 
-**At 150 dpi:**
+**At 150 dpi (MiB):**
 
 | fixture | E1 JPEG | E2 PNG→pdf-lib | E3 gray raw | E3 gray flate | E3 rgb raw | E3 rgb flate |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -50,22 +93,17 @@ bytes actually written agree exactly, at every size.
 | grey-scan-a4 | 0.3 | 1.9 | 2.1 | 1.1 | 6.2 | 1.9 |
 | photo-a4 | 0.1 | 1.5 | 2.1 | 1.3 | 6.2 | 5.2 |
 
-**At 300 dpi:**
+**At 300 dpi (MiB):**
 
 | fixture | E1 JPEG | E2 | E3 gray raw | E3 gray flate | E3 rgb raw | E3 rgb flate |
 | --- | --- | --- | --- | --- | --- | --- |
 | drawing-a4 | 0.1 | 0.1 | 8.3 | 0.0 | 24.9 | 0.1 |
 | grey-scan-a4 | 1.2 | 3.0 | 8.3 | 1.4 | 24.9 | 3.0 |
 
-(MiB.) The raw streams are exactly 1 and 3 B/px and do not depend on the
-content at all — that is the point of them. `FlateDecode` costs the exactness
-and recovers most of the size: on a line drawing it is smaller than the JPEG;
-on photographic content it is several times larger.
-
 ## Quality
 
-Judged at 300 dpi against the source rendered the same way: how much of the
-source's ink is still ink, how much ink appeared that was not there, and PSNR.
+Judged at 300 dpi against the source rendered the same way — ink kept, ink
+invented, PSNR.
 
 **Flattened at 150 dpi:**
 
@@ -85,64 +123,77 @@ source's ink is still ink, how much ink appeared that was not there, and PSNR.
 | drawing-a4 | 89.7%, 28.4 dB | 89.7%, 28.4 | 89.7%, 28.4 | 89.7%, 28.4 | 89.7%, 28.4 |
 | fine-line-a4 | 76.3%, 19.5 | 76.4%, 19.5 | **76.5%**, 19.5 | 76.5%, 19.5 | 76.4%, 19.5 |
 
-At a given resolution the candidates are indistinguishable — the encoder was
-never what was damaging the drawings. The same lossless owned path keeps
-**3.5% of the line ink at 150 dpi and 76.5% at 300**. (JPEG's 8.8% at 150 dpi
-is not better preservation: its ringing darkens pixels around the lost lines,
-which the ink measure counts and the spurious-ink measure shows, 0.6% against
-0.1%.)
+At a given resolution the candidates are indistinguishable. The same lossless
+owned path keeps **3.5% of the line ink at 150 dpi and 76.5% at 300**. (JPEG's
+8.8% at 150 is ringing counted as ink: spurious ink 0.6% against 0.1%.)
 
 ## The memory model, per candidate
 
-One A4 page at 300 dpi (2480 × 3508 = 8.70 Mpx):
+One A4 page at 300 dpi (2480 × 3508 = 8.70 Mpx), canvas released first:
 
-| candidate | peak | at step | stream | admissible for a hard contract |
-| --- | --- | --- | --- | --- |
-| E1 JPEG, format bound | **553.0 MiB** | embed | 20.000 B/px | **no** — the encoder's working memory is UNKNOWN |
-| E1 JPEG, measured estimate | 66.4 MiB | readback | 1.000 B/px | **no** — that, and the size is MEASURED_ONLY |
-| E2 owned PNG → pdf-lib | **132.7 MiB** | decode | 4.001 B/px | yes |
-| **E3 DeviceGray, raw** | **66.4 MiB** | readback | **1.000 B/px** | yes |
-| **E3 DeviceGray, flate** | **66.4 MiB** | readback | 1.000 B/px | yes |
-| **E3 DeviceRGB, raw** | **66.4 MiB** | readback | **3.000 B/px** | yes |
-| **E3 DeviceRGB, flate** | **66.4 MiB** | readback | 3.000 B/px | yes |
+| candidate | peak | per pixel | at step | stream | admissible |
+| --- | --- | --- | --- | --- | --- |
+| E1 JPEG, format bound | **553.0 MiB** | 66.7 | embed | 20.000 B/px | **no** — encoder working memory UNKNOWN |
+| E1 JPEG, measured estimate | 85.7 MiB | 10.3 | encode | 1.000 B/px | **no** — that, plus MEASURED_ONLY size |
+| E2 owned PNG → pdf-lib | 132.7 MiB | 16.0 | decode | 4.001 B/px | yes |
+| **E3 DeviceGray, raw** | **66.4 MiB** | **8.0** | readback | **1.000 B/px** | yes |
+| **E3 DeviceGray, flate** | **66.4 MiB** | 8.0 | readback | 1.000 B/px | yes |
+| **E3 DeviceRGB, raw** | **66.4 MiB** | 8.0 | readback | **3.000 B/px** | yes |
+| **E3 DeviceRGB, flate** | 74.9 MiB | 9.0 | deflate | 3.001 B/px | yes |
+| E4 jsPDF, format bound | 1,493.0 MiB | 180.0 | convert | 20.000 B/px | **no** — `byteout`, the lookup arrays, and no public path |
+| E4 jsPDF, measured estimate | 100.5 MiB | 12.1 | encode | 1.000 B/px | **no** — same |
 
-Every E3 variant peaks at the readback — canvas plus `ImageData`, 8 B/px,
-exact. Nothing after it is larger, so the encoding step has left the peak
-entirely.
+## E4 — jsPDF 3.0.4's bundled encoder, checked at runtime
 
-## Boundaries, inside the 512 MiB default
+Exports: `AcroForm`, `AcroFormAppearance`, `AcroFormButton`,
+`AcroFormCheckBox`, `AcroFormChoiceField`, `AcroFormComboBox`,
+`AcroFormEditBox`, `AcroFormListBox`, `AcroFormPasswordField`,
+`AcroFormPushButton`, `AcroFormRadioButton`, `AcroFormTextField`, `GState`,
+`ShadingPattern`, `TilingPattern`, `default`, `jsPDF`.
 
-| candidate | A4 @300 | A4 @150 | one-page files, B2 batch @150 |
-| --- | --- | --- | --- |
-| E1, fail-closed | **0** (1st refused) | 6 (7th) | 6 (7th) |
-| E1, estimate (unadoptable) | 30 (31st) | 123 (124th) | 123 (124th) |
-| E2 | 10 (11th) | 41 (42nd) | 41 (42nd) |
-| **E3 DeviceGray** | **30** (31st) | **123** (124th) | **123** (124th) |
-| **E3 DeviceRGB** | **10** (11th) | **41** (42nd) | **41** (42nd) |
+`JPEGEncoder` exported: **false**. On `jsPDF.API`: **false**. On an instance:
+**false**. Plugins that call it: `processGIF89A`, `processBMP`, `processWEBP` —
+each takes an encoded image file. `processRGBA`, the one that takes canvas
+pixels, exists and does not use it.
 
-Every first-over case is refused `OVER_MEMORY_BUDGET`, by name, before any
-raster is allocated.
+## Boundaries
 
-### At the explicit presets — where the binding ceiling changes
+Single file, inside 512 MiB:
 
-| candidate | 1 GiB, A4 @300 · @150 | 2 GiB, A4 @300 · @150 |
+| candidate | A4 @300 | A4 @150 |
 | --- | --- | --- |
-| E1, fail-closed | 1 · 6 | 1 · 6 |
-| E1, estimate (unadoptable) | 30 · 123 | 30 · 123 |
-| E2 | 10 · 41 | 10 · 41 |
-| **E3 DeviceGray** | **30 · 123** | **30 · 123** |
-| **E3 DeviceRGB** | **10 · 41** | **10 · 41** |
+| E1, fail-closed | **0** (1st refused) | 6 (7th) |
+| E1, estimate (unadoptable) | 30 (31st) | 123 (124th) |
+| E2 | 10 (11th) | 41 (42nd) |
+| **E3 DeviceGray** | **30** (31st) | **123** (124th) |
+| **E3 DeviceRGB** | **10** (11th) | **41** (42nd) |
+| E4, fail-closed | **0** (1st) | 3 (4th) |
+| E4, estimate | 30 (31st) | 123 (124th) |
 
-**Above 512 MiB the memory ceiling stops being what refuses.** Every first-over
-case at 1 GiB and at 2 GiB is `OVER_OUTPUT_BUDGET` — the 256 MiB
-`MAX_OUTPUT_BYTES` — which is why 1 GiB and 2 GiB admit exactly the same jobs.
-Raising the memory preset buys nothing beyond that point, and cannot: the
-ceilings are independent by construction.
+B2 batch, one-page A4 @150 files, priced from JSZip's own path:
 
-The one candidate the larger preset does move is the one that cannot be
-adopted anyway: E1 under its fail-closed term goes from **0** pages at 300 dpi
-to **1**, because a single page's peak (553.0 MiB) does not fit in 512 MiB at
-all. At 2 GiB it is still 1, refused by output.
+| candidate | 512 MiB | 1 GiB | 2 GiB |
+| --- | --- | --- | --- |
+| E1, fail-closed | 4 (5th refused) | 6 | 6 |
+| E1, estimate | 82 (83rd) | 123 | 123 |
+| E2 | 27 (28th) | 41 | 41 |
+| **E3 DeviceGray** | **82** (83rd) | 123 | 123 |
+| **E3 DeviceRGB** | **27** (28th) | 41 | 41 |
+| E4, fail-closed | 3 (4th) | 6 | 6 |
+
+Every first-over case at 512 MiB is `OVER_MEMORY_BUDGET`. At 1 GiB and 2 GiB
+the numbers stop moving because `MAX_OUTPUT_BYTES` binds instead — a larger
+memory preset is not a way to process more files.
+
+**The batch terms**, for 12 one-page A4 @300 DeviceRGB files: output PDFs held
+as sources 298.6 MiB (EXACT); `ZipFileWorker.contentBuffer`, one file at a
+time, 24.9 MiB (CONSERVATIVE); `StreamHelper` `dataArray` 298.6 MiB
+(SOURCE_DERIVED); the `concat` result, allocated while `dataArray` is live,
+298.6 MiB (SOURCE_DERIVED); the arraybuffer view 0 (EXACT — `input.buffer`, no
+copy); the Blob copy 298.6 MiB (CONSERVATIVE).
+
+**A real archive**: 3 files, sources 28,974 B, archive 29,556 B, +194 B per
+file of records — STORE behaving as the model assumes.
 
 ## The ceilings stay independent
 
@@ -150,51 +201,40 @@ all. At 2 GiB it is still 1, refused by output.
   512 MiB, 1 GiB, 2 GiB *and* with memory unbounded;
 - **output first-over** — with memory and pixels unbounded, the first page
   count past 256 MiB of output is refused `OVER_OUTPUT_BUDGET`;
-- **memory first-over** — with the other two unbounded, the memory ceiling is
-  the one that fires;
+- **memory first-over** — with the other two unbounded, the memory ceiling
+  fires;
 - **an explicit preset moves nothing but memory** — A0 at 300 dpi stays
   `OVER_RASTER_LIMIT` at the largest preset.
 
 **Canvas probe** (one machine): A4@300 (9 Mpx) allocates, A1@300 (70 Mpx)
-allocates, A1@600 (279 Mpx) does not. The 128 Mi px policy sits below that
-boundary rather than on it.
-
-## Base64 versus binary
-
-Production turns a 64,952 B JPEG into a data URL of **86,627 characters** —
-`4·⌈J/3⌉+23` predicted it exactly, **33.4% larger** than the bytes — and then
-decodes it back. An owned path hands pdf-lib a `Uint8Array` of samples; no
-string is created at any point.
+allocates, A1@600 (279 Mpx) does not.
 
 ## Negative probes
 
-Eleven, all passing. The ones that carry the argument:
+Twelve, all passing. The ones that carry the argument:
 
-- an **unknown encoder scratch prevents a hard contract**, whatever the numbers
-  look like: both JPEG models are refused, one for the UNKNOWN term and one for
-  that plus a MEASURED_ONLY size;
-- a **measured compression ratio cannot masquerade as a hard bound**: the
-  planning model is 486.6 MiB cheaper on the same page and is refused for it;
-- a **partial model cannot claim READY**: pricing one page of a 40-page job at
-  300 dpi says READY where the complete model — which knows every page is held
-  until `save()` — refuses `OVER_MEMORY_BUDGET`;
-- a **deflated stream stays under DEFLATE's own stored-block bound**, which
-  holds by derivation; the measurement is a sanity check on it.
-
-## Determinism, and what still moves
-
-Two consecutive runs: every line's kind, name and verdict identical, every
-total identical, and **every owned candidate's byte counts identical**. Six
-`MEASURE` details moved, all of them the production baseline: four differ only
-in timings, and two also in size — `colour-scan-a4` @300 at 706,163 / 706,164 B
-and `photo-a4` @300 at 400,036 / 400,037 B. That is the same browser JPEG
-encoder failing to repeat itself byte for byte on one machine, which M5 first
-recorded and which is the whole reason a measurement of it cannot become a
-bound.
+- **the first round's model fails against the ordering the first round's code
+  performed** — holding the canvas costs 11.0 B/px at conversion, not 8;
+- **the measurement is of the compressed stream, not of the samples** — noise
+  and uniform content differ by three orders of magnitude through the same
+  code path, so a substitution of `samples.length` is caught;
+- **incompressible content stays inside the bound** rather than merely inside
+  the samples — it lands on it exactly;
+- **an unknown encoder scratch prevents a hard contract**, and **a measured
+  compression ratio cannot masquerade as a hard bound**;
+- **a partial model cannot claim READY** — pricing one page of a multi-page job
+  admits what the complete model refuses;
+- **the simplified batch model claims READY where the source-derived one
+  refuses**, at the exact file count the simplified model would have allowed;
+- raster / memory / output first-over, each isolated with the other two
+  unbounded, and an explicit preset moving nothing but memory.
 
 ## Provenance
 
-`evidence.json` records `productionBase`, `researchHeadAtRun`,
-`researchBranchAtRun`, `workingTreeDirty` and `coreCiRunsThisGate: false`. This
-is local research evidence. **Core CI** runs the existing backbone at the exact
-head and does not run this gate; the two are reported separately.
+`evidence.json` records `productionBase`, `testedResearchHead`,
+`researchBranchAtRun`, `workingTreeDirty` and `coreCiRunsThisGate: false`.
+Dirtiness is computed over `research/m5-raster-encoder-memory` **including
+untracked files**, so an uncommitted prototype makes the run dirty and the gate
+fails rather than recording a clean tree that never existed. This is local
+research evidence; **Core CI** runs the existing backbone at the exact head and
+does not run this gate.

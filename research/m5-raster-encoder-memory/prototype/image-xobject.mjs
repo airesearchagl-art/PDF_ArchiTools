@@ -1,11 +1,17 @@
 /**
  * E3, implemented: an image XObject this architecture owns end to end.
  *
- * pdf-lib will write a stream exactly as given (`context.stream`) or deflate it
- * with its own pinned pako (`context.flateStream`). Neither path decodes, and
- * neither involves a browser encoder, so the bytes in the file are either the
- * samples themselves — exact, known before the page is rendered — or a deflate
- * of them, bounded by DEFLATE's stored-block worst case.
+ * pdf-lib writes a stream exactly as handed to it (`context.stream`) or
+ * deflates it with its own pinned pako (`context.flateStream`). Neither path
+ * decodes, and neither involves a browser encoder.
+ *
+ * The ordering matters as much as the encoder. `getImageData` needs the canvas,
+ * but nothing after it does — so the canvas is released the moment the readback
+ * exists, before any sample buffer is allocated. That is what makes the peak
+ * the readback (8 B/px) instead of the readback plus the samples on top of a
+ * canvas nobody is using any more. The first version of this prototype kept the
+ * canvas alive to the end; `ordering: 'canvas-held'` reproduces that so the gate
+ * can show the difference rather than assert it.
  *
  * This is a prototype. It does not touch `src/`, and nothing here is adopted.
  */
@@ -13,7 +19,15 @@ import {
     pushGraphicsState, popGraphicsState, concatTransformationMatrix, drawObject,
 } from 'pdf-lib';
 
-/** RGBA readback to DeviceGray samples, in place of a colour conversion pass. */
+export const ORDERING = { HELD: 'canvas-held', RELEASED: 'canvas-released' };
+
+/** Drop a canvas's backing store. A zero-sized canvas holds no pixels. */
+export function releaseCanvas(canvas) {
+    canvas.width = 0;
+    canvas.height = 0;
+}
+
+/** RGBA readback to DeviceGray samples. */
 export function rgbaToGray(rgba, { contrast = 1 } = {}) {
     const out = new Uint8Array(rgba.length / 4);
     for (let i = 0, j = 0; i < rgba.length; i += 4, j += 1) {
@@ -39,8 +53,8 @@ export function rgbaToRgb(rgba) {
 /**
  * Write one full-page image XObject and draw it over the whole page.
  *
- * `colourSpace` is 'DeviceGray' (1 sample per pixel) or 'DeviceRGB' (3).
- * `filter` is 'none' — the samples are the stream — or 'flate'.
+ * Returns the `PDFRawStream` itself, so a caller can read what was actually
+ * stored — `getContentsSize()` — instead of assuming the samples' length.
  */
 export function drawFullPageImage(doc, page, {
     samples, width, height, colourSpace, filter = 'none',
@@ -72,26 +86,51 @@ export function drawFullPageImage(doc, page, {
         drawObject(name),
         popGraphicsState(),
     );
-    return { streamBytes: samples.length, name: String(name) };
+    return {
+        stream,
+        /** What the PDF actually carries, read back from the object. */
+        storedBytes: stream.getContentsSize(),
+        /** Whether pdf-lib kept the very array we handed it (no copy on the write path). */
+        sameArray: filter === 'none' && stream.getContents() === samples,
+        name: String(name),
+    };
 }
 
 /**
- * The whole owned path for one page, for the harness to run against the same
- * canvas production uses: read back, convert, write, and report exactly what
- * each step cost.
+ * The whole owned path for one page, in a stated order, reporting what was live
+ * at each step so the model can be checked against the code rather than assumed.
  */
-export function encodeOwnedPage(doc, page, ctx, { width, height, colourSpace, filter, contrast }) {
+export function encodeOwnedPage(doc, page, ctx, {
+    width, height, colourSpace, filter, contrast, ordering = ORDERING.RELEASED,
+}) {
+    const canvas = ctx.canvas;
+    const canvasBytes = canvas.width * canvas.height * 4;
     const readback = ctx.getImageData(0, 0, width, height);
+    const readbackBytes = readback.data.length;
+
+    let canvasLiveDuringConvert = canvasBytes;
+    if (ordering === ORDERING.RELEASED) {
+        releaseCanvas(canvas);
+        canvasLiveDuringConvert = 0;
+    }
+
     const samples = colourSpace === 'DeviceGray'
         ? rgbaToGray(readback.data, { contrast })
         : rgbaToRgb(readback.data);
-    const drawn = drawFullPageImage(doc, page, {
-        samples, width, height, colourSpace, filter,
-    });
+
+    const drawn = drawFullPageImage(doc, page, { samples, width, height, colourSpace, filter });
+
     return {
-        readbackBytes: readback.data.length,
+        ordering,
+        canvasBytes,
+        readbackBytes,
         sampleBytes: samples.length,
-        streamBytes: drawn.streamBytes,
+        /** The live set while the samples were being allocated and filled. */
+        convertLiveBytes: canvasLiveDuringConvert + readbackBytes + samples.length,
+        canvasReleasedBeforeConvert: canvasLiveDuringConvert === 0,
+        canvasWidthAfter: canvas.width,
+        storedBytes: drawn.storedBytes,
+        sameArray: drawn.sameArray,
         colourSpace,
         filter,
     };
