@@ -123,6 +123,27 @@ entirely.
 Every first-over case is refused `OVER_MEMORY_BUDGET`, by name, before any
 raster is allocated.
 
+### At the explicit presets — where the binding ceiling changes
+
+| candidate | 1 GiB, A4 @300 · @150 | 2 GiB, A4 @300 · @150 |
+| --- | --- | --- |
+| E1, fail-closed | 1 · 6 | 1 · 6 |
+| E1, estimate (unadoptable) | 30 · 123 | 30 · 123 |
+| E2 | 10 · 41 | 10 · 41 |
+| **E3 DeviceGray** | **30 · 123** | **30 · 123** |
+| **E3 DeviceRGB** | **10 · 41** | **10 · 41** |
+
+**Above 512 MiB the memory ceiling stops being what refuses.** Every first-over
+case at 1 GiB and at 2 GiB is `OVER_OUTPUT_BUDGET` — the 256 MiB
+`MAX_OUTPUT_BYTES` — which is why 1 GiB and 2 GiB admit exactly the same jobs.
+Raising the memory preset buys nothing beyond that point, and cannot: the
+ceilings are independent by construction.
+
+The one candidate the larger preset does move is the one that cannot be
+adopted anyway: E1 under its fail-closed term goes from **0** pages at 300 dpi
+to **1**, because a single page's peak (553.0 MiB) does not fit in 512 MiB at
+all. At 2 GiB it is still 1, refused by output.
+
 ## The ceilings stay independent
 
 - **raster first-over** — A1 at 600 dpi is refused `OVER_RASTER_LIMIT` at

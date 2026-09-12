@@ -49,6 +49,14 @@ archive, so the ceiling must cover the **job**, not the largest file.
 
 Every refusal is `OVER_MEMORY_BUDGET`, by name, before any raster is allocated.
 
+**At the explicit presets the binding ceiling changes hands.** 1 GiB and 2 GiB
+admit exactly the same jobs as each other — 30 · 123 for DeviceGray, 10 · 41
+for DeviceRGB — because above 512 MiB it is `MAX_OUTPUT_BYTES` (256 MiB) that
+refuses, not memory. A larger preset is therefore not a way to process more
+pages; it is only a way to survive a page whose own peak does not fit. If the
+product wants longer documents, the decision to revisit is the output ceiling,
+not the memory one.
+
 For the same page, the path that blocked H8 allowed **0** pages at 300 dpi and
 6 at 150 under its only fail-closed term, and *estimated* 30 and 123 under a
 measurement that could not be adopted. The owned grey path delivers that
