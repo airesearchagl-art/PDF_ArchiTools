@@ -1,6 +1,8 @@
 # Decision matrix
 
-Recommendations are marked; adoption is the Human Gate's (`human-gate.json`).
+Recommendations are marked; adoption was the Human Gate's, and what it decided
+is recorded as given in `adoption.md` (thirteen adopted, H2b deferred, H8
+blocked pending the Raster Encoder / Memory Sub-Spike).
 All numbers: M5 research gate, local branch run, `evidence.json`.
 
 ## Operation class, per operation

@@ -30,7 +30,7 @@ for them.
 - The hardened lanes' gates pass unchanged; both invalidate a document's
   applied signature without refusing it.
 
-## What is proposed (not adopted)
+## What was proposed, and what the Human Gate adopted
 
 Two operation classes. One PLAN → RESULT orchestration that reads **source
 facts** once (M3's dictionary-level reading, never `getForm()`) and applies an
@@ -46,7 +46,11 @@ Encoder / Memory Sub-Spike). Per operation: Monochrome keeps rasterising for
 the MVP as an explicit, confirmed flattening (candidate C for a follow-up
 spike); 「最適化」 promises O2 now and O3 only once its lossy contract is
 decided; Margin transforms in place with a stated supported/refused contract.
-Fifteen Human decisions remain open.
+
+**The Human Adoption Gate has since closed** (`adoption.md`): thirteen
+decisions adopted, **H2b deferred**, **H8 blocked** pending the Raster Encoder
+/ Memory Sub-Spike. No production implementation follows from that record;
+`src/` is unchanged.
 
 ## Evidence
 
@@ -64,7 +68,8 @@ reported separately.
 | `architecture.md` | the proposed architecture |
 | `decision-matrix.md` | candidate comparisons and recommendations |
 | `limitations.md` | what the evidence and prototypes do not show |
-| `human-gate.json` | H1–H13 (H2 and H13 split into a/b), recommendations, all open |
+| `human-gate.json` | H1–H13 (H2 and H13 split into a/b) and the research's recommendations |
+| `adoption.md` | the Human Adoption Gate's decisions, recorded as given |
 | `evidence.json` | the gate's output: every line, classified, and the compact matrices |
 | `prototype/inspect.mjs` | the read-only structural inspector |
 | `prototype/source-facts.mjs` | SourceFacts, operation effects, H7 candidate policies, `planOperation` |

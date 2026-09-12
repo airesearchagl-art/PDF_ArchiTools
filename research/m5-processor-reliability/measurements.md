@@ -321,7 +321,9 @@ in these documents are therefore reproducible to ±1 B, not exactly.
 `productionBase`, `researchHeadAtRun`, `researchBranchAtRun`,
 `workingTreeDirty` and `coreCiRunsThisGate: false` record where it ran, and
 that Core CI did not run it):**
-ASSERT 28/28, PROBE 38/38, MEASURE 127, BASELINE-FAIL 19, HUMAN-OPEN 15;
+ASSERT 28/28, PROBE 38/38, MEASURE 127, BASELINE-FAIL 19, HUMAN-OPEN 15 — the
+gate's own classification at run time, before the Human Adoption Gate closed
+(`adoption.md`);
 external HTTP(S) 0; page errors 0. Console errors: PdfTools' own
 `console.error` for the deliberately invalid inputs, and one same-origin
 `/favicon.ico` 404.
