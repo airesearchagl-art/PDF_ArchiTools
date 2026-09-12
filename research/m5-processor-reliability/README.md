@@ -13,13 +13,13 @@ for them.
 
 - **Monochrome, Both and Optimize flatten every page to a JPEG** and report
   「done」: searchable text, the OCR layer, vectors, annotations, links, forms,
-  the signature, XFA and all metadata are gone, and nothing says so.
+  signature fields, XFA and all metadata are gone, and nothing says so.
 - **「最適化」 makes vector drawings 11–153× larger at its default** (up to
   463×) and unsearchable.
 - **Margin keeps the drawing but not the document**: annotations, links (and
   where they point), forms, XFA and metadata are left behind, rotated sheets
   come back turned, the CropBox is discarded and hidden content is revealed.
-- **Layer keeps the structure** but silently invalidates signatures, rewrites
+- **Layer keeps the structure** but silently invalidates an applied signature, rewrites
   metadata, misses part of the sheet when the MediaBox is not at (0,0), and sits
   below every annotation.
 - **600 dpi on A1/A0 is offered and cannot be allocated**; it fails after the
@@ -27,21 +27,26 @@ for them.
 - **A partly failed batch ships a ZIP of the rest with no record of the
   failure; a batch the user navigated away from still downloads; a setting
   changed mid-run is neither applied nor locked.**
-- The hardened lanes' gates pass unchanged; both invalidate a signed document
-  without refusing it.
+- The hardened lanes' gates pass unchanged; both invalidate a document's
+  applied signature without refusing it.
 
 ## What is proposed (not adopted)
 
 Two operation classes. One PLAN → RESULT orchestration that reads **source
 facts** once (M3's dictionary-level reading, never `getForm()`) and applies an
-**H7 policy** chosen by the Human Gate. `FileResult` and `BatchResult` kept
-apart, with B1/B2/B3 defined and prototyped as defined. A closed **Raster
-Budget** for the flattening operations (raster, memory and output ceilings with
-concrete candidates, validated against production). Per operation: Monochrome
-keeps rasterising for the MVP as an explicit, confirmed flattening (candidate C
-for a follow-up spike); 「最適化」 promises O2 now and O3 only once its lossy
-contract is decided; Margin transforms in place with a stated supported/refused
-contract. Fifteen Human decisions remain open.
+**H7 policy** chosen by the Human Gate — with an *applied* signature (a `/Sig`
+field with a signature in `/V`) kept apart from an empty signature field, which
+is a form object. `FileResult` and `BatchResult` kept apart, with B1/B2/B3
+defined and prototyped as defined. A **Raster Budget** for the flattening
+operations whose terms are labelled by basis: the raster-pixel ceiling and the
+runtime canvas probe are adoptable now (**H9**), while the operation-memory
+guarantee is **blocked** — the browser JPEG encoder is not owned, so neither
+its output size nor its working memory can be bounded (**H8**, pending a Raster
+Encoder / Memory Sub-Spike). Per operation: Monochrome keeps rasterising for
+the MVP as an explicit, confirmed flattening (candidate C for a follow-up
+spike); 「最適化」 promises O2 now and O3 only once its lossy contract is
+decided; Margin transforms in place with a stated supported/refused contract.
+Fifteen Human decisions remain open.
 
 ## Evidence
 

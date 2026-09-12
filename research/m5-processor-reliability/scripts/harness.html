@@ -509,7 +509,8 @@ window.__m5 = {
    * candidate policy applied to them, operation by operation.
    */
   async sourceFacts() {
-    const names = ['text-a4', 'form-a4', 'signature-a4', 'xfa-a4', 'annotation-a4', 'metadata-a4', 'invalid', 'raster-a4'];
+    const names = ['text-a4', 'form-a4', 'signature-a4', 'unsigned-signature-field', 'xfa-a4',
+      'annotation-a4', 'metadata-a4', 'invalid', 'raster-a4'];
     const original = PDFDocument.prototype.getForm;
     let calls = 0;
     // Reaching getForm() while reading facts is the defect, so make it loud.
@@ -533,17 +534,33 @@ window.__m5 = {
     const matrix = {};
     for (const [policyName, policy] of Object.entries(H7_POLICIES)) {
       matrix[policyName] = {};
-      for (const n of ['signature-a4', 'xfa-a4', 'form-a4', 'text-a4', 'invalid']) {
+      for (const n of ['signature-a4', 'unsigned-signature-field', 'xfa-a4', 'form-a4', 'text-a4', 'invalid']) {
         matrix[policyName][n] = Object.fromEntries(Object.keys(OPERATION_EFFECTS)
           .map((op) => [op, planOperation(facts[n], op, policy).status]));
       }
     }
-    return { facts, getFormCallsWhileReading: calls, getFormCallsByAssessSource: controlCalls, m3, matrix, effects: OPERATION_EFFECTS };
+    // An empty signature field is a form object: what happens to it is the
+    // operation's form contract, measured rather than assumed.
+    const emptyField = { before: facts['unsigned-signature-field'] };
+    for (const op of ['layer', 'monochrome']) {
+      try {
+        const bytes = await OPS[op]('unsigned-signature-field', await bytesOf('unsigned-signature-field'));
+        const after = await readSourceFacts(bytes);
+        emptyField[op] = {
+          hasSignatureField: after.hasSignatureField, hasAppliedSignature: after.hasAppliedSignature,
+          sigFlags: after.sigFlags, fields: after.fieldCount, hasAcroForm: after.hasAcroForm,
+        };
+      } catch (e) { emptyField[op] = { error: String(e?.message ?? e) }; }
+    }
+    return {
+      facts, getFormCallsWhileReading: calls, getFormCallsByAssessSource: controlCalls,
+      m3, matrix, effects: OPERATION_EFFECTS, policies: H7_POLICIES, emptyField,
+    };
   },
 
   /** RF-K2: B1/B2/B3 as defined, around the unchanged production processLayer/processMonochrome. */
   async batchPolicies() {
-    const policy = H7_POLICIES['refuse-if-dropped'];
+    const policy = H7_POLICIES['applied-only'];
     const plan = async (bytes) => {
       const p = planOperation(await readSourceFacts(bytes), 'layer', policy);
       return { status: p.status, reason: p.reasons.join(', ') };
@@ -864,7 +881,11 @@ window.__m5 = {
       const bytes = b64 * 3 / 4 - (url.endsWith('==') ? 2 : (url.endsWith('=') ? 1 : 0));
       out.push({ kind, width: w, height: h, grey, bytes, bytesPerPixel: bytes / (w * h) });
     }
-    return { samples: out, worst: Math.max(...out.map((s) => s.bytesPerPixel)), bound: RASTER_MODEL.jpegBytesPerPixelBound };
+    return {
+      samples: out, worst: Math.max(...out.map((s) => s.bytesPerPixel)),
+      bound: RASTER_MODEL.jpeg.measuredPerformanceBound,
+      formatBound: RASTER_MODEL.jpeg.formatUpperBound,
+    };
   },
 
   /**
@@ -894,7 +915,10 @@ window.__m5 = {
         dataUrls.length = 0; canvases.length = 0;
         const src = await bytesOf(name);
         const facts = await rasterFacts(src);
-        const plan = filePlan(facts, op, dpi);
+        // Measured output is compared with the planning model — the one that
+        // claims to predict size. The hard model only has to be above it.
+        const plan = filePlan(facts, op, dpi, 'planning');
+        const hardPlan = filePlan(facts, op, dpi, 'hard');
         const outBytes = await OPS[op](name, src, dpi);
         const rep = await inspect(outBytes, { render: false });
         const jpegs = rep.pages.map((p) => p.images[0]?.encodedBytes ?? 0);
@@ -902,7 +926,10 @@ window.__m5 = {
           op, name, dpi, pages: facts.pages.length,
           outputBytes: outBytes.length, outputBound: plan.output,
           jpegMax: Math.max(...jpegs), jpegBound: Math.max(...plan.pages.map((p) => p.jpeg)),
+          jpegHardBound: Math.max(...hardPlan.pages.map((p) => p.jpeg)),
           jpegPerPageWithinBound: jpegs.every((j, i) => j <= plan.pages[i].jpeg),
+          jpegPerPageWithinHardBound: jpegs.every((j, i) => j <= hardPlan.pages[i].jpeg),
+          outputHardBound: hardPlan.output,
           dataUrlExact: op === 'both' ? null : dataUrls.length === jpegs.length
             && dataUrls.every((len, i) => len === 4 * Math.ceil(jpegs[i] / 3) + RASTER_MODEL.dataUrlPrefix),
           canvasExact: canvases.slice(0, plan.pages.length).every((c, i) => {
@@ -917,7 +944,9 @@ window.__m5 = {
       HTMLCanvasElement.prototype.getContext = origCtx;
     }
 
-    // The model over every sheet and every resolution the UI offers.
+    // The model over every sheet and every resolution the UI offers — under
+    // both the fail-closed (format-derived) and the planning (measured) JPEG
+    // terms, kept apart.
     const MIB = 1024 * 1024;
     const sheets = { A4: [595.28, 841.89], A3: [841.89, 1190.55], A1: [1683.78, 2383.94], A0: [2383.94, 3370.39] };
     const one = (wPt, hPt, pages = 1, sourceBytes = 50000) => ({
@@ -927,53 +956,70 @@ window.__m5 = {
       maxRasterPixels, memory, maxOutputBytes: RASTER_LIMIT_CANDIDATES.MAX_OUTPUT_BYTES[0],
     });
     const offered = { monochrome: [150, 300, 600], both: [150, 300, 600], optimize: [72, 150, 300] };
-    const table = [];
-    for (const [sheet, [w, h]] of Object.entries(sheets)) {
-      for (const [op, dpis] of Object.entries(offered)) {
-        for (const dpi of dpis) {
-          const at = (mem) => runPlan([{ name: 'x', facts: one(w, h) }], op, dpi, limits(mem));
-          const r = at(512 * MIB);
-          table.push({
-            sheet, op, dpi, megapixels: r.maxPixels / 1e6, peakMiB: r.peak / MIB, outputMiB: r.output / MIB,
-            at512: r.status, at1G: at(1024 * MIB).status, at2G: at(2048 * MIB).status,
-          });
+    const pick = (r) => ({ status: r.status, reason: r.reason, peakMiB: r.peak / MIB, outputMiB: r.output / MIB });
+    const search = (lo, hi, ok) => { while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) lo = mid; else hi = mid; } return [lo, hi]; };
+
+    const modelFor = (mode) => {
+      const table = [];
+      for (const [sheet, [w, h]] of Object.entries(sheets)) {
+        for (const [op, dpis] of Object.entries(offered)) {
+          for (const dpi of dpis) {
+            const at = (mem) => runPlan([{ name: 'x', facts: one(w, h) }], op, dpi, limits(mem), mode);
+            const r = at(512 * MIB);
+            table.push({
+              sheet, op, dpi, megapixels: r.maxPixels / 1e6, peakMiB: r.peak / MIB, outputMiB: r.output / MIB,
+              at512: r.status, at1G: at(1024 * MIB).status, at2G: at(2048 * MIB).status,
+            });
+          }
         }
       }
-    }
-    // Which sheets and resolutions each raster-limit candidate admits (memory aside).
+      // (a) the raster ceiling, isolated: memory and output unbounded, so the
+      // only thing that can refuse is the pixel count itself.
+      const isolated = { maxRasterPixels: RASTER_LIMIT_CANDIDATES.MAX_RASTER_PIXELS[1], memory: Infinity, maxOutputBytes: Infinity };
+      const rasterAt = (width) => runPlan([{ name: 'x', facts: one(width, width * Math.SQRT2) }], 'monochrome', 300, isolated, mode);
+      const [rLo, rHi] = search(100, 20000, (wPt) => rasterAt(wPt).status === 'READY');
+      // (b) pages of A4 at 300 and at 150 dpi Monochrome under the default budget.
+      const pagesAt = (n, dpi, mem = 512 * MIB) => runPlan([{ name: 'x', facts: one(...sheets.A4, n) }], 'monochrome', dpi, limits(mem), mode);
+      const [p3Lo, p3Hi] = search(0, 400, (n) => n === 0 || pagesAt(n, 300).status === 'READY');
+      const [p1Lo, p1Hi] = search(0, 400, (n) => n === 0 || pagesAt(n, 150).status === 'READY');
+      // (c) files of one A4 page at 150 dpi Optimize, as a batch.
+      const filesAt = (k, mem = 512 * MIB) => runPlan(Array.from({ length: k }, (_, i) => ({ name: `f${i}`, facts: one(...sheets.A4) })), 'optimize', 150, limits(mem), mode);
+      const [fLo, fHi] = search(0, 400, (k) => k === 0 || filesAt(k).status === 'READY');
+      const a1 = (mem) => runPlan([{ name: 'x', facts: one(...sheets.A1) }], 'monochrome', 300, limits(mem), mode);
+      // (e) a job the output ceiling refuses on its own: the fewest A4 pages
+      // at 150 dpi whose output passes 256 MiB, with memory raised to 2 GiB.
+      const [, outputFirstOver] = search(0, 4000, (n) => n === 0
+        || runPlan([{ name: 'x', facts: one(...sheets.A4, n) }], 'monochrome', 150,
+          { maxRasterPixels: Infinity, memory: Infinity, maxOutputBytes: RASTER_LIMIT_CANDIDATES.MAX_OUTPUT_BYTES[0] }, mode).status === 'READY');
+      return {
+        mode,
+        jpegBytesPerPixel: mode === 'hard' ? RASTER_MODEL.jpeg.formatUpperBound : RASTER_MODEL.jpeg.measuredPerformanceBound,
+        table,
+        boundaries: {
+          raster: { largestWidthPt: rLo, firstRefusedWidthPt: rHi, largest: pick(rasterAt(rLo)), firstRefused: pick(rasterAt(rHi)), pixelsLargest: rasterAt(rLo).maxPixels, pixelsFirst: rasterAt(rHi).maxPixels },
+          pages300: { largest: p3Lo, firstRefused: p3Hi, atLargest: p3Lo > 0 ? pick(pagesAt(p3Lo, 300)) : null, atFirst: pick(pagesAt(p3Hi, 300)), firstAt1G: pick(pagesAt(p3Hi, 300, 1024 * MIB)), firstAt2G: pick(pagesAt(p3Hi, 300, 2048 * MIB)) },
+          pages150: { largest: p1Lo, firstRefused: p1Hi, atLargest: p1Lo > 0 ? pick(pagesAt(p1Lo, 150)) : null, atFirst: pick(pagesAt(p1Hi, 150)), firstAt1G: pick(pagesAt(p1Hi, 150, 1024 * MIB)), firstAt2G: pick(pagesAt(p1Hi, 150, 2048 * MIB)) },
+          files: { largest: fLo, firstRefused: fHi, atLargest: fLo > 0 ? pick(filesAt(fLo)) : null, atFirst: pick(filesAt(fHi)), firstAt1G: pick(filesAt(fHi, 1024 * MIB)), firstAt2G: pick(filesAt(fHi, 2048 * MIB)) },
+          a1mono300: { at512: pick(a1(512 * MIB)), at1G: pick(a1(1024 * MIB)), at2G: pick(a1(2048 * MIB)) },
+          independence: {
+            rasterAt2G: pick(runPlan([{ name: 'x', facts: one(...sheets.A1) }], 'monochrome', 600, limits(2048 * MIB), mode)),
+            rasterAtUnbounded: pick(runPlan([{ name: 'x', facts: one(...sheets.A0) }], 'monochrome', 600, limits(Infinity), mode)),
+            outputFirstOverPages: outputFirstOver,
+            outputAt2G: pick(pagesAt(outputFirstOver, 150, 2048 * MIB)),
+          },
+        },
+      };
+    };
+    // Which sheets and resolutions each raster-limit candidate admits — pixels
+    // only, so it does not depend on the JPEG term at all.
     const candidates = RASTER_LIMIT_CANDIDATES.MAX_RASTER_PIXELS.map((limit) => ({
       limitMpx: limit / 1e6,
       admits: Object.entries(sheets).flatMap(([s, [w, h]]) => [72, 150, 300, 600]
         .filter((dpi) => pagePixels(w, h, dpi).pixels <= limit).map((dpi) => `${s}@${dpi}`)),
     }));
-
-    // Boundaries.
-    const search = (lo, hi, ok) => { while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) lo = mid; else hi = mid; } return [lo, hi]; };
-    // (a) the raster ceiling, isolated from memory by an unbounded budget.
-    const rasterAt = (width) => runPlan([{ name: 'x', facts: one(width, width * Math.SQRT2) }], 'monochrome', 300, limits(Infinity));
-    const [rLo, rHi] = search(100, 20000, (wPt) => rasterAt(wPt).status === 'READY');
-    // (b) pages of A4 at 300 dpi Monochrome under the default budget.
-    const pagesAt = (n, mem = 512 * MIB) => runPlan([{ name: 'x', facts: one(...sheets.A4, n) }], 'monochrome', 300, limits(mem));
-    const [pLo, pHi] = search(1, 400, (n) => pagesAt(n).status === 'READY');
-    // (c) files of one A4 page at 150 dpi Optimize, as a batch.
-    const filesAt = (k, mem = 512 * MIB) => runPlan(Array.from({ length: k }, (_, i) => ({ name: `f${i}`, facts: one(...sheets.A4) })), 'optimize', 150, limits(mem));
-    const [fLo, fHi] = search(1, 400, (k) => filesAt(k).status === 'READY');
-    // (d) the first memory-refused single page, at the presets.
-    const a1 = (mem) => runPlan([{ name: 'x', facts: one(...sheets.A1) }], 'monochrome', 300, limits(mem));
-    const pick = (r) => ({ status: r.status, reason: r.reason, peakMiB: r.peak / MIB, outputMiB: r.output / MIB });
     return {
-      model: RASTER_MODEL, terms: RASTER_TERMS, limits: RASTER_LIMIT_CANDIDATES, validation, table, candidates,
-      boundaries: {
-        raster: { largestWidthPt: rLo, firstRefusedWidthPt: rHi, largest: pick(rasterAt(rLo)), firstRefused: pick(rasterAt(rHi)), pixelsLargest: rasterAt(rLo).maxPixels, pixelsFirst: rasterAt(rHi).maxPixels },
-        pages: { largest: pLo, firstRefused: pHi, atLargest: pick(pagesAt(pLo)), atFirst: pick(pagesAt(pHi)), firstAt1G: pick(pagesAt(pHi, 1024 * MIB)), firstAt2G: pick(pagesAt(pHi, 2048 * MIB)) },
-        files: { largest: fLo, firstRefused: fHi, atLargest: pick(filesAt(fLo)), atFirst: pick(filesAt(fHi)), firstAt1G: pick(filesAt(fHi, 1024 * MIB)) },
-        a1mono300: { at512: pick(a1(512 * MIB)), at1G: pick(a1(1024 * MIB)), at2G: pick(a1(2048 * MIB)) },
-        independence: {
-          rasterAt2G: pick(runPlan([{ name: 'x', facts: one(...sheets.A1) }], 'monochrome', 600, limits(2048 * MIB))),
-          rasterAtUnbounded: pick(runPlan([{ name: 'x', facts: one(...sheets.A0) }], 'monochrome', 600, limits(Infinity))),
-          outputAt2G: pick(pagesAt(pHi + 40, 2048 * MIB)),
-        },
-      },
+      model: RASTER_MODEL, terms: RASTER_TERMS, limits: RASTER_LIMIT_CANDIDATES, validation, candidates,
+      hard: modelFor('hard'), planning: modelFor('planning'),
     };
   },
 };

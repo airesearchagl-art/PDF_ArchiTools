@@ -10,7 +10,7 @@ their Info dictionary.
 
 ## Corpus
 
-38 synthetic PDFs from `scripts/make-fixtures.mjs` (none committed):
+39 synthetic PDFs from `scripts/make-fixtures.mjs` (none committed):
 
 - content — `vector-a4`, `text-a4`, `raster-a4`, `colour-raster-a4`, `ocr-a4`
   (full-page image + `Tr 3` text), `mixed-a4`, `transparency-a4`;
@@ -25,8 +25,10 @@ their Info dictionary.
 - added for RF-K3/K4/K6 — `internal-links` (GoTo `/XYZ`, named `/FitH`,
   `/FitR`, an outline item), `annotation-partial-crop`, `annotation-overlap`,
   `shared-image-a4-a1` / `shared-image-a1-a4`, `repeated-image`, `form-image`,
-  `annot-image`, `fine-line-scan` (300 dpi one-pixel linework on paper grain).
-  `form-a4` now sets an explicit `/DA` size (14 pt).
+  `annot-image`, `fine-line-scan` (300 dpi one-pixel linework on paper grain);
+- added for RF-L1 — `unsigned-signature-field` (an empty `/Sig` field with
+  `/SigFlags` 3 and no applied signature). `form-a4` sets an explicit `/DA`
+  size (14 pt).
 
 Every property a fixture claims is asserted before it is used (gate §1).
 
@@ -138,7 +140,7 @@ difference, 0–255, lower is closer:
 | crop-offset | 8.4 | 2.0 |
 | mediabox-larger | page shape differs, hidden content 1.7% | 2.0, hidden 0% |
 
-## Source facts and H7 (RF-K1)
+## Source facts and H7 (RF-K1, RF-L1)
 
 `readSourceFacts` on the corpus: `signature-a4` → one signature field, signed;
 `xfa-a4` → AcroForm with XFA, 0 fields; `form-a4` → 2 fields, form read; the
@@ -146,7 +148,22 @@ non-PDF → loaded by pdf-lib's lenient parser, pages invalid (M3 calls it
 unreadable at the same stage). `getForm()` trapped to throw while facts are
 read: **0 calls**; the same trap counts 1 call from M3's `assessSource` on an
 ordinary form. The planner's operation-effects table matches the measured XFA
-and form outcomes of all 8 operations it covers. Policy matrix: see
+and form outcomes of all 8 operations it covers.
+
+**An applied signature against an empty signature field** (RF-L1):
+
+| | `hasSignatureField` | `hasAppliedSignature` | `/SigFlags` |
+| --- | --- | --- | --- |
+| `signature-a4` (a `/Sig` field with a signature in `/V`) | true | **true** | 3 |
+| `unsigned-signature-field` (an empty `/Sig` field) | true | **false** | 3 |
+
+What the operations do to the empty field: **Layer keeps it** (field still
+there, still unsigned, AcroForm intact); **Monochrome removes it** with the
+AcroForm — i.e. it behaves as the form object it is. Under policy A
+(`applied-only`) the empty field plans `READY` for Layer and Margin in-place
+and `STRUCTURE_LOSS_REQUIRES_CONFIRMATION` for Monochrome A; under policy B
+(`any-signature-infrastructure`) every operation refuses it. Every policy
+refuses the *applied* signature for every operation. Policy matrix:
 `decision-matrix.md`.
 
 ## Batch policies (RF-K2)
@@ -210,37 +227,73 @@ Rendered at 300 dpi against the source:
 What removes linework is the resample below the scan's resolution, lossless or
 not; JPEG at the native resolution keeps every line.
 
-## Raster Budget (RF-K5)
+## Raster Budget (RF-K5, corrected by RF-L2)
 
-**JPEG worst case** at q0.8 (1024² and 2480×3508): uniform RGB noise 0.635,
-grey noise 0.582, **binary RGB noise 0.783**, binary grey 0.678, checkerboard
-0.196, colour checkerboard 0.102 B/px. Bound 1.0 B/px (≥ 1.25 × 0.783),
-re-measured and probed every run.
+**Every term, by basis.** Four bases, kept apart:
 
-**Validation against production** (7 runs, 16 pages: Monochrome text/raster
-A4 @300, Optimize mixed A4 @150, Monochrome `long-8` @150, Both @150, Optimize
-A1 @150, Optimize mixed sizes @72): every canvas exactly the planned W×H; every
-data URL exactly 4·⌈J/3⌉+23 characters; every JPEG and every output under its
-bound (e.g. Monochrome raster A4 @300: 1,176,256 ≤ 8,707,600 B).
+| basis | terms |
+| --- | --- |
+| exact | canvas 4·W·H; Monochrome's readback 4·W·H; data URL 4·⌈J/3⌉+23; a single file's publish (2 × output) |
+| source-derived upper bound | the embedded JPEG pdf-lib keeps until save; pdf-lib's whole-output save buffer; **the JPEG format's own 20 B/px** |
+| conservative upper bound | PDF.js scratch 8·W·H where the page has groups/soft masks/patterns/shadings; 12 B per source-image pixel; source bytes ×2; Both's Layer phase 3 × output; JSZip accumulation (4 × archive) |
+| measured performance (**not a bound**) | the 1.0 B/px planning ratio |
+| **unknown** | **the browser JPEG encoder's internal working memory** |
 
-**Per sheet and offered DPI** (single page, `MAX_RASTER_PIXELS` 128 Mi):
+**The JPEG term has two values, and they are not interchangeable.**
 
-| sheet | Monochrome/Both 150 · 300 · 600 | Optimize 72 · 150 · 300 |
+- *hard*: **20 B/px**, derived from baseline JPEG itself (ITU-T T.81): per 8×8
+  block, DC ≤ 16+11 bits and 63 ACs ≤ 16+10 bits each = 1665 bits = 208.2 B,
+  doubled by 0xFF byte stuffing = 416.4 B, three blocks per 64 pixels without
+  subsampling = 19.52 B/px, rounded up. Fail-closed, and independent of any
+  encoder's behaviour.
+- *planning*: **1.0 B/px**, from a measured worst case at q0.8 (1024² and
+  2480×3508): uniform RGB noise 0.635, grey noise 0.582, **binary RGB noise
+  0.783**, binary grey 0.678, checkerboard 0.196, colour checkerboard 0.102 —
+  ×≥1.25, re-measured and probed every run. **Performance evidence only.**
+
+**Validation against production** (7 runs, 16 pages). What is *validated* is
+the exact part: every canvas was exactly the planned W×H and every data URL
+exactly 4·⌈J/3⌉+23 characters. The JPEG sizes are only *observed* to fall under
+both terms (e.g. Monochrome raster A4 @300: output 1,176,255 ≤ planning
+8,707,600 ≤ hard 173,957,440 B) — for the planning term that is one more
+performance sample, not a limit it was held to; for the format term it is a
+sanity check on a bound that holds by derivation.
+
+**What 512 MiB takes, per model:**
+
+| | hard (fail-closed) | planning (estimate) |
 | --- | --- | --- |
-| A4 | 24 · 94 · 376 MiB — all READY at 512 | 4 · 15 · 61 MiB — READY |
-| A3 | 47 · 188 · 752 MiB — 600 needs 1 GiB | 7 · 30 · 122 MiB — READY |
-| A1 | 188 · **753 MiB (needs 1 GiB)** · raster-refused | 28 · 122 · 487 MiB — READY |
-| A0 | 377 · raster-refused · raster-refused | 56 · 244 MiB · raster-refused |
+| A4 @300 Monochrome | **0 pages** — one page is already 619 MiB | 30 pages (498 MiB); 31st refused (514 MiB) |
+| A4 @150 Monochrome | 6 pages (498 MiB); 7th refused | 123 pages (511 MiB); 124th refused |
+| A4 @150 Optimize, batch | 2 files (415 MiB); 3rd refused, 1 GiB takes it | 49 files (510 MiB); 50th refused, 1 GiB takes it |
+| A1 @300 Monochrome | 4,962 MiB — refused at every preset | 753 MiB — needs 1 GiB |
 
-**Boundaries:** raster ceiling — 134.19 Mpx accepted, 134.31 Mpx refused
-(memory unbounded to isolate it); A4 @300 Monochrome — 30 pages accepted
-(498 MiB), 31 refused `OVER_MEMORY_BUDGET` (514 MiB), and at 1 GiB and 2 GiB
-the 31st is refused by `OVER_OUTPUT_BUDGET` (257 MiB); one-page A4 @150
-Optimize batch — 49 files accepted (510 MiB), 50 refused (521 MiB), accepted
-at 1 GiB. A1 @600 at 2 GiB and A0 @600 at unbounded memory: `OVER_RASTER_LIMIT`.
+**Single page, per sheet and offered DPI** (`MAX_RASTER_PIXELS` 128 Mi):
 
-**Raster-limit candidates** admit (raster only): 64 Mi — through A3@300,
-A1@150, A0@150; 128 Mi — plus A3@600 and A1@300; 256 Mi — plus A0@300.
+| sheet | hard: Monochrome 150 · 300 · 600 | planning: Monochrome 150 · 300 · 600 |
+| --- | --- | --- |
+| A4 | 155 · 619 · 2,478 MiB | 24 · 94 · 376 MiB |
+| A3 | 310 · 1,239 · 4,956 MiB | 47 · 188 · 752 MiB |
+| A1 | 1,240 · 4,962 MiB · raster-refused | 188 · 753 MiB · raster-refused |
+| A0 | 2,483 MiB · raster-refused · raster-refused | 377 MiB · raster-refused · raster-refused |
+
+**Boundaries.** The raster ceiling is the same in both models — it is pixels
+only: **134.19 Mpx accepted, 134.31 Mpx refused** (memory and output unbounded
+to isolate it). In both models a larger memory budget buys past neither the
+raster ceiling (A1 @600 at 2 GiB: `OVER_RASTER_LIMIT`) nor the output ceiling
+(hard: 290 MiB of output at 2 GiB; planning: 257 MiB — both
+`OVER_OUTPUT_BUDGET`).
+
+**Raster-limit candidates** admit (raster only, encoder-independent): 64 Mi —
+through A3@300, A1@150, A0@150; **128 Mi** — plus A3@600 and A1@300; 256 Mi —
+plus A0@300.
+
+**Why H8 is blocked.** The gap between 0 and 30 A4 pages at 300 dpi is the
+encoder nobody here owns: the measured ratio cannot be a safety proof, the
+format bound leaves the flattening operations barely usable, and the encoder's
+own working memory is bounded by nothing in this research. H9 (the raster
+ceiling and the runtime canvas probe) is computed from pixel counts alone and
+is unaffected.
 
 ## Hardened lanes
 
@@ -252,8 +305,23 @@ Producer and ModDate.
 
 ## Gate totals, and what kind of evidence they are
 
-**M5 research gate (local branch run, committed as `evidence.json`):**
-ASSERT 27/27, PROBE 32/32, MEASURE 119, BASELINE-FAIL 18, HUMAN-OPEN 15;
+**Run-to-run determinism.** Three consecutive runs on one machine: every line's
+kind, name and verdict identical, and every total identical. Six `MEASURE`
+details moved, all of them production output byte counts and all by **±1 B**
+(Monochrome `text-a4` @300 126,805/126,805/126,804; `raster-a4` @300
+1,176,255/1,176,255/1,176,254; `long-8` @150 334,593/334,594/334,593; Optimize
+`mixed-a4` @150 86,797/86,797/86,796; `vector-a1` @150
+216,246/216,246/216,247; the Optimize size-growth row likewise). The canvas
+dimensions and data-URL lengths were exact in all three. The cause is the
+browser JPEG encoder — the same input, the same build, a different byte — which
+is also why no measurement of it can become a hard bound (RF-L2). Sizes quoted
+in these documents are therefore reproducible to ±1 B, not exactly.
+
+**M5 research gate (local branch run, committed as `evidence.json`, whose
+`productionBase`, `researchHeadAtRun`, `researchBranchAtRun`,
+`workingTreeDirty` and `coreCiRunsThisGate: false` record where it ran, and
+that Core CI did not run it):**
+ASSERT 28/28, PROBE 38/38, MEASURE 127, BASELINE-FAIL 19, HUMAN-OPEN 15;
 external HTTP(S) 0; page errors 0. Console errors: PdfTools' own
 `console.error` for the deliberately invalid inputs, and one same-origin
 `/favicon.ico` 404.

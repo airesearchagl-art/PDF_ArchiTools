@@ -1,26 +1,31 @@
 /**
- * The Raster Budget for the flattening operations — RF-K5.
+ * The Raster Budget for the flattening operations — RF-K5, corrected by RF-L2.
  *
  * Monochrome (A), Optimize (O1) and Both render every page to a canvas and
- * write a document of JPEGs. What that costs is decidable before the first
- * page: pixel counts follow from the page boxes and the DPI; everything else
- * is a named term below, each marked by what it rests on.
+ * write a document of JPEGs. Pixel counts follow from the page boxes and the
+ * DPI, and most of the pipeline's buffers follow from the code. One term does
+ * not: **how large the browser's JPEG encoder makes its output, and what it
+ * allocates while making it.** That encoder is not owned by this
+ * architecture, and no finite sweep of fixtures can bound either.
  *
- * Three ceilings, as in M4, checked in this order and independently:
+ * So this module keeps two models apart, and never lets one stand in for the
+ * other:
  *
- *   MAX_RASTER_PIXELS     per page — the canvas a page needs
- *   MAX_OPERATION_MEMORY  per run  — the peak of everything live at once
- *   MAX_OUTPUT_BYTES      per run  — the finished file or archive
+ *   'planning'  — the JPEG term is a *measured performance ratio* (the worst
+ *                 of six adversarial contents on one encoder, with margin).
+ *                 Useful for what a run will probably cost. **Not a safety
+ *                 proof**, and not a fail-closed guarantee.
+ *   'hard'      — the JPEG term is the *format's own upper bound*, derived
+ *                 from baseline JPEG entropy coding (ITU-T T.81) rather than
+ *                 from any encoder's behaviour. Fail-closed, and — as the
+ *                 gate shows — so large that the flattening operations barely
+ *                 fit at all.
  *
- * An explicit larger memory budget is a choice a person makes; it never moves
- * either of the other two. Nothing lowers the DPI to make a job fit.
- *
- * The raster ceiling is a *policy*, not the largest canvas one machine
- * allocated: that is measured (139 Mpx allocated, 279 Mpx did not, headless
- * Chrome here) and is exactly what must not be shipped as a portable limit.
- * The candidates below sit under it, and a production implementation would
- * still probe each canvas before drawing into it and refuse if it did not
- * allocate.
+ * Even under 'hard', the encoder's internal working memory is unknown, so the
+ * memory ceiling is still not a proof. That is why H8 is blocked pending a
+ * Raster Encoder / Memory Sub-Spike (see architecture.md), while H9 — the
+ * raster-pixel ceiling and the runtime canvas probe, both computed from
+ * pixels the architecture does own — can be adopted.
  *
  * Research code. Not part of the app.
  */
@@ -28,23 +33,38 @@ import { PDFDocument, PDFName, PDFDict, PDFArray, PDFRef, PDFStream } from 'pdf-
 
 const MIB = 1024 * 1024;
 
+/**
+ * Baseline sequential JPEG, worst case per 8x8 block (ITU-T T.81):
+ *   DC: a Huffman code of at most 16 bits + at most 11 extra bits
+ *   AC: 63 coefficients, each at most 16 + 10 bits
+ *   → (27 + 63x26) bits = 1665 bits = 208.2 bytes
+ * Entropy-coded bytes equal to 0xFF are followed by a stuffed 0x00, which at
+ * worst doubles that: 416.4 bytes per block. Without chroma subsampling a
+ * pixel belongs to three blocks of 64 pixels: 3 x 416.4 / 64 = 19.52 B/px.
+ * Rounded up, with headers and restart markers absorbed: 20 B/px.
+ */
+const JPEG_FORMAT_BOUND_BYTES_PER_PIXEL = 20;
+
 export const RASTER_MODEL = Object.freeze({
-    /**
-     * JPEG bytes per pixel at quality 0.8 (production's setting) on the worst
-     * content found: binary RGB noise, 0.783 B/px, the highest of six
-     * adversarial contents (uniform and binary noise, grey and colour, and
-     * one-pixel checkerboards) at two sizes on this Chrome's encoder. Rounded
-     * up to at least 1.25x that for other encoders. The gate re-measures it
-     * every run and fails the apparatus if it is ever exceeded.
-     */
-    jpegBytesPerPixelBound: 1.0,
+    jpeg: Object.freeze({
+        /** Fail-closed, derived from the format, not from an encoder. */
+        formatUpperBound: JPEG_FORMAT_BOUND_BYTES_PER_PIXEL,
+        /**
+         * Measured worst case over six adversarial contents (uniform and
+         * binary noise, grey and colour, and one-pixel checkerboards) at two
+         * sizes on this Chrome's encoder at q0.8: 0.783 B/px, rounded up to at
+         * least 1.25x. Performance evidence only.
+         */
+        measuredPerformanceBound: 1.0,
+        measuredWorst: 0.783,
+    }),
     /** `data:image/jpeg;base64,` */
     dataUrlPrefix: 23,
     /** Page object, content stream and xref overhead per output page. A bound. */
     perPageOverhead: 2048,
     /** Header, catalog, trailer. A bound. */
     documentOverhead: 8192,
-    /** JSZip STORE: local header + central directory per entry, with a long name. A bound. */
+    /** JSZip STORE: local header + central directory per entry. A bound. */
     zipEntryOverhead: 1024,
     zipOverhead: 1024,
 });
@@ -54,6 +74,9 @@ export const RASTER_LIMIT_CANDIDATES = Object.freeze({
     MAX_OPERATION_MEMORY: { default: 512 * MIB, explicit: [1024 * MIB, 2048 * MIB] },
     MAX_OUTPUT_BYTES: [256 * MIB, 512 * MIB],
 });
+
+export const jpegBytesPerPixel = (mode) => (mode === 'hard'
+    ? RASTER_MODEL.jpeg.formatUpperBound : RASTER_MODEL.jpeg.measuredPerformanceBound);
 
 /** The canvas production creates: `canvas.width = viewport.width` truncates. */
 export function pagePixels(wPt, hPt, dpi) {
@@ -67,7 +90,7 @@ export function pagePixels(wPt, hPt, dpi) {
  * What a plan needs to know about a source, read without rendering: the
  * visible box of each page, how many source-image pixels it draws, and
  * whether it has the transparency constructs that make PDF.js allocate
- * page-sized scratch canvases (groups, soft masks, patterns).
+ * page-sized scratch canvases (groups, soft masks, patterns, shadings).
  */
 export async function rasterFacts(bytes) {
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
@@ -118,21 +141,22 @@ export async function rasterFacts(bytes) {
 
 /**
  * One file through one flattening operation: named terms, a per-page peak,
- * the file's peak and its output bound.
+ * the file's peak and its output bound, under the chosen model.
  */
-export function filePlan(facts, op, dpi, model = RASTER_MODEL) {
+export function filePlan(facts, op, dpi, mode = 'hard', model = RASTER_MODEL) {
+    const perPixel = jpegBytesPerPixel(mode);
     const readbackPerPixel = op === 'optimize' ? 0 : 4; // Monochrome's getImageData copy
     const pages = facts.pages.map((p) => {
         const { w, h, pixels } = pagePixels(p.wPt, p.hPt, dpi);
-        const jpeg = Math.ceil(pixels * model.jpegBytesPerPixelBound);
+        const jpeg = Math.ceil(pixels * perPixel);
         const terms = {
-            canvas: pixels * 4,                                  // exact: production's canvas
-            pdfjsScratch: p.transparency ? pixels * 8 : 0,       // conservative: two page-sized PDF.js scratch canvases
-            sourceImageDecode: p.imagePixels * 12,               // conservative: decode + bitmap + downscale scratch
-            readback: pixels * readbackPerPixel,                 // exact: getImageData (Monochrome, Both)
-            jpeg,                                                // conservative: measured worst-case bound
+            canvas: pixels * 4,                                  // exact
+            pdfjsScratch: p.transparency ? pixels * 8 : 0,       // conservative upper bound
+            sourceImageDecode: p.imagePixels * 12,               // conservative upper bound
+            readback: pixels * readbackPerPixel,                 // exact
+            jpeg,                                                // hard: format bound; planning: measured ratio
             dataUrl: 4 * Math.ceil(jpeg / 3) + model.dataUrlPrefix, // exact given the JPEG
-            embedded: jpeg,                                      // inferred: pdf-lib JpegEmbedder keeps the bytes
+            embedded: jpeg,                                      // source-derived (pdf-lib keeps the bytes)
         };
         return { w, h, pixels, terms, peak: Object.values(terms).reduce((n, v) => n + v, 0), jpeg };
     });
@@ -144,14 +168,11 @@ export function filePlan(facts, op, dpi, model = RASTER_MODEL) {
         retained += p.jpeg + model.perPageOverhead;
     }
     const output = retained + model.documentOverhead;
-    // pdf-lib save: every retained JPEG plus one buffer of the whole file
-    // (PDFWriter.serializeToBuffer allocates `new Uint8Array(size)`).
     const save = source + retained + output;
-    // Both: Layer loads Monochrome's output, keeps it, and writes a new one.
     const bothPhase = op === 'both' ? output * 3 : 0;
     const maxPixels = Math.max(0, ...pages.map((p) => p.pixels));
     return {
-        op, dpi, pages, maxPixels,
+        op, dpi, mode, pages, maxPixels,
         terms: { source, duringPages, save, bothPhase },
         peak: Math.max(duringPages, save, bothPhase),
         output: op === 'both' ? output + model.perPageOverhead * pages.length : output,
@@ -164,8 +185,8 @@ export function filePlan(facts, op, dpi, model = RASTER_MODEL) {
  * `generateAsync`, which accumulates chunks, concatenates them, converts to an
  * ArrayBuffer and makes a Blob (jszip/lib/stream/StreamHelper.js:46-68, 28-31).
  */
-export function runPlan(files, op, dpi, limits, model = RASTER_MODEL) {
-    const plans = files.map((f) => ({ name: f.name, ...filePlan(f.facts, op, dpi, model) }));
+export function runPlan(files, op, dpi, limits, mode = 'hard', model = RASTER_MODEL) {
+    const plans = files.map((f) => ({ name: f.name, ...filePlan(f.facts, op, dpi, mode, model) }));
     let kept = 0;
     let during = 0;
     for (const p of plans) {
@@ -195,21 +216,31 @@ export function runPlan(files, op, dpi, limits, model = RASTER_MODEL) {
         status = 'OVER_OUTPUT_BUDGET';
         reason = `output up to ${(output / MIB).toFixed(0)} MiB; the limit is ${(limits.maxOutputBytes / MIB).toFixed(0)} MiB`;
     }
-    return { status, reason, peak, output, maxPixels, during, publish, files: plans };
+    return { status, reason, peak, output, maxPixels, during, publish, mode, files: plans };
 }
 
-/** The named terms and what each rests on — for the documents and the gate. */
+/**
+ * Every term and what it rests on. Four bases, kept apart on purpose:
+ *
+ *   exact                      arithmetic on the code that runs
+ *   source-derived upper bound read out of a pinned implementation or a format
+ *   conservative upper bound   a bound chosen above anything observed, where
+ *                              the implementation does not state one
+ *   measured performance       observed behaviour; useful, never a guarantee
+ */
 export const RASTER_TERMS = Object.freeze([
     ['canvas (4·W·H)', 'exact', 'pdf-processor.ts:75-82, 117-124; canvas.width truncates'],
-    ['getImageData readback (4·W·H, Monochrome/Both)', 'exact', 'pdf-processor.ts:126; modified in place, no third buffer'],
-    ['PDF.js scratch canvases (8·W·H when groups, soft masks, patterns or shadings)', 'conservative', 'pdf.mjs cachedCanvases: transparent, groupAt, maskCanvas, pattern'],
-    ['source image decode (12 B per source-image pixel)', 'conservative', 'decode buffer + bitmap + downscale scratch'],
-    ['JPEG (≤ 1.0 B/px)', 'conservative', 'measured worst case (binary RGB noise, 0.783 B/px) × ≥1.25; re-measured every run'],
+    ['getImageData readback (4·W·H, Monochrome/Both)', 'exact', 'pdf-processor.ts:126; modified in place'],
     ['data URL (4·⌈J/3⌉ + 23)', 'exact', 'toDataURL; one byte per base64 character'],
-    ['embedded JPEG kept until save (J)', 'inferred', 'pdf-lib JpegEmbedder keeps imageData'],
-    ['save buffer (whole output)', 'inferred', 'pdf-lib PDFWriter.serializeToBuffer: new Uint8Array(size)'],
-    ['source bytes ×2', 'conservative', 'File.arrayBuffer() + PDF.js getDocument copy'],
-    ['Both: Layer phase (3 × output)', 'conservative', 'load + parsed streams + new output'],
+    ['embedded JPEG kept until save (J)', 'source-derived upper bound', 'pdf-lib JpegEmbedder keeps imageData'],
+    ['save buffer (whole output)', 'source-derived upper bound', 'pdf-lib PDFWriter.serializeToBuffer: new Uint8Array(size)'],
+    ['JPEG, hard model (≤ 20 B/px)', 'source-derived upper bound', 'ITU-T T.81 baseline entropy coding + byte stuffing, no subsampling'],
+    ['JPEG, planning model (≤ 1.0 B/px)', 'measured performance', 'worst of six adversarial contents on one encoder (0.783 B/px) × ≥1.25 — not a bound'],
+    ['JPEG encoder internal working memory', 'unknown', 'the browser encoder is not owned; nothing here bounds its scratch'],
+    ['PDF.js scratch canvases (8·W·H with groups/soft masks/patterns/shadings)', 'conservative upper bound', 'pdf.mjs cachedCanvases'],
+    ['source image decode (12 B per source-image pixel)', 'conservative upper bound', 'decode + bitmap + downscale scratch'],
+    ['source bytes ×2', 'conservative upper bound', 'File.arrayBuffer() + PDF.js getDocument copy'],
+    ['Both: Layer phase (3 × output)', 'conservative upper bound', 'load + parsed streams + new output'],
     ['single file publish (2 × output)', 'exact', 'Uint8Array + Blob'],
-    ['batch: outputs kept by JSZip, then 4 × archive', 'conservative', 'StreamHelper accumulate + concat + ArrayBuffer + Blob'],
+    ['batch: outputs kept by JSZip, then 4 × archive', 'conservative upper bound', 'StreamHelper accumulate + concat + ArrayBuffer + Blob'],
 ]);

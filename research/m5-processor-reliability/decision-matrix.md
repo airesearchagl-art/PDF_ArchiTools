@@ -16,12 +16,19 @@ All numbers: M5 research gate, local branch run, `evidence.json`.
 
 ## Facts and policy (H7)
 
-| operation → policy | annotator-equivalent | **refuse-if-dropped** | confirm-if-dropped |
-| --- | --- | --- | --- |
-| signed document, any operation | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE |
-| XFA, Layer / Margin in-place / Mono C / O2 / O3 / hardened lanes | XFA_UNSAFE | **READY** | READY |
-| XFA, Monochrome A / Optimize O1 | XFA_UNSAFE | **XFA_UNSAFE** | STRUCTURE_LOSS_REQUIRES_CONFIRMATION |
-| ordinary form, flattening | STRUCTURE_LOSS_REQUIRES_CONFIRMATION | same | same |
+| document → policy | **applied-only** (A) | any-signature-infrastructure (B) | annotator-equivalent | confirm-if-dropped |
+| --- | --- | --- | --- | --- |
+| **applied** signature, any operation | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE |
+| **empty** `/Sig` field, Layer / Margin in-place | **READY** | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE | READY |
+| **empty** `/Sig` field, Monochrome A / O1 | **STRUCTURE_LOSS_REQUIRES_CONFIRMATION** (the form is among the losses) | SIGNATURE_UNSAFE | SIGNATURE_UNSAFE | same as A |
+| XFA, Layer / Margin in-place / Mono C / O2 / O3 / hardened lanes | **READY** | READY | XFA_UNSAFE | READY |
+| XFA, Monochrome A / Optimize O1 | **XFA_UNSAFE** | XFA_UNSAFE | XFA_UNSAFE | STRUCTURE_LOSS_REQUIRES_CONFIRMATION |
+| ordinary form, flattening | STRUCTURE_LOSS_REQUIRES_CONFIRMATION | same | same | same |
+
+Measured, an empty `/Sig` field behaves as a form field: Layer keeps it
+(`hasSignatureField` still true, `hasAppliedSignature` false), Monochrome
+removes it with the AcroForm. B would refuse a document that merely contains a
+blank signature box.
 
 ## Monochrome
 
@@ -32,7 +39,7 @@ All numbers: M5 research gate, local branch run, `evidence.json`.
 | signature / XFA | removed / removed | per H7 / kept | per H7 / kept |
 | size, vector A4 | 112,759 B | 1,108 B | 1,108 B |
 | size, raster A4 | 1,176,256 B | refused | 147,665 B |
-| memory | Raster Budget (A1@300 needs 1 GiB) | content streams | + one decoded image at a time |
+| memory | Raster Budget — A1@300 is 753 MiB planning / 4,962 MiB hard, and H8 is blocked | content streams | + one decoded image at a time |
 | coverage | everything renders | refuses any image | refuses unsupported classes |
 | real-drawing readiness | shipped | not claimed | **not claimed** |
 | **recommendation** | **MVP, explicit confirmed flattening inside the Raster Budget** | not alone | **follow-up spike on real drawings** |
@@ -74,7 +81,7 @@ All numbers: M5 research gate, local branch run, `evidence.json`.
 | a failure can be missed | no | no (manifest + UI) | no (per-file state) |
 | **recommendation** | | **B2** | |
 
-## Raster Budget (H8, H9)
+## Raster ceiling (H9 — adoptable)
 
 | | 64 Mi px | **128 Mi px** | 256 Mi px |
 | --- | --- | --- | --- |
@@ -82,7 +89,24 @@ All numbers: M5 research gate, local branch run, `evidence.json`.
 | refuses | A3@600, A1@300, A0@300, all @600 on A1/A0 | A0@300, A1/A0@600 | A1/A0@600 |
 | **recommendation** | | **policy ceiling + runtime allocation probe** | above one machine's measured success, too close to its failure |
 
-Memory: **512 MiB default, explicit 1 GiB / 2 GiB**; output **256 MiB**.
+Pixel counts only: the boundary (134.19 Mpx accepted / 134.31 refused) is
+identical under both memory models, because it does not involve the encoder.
+
+## Operation memory (H8 — blocked)
+
+| | hard model (fail-closed) | planning model (estimate) |
+| --- | --- | --- |
+| JPEG term | 20 B/px, from ITU-T T.81 | 1.0 B/px, from a measured worst case |
+| basis | source-derived upper bound | measured performance — **not a bound** |
+| A4 @300 Monochrome in 512 MiB | **0 pages** (one page = 619 MiB) | 30 pages |
+| A4 @150 Monochrome in 512 MiB | 6 pages | 123 pages |
+| A4 @150 Optimize batch in 512 MiB | 2 files | 49 files |
+| A1 @300 Monochrome | refused at every preset (4,962 MiB) | needs 1 GiB (753 MiB) |
+| encoder working memory | unknown in both | unknown in both |
+| **status** | **H8 BLOCKED pending a Raster Encoder / Memory Sub-Spike**; 512 MiB / 1 GiB / 2 GiB remain candidates | |
+
+Output: **256 MiB**, enforceable on the finished artifact, whose size is
+measured rather than predicted.
 
 ## Layer stacking (H13b)
 

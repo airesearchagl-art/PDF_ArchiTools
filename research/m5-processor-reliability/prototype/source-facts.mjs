@@ -34,8 +34,16 @@ const text = (v) => (v instanceof PDFString || v instanceof PDFHexString ? v.dec
  *   pageCount: number, pagesValid: boolean, pageError: string|null,
  *   hasAcroForm: boolean, hasXfa: boolean, sigFlags: number|null,
  *   fieldCount: number, signatureFields: {name: string, signed: boolean}[],
+ *   hasSignatureField: boolean, hasAppliedSignature: boolean,
  *   formInspectionState: 'no-form'|'read'|'unreadable', formError: string|null,
  * }>}
+ *
+ * A signature field is not a signature. A form can carry an empty `/Sig`
+ * field — a place for a signature nobody has applied — and `/SigFlags` only
+ * says the document is meant to be signable. Both are facts; neither is "this
+ * document is signed". Only a field with a signature dictionary in `/V` is an
+ * applied signature, and only that is what re-serialising breaks. All four are
+ * reported, and the verdict is left to `planOperation`.
  */
 export async function readSourceFacts(bytes) {
     const facts = {
@@ -43,7 +51,13 @@ export async function readSourceFacts(bytes) {
         pageCount: 0, pagesValid: false, pageError: null,
         hasAcroForm: false, hasXfa: false, sigFlags: null,
         fieldCount: 0, signatureFields: [],
+        hasSignatureField: false, hasAppliedSignature: false,
         formInspectionState: 'no-form', formError: null,
+    };
+    const derive = () => {
+        facts.hasSignatureField = facts.signatureFields.length > 0;
+        facts.hasAppliedSignature = facts.signatureFields.some((f) => f.signed);
+        return facts;
     };
     let doc;
     try {
@@ -118,7 +132,7 @@ export async function readSourceFacts(bytes) {
         facts.formInspectionState = 'unreadable';
         facts.formError = String(error?.message ?? error);
     }
-    return facts;
+    return derive();
 }
 
 // ---------------------------------------------------------------------------
@@ -141,18 +155,24 @@ export const OPERATION_EFFECTS = Object.freeze({
 
 /**
  * H7's candidate policies, as data. None is adopted; the gate applies each so
- * the Human Gate can see what it would decide.
+ * the Human Gate can see what each would decide.
  *
- *   signed          'refuse'                 — every candidate re-serialises
- *   xfa             'refuse-always'          — the Annotator's rule
- *                   'refuse-if-dropped'      — refuse only operations that drop it
- *                   'confirm-if-dropped'     — a flattening may drop it on confirmation
- *   formUnreadable  'refuse'                 — cannot tell whether it is signed
+ *   signature       'refuse-applied'   — refuse a signature that exists (A)
+ *                   'refuse-any-field' — refuse any signature infrastructure,
+ *                                        signed or not (B)
+ *   xfa             'refuse-always' | 'refuse-if-dropped' | 'confirm-if-dropped'
+ *   formUnreadable  'refuse'           — a form that cannot be read may hide
+ *                                        an applied signature
+ *
+ * Under 'refuse-applied' an *empty* signature field is not a refusal: it is a
+ * form field, and it is kept or lost by the operation's form contract like any
+ * other — which the gate measures.
  */
 export const H7_POLICIES = Object.freeze({
-    'annotator-equivalent': { signed: 'refuse', xfa: 'refuse-always', formUnreadable: 'refuse' },
-    'refuse-if-dropped': { signed: 'refuse', xfa: 'refuse-if-dropped', formUnreadable: 'refuse' },
-    'confirm-if-dropped': { signed: 'refuse', xfa: 'confirm-if-dropped', formUnreadable: 'refuse' },
+    'applied-only': { signature: 'refuse-applied', xfa: 'refuse-if-dropped', formUnreadable: 'refuse' },
+    'any-signature-infrastructure': { signature: 'refuse-any-field', xfa: 'refuse-if-dropped', formUnreadable: 'refuse' },
+    'annotator-equivalent': { signature: 'refuse-any-field', xfa: 'refuse-always', formUnreadable: 'refuse' },
+    'confirm-if-dropped': { signature: 'refuse-applied', xfa: 'confirm-if-dropped', formUnreadable: 'refuse' },
 });
 
 /**
@@ -167,11 +187,18 @@ export function planOperation(facts, operation, policy) {
     if (facts.encrypted) return { status: 'ENCRYPTED', reasons: ['encrypted'] };
     if (!facts.pagesValid) return { status: 'UNSUPPORTED_DOCUMENT', reasons: [facts.pageError] };
     if (facts.formInspectionState === 'unreadable' && policy.formUnreadable === 'refuse') {
-        return { status: 'SIGNATURE_UNSAFE', reasons: ['the form could not be read, so a signature cannot be ruled out'] };
+        return { status: 'SIGNATURE_UNSAFE', reasons: ['the form could not be read, so an applied signature cannot be ruled out'] };
     }
-    const signed = facts.signatureFields.length > 0 || (facts.sigFlags !== null && facts.sigFlags > 0);
-    if (signed && effect.reserialises && policy.signed === 'refuse') {
-        return { status: 'SIGNATURE_UNSAFE', reasons: ['re-saving invalidates the signature'] };
+    if (facts.hasAppliedSignature && effect.reserialises) {
+        return { status: 'SIGNATURE_UNSAFE', reasons: ['re-saving invalidates the applied signature'] };
+    }
+    if (policy.signature === 'refuse-any-field' && (facts.hasSignatureField || (facts.sigFlags ?? 0) > 0)) {
+        return {
+            status: 'SIGNATURE_UNSAFE',
+            reasons: [facts.hasSignatureField
+                ? 'an empty signature field is present, and this policy refuses any signature infrastructure'
+                : 'SigFlags is set, and this policy refuses any signature infrastructure'],
+        };
     }
     const losses = [];
     if (facts.hasXfa) {

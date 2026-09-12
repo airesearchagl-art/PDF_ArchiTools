@@ -341,6 +341,24 @@ await annotated('annotation-a4', SHEET.A4, 0, 'a Square annotation with an appea
     written.push({ name: 'signature-a4', bytes: bytes.length, note: 'a signature whose /ByteRange covers the file, digest in /Contents' });
 }
 {
+    // A place for a signature that nobody has signed: a /Sig field with no
+    // /V, and /SigFlags set. Re-serialising it breaks nothing, because there
+    // is nothing signed to break.
+    const { doc, font } = await newDoc('M5 unsigned signature field');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'UNSIGNED-FIELD-M5');
+    const field = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFString.of('m5.unsigned'),
+        Rect: [80, 120, 300, 180], F: 4, P: page.ref,
+    }));
+    page.node.set(PDFName.of('Annots'), doc.context.obj([field]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.obj({
+        Fields: doc.context.obj([field]), SigFlags: PDFNumber.of(3),
+    }));
+    await write('unsigned-signature-field', doc, 'an empty /Sig field with /SigFlags, and no applied signature');
+}
+{
     const { doc, font } = await newDoc('M5 XFA');
     const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
     drawVector(page, SHEET.A4, { colour: false });

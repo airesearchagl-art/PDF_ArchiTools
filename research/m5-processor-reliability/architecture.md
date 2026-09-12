@@ -46,17 +46,29 @@ What each operation does to a document is itself data (`OPERATION_EFFECTS`:
 re-serialises, keeps XFA, keeps forms), held against the measurements by the
 gate. H7's candidate policies are data too:
 
-| policy | signed | XFA |
-| --- | --- | --- |
-| `annotator-equivalent` | refuse | refuse always |
-| `refuse-if-dropped` (recommended) | refuse | refuse only the operations that drop it |
-| `confirm-if-dropped` | refuse | a flattening may drop it, confirmed |
+**A signature field is not a signature.** The facts keep three things apart:
+`signatureFields[]` with a `signed` flag each, `hasSignatureField`,
+`hasAppliedSignature`, and `/SigFlags` as its own fact. Only a `/Sig` field
+whose `/V` holds a signature dictionary is an applied signature, and only that
+is what re-serialising destroys. An *empty* signature field is a form field:
+measured, Layer keeps it and Monochrome removes it with the rest of the form.
 
-Every candidate refuses a signed document for every operation — every
+| policy | signature | XFA |
+| --- | --- | --- |
+| `applied-only` (recommended) | refuse an **applied** signature; an empty field falls to the operation's form contract | refuse only the operations that drop it |
+| `any-signature-infrastructure` | refuse any `/Sig` field or `/SigFlags`, signed or not | refuse only the operations that drop it |
+| `annotator-equivalent` | refuse any signature infrastructure | refuse always |
+| `confirm-if-dropped` | refuse an applied signature | a flattening may drop XFA, confirmed |
+
+Every candidate refuses an *applied* signature for every operation — every
 operation re-serialises, so no signature survives (measured for Layer and both
-hardened lanes). Under `refuse-if-dropped`, Layer, Margin in-place, Monochrome
-C, Optimize O2/O3 and both hardened lanes plan an XFA document `READY`, and
-Monochrome A / Optimize O1 plan `XFA_UNSAFE`.
+hardened lanes). They differ on the empty field: under `applied-only` it plans
+`READY` for Layer and Margin in-place and
+`STRUCTURE_LOSS_REQUIRES_CONFIRMATION` for Monochrome A (the form is among the
+losses); under `any-signature-infrastructure` every operation refuses it.
+On XFA: under `applied-only`, Layer, Margin in-place, Monochrome C, Optimize
+O2/O3 and both hardened lanes plan `READY`, and Monochrome A / Optimize O1
+plan `XFA_UNSAFE`.
 
 ## 3. PLAN → RESULT
 
@@ -101,44 +113,57 @@ and B2 publish nothing; B3 has published only the file that finished first. An
 aggregate single-publish run fed to the B3 conformance check is rejected
 (`1 publishes for 2 successes; publishes an archive`).
 
-## 5. The Raster Budget for flattening operations (RF-K5 — closed here)
+## 5. The Raster Budget for flattening operations (RF-K5, corrected by RF-L2)
 
 `prototype/raster-budget.mjs`. Three ceilings, checked in order, each
 independent; an explicit memory preset never moves the other two; nothing
 lowers the DPI.
 
-| ceiling | recommended | alternatives measured |
+| ceiling | status | recommended |
 | --- | --- | --- |
-| `MAX_RASTER_PIXELS` per page | **128 Mi px (134.2 Mpx)** + a runtime canvas-allocation probe | 64 Mi / 256 Mi (admits in `measurements.md`) |
-| `MAX_OPERATION_MEMORY` | **512 MiB default, explicit 1 GiB / 2 GiB** | — |
-| `MAX_OUTPUT_BYTES` | **256 MiB** | 512 MiB |
+| `MAX_RASTER_PIXELS` per page | **adoptable (H9)** — computed from pixel counts alone | **128 Mi px (134.2 Mpx)** + a runtime canvas-allocation probe |
+| `MAX_OPERATION_MEMORY` | **BLOCKED (H8)** — see below | 512 MiB / 1 GiB / 2 GiB remain *candidates*, not guarantees |
+| `MAX_OUTPUT_BYTES` | adoptable as a **post-hoc** check on the finished artifact (its size is measured, not predicted) | **256 MiB** |
 
 The raster ceiling is a portable *policy* below what one machine allocated
 (139 Mpx yes, 279 Mpx no) — not that machine's limit.
 
-Named terms (exact / conservative / inferred, listed in `measurements.md`):
-canvas 4·W·H; Monochrome's readback 4·W·H; PDF.js scratch 8·W·H where the page
-has groups, soft masks, patterns or shadings; 12 B per source-image pixel; JPEG
-≤ 1.0 B/px (measured worst case 0.783 B/px on binary RGB noise, ×≥1.25); data
-URL 4·⌈J/3⌉+23; the embedded JPEG kept until save; the save buffer; source
-bytes ×2; Both's Layer phase 3 × output; a single file's Blob; a batch's JSZip
-accumulation, concatenation and Blob.
+**Every term carries its basis** (`measurements.md`): exact (canvas, readback,
+data URL, single-file publish), source-derived upper bound (pdf-lib's retained
+JPEG and save buffer; the JPEG *format's* 20 B/px), conservative upper bound
+(PDF.js scratch, source-image decode, source bytes, Both's Layer phase, JSZip),
+measured performance (the 1.0 B/px planning ratio) and **unknown** (the browser
+JPEG encoder's internal working memory).
 
-Validated against production on 7 runs / 16 pages: every canvas exactly as
-planned, every data URL exact to the byte, every JPEG and every output under
-its bound. Applied: A4 at 300 dpi Monochrome takes 30 pages at 512 MiB (the
-31st is refused by name; at 1 GiB and 2 GiB it is the output ceiling that
-refuses); a batch takes 49 one-page A4 files at 150 dpi Optimize (the 50th
-needs 1 GiB); A1 at 300 dpi Monochrome needs 1 GiB; A0 at 300 and A1/A0 at 600
-are refused by the raster ceiling at any memory.
+**Why H8 cannot be adopted now (RF-L2).** Production encodes with
+`canvas.toDataURL('image/jpeg', 0.8)`. That encoder is not owned by this
+architecture: no finite sweep of fixtures can bound its output, and nothing
+here bounds its scratch. So the research keeps two models apart and never lets
+one stand in for the other:
 
-H8 and H9 therefore have concrete choices and are part of this Adoption Gate.
+- the **planning** model (measured ratio) says 512 MiB takes 30 A4 pages at
+  300 dpi — an estimate, useful for what a run will probably cost;
+- the **hard** model (format bound) says it takes **none** — one A4 page at
+  300 dpi is already 619 MiB — and 6 pages at 150 dpi.
+
+Neither is a memory guarantee while the encoder's own working set is unknown.
+**H8 is therefore BLOCKED pending a Raster Encoder / Memory Sub-Spike.** The
+way out is Route A: an encoding path whose size and working memory follow from
+its implementation — the repository already owns one, M4's stored-PNG encoder,
+whose encoded size is exact by construction, at a file-size cost this research
+has not weighed. Until then 512 MiB stays a candidate, and every "planning" number
+is labelled an estimate.
+
+**What is unaffected:** the raster ceiling and the canvas probe (H9) — pixel
+counts, measured identically in both models (134.19 Mpx accepted, 134.31
+refused) — and the independence of the ceilings: in both models a larger memory
+budget buys past neither the raster ceiling nor the output ceiling.
 
 ## 6. Monochrome
 
 | candidate | measured |
 | --- | --- |
-| **A** production (rasterise) | grey; removes text, OCR, vectors, annotations, links, forms, signature, XFA, metadata; ×86 on a vector page |
+| **A** production (rasterise) | grey; removes text, OCR, vectors, annotations, links, forms, signature fields, XFA, metadata; ×86 on a vector page |
 | **B** colour operators only | grey and keeps everything where it converts; refuses every page that draws an image |
 | **C** B + exact grey re-encoding of decodable images | grey on all 14 inputs it accepted (incl. a saturated image 1.000 → 0.000 and production's own JPEG output); keeps text, OCR, vectors, annotations, forms, metadata |
 
@@ -209,7 +234,9 @@ unchanged. H3, H6.
 
 ## 10. Signatures, XFA, metadata, local-only
 
-- Signed → refuse, every operation (§2). XFA → per the adopted H7 policy.
+- An **applied** signature → refuse, every operation (§2); an **empty** `/Sig`
+  field is a form field and is handled by the operation's form contract (§2,
+  H6). XFA → per the adopted H7 policy.
 - Every pdf-lib-default load rewrites Producer/ModDate; rebuilt documents drop
   Title, Author and XMP. H12.
 - Zero external HTTP(S) in every measurement; same-origin PDF.js worker; no new
@@ -219,8 +246,9 @@ unchanged. H3, H6.
 
 `normalizePageSize` and `updateTitleBlocks` enter unchanged: per-file functions
 with typed thrown errors mapped to `FileResult.FAILED` with their code. The
-orchestration only *adds* the SourceFacts step (today both invalidate a
-signature without refusing), ownership, the batch policy and a single publish.
+orchestration only *adds* the SourceFacts step (today both invalidate an
+applied signature without refusing), ownership, the batch policy and a single
+publish.
 Their own guarantees — annotation-exposure refusal, orientation refusal, vector
 preservation, `/Rotate`, the title-block Human workflow — stay where they are;
 their gates pass unchanged (339, 20, 122, 31).

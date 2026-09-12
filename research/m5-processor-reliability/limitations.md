@@ -13,14 +13,25 @@
 - **The signature is a structural proxy.** `/ByteRange` covers the file and
   `/Contents` holds a SHA-256 of it; there is no certificate and no PKCS#7.
 - **Browser heap is not measured.** The Raster Budget is a source-derived model
-  whose exact terms (canvas, data URL) and bounds (JPEG, outputs) are validated
-  against production on 16 pages; its conservative and inferred terms (PDF.js
-  scratch canvases, source-image decode, pdf-lib and JSZip buffers) are not
-  measured in the heap.
-- **The JPEG bound comes from one encoder.** 0.783 B/px worst case on this
-  Chrome's JPEG encoder at q0.8, bounded at 1.0 B/px; other browsers' encoders
-  are unmeasured. The gate fails its apparatus if the measured worst case ever
-  exceeds the bound.
+  whose exact terms (canvas, data URL) are validated against production on 16
+  pages; its conservative terms (PDF.js scratch canvases, source-image decode,
+  pdf-lib and JSZip buffers) are not measured in the heap.
+- **The JPEG encoder is not owned, and that is why H8 is blocked.** Its encoded
+  size is bounded here only by the *format's* worst case (ITU-T T.81 entropy
+  coding plus byte stuffing, 20 B/px), and its internal working memory is
+  bounded by nothing at all. The measured 0.783 B/px worst case over six
+  adversarial contents on one Chrome encoder is **performance evidence, not a
+  safety proof**: a finite fixture sweep cannot bound an encoder, and other
+  browsers' encoders are unmeasured. Every "planning" number in this research
+  is an estimate; only the "hard" model is fail-closed, and even it does not
+  cover the encoder's scratch.
+- **The same encoder does not even repeat itself to the byte.** Across three
+  consecutive gate runs on one machine and one browser build, every classified
+  line was identical, while six measured production output sizes moved by
+  **±1 B** (e.g. Monochrome `text-a4` @300: 126,805 / 126,805 / 126,804 B). The
+  canvas dimensions and data-URL lengths stayed exact in every run. A quantity
+  that is not reproducible on one machine cannot be turned into a bound by
+  measuring it on more of them.
 - **The canvas limit is measured on one machine** (139 Mpx allocated, 279 Mpx
   did not). The recommended 128 Mi px ceiling is a policy below that, paired
   with a runtime allocation probe; the portable limit of every supported
@@ -37,7 +48,11 @@
 
 - **Source facts** read at the dictionary level; a document with a broken but
   loadable AcroForm reads as `formInspectionState: 'unreadable'`, which every
-  H7 candidate treats as a possible signature.
+  H7 candidate treats as possibly hiding an applied signature. An applied
+  signature is recognised by a `/Sig` field whose `/V` is a dictionary; a
+  signature whose value is stored somewhere this reading does not look would be
+  reported as an empty field. `/SigFlags` is recorded but never treated as
+  evidence that a signature exists.
 - **Monochrome B/C** convert Device RGB/CMYK/Gray colour operators, Form
   XObjects and annotation appearances, and Flate/DCT 8-bit DeviceRGB/Gray
   images; everything else is refused (ICCBased/CalRGB/Lab, Indexed, 1- and

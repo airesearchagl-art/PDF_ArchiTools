@@ -38,7 +38,7 @@ Source for every number: `evidence.json` (`sections.baseline`), produced by
 | annotations | retained | **lost** | **lost** | **lost** | **lost** |
 | links | retained | **lost** | **lost** | **lost** | **lost** |
 | AcroForm / value | retained with value | **lost** | **lost** | **lost** | **lost** |
-| signature | **invalidated, silently** (digest mismatch) | removed | removed | removed | removed |
+| applied signature | **invalidated, silently** (digest mismatch) | removed | removed | removed | removed |
 | XFA | retained | **removed** | **removed** | **removed** | **removed** |
 | metadata | Title/Author/XMP kept; **Producer, ModDate rewritten** | **all lost** (Title null) | **all lost** | **all lost** | **all lost** |
 | hidden (outside-CropBox) content | stays hidden | stays hidden | stays hidden | **revealed** (1.7% of the page) | stays hidden |
@@ -50,7 +50,10 @@ Source for every number: `evidence.json` (`sections.baseline`), produced by
 
 Signature "invalidated" is the fixture's structural proxy: its `/ByteRange` covers
 the whole file and `/Contents` holds the SHA-256 of that range; after Layer the
-signature dictionary is still there but the file it covered is not.
+signature dictionary is still there but the file it covered is not. An **empty**
+`/Sig` field is not a signature and is not in this row: measured separately,
+Layer keeps it and Monochrome removes it with the AcroForm, exactly as it treats
+any other form field (`measurements.md`).
 
 ## Baseline defects (FAIL → root cause → proposed architecture)
 
@@ -62,8 +65,8 @@ Each is printed by the gate as `BASELINE-FAIL` with the measured detail.
    except pixels. → Architecture: classify as `INTENTIONAL_FLATTENING`, PLAN
    `STRUCTURE_LOSS_REQUIRES_CONFIRMATION` naming each loss; or a
    structure-preserving candidate (Monochrome C, Optimize O3). *H1, H2, H5.*
-2. **The same three drop annotations, links, forms, the signature, XFA and all
-   metadata without saying so.** Same root cause. → every output item is
+2. **The same three drop annotations, links, forms, signature fields (applied
+   or empty), XFA and all metadata without saying so.** Same root cause. → every output item is
    accounted for in the PLAN; a loss is refused or confirmed, never silent.
    *H5, H6, H7, H12.*
 3. **「最適化」 makes vector documents 11–153× larger at its default, up to 463×.** A vector A4 at the
@@ -80,7 +83,8 @@ Each is printed by the gate as `BASELINE-FAIL` with the measured detail.
    **and reveals content the CropBox hid.** Root cause: the new page is sized
    from `getSize()` (MediaBox) and the embedded page's bounding box is the
    MediaBox.
-7. **Layer invalidates a signature silently** and **rewrites Producer/ModDate**
+7. **Layer invalidates an applied signature silently** and **rewrites
+   Producer/ModDate**
    (`PDFDocument.load` defaults to `updateMetadata: true`).
 8. **Layer's overlay misses the sheet when the MediaBox does not start at
    (0,0)**: it reached 39% of the ink on `mediabox-offset` against 100% on an
@@ -95,9 +99,16 @@ Each is printed by the gate as `BASELINE-FAIL` with the measured detail.
     `startProcessing`. *H10.*
 11. **A setting changed during a run is neither applied nor locked**: the panel
     shows 150 dpi, the file written is 300 dpi, and its row says done. *H10.*
-12. **Hardened lanes: a signed document is processed and its signature
-    invalidated without a refusal**, and both lanes rewrite Producer/ModDate.
-    Recorded as compatibility notes; neither lane is redesigned here. *H7, H12.*
+12. **Hardened lanes: a document with an applied signature is processed and
+    that signature invalidated without a refusal**, and both lanes rewrite
+    Producer/ModDate. Recorded as compatibility notes; neither lane is
+    redesigned here. *H7, H12.*
+13. **The flattening operations cannot be given a hard memory guarantee.**
+    Root cause: they encode with `canvas.toDataURL('image/jpeg', 0.8)`, an
+    encoder this architecture does not own — no fixture sweep bounds its
+    output, and nothing bounds its internal working memory. → H8 is BLOCKED
+    pending a Raster Encoder / Memory Sub-Spike; H9 (raster pixels + a runtime
+    canvas probe) is unaffected. *H8, H9.*
 
 ## What already holds
 

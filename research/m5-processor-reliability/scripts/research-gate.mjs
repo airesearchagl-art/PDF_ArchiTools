@@ -61,9 +61,24 @@ const baselineFail = (name, detail, rootCause, architecture, data) => log(
 const human = (id, question, recommendation) => log('HUMAN-OPEN', `${id} ${question}`, null,
     recommendation ? `recommendation: ${recommendation}` : '');
 
-const evidence = { ranAt: new Date().toISOString(), main: null, sections: {} };
+// Provenance, unambiguous: what production code was measured, which research
+// commit the gate ran from, whether that tree was clean, and who ran it. This
+// is local research evidence; Core CI does not run this gate.
+const evidence = {
+    ranAt: new Date().toISOString(),
+    ranBy: 'M5 research gate (local run on the research branch)',
+    productionBase: '78b5bd5ee676ee72621bccf9524225cd4ce8482a',
+    researchHeadAtRun: null,
+    researchBranchAtRun: null,
+    workingTreeDirty: null,
+    coreCiRunsThisGate: false,
+    sections: {},
+};
 try {
-    evidence.main = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT }).toString().trim();
+    const git = (args) => execFileSync('git', args, { cwd: ROOT }).toString().trim();
+    evidence.researchHeadAtRun = git(['rev-parse', 'HEAD']);
+    evidence.researchBranchAtRun = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+    evidence.workingTreeDirty = git(['status', '--porcelain', '--untracked-files=no']).length > 0;
 } catch { /* not a checkout */ }
 
 const server = await createServer({ root: ROOT, server: { port: PORT, strictPort: true }, logLevel: 'warn' });
@@ -189,15 +204,43 @@ try {
         && sf.facts['form-a4'].fieldCount === 2 && sf.facts['form-a4'].formInspectionState === 'read');
     probe('facts carry no verdict: an XFA document is described, not refused, until a policy is applied',
         sf.facts['xfa-a4'].readable === true && sf.m3['xfa-a4'].docReturned === false
-        && sf.matrix['refuse-if-dropped']['xfa-a4'].layer === 'READY',
-        `M3 returns no document for it; under 'refuse-if-dropped' Layer plans READY`);
+        && sf.matrix['applied-only']['xfa-a4'].layer === 'READY',
+        `M3 returns no document for it; under 'applied-only' Layer plans READY`);
     for (const [policy, rows] of Object.entries(sf.matrix)) {
         measure(`H7 candidate '${policy}'`, ['signature-a4', 'xfa-a4', 'form-a4'].map((n) => `${n}: ${Object.entries(rows[n])
             .filter(([op]) => ['layer', 'margin-inplace', 'monochrome-A', 'monochrome-C', 'optimize-O1', 'optimize-O3', 'normalize-size'].includes(op))
             .map(([op, s]) => `${op}=${s}`).join(' ')}`).join(' | '));
     }
-    probe('every candidate policy refuses a signed document for every operation, because every operation re-saves',
+    probe('every candidate policy refuses an applied signature for every operation, because every operation re-saves',
         Object.values(sf.matrix).every((rows) => Object.values(rows['signature-a4']).every((s) => s === 'SIGNATURE_UNSAFE')));
+    // RF-L1: a place for a signature is not a signature.
+    const applied = sf.facts['signature-a4'];
+    const empty = sf.facts['unsigned-signature-field'];
+    measure('an applied signature against an empty signature field',
+        `applied: field ${applied.hasSignatureField}, applied ${applied.hasAppliedSignature}, SigFlags ${applied.sigFlags}; `
+        + `empty: field ${empty.hasSignatureField}, applied ${empty.hasAppliedSignature}, SigFlags ${empty.sigFlags}`);
+    probe('the facts tell an empty /Sig field from an applied signature, and /SigFlags alone from both',
+        applied.hasSignatureField && applied.hasAppliedSignature
+        && empty.hasSignatureField && empty.hasAppliedSignature === false && empty.sigFlags === 3
+        && empty.signatureFields.length === 1 && empty.signatureFields[0].signed === false,
+        'an empty field with /SigFlags 3 is a signable document, not a signed one');
+    measure('what the operations do to an empty signature field',
+        Object.entries(sf.emptyField).filter(([k]) => k !== 'before')
+            .map(([op, r]) => `${op}: ${r.error ? r.error : `field ${r.hasSignatureField}, AcroForm ${r.hasAcroForm}`}`).join('; '));
+    probe('an empty signature field is a form object: Layer keeps it, Monochrome removes it with the rest of the form',
+        sf.emptyField.layer.hasSignatureField === true && sf.emptyField.layer.hasAppliedSignature === false
+        && sf.emptyField.monochrome.hasSignatureField === false && sf.emptyField.monochrome.hasAcroForm === false,
+        'so it belongs to the operation\'s form contract (H6), not to a signature refusal');
+    probe("policy A ('applied-only') refuses the applied signature and lets the empty field through; policy B refuses both",
+        Object.values(sf.matrix['applied-only']['signature-a4']).every((s) => s === 'SIGNATURE_UNSAFE')
+        && sf.matrix['applied-only']['unsigned-signature-field'].layer === 'READY'
+        && sf.matrix['applied-only']['unsigned-signature-field']['margin-inplace'] === 'READY'
+        && sf.matrix['applied-only']['unsigned-signature-field']['monochrome-A'] === 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION'
+        && Object.values(sf.matrix['any-signature-infrastructure']['unsigned-signature-field']).every((s) => s === 'SIGNATURE_UNSAFE'),
+        `A: layer READY, monochrome-A ${sf.matrix['applied-only']['unsigned-signature-field']['monochrome-A']}; `
+        + 'B: every operation SIGNATURE_UNSAFE');
+    assert('no candidate policy calls an unsigned document signed',
+        sf.facts['unsigned-signature-field'].hasAppliedSignature === false);
 
     // ---- 3. the five legacy operations ----------------------------------------
     console.log('\n=== 3. baseline: the five target operations ===');
@@ -559,42 +602,74 @@ try {
     const jw = await call('jpegWorstCase');
     evidence.sections.jpegWorstCase = jw;
     for (const s of jw.samples) measure(`JPEG q0.8, ${s.kind} ${s.width}x${s.height}`, `${s.bytesPerPixel.toFixed(3)} B/px`);
-    probe('the JPEG bound holds against the worst content measured, with margin',
-        jw.worst * 1.25 <= jw.bound + 1e-9,
-        `worst ${jw.worst.toFixed(3)} B/px (x1.25 = ${(jw.worst * 1.25).toFixed(3)}); bound ${jw.bound}`);
+    probe('the planning ratio covers the worst content measured, with margin — and stays far under the format bound',
+        jw.worst * 1.25 <= jw.bound + 1e-9 && jw.bound < jw.formatBound,
+        `worst ${jw.worst.toFixed(3)} B/px (x1.25 = ${(jw.worst * 1.25).toFixed(3)}); planning ${jw.bound} B/px; format ${jw.formatBound} B/px — the gap is what an unowned encoder costs`);
     const rb = await call('rasterBudget');
     evidence.sections.rasterBudget = rb;
-    for (const [term, basis, source] of rb.terms) console.log(`    [${basis.padEnd(12)}] ${term} — ${source}`);
+    for (const [term, basis, source] of rb.terms) console.log(`    [${basis.padEnd(26)}] ${term} — ${source}`);
+    measure('the JPEG term, by basis',
+        `hard (fail-closed): ${rb.model.jpeg.formatUpperBound} B/px from ITU-T T.81 entropy coding and byte stuffing; `
+        + `planning (performance evidence only): ${rb.model.jpeg.measuredPerformanceBound} B/px from a measured worst case of ${rb.model.jpeg.measuredWorst} B/px; `
+        + 'the encoder\'s internal working memory: unknown, and not bounded by anything here');
     for (const v of rb.validation) {
-        measure(`model vs production: ${v.op} ${v.name} @${v.dpi}`, `output ${v.outputBytes.toLocaleString('en-US')} ≤ ${v.outputBound.toLocaleString('en-US')}; largest JPEG ${v.jpegMax.toLocaleString('en-US')} ≤ ${v.jpegBound.toLocaleString('en-US')}; data URL exact ${v.dataUrlExact}; canvas exact ${v.canvasExact}`);
+        measure(`model vs production: ${v.op} ${v.name} @${v.dpi}`, `output ${v.outputBytes.toLocaleString('en-US')} ≤ planning ${v.outputBound.toLocaleString('en-US')} ≤ hard ${v.outputHardBound.toLocaleString('en-US')}; largest JPEG ${v.jpegMax.toLocaleString('en-US')} ≤ ${v.jpegBound.toLocaleString('en-US')}; data URL exact ${v.dataUrlExact}; canvas exact ${v.canvasExact}`);
     }
-    probe('every production run sits inside the model: canvases as planned, data URLs to the byte, JPEGs and outputs under their bounds',
-        rb.validation.every((v) => v.canvasExact && v.jpegPerPageWithinBound && v.outputBytes <= v.outputBound && v.dataUrlExact !== false),
+    probe('the exact terms hold against production: canvases as planned and data URLs to the byte',
+        rb.validation.every((v) => v.canvasExact && v.dataUrlExact !== false),
         `${rb.validation.length} runs, ${rb.validation.reduce((n, v) => n + v.pages, 0)} pages`);
-    console.log('  sheet op          dpi     Mpx   peak MiB  out MiB  512 MiB            1 GiB              2 GiB');
-    for (const t of rb.table) {
-        console.log(`  ${t.sheet} ${t.op.padEnd(11)} ${String(t.dpi).padStart(3)} ${t.megapixels.toFixed(1).padStart(7)} ${t.peakMiB.toFixed(0).padStart(9)} ${t.outputMiB.toFixed(0).padStart(8)}  ${t.at512.padEnd(18)} ${t.at1G.padEnd(18)} ${t.at2G}`);
-    }
+    probe('and the measured outputs stay under both JPEG terms — evidence for the planning model, sanity for the hard one',
+        rb.validation.every((v) => v.jpegPerPageWithinBound && v.jpegPerPageWithinHardBound && v.outputBytes <= v.outputBound),
+        'measured ratios are performance evidence; only the format bound is fail-closed');
     for (const cnd of rb.candidates) measure(`MAX_RASTER_PIXELS candidate ${cnd.limitMpx.toFixed(1)} Mpx admits`, cnd.admits.join(' '));
-    const bd = rb.boundaries;
-    probe('raster ceiling: the largest page it takes and the first it refuses, a point apart',
-        bd.raster.largest.status === 'READY' && bd.raster.firstRefused.status === 'OVER_RASTER_LIMIT'
-        && bd.raster.firstRefusedWidthPt === bd.raster.largestWidthPt + 1,
-        `${(bd.raster.pixelsLargest / 1e6).toFixed(2)} Mpx accepted, ${(bd.raster.pixelsFirst / 1e6).toFixed(2)} Mpx refused (memory unbounded, to isolate it)`);
-    probe('memory: A4 at 300 dpi Monochrome, pages — just under accepted, first over refused by name',
-        bd.pages.atLargest.status === 'READY' && bd.pages.atFirst.status === 'OVER_MEMORY_BUDGET' && bd.pages.firstRefused === bd.pages.largest + 1,
-        `${bd.pages.largest} pages ${bd.pages.atLargest.peakMiB.toFixed(0)} MiB; ${bd.pages.firstRefused} pages ${bd.pages.atFirst.peakMiB.toFixed(0)} MiB`);
-    probe('memory: a batch of one-page A4 files at 150 dpi Optimize — just under, first over, and 1 GiB takes it',
-        bd.files.atLargest.status === 'READY' && bd.files.atFirst.status === 'OVER_MEMORY_BUDGET' && bd.files.firstAt1G.status === 'READY',
-        `${bd.files.largest} files ${bd.files.atLargest.peakMiB.toFixed(0)} MiB; ${bd.files.firstRefused} files ${bd.files.atFirst.peakMiB.toFixed(0)} MiB`);
-    probe('A1 at 300 dpi Monochrome needs an explicit 1 GiB, and gets it',
-        bd.a1mono300.at512.status === 'OVER_MEMORY_BUDGET' && bd.a1mono300.at1G.status === 'READY',
-        `${bd.a1mono300.at512.peakMiB.toFixed(0)} MiB`);
-    probe('a larger memory budget buys past neither the raster ceiling nor the output ceiling',
-        bd.independence.rasterAt2G.status === 'OVER_RASTER_LIMIT' && bd.independence.rasterAtUnbounded.status === 'OVER_RASTER_LIMIT'
-        && bd.pages.firstAt1G.status === 'OVER_OUTPUT_BUDGET' && bd.pages.firstAt2G.status === 'OVER_OUTPUT_BUDGET'
-        && bd.independence.outputAt2G.status === 'OVER_OUTPUT_BUDGET',
-        `A1 @600 at 2 GiB: ${bd.independence.rasterAt2G.reason}; ${bd.pages.firstRefused} A4 pages at 1 GiB: ${bd.pages.firstAt1G.reason}`);
+    for (const mode of ['hard', 'planning']) {
+        const m = rb[mode];
+        console.log(`\n  -- ${mode} model (JPEG ${m.jpegBytesPerPixel} B/px) --`);
+        console.log('  sheet op          dpi     Mpx   peak MiB  out MiB  512 MiB            1 GiB              2 GiB');
+        for (const t of m.table) {
+            console.log(`  ${t.sheet} ${t.op.padEnd(11)} ${String(t.dpi).padStart(3)} ${t.megapixels.toFixed(1).padStart(7)} ${t.peakMiB.toFixed(0).padStart(9)} ${t.outputMiB.toFixed(0).padStart(8)}  ${t.at512.padEnd(18)} ${t.at1G.padEnd(18)} ${t.at2G}`);
+        }
+        const b = m.boundaries;
+        const cap = (x) => (x.largest === 0 ? 'nothing' : `${x.largest} (${x.atLargest.peakMiB.toFixed(0)} MiB)`);
+        measure(`${mode} model: what 512 MiB takes`,
+            `A4@300 Monochrome ${cap(b.pages300)} pages, first over ${b.pages300.firstRefused} (${b.pages300.atFirst.peakMiB.toFixed(0)} MiB, ${b.pages300.atFirst.status}); `
+            + `A4@150 Monochrome ${cap(b.pages150)} pages; `
+            + `A4@150 Optimize batch ${cap(b.files)} files; A1@300 Monochrome ${b.a1mono300.at512.status} (${b.a1mono300.at512.peakMiB.toFixed(0)} MiB), at 1 GiB ${b.a1mono300.at1G.status}`);
+    }
+    // The raster ceiling is pixels only: the same in both models, and the one
+    // thing here that does not depend on the encoder at all.
+    const hard = rb.hard.boundaries;
+    const planning = rb.planning.boundaries;
+    probe('the raster ceiling is independent of the JPEG term: the same boundary in both models, to the point',
+        hard.raster.largest.status === 'READY' && hard.raster.firstRefused.status === 'OVER_RASTER_LIMIT'
+        && hard.raster.firstRefusedWidthPt === hard.raster.largestWidthPt + 1
+        && planning.raster.largestWidthPt === hard.raster.largestWidthPt,
+        `${(hard.raster.pixelsLargest / 1e6).toFixed(2)} Mpx accepted, ${(hard.raster.pixelsFirst / 1e6).toFixed(2)} Mpx refused (memory unbounded, to isolate it)`);
+    for (const [mode, b] of [['hard', hard], ['planning', planning]]) {
+        probe(`${mode} model: pages just under and first over, refused by name`,
+            b.pages150.firstRefused === b.pages150.largest + 1 && b.pages150.atFirst.status !== 'READY'
+            && (b.pages150.largest === 0 || b.pages150.atLargest.status === 'READY'),
+            `A4@150 Monochrome: ${b.pages150.largest} accepted, ${b.pages150.firstRefused} ${b.pages150.atFirst.status}`);
+        probe(`${mode} model: a batch just under and first over, and the explicit presets`,
+            b.files.firstRefused === b.files.largest + 1 && b.files.atFirst.status !== 'READY'
+            && (b.files.firstAt1G.status === 'READY' || b.files.firstAt2G.status === 'READY' || b.files.atFirst.status === 'OVER_OUTPUT_BUDGET'),
+            `${b.files.largest} files accepted, ${b.files.firstRefused} ${b.files.atFirst.status}; at 1 GiB ${b.files.firstAt1G.status}, at 2 GiB ${b.files.firstAt2G.status}`);
+        probe(`${mode} model: a larger memory budget buys past neither the raster ceiling nor the output ceiling`,
+            b.independence.rasterAt2G.status === 'OVER_RASTER_LIMIT'
+            && b.independence.rasterAtUnbounded.status === 'OVER_RASTER_LIMIT'
+            && b.independence.outputAt2G.status === 'OVER_OUTPUT_BUDGET',
+            `A1@600 at 2 GiB: ${b.independence.rasterAt2G.reason}; output at 2 GiB: ${b.independence.outputAt2G.reason}`);
+    }
+    measure('what the fail-closed model costs',
+        `under the format bound the flattening operations take ${rb.hard.boundaries.pages300.largest} A4 pages at 300 dpi and `
+        + `${rb.hard.boundaries.pages150.largest} at 150 dpi within 512 MiB, against ${rb.planning.boundaries.pages300.largest} and `
+        + `${rb.planning.boundaries.pages150.largest} under the planning estimate — the gap is the encoder nobody here owns`);
+    log('BASELINE-FAIL', 'H8 cannot be adopted as a hard memory guarantee in this round', false,
+        'the browser JPEG encoder is not owned: neither its encoded size nor its internal working memory is bounded by any implementation this research controls',
+        {
+            rootCause: 'production encodes with canvas.toDataURL(image/jpeg, 0.8); measured compression ratios are performance evidence, and a finite fixture sweep cannot bound an encoder',
+            architecture: 'H8 is BLOCKED pending a Raster Encoder / Memory Sub-Spike (an owned encoder — the repository already owns an exact-size PNG encoder from M4 — or a bounded encoding path). H9 (raster pixels + runtime canvas probe) is unaffected and can be adopted now; MAX_OUTPUT_BYTES can be enforced on the finished artifact, which is measured rather than predicted',
+        });
 
     // ---- 7. failure and atomicity (functions) ---------------------------------
     console.log('\n=== 7. failure ===');
