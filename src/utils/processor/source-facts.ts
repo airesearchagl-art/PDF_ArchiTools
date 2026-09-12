@@ -19,11 +19,19 @@
  * documents this boundary exists for, so both are resolved up the `/Parent`
  * chain.
  *
+ * **`/T` does not decide what is a field.** It is optional. The earlier walk
+ * treated a Kid as a child field only when it carried `/T`, so a child with no
+ * `/T`, inheriting `/FT /Sig` from its parent and holding the signature in its
+ * own `/V`, was classified as a widget, never descended into, and the applied
+ * signature it held was never seen. What decides now is whether the Kid carries
+ * any attribute that belongs to a field and to nothing else.
+ *
  * **Ambiguity is a refusal, not a shrug.** A cyclic field tree, one deeper than
- * this walk will follow, or a `/Fields` entry that is not an array all leave
- * `formInspectionState: 'unreadable'`, which the planner turns into
- * `SIGNATURE_UNSAFE`. A form we cannot read completely may hide an applied
- * signature, and "probably fine" is not a thing this code is allowed to decide.
+ * this walk will follow, a `/Fields` entry that is not an array, or a Kid whose
+ * dictionary contradicts itself all leave `formInspectionState: 'unreadable'`,
+ * which the planner turns into `SIGNATURE_UNSAFE`. A form we cannot read
+ * completely may hide an applied signature, and "probably fine" is not a thing
+ * this code is allowed to decide.
  *
  * Adopted: H7 (applied-only), H11 (one facts step for every operation).
  */
@@ -48,6 +56,55 @@ const nameOf = (value: unknown): string => {
 
 /** Raised when the field tree cannot be read completely. Never swallowed. */
 class FieldTreeUnreadable extends Error {}
+
+/**
+ * The keys that belong to a field dictionary and to nothing else.
+ *
+ * A widget annotation has `/Rect`, `/AP`, `/AS`, `/MK`, `/BS`, `/F`, `/P` and
+ * friends; none of those appears here, and `/DA` and `/AA` are deliberately
+ * absent because a widget may carry them too. What remains is the set whose
+ * presence means "this dictionary is a field", whether or not it also happens
+ * to be the widget that draws it.
+ */
+const FIELD_ONLY_KEYS = ['T', 'FT', 'V', 'DV', 'Ff', 'TU', 'TM', 'Kids'] as const;
+
+const hasFieldAttribute = (dict: PDFDict): boolean =>
+    FIELD_ONLY_KEYS.some((key) => dict.get(PDFName.of(key)) !== undefined);
+
+const subtypeOf = (dict: PDFDict): string | null => {
+    const raw = dict.get(PDFName.of('Subtype'));
+    return raw === undefined ? null : nameOf(raw);
+};
+
+/**
+ * Is this Kid a child field, or an annotation that merely belongs to one?
+ *
+ * Descending is never the dangerous direction — it can only find more — so the
+ * decision that needs an argument is the one that *skips* a Kid. A Kid with no
+ * field attribute of its own is skipped, and that is safe for a reason the
+ * dictionary itself proves: `/Kids` is in the set above, so such a Kid has no
+ * children either, and every `/FT` or `/V` it could inherit is by definition on
+ * the parent this walk is about to read as a terminal field. Skipping it cannot
+ * lose a signature, only a duplicate count of one we are already looking at.
+ *
+ * A Kid that contradicts itself is neither, and says so: a widget annotation
+ * with `/Kids`, or a dictionary carrying field attributes while declaring it is
+ * some other kind of annotation. Guessing which half to believe is how an
+ * applied signature gets skipped by a reader that was sure it knew better.
+ */
+function classifyKid(kid: PDFDict): 'field' | 'widget' {
+    const subtype = subtypeOf(kid);
+    const fieldAttributes = hasFieldAttribute(kid);
+    const hasKids = kid.get(PDFName.of('Kids')) !== undefined;
+
+    if (subtype === '/Widget' && hasKids) {
+        throw new FieldTreeUnreadable('a widget annotation carrying /Kids');
+    }
+    if (subtype !== null && subtype !== '/Widget' && fieldAttributes) {
+        throw new FieldTreeUnreadable(`a field dictionary declaring ${subtype}`);
+    }
+    return fieldAttributes ? 'field' : 'widget';
+}
 
 /**
  * An inheritable attribute, resolved the way a reader resolves it: this
@@ -80,7 +137,10 @@ function inherited(
             seen.add(id);
         }
         const parent = resolve(doc, parentRaw);
-        current = parent instanceof PDFDict ? parent : null;
+        if (!(parent instanceof PDFDict)) {
+            throw new FieldTreeUnreadable('/Parent is not a dictionary');
+        }
+        current = parent;
     }
     return undefined;
 }
@@ -88,14 +148,14 @@ function inherited(
 /**
  * Walk the AcroForm field tree at the dictionary level.
  *
- * Terminal fields are the ones with a `/T` and no field `/Kids`; a widget is
- * not a field, and counting widgets is how a one-field form starts reporting
- * two. A `/Sig` field is *applied* only when its effective `/V` resolves to a
- * dictionary — an empty signature box has no `/V` anywhere above it.
+ * A field is terminal when none of its Kids is itself a field — which is not
+ * the same question as whether its Kids carry `/T`. A `/Sig` field is *applied*
+ * only when its effective `/V` resolves to a dictionary; an empty signature box
+ * has no `/V` anywhere above it.
  */
-function walkFields(
+function walkFieldEntries(
     doc: PDFDocument,
-    array: PDFArray,
+    entries: unknown[],
     facts: SourceFacts,
     inheritedName: string,
     seen: Set<string>,
@@ -104,8 +164,7 @@ function walkFields(
     if (depth > MAX_FIELD_TREE_DEPTH) {
         throw new FieldTreeUnreadable(`field tree deeper than ${MAX_FIELD_TREE_DEPTH}`);
     }
-    for (let i = 0; i < array.size(); i += 1) {
-        const raw = array.get(i);
+    for (const raw of entries) {
         const ref = raw instanceof PDFRef ? raw : null;
         if (ref) {
             const id = ref.toString();
@@ -113,7 +172,11 @@ function walkFields(
             seen.add(id);
         }
         const field = resolve(doc, raw);
-        if (!(field instanceof PDFDict)) continue;
+        if (!(field instanceof PDFDict)) {
+            // A field slot holding something that is not a field dictionary is
+            // a form we cannot enumerate, not a form with one fewer field.
+            throw new FieldTreeUnreadable('a field entry that is not a dictionary');
+        }
 
         const partial = field.get(PDFName.of('T'));
         const partialName = partial === undefined
@@ -123,27 +186,27 @@ function walkFields(
             ? `${inheritedName}.${partialName}`
             : (partialName || inheritedName);
 
-        const kidsRaw = resolve(doc, field.get(PDFName.of('Kids')));
-        const kids = kidsRaw instanceof PDFArray ? kidsRaw : null;
-        // Kids that are themselves fields (they carry /T) make this a node, not
-        // a leaf. Kids that are only widgets leave it a terminal field.
-        let hasFieldKids = false;
-        if (kids) {
+        const kidsRaw = field.get(PDFName.of('Kids'));
+        let childFields: unknown[] = [];
+        if (kidsRaw !== undefined) {
+            const kids = resolve(doc, kidsRaw);
+            if (!(kids instanceof PDFArray)) throw new FieldTreeUnreadable('/Kids is not an array');
+            const found: unknown[] = [];
             for (let k = 0; k < kids.size(); k += 1) {
-                const kid = resolve(doc, kids.get(k));
-                if (kid instanceof PDFDict && kid.get(PDFName.of('T')) !== undefined) {
-                    hasFieldKids = true;
-                    break;
+                const kidRaw = kids.get(k);
+                const kid = resolve(doc, kidRaw);
+                if (!(kid instanceof PDFDict)) {
+                    throw new FieldTreeUnreadable('a /Kids entry that is not a dictionary');
                 }
+                if (classifyKid(kid) === 'field') found.push(kidRaw);
             }
+            childFields = found;
         }
 
-        if (hasFieldKids && kids) {
-            walkFields(doc, kids, facts, fullName, seen, depth + 1);
+        if (childFields.length > 0) {
+            walkFieldEntries(doc, childFields, facts, fullName, seen, depth + 1);
             continue;
         }
-
-        if (partial === undefined) continue; // a bare widget
 
         facts.fieldCount += 1;
         const ft = nameOf(inherited(doc, field, 'FT', ref));
@@ -161,6 +224,7 @@ function walkFields(
 export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
     const facts: SourceFacts = {
         readable: false,
+        sourceBytes: bytes.length,
         loadError: null,
         encrypted: false,
         pageCount: 0,
@@ -258,7 +322,9 @@ export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
                 // could be hiding, so it refuses rather than reporting none.
                 throw new FieldTreeUnreadable('/Fields is not an array');
             }
-            walkFields(doc, fields, facts, '', new Set<string>(), 0);
+            const entries: unknown[] = [];
+            for (let i = 0; i < fields.size(); i += 1) entries.push(fields.get(i));
+            walkFieldEntries(doc, entries, facts, '', new Set<string>(), 0);
         }
         facts.formInspectionState = 'read';
     } catch (error) {

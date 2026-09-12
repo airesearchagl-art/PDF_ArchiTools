@@ -17,7 +17,7 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
-    PDFDocument, PDFName, PDFNumber, PDFString, PDFHexString, PDFArray, PDFDict,
+    PDFDocument, PDFName, PDFNumber, PDFString, PDFHexString, PDFArray, PDFDict, PDFRef,
     StandardFonts, rgb, degrees,
     setTextRenderingMode, TextRenderingMode,
 } from 'pdf-lib';
@@ -461,6 +461,104 @@ await inheritedSignature('inherited-empty-signature', {
 }
 
 // ---------------------------------------------------------------------------
+// Field children that carry no /T
+//
+// `/T` is optional. A child field may have none, inherit `/FT` from its parent
+// and hold the signature in its own `/V` — so a reader that decides "field or
+// widget" by looking for `/T` walks straight past an applied signature. These
+// four are that case and its neighbours: the one that must be found, the one
+// that must still be allowed through, and two whose dictionaries contradict
+// themselves badly enough that no classification is honest.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M5 no-/T applied signature');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'NO-T-SIGNED-M5P');
+    const sigRef = doc.context.register(doc.context.obj({
+        Type: 'Sig', Filter: 'Adobe.PPKLite', SubFilter: 'adbe.pkcs7.detached',
+        ByteRange: [0, 0, 0, 0], Contents: PDFHexString.of('00'.repeat(16)),
+    }));
+    // No /T, no /FT: the signature is here, and what makes it one is upstairs.
+    const kid = doc.context.obj({ Rect: [380, 80, 560, 140], F: 4, V: sigRef });
+    const kidRef = doc.context.register(kid);
+    const parent = doc.context.obj({
+        T: PDFString.of('parent'), FT: 'Sig', Kids: [kidRef],
+    });
+    const parentRef = doc.context.register(parent);
+    kid.set(PDFName.of('Parent'), parentRef);
+    page.node.set(PDFName.of('Annots'), doc.context.obj([kidRef]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [parentRef], SigFlags: 3,
+    })));
+    await write('no-t-applied-signature', doc, 'a child field with no /T holding the signature, /FT inherited');
+}
+{
+    const { doc, font } = await newDoc('M5 no-/T empty signature');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'NO-T-EMPTY-M5P');
+    // The same hierarchy with nothing signed. The child carries no field
+    // attribute of its own, so it has no children either and nothing it could
+    // inherit that the parent does not already show: reading the parent as the
+    // terminal field cannot miss anything.
+    const kid = doc.context.obj({ Rect: [380, 80, 560, 140], F: 4 });
+    const kidRef = doc.context.register(kid);
+    const parent = doc.context.obj({
+        T: PDFString.of('parent'), FT: 'Sig', Kids: [kidRef],
+    });
+    const parentRef = doc.context.register(parent);
+    kid.set(PDFName.of('Parent'), parentRef);
+    page.node.set(PDFName.of('Annots'), doc.context.obj([kidRef]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [parentRef], SigFlags: 3,
+    })));
+    await write('no-t-empty-signature', doc, 'the same hierarchy with nothing signed anywhere');
+}
+{
+    const { doc, font } = await newDoc('M5 widget carrying kids');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'AMBIGUOUS-WIDGET-KIDS-M5P');
+    const grandkidRef = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', Rect: [380, 80, 560, 140], F: 4,
+    }));
+    // An annotation cannot have children and a field can. This says both.
+    const kidRef = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', Rect: [380, 80, 560, 140], F: 4,
+        Kids: [grandkidRef],
+    }));
+    const parentRef = doc.context.register(doc.context.obj({
+        T: PDFString.of('parent'), FT: 'Sig', Kids: [kidRef],
+    }));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [parentRef], SigFlags: 3,
+    })));
+    await write('ambiguous-widget-with-kids', doc, 'a Kid declaring /Subtype /Widget while carrying /Kids');
+}
+{
+    const { doc, font } = await newDoc('M5 field declaring another subtype');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'AMBIGUOUS-SUBTYPE-M5P');
+    const sigRef = doc.context.register(doc.context.obj({
+        Type: 'Sig', Filter: 'Adobe.PPKLite', SubFilter: 'adbe.pkcs7.detached',
+        ByteRange: [0, 0, 0, 0], Contents: PDFHexString.of('00'.repeat(16)),
+    }));
+    // Field attributes on a dictionary that says it is a link annotation.
+    const kidRef = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Link', Rect: [380, 80, 560, 140], V: sigRef,
+    }));
+    const parentRef = doc.context.register(doc.context.obj({
+        T: PDFString.of('parent'), FT: 'Sig', Kids: [kidRef],
+    }));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [parentRef], SigFlags: 3,
+    })));
+    await write('ambiguous-subtype-conflict', doc, 'a Kid carrying /V while declaring /Subtype /Link');
+}
+
+// ---------------------------------------------------------------------------
 // Metadata and a document that cannot be read at all
 // ---------------------------------------------------------------------------
 {
@@ -517,6 +615,69 @@ await inheritedSignature('inherited-empty-signature', {
     )));
     await write('metadata-xmp-flate', doc, 'an XMP packet stored with /Filter /FlateDecode');
 }
+
+// ---------------------------------------------------------------------------
+// Metadata that cannot simply be copied
+//
+// An Info value may be held by reference. `PDFRef.clone()` returns the same
+// reference, so copying one into a rebuilt document writes "42 0 R" into a file
+// that has no object 42 — a value that looks present and reads as nothing. The
+// first of these must survive; the other three have no honest way to survive,
+// so the operation must refuse rather than hand over a document quietly missing
+// what it came in with.
+// ---------------------------------------------------------------------------
+
+/** A document with the standard Info keys, plus whatever this test needs. */
+async function metadataCase(name, note, decorate) {
+    const { doc, font } = await newDoc(`M5 ${name}`);
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, `META-M5P-${name}`);
+    const info = doc.context.lookup(doc.context.trailerInfo.Info);
+    if (!(info instanceof PDFDict)) throw new Error('no Info dictionary to decorate');
+    decorate(doc, info);
+    await write(name, doc, note);
+}
+
+await metadataCase(
+    'metadata-indirect-info',
+    'a custom Info value held by reference rather than inline',
+    (doc, info) => {
+        info.set(
+            PDFName.of('M5PIndirect'),
+            doc.context.register(PDFString.of('M5P-INDIRECT-VALUE')),
+        );
+    },
+);
+
+await metadataCase(
+    'metadata-dangling-info',
+    'an Info value referencing an object that does not exist',
+    (doc, info) => {
+        info.set(PDFName.of('M5PBroken'), PDFRef.of(9999, 0));
+    },
+);
+
+await metadataCase(
+    'metadata-uncopyable-info',
+    'an Info value that is a dictionary of its own, which no copy can move safely',
+    (doc, info) => {
+        info.set(PDFName.of('M5PDict'), doc.context.register(doc.context.obj({
+            M5PInner: PDFString.of('M5P-NESTED-VALUE'),
+        })));
+    },
+);
+
+await metadataCase(
+    'metadata-unreadable-xmp',
+    '/Metadata present, but a dictionary rather than a stream',
+    (doc) => {
+        doc.catalog.set(PDFName.of('Metadata'), doc.context.register(doc.context.obj({
+            NotAStream: PDFString.of('M5P-NOT-XMP'),
+        })));
+    },
+);
+
 {
     fs.writeFileSync(path.join(OUT, 'invalid.pdf'), Buffer.from('not a pdf at all\n', 'utf8'));
     written.push({ name: 'invalid', bytes: 17, note: 'not a PDF' });

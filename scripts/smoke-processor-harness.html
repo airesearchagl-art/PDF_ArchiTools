@@ -35,6 +35,7 @@ import {
     entryNameBytes,
     fileCost,
     manifestBytes,
+    manifestUpperBound,
     needsUnicodePath,
     pageCost,
     planBatchPublication,
@@ -55,7 +56,7 @@ import JSZip from 'jszip';
 import { normalizePageSize } from '/src/utils/page-size-normalizer.ts';
 import { updateTitleBlocks } from '/src/utils/title-block-updater.ts';
 import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
-import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, PDFString, PDFHexString, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, PDFRef, PDFString, PDFHexString, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 
 const FIXTURES = '/test-fixtures/processor';
@@ -447,9 +448,20 @@ window.__processor = {
       const infoRef = doc.context.trailerInfo?.Info;
       const info = infoRef ? doc.context.lookup(infoRef) : null;
       if (info instanceof PDFDict) {
-        for (const [key, value] of info.entries()) {
+        for (const [key, raw] of info.entries()) {
+          // An indirect value has to be resolved to be compared: reading the
+          // reference itself compares object numbers, which differ between any
+          // two documents and would call a lost value preserved.
+          let value = raw;
+          let indirect = false;
+          if (raw instanceof PDFRef) {
+            indirect = true;
+            try { value = doc.context.lookup(raw); } catch { value = undefined; }
+          }
           out.info.push({
             key: key.asString(),
+            indirect,
+            resolved: value !== undefined,
             value: value?.decodeText ? value.decodeText() : String(value ?? ''),
           });
         }
@@ -513,10 +525,13 @@ window.__processor = {
         const job = planWholeJob(
           Array.from({ length: n }, () => file.peakBytes),
           Array.from({ length: n }, () => file.outputBytes),
-          names, 2048, ceilings,
+          ceilings,
         );
         if (!job.ok) return { ok: false, why: 'OVER_MEMORY_BUDGET', peak: job.peakBytes };
-        const cost = batchCost(names.map((name) => ({ name, bytes: file.outputBytes })), 2048);
+        const cost = batchCost(
+          names.map((name) => ({ name, bytes: file.outputBytes })),
+          manifestUpperBound(n),
+        );
         if (cost.archiveBytes > ceilings.maxOutputBytes) {
           return { ok: false, why: 'OVER_OUTPUT_BUDGET', peak: job.peakBytes };
         }
@@ -553,12 +568,106 @@ window.__processor = {
     const names = Array.from({ length: files }, (_, i) => `file-${i + 1}.pdf`);
     const peaks = Array.from({ length: files }, () => perFilePeakBytes);
     const outputs = Array.from({ length: files }, () => perFileOutputBytes);
-    const whole = planWholeJob(peaks, outputs, names, 200, ceilings);
+    const whole = planWholeJob(peaks, outputs, ceilings);
     const retained = names.slice(0, files - 1).map((name, i) => ({
       name, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED', reason: 'ok',
       bytes: new Uint8Array(outputs[i]), outputName: name,
     }));
     return { whole, atLastBoundary: canStartNextFile(retained, perFilePeakBytes, ceilings) };
+  },
+
+  /**
+   * RF-P3B. The invariant the pre-run preflight has to satisfy.
+   *
+   * A batch that passes the preflight and is then refused at publication has
+   * been refused too late: every file was produced first. So the number
+   * computed before the run must be an upper bound on the one computed from the
+   * finished artifacts, and this holds the two against each other for a real
+   * batch rather than for an argument about them.
+   */
+  async jobBoundVersusPublication(names, operation, over = {}) {
+    const ceilings = defaultCeilings(over.memoryBudgetBytes ?? DEFAULT_MEMORY_BUDGET);
+    const plans = [];
+    const results = [];
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const facts = await readSourceFacts(bytes.slice());
+      let plan = planOperation(facts, operation, settingsFor(operation, over));
+      if (over.confirm) plan = withConfirmation(plan, true);
+      if (plan.status !== PLAN_STATUS.READY) continue;
+      plans.push(plan);
+      const out = operation === 'layer'
+        ? await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 })
+        : await runFlatten(bytes.slice(), 'monochrome',
+          { dpi: settingsFor(operation, over).dpi, contrast: 1.0 });
+      results.push({
+        name: `${name}.pdf`, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED',
+        reason: '完了しました。', bytes: out,
+        // The longest suffix any tool appends, so the comparison is not made
+        // easy by a short name.
+        outputName: `${name}_overlay&mono.pdf`,
+      });
+    }
+    const initial = planWholeJob(
+      plans.map((p) => p.filePeakBytes),
+      plans.map((p) => p.fileBytesEstimate),
+      ceilings,
+    );
+    const manifest = buildManifest('半透明レイヤ追加', results);
+    const exact = planBatchPublication(results, manifest, ceilings);
+    const exactPeak = exact.ok ? exact.cost.peakBytes : null;
+    return {
+      files: results.length,
+      initialOk: initial.ok,
+      initialPeak: initial.peakBytes,
+      exactPeak,
+      holds: exactPeak !== null && initial.peakBytes >= exactPeak,
+      estimatedOutputs: plans.map((p) => p.fileBytesEstimate),
+      actualOutputs: results.map((r) => r.bytes.length),
+      outputsWithinEstimate: results.every((r, i) => r.bytes.length <= plans[i].fileBytesEstimate),
+      manifestActual: manifestBytes(manifest).length,
+      manifestBound: manifestUpperBound(results.length),
+    };
+  },
+
+  /**
+   * RF-P3A. The ceiling applied to the archive that exists.
+   *
+   * The boundary is taken from the archive JSZip really produced, not from the
+   * model — at `size` it publishes, at `size - 1` nothing comes back. Which of
+   * the two guards fires is reported rather than assumed: the model is exact
+   * for the STORE path (measured head-room zero), so it refuses first, and the
+   * check on the Blob is what remains if that ever stops being true.
+   */
+  async actualArchiveGuard() {
+    const bytes = await bytesOf('vector-a4');
+    const out = await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 });
+    const results = ['a', 'b'].map((k) => ({
+      name: `${k}.pdf`, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED',
+      reason: 'ok', bytes: out, outputName: `${k}_out.pdf`,
+    }));
+    const base = defaultCeilings();
+    const published = await publishBatch('gate', results, base, () => true);
+    const size = published.archive.size;
+
+    const at = await publishBatch('gate', results, { ...base, maxOutputBytes: size }, () => true);
+    let refusal = null;
+    try {
+      await publishBatch('gate', results, { ...base, maxOutputBytes: size - 1 }, () => true);
+    } catch (error) {
+      refusal = {
+        code: error?.code ?? 'THREW',
+        // The two guards say different things, on purpose.
+        firedOn: String(error?.message ?? '').startsWith('作成したZIP') ? 'the archive' : 'the model',
+      };
+    }
+    const modelled = planBatchPublication(results, buildManifest('gate', results), base);
+    return {
+      size,
+      modelledBytes: modelled.ok ? modelled.cost.archiveBytes : null,
+      publishedAtSize: at.archive !== null,
+      refusal,
+    };
   },
 
   /** Ownership: a superseded run must publish nothing. */

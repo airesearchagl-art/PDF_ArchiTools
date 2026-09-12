@@ -25,7 +25,8 @@ import type {
     Plan, ProcessorOperation, SourceFacts, StructureLoss,
 } from './contracts';
 import {
-    checkCeilings, defaultCeilings, fileCost, pageCost,
+    EMBEDDED_FONT_ALLOWANCE_BYTES, PRESERVING_SLACK_BYTES,
+    checkCeilings, defaultCeilings, fileCost, pageCost, preservingFileCost,
 } from './budget';
 import type { Ceilings, ColourSpace, StreamFilter } from './budget';
 
@@ -196,6 +197,29 @@ export function planOperation(
                 ...measured,
             };
         }
+    } else {
+        // A structure-preserving operation cannot know its output until it has
+        // produced it, so the job accounting uses the stated conservative bound
+        // over the source's own size. Leaving it at zero is what let a
+        // whole-job preflight approve a batch of them without pricing a byte.
+        //
+        // It deliberately does **not** go through `checkCeilings`: a bound this
+        // loose would refuse a single large document whose real output is well
+        // inside the ceiling, and refusing work that would have succeeded is
+        // its own kind of dishonesty. The ceiling for these operations is
+        // applied to the artifact that exists, by `checkActualOutput`.
+        //
+        // Only one of these operations adds a payload unrelated to its input's
+        // size: 図枠一括更新 embeds an unsubsetted Japanese face, so it is the
+        // only one that pays for it.
+        const cost = preservingFileCost(
+            facts.sourceBytes,
+            operation === 'title-block-update'
+                ? EMBEDDED_FONT_ALLOWANCE_BYTES + PRESERVING_SLACK_BYTES
+                : PRESERVING_SLACK_BYTES,
+        );
+        fileBytesEstimate = cost.outputBytes;
+        filePeakBytes = cost.peakBytes;
     }
 
     // ---- H5/H6: a loss is agreed to, never assumed --------------------------

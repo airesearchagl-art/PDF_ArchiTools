@@ -171,6 +171,43 @@ try {
     check('an inherited empty field still processes',
         (await call('plans', ['inherited-empty-signature'], ['layer', 'optimize']))['inherited-empty-signature'].layer.status === 'READY');
 
+    // RF-P1: /T is optional, so it cannot be what decides field from widget.
+    const noT = await call('facts', [
+        'no-t-applied-signature', 'no-t-empty-signature',
+        'ambiguous-widget-with-kids', 'ambiguous-subtype-conflict',
+    ]);
+    check('a child field carrying no /T is still a field, and its signature is found',
+        noT['no-t-applied-signature'].hasSignatureField === true
+        && noT['no-t-applied-signature'].hasAppliedSignature === true,
+        JSON.stringify(noT['no-t-applied-signature'].signatureFields));
+    check('the same hierarchy with nothing signed stays a field, not a signature',
+        noT['no-t-empty-signature'].hasSignatureField === true
+        && noT['no-t-empty-signature'].hasAppliedSignature === false
+        && noT['no-t-empty-signature'].formInspectionState === 'read',
+        JSON.stringify(noT['no-t-empty-signature'].signatureFields));
+    probe('a Kid whose dictionary contradicts itself leaves the form unreadable',
+        ['ambiguous-widget-with-kids', 'ambiguous-subtype-conflict']
+            .every((n) => noT[n].formInspectionState === 'unreadable'
+                && noT[n].signatureFields.length === 0),
+        ['ambiguous-widget-with-kids', 'ambiguous-subtype-conflict']
+            .map((n) => `${n}:${noT[n].formInspectionState}`).join(' '));
+
+    const noTPlans = await call('plans', [
+        'no-t-applied-signature', 'no-t-empty-signature',
+        'ambiguous-widget-with-kids', 'ambiguous-subtype-conflict',
+    ], ops);
+    probe('every operation refuses a signature held by a child with no /T',
+        ops.every((op) => noTPlans['no-t-applied-signature'][op].status === 'SIGNATURE_UNSAFE'),
+        ops.map((op) => `${op}:${noTPlans['no-t-applied-signature'][op].status}`).join(' '));
+    probe('and refuses a form holding a Kid it could not classify',
+        ['ambiguous-widget-with-kids', 'ambiguous-subtype-conflict'].every(
+            (n) => ops.every((op) => noTPlans[n][op].status === 'SIGNATURE_UNSAFE'),
+        ));
+    check('while an unsigned one is processed like any other form',
+        ['layer', 'margin', 'optimize']
+            .every((op) => noTPlans['no-t-empty-signature'][op].status === 'READY'),
+        ops.map((op) => `${op}:${noTPlans['no-t-empty-signature'][op].status}`).join(' '));
+
     const readOnly = await call('inspectionIsReadOnly');
     probe('looking at an XFA document does not delete its XFA',
         readOnly.xfaBefore === true && readOnly.xfaAfter === true);
@@ -391,6 +428,28 @@ try {
     check('and the structure-preserving operations keep theirs untouched',
         (await call('metadataRoundTrip', 'metadata-xmp-flate', 'layer')).after.xmp?.filter === '/FlateDecode');
 
+    // RF-P2: an Info value held by reference, and the cases with no honest way
+    // through. "Preserved or refused" — never a successful file quietly missing
+    // what it came in with.
+    for (const operation of ['monochrome', 'both']) {
+        const indirect = await call('metadataRoundTrip', 'metadata-indirect-info', operation,
+            { confirm: true, dpi: 150 });
+        const valueOf = (side) => side?.info.find((e) => e.key === '/M5PIndirect');
+        check(`an Info value held by reference survives ${operation} with its value, not its object number`,
+            indirect.ran
+            && valueOf(indirect.before)?.value === 'M5P-INDIRECT-VALUE'
+            && valueOf(indirect.after)?.value === 'M5P-INDIRECT-VALUE'
+            && valueOf(indirect.after)?.resolved === true,
+            `${JSON.stringify(valueOf(indirect.before))} -> ${JSON.stringify(valueOf(indirect.after))}`);
+    }
+
+    for (const name of ['metadata-dangling-info', 'metadata-uncopyable-info', 'metadata-unreadable-xmp']) {
+        const refused = await call('run', name, 'monochrome', { confirm: true, dpi: 150 });
+        probe(`${name} is refused rather than written without its metadata`,
+            refused.ran === false && refused.code === 'METADATA_NOT_PRESERVED',
+            `${refused.code}: ${String(refused.reason ?? '').slice(0, 90)}`);
+    }
+
     // ---- 8. B2 -----------------------------------------------------------------
     console.log('\n=== 8. batch (B2) ===');
     const batch = await call('batch', ['vector-a4', 'signature-a4', 'text-a4'], 'layer');
@@ -457,6 +516,52 @@ try {
             ['OVER_MEMORY_BUDGET', 'OVER_OUTPUT_BUDGET'].includes(b.presets[512 * MIB].binding),
             b.presets[512 * MIB].binding);
     }
+
+    // RF-P3B: the pre-run preflight has to be an upper bound on the publication
+    // it admits, or a batch passes it and is refused after every file exists.
+    const bound = await call('jobBoundVersusPublication',
+        ['vector-a4', 'text-a4', 'annotation-a4'], 'layer');
+    measureNote('whole-job preflight',
+        `initial ${fmt(bound.initialPeak)} B vs exact ${fmt(bound.exactPeak)} B `
+        + `(${bound.files} files)`);
+    measureNote('manifest', `bound ${fmt(bound.manifestBound)} B vs written ${fmt(bound.manifestActual)} B`);
+    probe('the pre-run preflight never prices a batch below the publication it admits',
+        bound.holds === true,
+        `${fmt(bound.initialPeak)} >= ${fmt(bound.exactPeak)}`);
+    probe('the manifest bound is never under the manifest that gets written',
+        bound.manifestBound >= bound.manifestActual,
+        `head-room ${fmt(bound.manifestBound - bound.manifestActual)} B`);
+    check('and every output landed inside the bound its own file was planned at',
+        bound.outputsWithinEstimate === true,
+        bound.actualOutputs.map((n, i) => `${fmt(n)}/${fmt(bound.estimatedOutputs[i])}`).join(' '));
+
+    // The one operation whose output has little to do with its input's size:
+    // 図枠一括更新 embeds a whole Japanese face. Its allowance is asserted
+    // against a real run rather than against the arithmetic that set it.
+    for (const lane of ['title-block-update', 'normalize-size']) {
+        const lanePlan = (await call('plans', ['text-a4'], [lane]))['text-a4'][lane];
+        // The replacement text has to be Japanese, or the lane takes the
+        // Helvetica path, embeds nothing, and the allowance the bound exists
+        // for is never exercised. Measured at 1,630 B with an ASCII rule — a
+        // number that proves the arithmetic against the wrong run.
+        const laneRun = await call('run', 'text-a4', lane, lane === 'title-block-update'
+            ? { rules: [{ rect: { x: 0.1, y: 0.1, width: 0.3, height: 0.05 }, text: '図面番号 M5P-A101' }] }
+            : {});
+        check(`${lane} produces an output inside the bound it was planned at`,
+            laneRun.ran === true && laneRun.after.bytes <= lanePlan.fileBytesEstimate,
+            `${fmt(laneRun.after?.bytes ?? 0)} / ${fmt(lanePlan.fileBytesEstimate)} B`);
+    }
+
+    // RF-P3A: the ceiling on the archive that exists, at a boundary taken from
+    // an archive JSZip really produced.
+    const archiveGuard = await call('actualArchiveGuard');
+    measureNote('archive', `actual ${fmt(archiveGuard.size)} B, modelled ${fmt(archiveGuard.modelledBytes)} B`);
+    probe('an archive one byte over the ceiling is not published',
+        archiveGuard.publishedAtSize === true
+        && archiveGuard.refusal?.code === 'OVER_OUTPUT_BUDGET',
+        `published at ${fmt(archiveGuard.size)} B, refused at ${fmt(archiveGuard.size - 1)} B`);
+    note('which guard refused it', `${archiveGuard.refusal?.firedOn} `
+        + '(the model is exact for STORE, so it answers first; the check on the Blob is what is left if that changes)');
 
     // ---- 9. ownership ----------------------------------------------------------
     console.log('\n=== 9. ownership and cancellation ===');

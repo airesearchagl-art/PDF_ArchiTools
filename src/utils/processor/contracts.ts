@@ -59,6 +59,12 @@ export const PLAN_STATUS = {
     XFA_UNSAFE: 'XFA_UNSAFE',
     STRUCTURE_LOSS_REQUIRES_CONFIRMATION: 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION',
     UNSUPPORTED_MARGIN_SEMANTICS: 'UNSUPPORTED_MARGIN_SEMANTICS',
+    /**
+     * The output would have gone out without what the source came in with.
+     * H12 makes metadata part of the artifact, so failing to carry it is a
+     * refusal — not a note attached to a file already handed over.
+     */
+    METADATA_NOT_PRESERVED: 'METADATA_NOT_PRESERVED',
     OVER_RASTER_LIMIT: 'OVER_RASTER_LIMIT',
     OVER_MEMORY_BUDGET: 'OVER_MEMORY_BUDGET',
     OVER_OUTPUT_BUDGET: 'OVER_OUTPUT_BUDGET',
@@ -105,6 +111,13 @@ export const LOSS_LABEL_JA: Record<StructureLoss, string> = {
  */
 export interface SourceFacts {
     readable: boolean;
+    /**
+     * The source's own size. The conservative per-file bound for the operations
+     * that cannot know their output until they have produced it is derived from
+     * this, so it is a fact about the source rather than a number the caller
+     * remembers to pass.
+     */
+    sourceBytes: number;
     loadError: string | null;
     encrypted: boolean;
     pageCount: number;

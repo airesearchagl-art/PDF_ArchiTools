@@ -19,8 +19,8 @@ import {
     ProcessorError,
     RunOwnership,
     canStartNextFile,
+    ceilingsFromSearch,
     checkActualOutput,
-    defaultCeilings,
     planOperation,
     planWholeJob,
     publishBatch,
@@ -202,7 +202,13 @@ export function PdfTools() {
         setBatchNote(null);
         setFiles(prev => prev.map(f => ({ ...f, status: 'planning', progress: 5, code: undefined, reason: undefined, summary: undefined, titleBlockSummary: undefined })));
 
-        const ceilings = defaultCeilings(memoryBudget);
+        // The output ceiling can be lowered by the address bar and never raised,
+        // so a gate can drive the built application into a publication its own
+        // contract refuses without producing a 256 MiB archive to get there.
+        const ceilings = ceilingsFromSearch(
+            memoryBudget,
+            typeof window === 'undefined' ? '' : window.location.search,
+        );
         const results: FileResult[] = [];
 
         try {
@@ -243,8 +249,6 @@ export function PdfTools() {
                 const job = planWholeJob(
                     runnable.map(p => p.plan.filePeakBytes),
                     runnable.map(p => p.plan.fileBytesEstimate),
-                    runnable.map(p => p.row.file.name),
-                    2048,
                     ceilings,
                 );
                 if (!job.ok) {
@@ -355,6 +359,31 @@ export function PdfTools() {
                             status: FILE_RESULT.FAILED,
                             code: PLAN_STATUS.OVER_OUTPUT_BUDGET,
                             reason: actual.reason,
+                            bytes: null,
+                            outputName: null,
+                        });
+                        continue;
+                    }
+
+                    // The bound the whole job was admitted on, held against the
+                    // artifact. The pre-run preflight priced this file at
+                    // `fileBytesEstimate`; an output past it would make the
+                    // arithmetic that approved the batch describe a different
+                    // job, so the file is refused rather than quietly breaking
+                    // the accounting that let the run start.
+                    if (out.length > plan.fileBytesEstimate) {
+                        const overRun = `このファイルの出力が${(out.length / 1048576).toFixed(1)} MiBとなり、`
+                            + `処理開始前に見積もった上限${(plan.fileBytesEstimate / 1048576).toFixed(1)} MiBを超えました。`
+                            + 'バッチ全体の見積もりが成り立たなくなるため、このファイルは書き出しません。';
+                        setRow(row.id, {
+                            status: 'refused', progress: 100,
+                            code: PLAN_STATUS.OVER_OUTPUT_BUDGET, reason: overRun,
+                        });
+                        results.push({
+                            name: row.file.name,
+                            status: FILE_RESULT.FAILED,
+                            code: PLAN_STATUS.OVER_OUTPUT_BUDGET,
+                            reason: overRun,
                             bytes: null,
                             outputName: null,
                         });
@@ -659,7 +688,13 @@ export function PdfTools() {
                     </div>
                 )}
 
-                {(activeTool === 'monochrome' || activeTool === 'both') && (
+                {/*
+                  * Shown for every tool, not only the two that rasterise. The
+                  * job ceiling now prices the structure-preserving operations
+                  * as well, so a batch of them can be refused for its memory —
+                  * and a refusal the person has no control over is a dead end.
+                  */}
+                {(
                     <div className="settings-group">
                         <h4>処理メモリ上限</h4>
                         <select value={memoryBudget}

@@ -448,6 +448,53 @@ try {
         !(states6.some((s) => s.includes('完了')) && after6.length === 0),
         `${after6.length} file(s)`);
 
+    // ---- 7. a publication refused by its own contract -----------------------
+    //
+    // RF-P3C. Every file is produced and none is delivered. The ceiling is not
+    // a number picked in advance: the batch above wrote a real archive, and
+    // this one runs the same three files against one byte less than that. A
+    // fixed guess would have been either too high to refuse anything or low
+    // enough to refuse each file on its own, which measures a different
+    // contract entirely.
+    console.log('\n=== 7. a publication the ceiling refuses ===');
+    const zipName = after6.find((f) => f.toLowerCase().endsWith('.zip'));
+    const zipSize = zipName ? fs.statSync(path.join(downloads, zipName)).size : null;
+    check('the archive to measure against exists', zipSize !== null && zipSize > 0,
+        `${zipName ?? 'no zip'} ${zipSize ?? 0} B`);
+
+    clearDownloads();
+    await page.goto(`${ORIGIN}/?maxOutputBytes=${Math.max(1, (zipSize ?? 2) - 1)}`, { waitUntil: 'networkidle0' });
+    await openProcessor();
+    await pickTool('半透明レイヤ追加');
+    await upload(A4, A4b, A4c);
+    clearDownloads();
+    await run();
+
+    // Wait for the run to be over rather than for a duration: it ends with the
+    // rows carrying a refusal, not with a download.
+    let settled = null;
+    for (let i = 0; i < 100 && settled === null; i += 1) {
+        await settle(150);
+        const state = await page.evaluate(() => ({
+            busy: document.querySelector('[data-usage-target="processor-run"]')?.disabled === true,
+            rows: [...document.querySelectorAll('.file-status')].map((e) => e.textContent.trim()),
+        }));
+        if (!state.busy && state.rows.length > 0 && !state.rows.some((s) => s.includes('待機'))) {
+            settled = state.rows;
+        }
+    }
+    const states7 = settled ?? await rowStates();
+    const shown = await page.evaluate(() => document.body.textContent ?? '');
+    probe('a batch refused at publication writes no ZIP',
+        downloadsNow().filter((f) => f.toLowerCase().endsWith('.zip')).length === 0,
+        downloadsNow().join(', ') || '0 files');
+    probe('and leaves no row claiming 完了',
+        !states7.some((s) => s.includes('完了')), states7.join(','));
+    check('the produced files are marked refused, with the code that refused them',
+        states7.some((s) => s.includes('処理できません'))
+        && shown.includes('OVER_OUTPUT_BUDGET'),
+        states7.join(','));
+
     check('no page error during any of it', pageErrors.length === 0, pageErrors.join(' | '));
 
     const failed = checks.filter((c) => !c.ok);

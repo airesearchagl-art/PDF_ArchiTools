@@ -173,6 +173,64 @@ export function fileCost(pages: PageCost[]): { peakBytes: number; outputBytes: n
     };
 }
 
+/**
+ * What a structure-preserving operation costs, bounded rather than guessed.
+ *
+ * These operations do not know their output until they have produced it: the
+ * overlay adds a rectangle per page, Margin wraps each content stream, 最適化
+ * re-serialises, 図面サイズ統一 re-embeds every page, and 図枠一括更新 embeds a
+ * 1,758,688-byte Japanese face **unsubsetted** (`@pdf-lib/fontkit` 1.1.1 drops
+ * CJK glyphs when subsetting, so M1 pinned `subset: false`). Leaving them at an
+ * estimate of zero is what let a whole-job preflight approve a batch it had not
+ * priced at all.
+ *
+ * So the basis here is CONSERVATIVE_BOUND, stated as such: half again the
+ * source for a re-serialisation that may expand, plus slack that covers the
+ * embedded font more than four times over. It is deliberately *not* run through
+ * `checkCeilings` for a single file — a bound this loose would refuse a 200 MB
+ * document whose real output is comfortably inside the ceiling — but it is what
+ * the job-level accounting prices, and a runner whose output exceeds it is
+ * refused rather than allowed to invalidate the arithmetic that admitted it.
+ */
+export const PRESERVING_GROWTH_NUMERATOR = 3;
+export const PRESERVING_GROWTH_DENOMINATOR = 2;
+
+/**
+ * Slack for a re-serialisation: cross-reference tables, object headers and the
+ * structure a save adds around content it did not change.
+ *
+ * It is deliberately small. A generous per-file constant looks harmless and is
+ * not: the whole-job model prices the Blob handoff at `sources + 3 × archive`,
+ * so every byte of slack is charged four times over, and an 8 MiB constant made
+ * forty ordinary 1.7 KB drawings read as 1,343 MiB — a batch that runs today in
+ * about 272 KB, refused before it started. A bound that refuses work which
+ * would have succeeded is its own kind of wrong answer.
+ */
+export const PRESERVING_SLACK_BYTES = 256 * 1024;
+
+/**
+ * What 図枠一括更新 adds on top of that: a Japanese face embedded **whole**.
+ *
+ * `@pdf-lib/fontkit` 1.1.1 drops CJK glyphs when subsetting, so M1 pinned
+ * `subset: false`, and every output carries all 1,758,688 bytes of
+ * `MPLUS1p-Regular.ttf`. This is the one operation whose output does not
+ * resemble its input's size, and the gate measures a real run against the bound
+ * rather than taking the arithmetic's word for it.
+ */
+export const EMBEDDED_FONT_ALLOWANCE_BYTES = 2 * 1024 * 1024;
+
+export function preservingFileCost(
+    sourceBytes: number,
+    slackBytes: number = PRESERVING_SLACK_BYTES,
+): { peakBytes: number; outputBytes: number } {
+    const outputBytes = Math.ceil(
+        (sourceBytes * PRESERVING_GROWTH_NUMERATOR) / PRESERVING_GROWTH_DENOMINATOR,
+    ) + slackBytes;
+    // The source bytes, the parsed document built from them, and the saved
+    // buffer are all live at the moment of saving.
+    return { outputBytes, peakBytes: 2 * sourceBytes + outputBytes };
+}
+
 // ---------------------------------------------------------------------------
 // The batch, priced from JSZip's own path
 // ---------------------------------------------------------------------------
@@ -287,6 +345,23 @@ export const MANIFEST_NAME = 'manifest.json';
  */
 export const MAX_ENTRY_NAME_BYTES = 255;
 
+/**
+ * What one entry can cost before the archive exists.
+ *
+ * The pre-run preflight runs before any output has been named — 最適化 does not
+ * know whether it will return `_optimized` or the source unchanged, and the two
+ * hardened lanes take their suffix from a summary that does not exist yet. The
+ * earlier version priced the *input* names, which is not an upper bound on the
+ * output ones. Pricing the stated maximum instead is: every name is charged at
+ * `MAX_ENTRY_NAME_BYTES` with its Unicode Path extra field in both records,
+ * which is at least what any name the publication will accept can cost, and
+ * `planBatchPublication` refuses anything longer rather than letting it through.
+ */
+export const worstCaseEntryOverhead = (): number =>
+    ZIP_LOCAL_HEADER_BYTES + ZIP_CENTRAL_RECORD_BYTES
+    + 2 * MAX_ENTRY_NAME_BYTES
+    + 2 * (2 + 2 + 1 + 4 + MAX_ENTRY_NAME_BYTES);
+
 export interface Ceilings {
     maxRasterPixels: number;
     memoryBytes: number;
@@ -298,6 +373,32 @@ export const defaultCeilings = (memoryBytes: number = DEFAULT_MEMORY_BUDGET): Ce
     memoryBytes,
     maxOutputBytes: MAX_OUTPUT_BYTES,
 });
+
+/**
+ * The same ceilings, with the output one optionally lowered by the address bar.
+ *
+ * A publication refused by its own contract is a state the built application
+ * has to be driven into to be believed — a unit test of `publishBatch` proves
+ * the function, not the screen. Producing a real 256 MiB archive in CI to reach
+ * it would cost minutes and gigabytes, so the ceiling comes down to meet the
+ * artifact instead.
+ *
+ * It can only ever come **down**: the value is clamped into
+ * `(0, MAX_OUTPUT_BYTES]`, so no query string can talk this build into
+ * accepting an output the adopted ceiling refuses. Anything unparseable is
+ * ignored rather than treated as zero.
+ */
+export function ceilingsFromSearch(memoryBytes: number, search: string): Ceilings {
+    const base = defaultCeilings(memoryBytes);
+    let requested = NaN;
+    try {
+        requested = Number(new URLSearchParams(search).get('maxOutputBytes'));
+    } catch {
+        return base;
+    }
+    if (!Number.isFinite(requested) || requested <= 0) return base;
+    return { ...base, maxOutputBytes: Math.min(base.maxOutputBytes, Math.floor(requested)) };
+}
 
 export type BudgetRefusal =
     | 'OVER_RASTER_LIMIT'

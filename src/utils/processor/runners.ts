@@ -16,7 +16,7 @@ import { configurePdfWorker } from '../pdf-worker-source';
 import { PLAN_STATUS, ProcessorError } from './contracts';
 import type { ProcessorOperation } from './contracts';
 import type { RunToken } from './ownership';
-import { applyMetadata, readMetadata } from './metadata';
+import { applyMetadata, metadataGaps, readMetadata } from './metadata';
 import {
     drawFullPageImage, probeCanvasAllocation, releaseCanvas, samplesFromCanvas,
 } from './raster-xobject';
@@ -126,8 +126,35 @@ export async function runFlatten(
         await rendered.destroy();
     }
 
-    applyMetadata(out, metadata);
-    return out.save({ useObjectStreams: false });
+    // H12, enforced rather than attempted. `applyMetadata` reports what it could
+    // not carry — an Info value held by reference to an object that is not
+    // there, a value no copy can move safely, a `/Metadata` that is not a
+    // stream — and none of those may end as a file the person is handed while
+    // the thing they came in with is missing from it.
+    const problems = applyMetadata(out, metadata);
+    if (problems.length > 0) {
+        throw new ProcessorError(
+            `元のPDFのメタデータを引き継げなかったため、処理を中止しました: ${problems.join(' / ')}`,
+            PLAN_STATUS.METADATA_NOT_PRESERVED,
+        );
+    }
+
+    const saved = await out.save({ useObjectStreams: false });
+
+    // And then read back, because applying is a claim and the file is the fact.
+    // The XMP defect this gate caught last round applied without error and
+    // produced a document whose metadata was deflate data calling itself XML;
+    // only reopening the bytes could tell the difference.
+    const gaps = metadataGaps(metadata, readMetadata(
+        await PDFDocument.load(saved, { updateMetadata: false }),
+    ));
+    if (gaps.length > 0) {
+        throw new ProcessorError(
+            `書き出したPDFに元のメタデータが残っていませんでした: ${gaps.join('、')}`,
+            PLAN_STATUS.METADATA_NOT_PRESERVED,
+        );
+    }
+    return saved;
 }
 
 /**
