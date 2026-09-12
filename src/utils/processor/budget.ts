@@ -193,8 +193,37 @@ export const ZIP_END_OF_DIRECTORY_BYTES = 22;
 const utf8 = new TextEncoder();
 export const entryNameBytes = (name: string): number => utf8.encode(name).length;
 
+/**
+ * Whether JSZip will treat this name as UTF-8.
+ *
+ * `generateZipParts` decides with `utfEncodedFileName.length !== file.name.length`
+ * (ZipFileWorker.js:89) — true exactly when a character costs more than one
+ * byte, which for a Japanese filename is every character.
+ */
+export const needsUnicodePath = (name: string): boolean => entryNameBytes(name) !== name.length;
+
+/**
+ * The Info-ZIP Unicode Path extra field JSZip writes for such a name:
+ * `"up"` (2) + size (2) + version (1) + NameCRC32 (4) + the UTF-8 name
+ * (ZipFileWorker.js:158-183). It is appended to `extraFields`, which goes into
+ * **both** the local header and the central-directory record (:228, :248).
+ */
+export const unicodePathExtraBytes = (name: string): number => (
+    needsUnicodePath(name) ? 2 + 2 + 1 + 4 + entryNameBytes(name) : 0
+);
+
+/**
+ * What one entry costs beyond its content, priced against what JSZip actually
+ * writes rather than against a round number.
+ *
+ * The name appears in both records, and so does the extra field. Pricing only
+ * `2 × name` under-charges every non-ASCII filename by `2 × (9 + name)` — which
+ * is the difference between a batch that fits and a batch that does not.
+ */
 export const zipEntryOverhead = (name: string): number =>
-    ZIP_LOCAL_HEADER_BYTES + ZIP_CENTRAL_RECORD_BYTES + 2 * entryNameBytes(name);
+    ZIP_LOCAL_HEADER_BYTES + ZIP_CENTRAL_RECORD_BYTES
+    + 2 * entryNameBytes(name)
+    + 2 * unicodePathExtraBytes(name);
 
 export interface BatchEntry {
     /** The name as it will appear in the archive. */
@@ -291,4 +320,27 @@ export function checkCeilings(
     if (peakBytes > ceilings.memoryBytes) return 'OVER_MEMORY_BUDGET';
     if (outputBytes > ceilings.maxOutputBytes) return 'OVER_OUTPUT_BUDGET';
     return null;
+}
+
+/**
+ * The output ceiling, applied to the artifact that actually exists.
+ *
+ * Planning estimates what a file will cost; this is the only check that knows.
+ * Every operation passes its finished bytes through here — including 最適化
+ * when it elects to hand back the source unchanged, because "we did not make it
+ * bigger" is not the same claim as "this is inside the ceiling" — and the
+ * answer gates the row turning green, the Blob, the download, and the file's
+ * admission to a B2 archive. The archive itself is measured again on its own.
+ */
+export function checkActualOutput(
+    actualBytes: number,
+    ceilings: Ceilings,
+): { ok: true } | { ok: false; reason: string } {
+    if (actualBytes <= ceilings.maxOutputBytes) return { ok: true };
+    return {
+        ok: false,
+        reason: `出力が${(actualBytes / 1048576).toFixed(1)} MiBとなり、`
+            + `上限の${(ceilings.maxOutputBytes / 1048576).toFixed(0)} MiBを超えます。`
+            + '書き出しは行いませんでした。',
+    };
 }

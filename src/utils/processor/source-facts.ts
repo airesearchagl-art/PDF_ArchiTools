@@ -13,10 +13,25 @@
  * "this document may not be processed" are different statements, and conflating
  * them is what made an empty signature box look like a signed contract.
  *
+ * **`/FT` and `/V` are inheritable.** A terminal field may carry neither and
+ * still be a signature field holding a signature, because both can sit on an
+ * ancestor. Reading them off the field dictionary alone misses exactly the
+ * documents this boundary exists for, so both are resolved up the `/Parent`
+ * chain.
+ *
+ * **Ambiguity is a refusal, not a shrug.** A cyclic field tree, one deeper than
+ * this walk will follow, or a `/Fields` entry that is not an array all leave
+ * `formInspectionState: 'unreadable'`, which the planner turns into
+ * `SIGNATURE_UNSAFE`. A form we cannot read completely may hide an applied
+ * signature, and "probably fine" is not a thing this code is allowed to decide.
+ *
  * Adopted: H7 (applied-only), H11 (one facts step for every operation).
  */
-import { PDFDocument, PDFName, PDFDict, PDFArray, PDFNumber } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, PDFArray, PDFNumber, PDFRef } from 'pdf-lib';
 import type { SourceFacts } from './contracts';
+
+/** How far up a `/Parent` chain, or down a field tree, this walk will go. */
+export const MAX_FIELD_TREE_DEPTH = 32;
 
 const resolve = (doc: PDFDocument, value: unknown): unknown => {
     try {
@@ -31,24 +46,73 @@ const nameOf = (value: unknown): string => {
     return typeof asString === 'function' ? asString.call(value) : String(value ?? '');
 };
 
+/** Raised when the field tree cannot be read completely. Never swallowed. */
+class FieldTreeUnreadable extends Error {}
+
+/**
+ * An inheritable attribute, resolved the way a reader resolves it: this
+ * dictionary first, then `/Parent`, then its parent, and so on.
+ *
+ * A loop in the chain is not "not found" — it is a document we cannot read, so
+ * it refuses rather than returning undefined and letting a signature through.
+ */
+function inherited(
+    doc: PDFDocument,
+    field: PDFDict,
+    key: string,
+    startRef: PDFRef | null,
+): unknown {
+    const seen = new Set<string>();
+    if (startRef) seen.add(startRef.toString());
+    let current: PDFDict | null = field;
+    for (let depth = 0; current; depth += 1) {
+        if (depth > MAX_FIELD_TREE_DEPTH) {
+            throw new FieldTreeUnreadable(`inheritable ${key} chain deeper than ${MAX_FIELD_TREE_DEPTH}`);
+        }
+        const own = current.get(PDFName.of(key));
+        if (own !== undefined) return resolve(doc, own);
+
+        const parentRaw = current.get(PDFName.of('Parent'));
+        if (parentRaw === undefined) return undefined;
+        if (parentRaw instanceof PDFRef) {
+            const id = parentRaw.toString();
+            if (seen.has(id)) throw new FieldTreeUnreadable('cyclic /Parent chain');
+            seen.add(id);
+        }
+        const parent = resolve(doc, parentRaw);
+        current = parent instanceof PDFDict ? parent : null;
+    }
+    return undefined;
+}
+
 /**
  * Walk the AcroForm field tree at the dictionary level.
  *
  * Terminal fields are the ones with a `/T` and no field `/Kids`; a widget is
  * not a field, and counting widgets is how a one-field form starts reporting
- * two. A `/Sig` field is *applied* only when its `/V` resolves to a dictionary
- * — an empty signature box has no `/V`, or a null one.
+ * two. A `/Sig` field is *applied* only when its effective `/V` resolves to a
+ * dictionary — an empty signature box has no `/V` anywhere above it.
  */
 function walkFields(
     doc: PDFDocument,
     array: PDFArray,
     facts: SourceFacts,
     inheritedName: string,
-    depth = 0,
+    seen: Set<string>,
+    depth: number,
 ): void {
-    if (depth > 32) return; // a cycle is a broken document, not a deep one
+    if (depth > MAX_FIELD_TREE_DEPTH) {
+        throw new FieldTreeUnreadable(`field tree deeper than ${MAX_FIELD_TREE_DEPTH}`);
+    }
     for (let i = 0; i < array.size(); i += 1) {
-        const field = resolve(doc, array.get(i));
+        const raw = array.get(i);
+        const ref = raw instanceof PDFRef ? raw : null;
+        if (ref) {
+            const id = ref.toString();
+            if (seen.has(id)) throw new FieldTreeUnreadable('cyclic field tree');
+            seen.add(id);
+        }
+        const field = resolve(doc, raw);
         if (!(field instanceof PDFDict)) continue;
 
         const partial = field.get(PDFName.of('T'));
@@ -75,16 +139,16 @@ function walkFields(
         }
 
         if (hasFieldKids && kids) {
-            walkFields(doc, kids, facts, fullName, depth + 1);
+            walkFields(doc, kids, facts, fullName, seen, depth + 1);
             continue;
         }
 
         if (partial === undefined) continue; // a bare widget
 
         facts.fieldCount += 1;
-        const ft = nameOf(field.get(PDFName.of('FT')));
+        const ft = nameOf(inherited(doc, field, 'FT', ref));
         if (ft === '/Sig') {
-            const value = resolve(doc, field.get(PDFName.of('V')));
+            const value = inherited(doc, field, 'V', ref);
             facts.signatureFields.push({ name: fullName, signed: value instanceof PDFDict });
         }
     }
@@ -185,12 +249,25 @@ export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
     if (sigFlags instanceof PDFNumber) facts.sigFlags = sigFlags.asNumber();
 
     try {
-        const fields = resolve(doc, acroForm.get(PDFName.of('Fields')));
-        if (fields instanceof PDFArray) walkFields(doc, fields, facts, '');
+        const fieldsRaw = acroForm.get(PDFName.of('Fields'));
+        if (fieldsRaw !== undefined) {
+            const fields = resolve(doc, fieldsRaw);
+            if (!(fields instanceof PDFArray)) {
+                // An AcroForm that has /Fields but not as an array is a form we
+                // cannot enumerate. That is exactly the state where a signature
+                // could be hiding, so it refuses rather than reporting none.
+                throw new FieldTreeUnreadable('/Fields is not an array');
+            }
+            walkFields(doc, fields, facts, '', new Set<string>(), 0);
+        }
         facts.formInspectionState = 'read';
     } catch (error) {
         facts.formInspectionState = 'unreadable';
         facts.formError = String((error as Error)?.message ?? error);
+        // What was collected before the tree turned out to be unreadable is not
+        // a complete picture, so it is not reported as one.
+        facts.signatureFields = [];
+        facts.fieldCount = 0;
     }
 
     return derive();

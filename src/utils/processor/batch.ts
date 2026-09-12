@@ -128,6 +128,75 @@ export function planBatchPublication(
     return { ok: true, cost };
 }
 
+/**
+ * Whether the job can still afford to start the next file.
+ *
+ * Checking the archive's budget after every output has been produced discovers
+ * `OVER_MEMORY_BUDGET` with the memory already claimed — the refusal arrives
+ * too late to be a refusal. So the job is re-checked at each file boundary,
+ * against what is actually being held rather than against an estimate: the
+ * bytes of the outputs retained so far, plus the peak the next file will reach
+ * while it is produced.
+ *
+ * `nextFilePeakBytes` comes from that file's own plan, which exists before the
+ * first raster of the job is allocated.
+ */
+export function canStartNextFile(
+    retained: FileResult[],
+    nextFilePeakBytes: number,
+    ceilings: Ceilings,
+): { ok: true; liveBytes: number } | { ok: false; reason: string; liveBytes: number } {
+    const held = retained.reduce((n, r) => n + (r.bytes ? r.bytes.length : 0), 0);
+    const liveBytes = held + nextFilePeakBytes;
+    if (liveBytes <= ceilings.memoryBytes) return { ok: true, liveBytes };
+    return {
+        ok: false,
+        liveBytes,
+        reason: `すでに書き出し済みの${(held / 1048576).toFixed(0)} MiBに加えて`
+            + `このファイルの処理に約${(nextFilePeakBytes / 1048576).toFixed(0)} MiBが必要で、`
+            + `処理メモリ上限${(ceilings.memoryBytes / 1048576).toFixed(0)} MiBを超えます。`
+            + 'ファイル数を減らすか、上限設定を変更してください。',
+    };
+}
+
+/**
+ * The whole job, priced before the first page is rendered.
+ *
+ * For the flattening operations every file's plan is known up front, so the
+ * batch can be refused before it starts instead of part-way through. The two
+ * terms that matter are the peak while the last file is produced on top of
+ * everything retained, and the archive handoff at the end.
+ */
+export function planWholeJob(
+    filePeaks: number[],
+    fileOutputEstimates: number[],
+    entryNames: string[],
+    manifestEstimateBytes: number,
+    ceilings: Ceilings,
+): { ok: true; peakBytes: number } | { ok: false; reason: string; peakBytes: number } {
+    const retainedAtEnd = fileOutputEstimates.reduce((n, b) => n + b, 0);
+    const producing = fileOutputEstimates.reduce(
+        (worst, _b, i) => {
+            const before = fileOutputEstimates.slice(0, i).reduce((n, x) => n + x, 0);
+            return Math.max(worst, before + (filePeaks[i] ?? 0));
+        },
+        0,
+    );
+    const archive = batchCost(
+        entryNames.map((name, i) => ({ name, bytes: fileOutputEstimates[i] ?? 0 })),
+        manifestEstimateBytes,
+    );
+    const peakBytes = Math.max(producing, retainedAtEnd, archive.peakBytes);
+    if (peakBytes <= ceilings.memoryBytes) return { ok: true, peakBytes };
+    return {
+        ok: false,
+        peakBytes,
+        reason: `このバッチ全体で約${(peakBytes / 1048576).toFixed(0)} MiBが必要で、`
+            + `処理メモリ上限${(ceilings.memoryBytes / 1048576).toFixed(0)} MiBを超えます。`
+            + '処理を開始せずに中止しました。',
+    };
+}
+
 const batchStatus = (results: FileResult[]): BatchResultStatus => {
     if (results.some((r) => r.status === FILE_RESULT.CANCELLED)) return BATCH_RESULT.CANCELLED;
     const ok = results.filter((r) => r.status === FILE_RESULT.SUCCEEDED).length;

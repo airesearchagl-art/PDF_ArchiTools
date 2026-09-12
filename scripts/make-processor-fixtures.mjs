@@ -17,7 +17,7 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
-    PDFDocument, PDFName, PDFNumber, PDFString, PDFHexString, PDFArray,
+    PDFDocument, PDFName, PDFNumber, PDFString, PDFHexString, PDFArray, PDFDict,
     StandardFonts, rgb, degrees,
     setTextRenderingMode, TextRenderingMode,
 } from 'pdf-lib';
@@ -354,6 +354,113 @@ for (const angle of [0, 90, 180, 270]) {
 }
 
 // ---------------------------------------------------------------------------
+// Inheritable /FT and /V, and field trees that cannot be read
+// ---------------------------------------------------------------------------
+
+/** A field tree whose terminal leaf inherits what makes it a signature. */
+async function inheritedSignature(name, { onParent, signed, note }) {
+    const { doc, font } = await newDoc(`M5 ${name}`);
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, `INHERIT-M5P-${name}`);
+
+    const sigRef = signed ? doc.context.register(doc.context.obj({
+        Type: 'Sig', Filter: 'Adobe.PPKLite', SubFilter: 'adbe.pkcs7.detached',
+        ByteRange: [0, 0, 0, 0], Contents: PDFHexString.of('00'.repeat(16)),
+    })) : null;
+
+    // The leaf carries /T and a widget rect, and nothing else that identifies
+    // it: whichever of /FT and /V the test is about lives on the parent.
+    const leaf = doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', T: PDFString.of('leaf'),
+        Rect: [380, 80, 560, 140], F: 4,
+        ...(onParent === 'FT' && signed ? { V: sigRef } : {}),
+        ...(onParent === 'V' ? { FT: 'Sig' } : {}),
+    });
+    const leafRef = doc.context.register(leaf);
+
+    const parent = doc.context.obj({
+        T: PDFString.of('parent'),
+        Kids: [leafRef],
+        ...(onParent === 'FT' ? { FT: 'Sig' } : {}),
+        ...(onParent === 'V' && signed ? { V: sigRef, FT: 'Sig' } : {}),
+    });
+    const parentRef = doc.context.register(parent);
+    leaf.set(PDFName.of('Parent'), parentRef);
+
+    page.node.set(PDFName.of('Annots'), doc.context.obj([leafRef]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [parentRef], SigFlags: 3,
+    })));
+    await write(name, doc, note);
+}
+
+await inheritedSignature('inherited-ft-signature', {
+    onParent: 'FT', signed: true, note: '/FT /Sig on the parent, the signature on the leaf',
+});
+await inheritedSignature('inherited-v-signature', {
+    onParent: 'V', signed: true, note: 'the signature /V on the parent, /FT on the leaf',
+});
+await inheritedSignature('inherited-empty-signature', {
+    onParent: 'FT', signed: false, note: '/FT /Sig inherited, nothing signed anywhere',
+});
+
+{
+    // Two field dictionaries that are each other's kid. A reader that follows
+    // the tree without remembering where it has been never comes back.
+    const { doc, font } = await newDoc('M5 cyclic field tree');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'CYCLIC-M5P');
+    const a = doc.context.obj({ T: PDFString.of('a') });
+    const b = doc.context.obj({ T: PDFString.of('b') });
+    const aRef = doc.context.register(a);
+    const bRef = doc.context.register(b);
+    a.set(PDFName.of('Kids'), doc.context.obj([bRef]));
+    b.set(PDFName.of('Kids'), doc.context.obj([aRef]));
+    b.set(PDFName.of('Parent'), aRef);
+    a.set(PDFName.of('Parent'), bRef);
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [aRef], SigFlags: 3,
+    })));
+    await write('cyclic-field-tree', doc, 'two fields that are each other’s kid');
+}
+{
+    // Deeper than the walk will follow. Not malformed — just unreadable by a
+    // bounded reader, which is the same thing as far as safety goes.
+    const { doc, font } = await newDoc('M5 deep field tree');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'DEEP-M5P');
+    let childRef = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', T: PDFString.of('leaf'), FT: 'Sig',
+        Rect: [380, 80, 560, 140], F: 4,
+    }));
+    for (let i = 0; i < 40; i += 1) {
+        const node = doc.context.obj({ T: PDFString.of(`n${i}`), Kids: [childRef] });
+        const nodeRef = doc.context.register(node);
+        const child = doc.context.lookup(childRef);
+        if (child instanceof PDFDict) child.set(PDFName.of('Parent'), nodeRef);
+        childRef = nodeRef;
+    }
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [childRef], SigFlags: 3,
+    })));
+    await write('over-depth-field-tree', doc, '41 levels of field nodes');
+}
+{
+    // /Fields present, but a dictionary rather than an array.
+    const { doc, font } = await newDoc('M5 malformed fields');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'MALFORMED-FIELDS-M5P');
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: { Broken: 1 }, SigFlags: 3,
+    })));
+    await write('malformed-fields-entry', doc, '/Fields is a dictionary, not an array');
+}
+
+// ---------------------------------------------------------------------------
 // Metadata and a document that cannot be read at all
 // ---------------------------------------------------------------------------
 {
@@ -368,6 +475,47 @@ for (const angle of [0, 90, 180, 270]) {
     const stream = doc.context.stream(Buffer.from(xmp, 'utf8'), { Type: 'Metadata', Subtype: 'XML' });
     doc.catalog.set(PDFName.of('Metadata'), doc.context.register(stream));
     await write('metadata-a4', doc, 'Info fields and an XMP packet');
+}
+{
+    // Custom Info keys alongside the standard ones, and an uncompressed XMP.
+    const { doc, font } = await newDoc('M5 custom metadata');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'CUSTOM-INFO-M5P');
+    doc.setKeywords(['M5P-KEY-ONE', 'M5P-KEY-TWO']);
+    const info = doc.context.lookup(doc.context.trailerInfo.Info);
+    if (info instanceof PDFDict) {
+        info.set(PDFName.of('Company'), PDFString.of('M5P-COMPANY'));
+        info.set(PDFName.of('SourceModified'), PDFString.of('D:20260101000000Z'));
+        info.set(PDFName.of('M5PCustom'), PDFString.of('M5P-CUSTOM-VALUE'));
+    }
+    const xmp = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description dc:title="M5P-XMP-PLAIN" m5p:custom="M5P-XMP-CUSTOM"
+ xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:m5p="https://example.invalid/m5p/"/>
+</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`;
+    doc.catalog.set(PDFName.of('Metadata'), doc.context.register(
+        doc.context.stream(Buffer.from(xmp, 'utf8'), { Type: 'Metadata', Subtype: 'XML' }),
+    ));
+    await write('metadata-custom', doc, 'custom Info keys, /Keywords, and an unfiltered XMP packet');
+}
+{
+    // The same thing with the XMP compressed, which is what a real producer
+    // often writes. Copying its stored bytes into an unfiltered stream would
+    // produce a document whose XMP is deflate data claiming to be XML.
+    const { doc, font } = await newDoc('M5 compressed XMP');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4, { colour: false });
+    drawText(page, font, SHEET.A4, 'FLATE-XMP-M5P');
+    const xmp = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description dc:title="M5P-XMP-FLATE" xmlns:dc="http://purl.org/dc/elements/1.1/"/>
+</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`;
+    doc.catalog.set(PDFName.of('Metadata'), doc.context.register(doc.context.stream(
+        zlib.deflateSync(Buffer.from(xmp, 'utf8')),
+        { Type: 'Metadata', Subtype: 'XML', Filter: 'FlateDecode' },
+    )));
+    await write('metadata-xmp-flate', doc, 'an XMP packet stored with /Filter /FlateDecode');
 }
 {
     fs.writeFileSync(path.join(OUT, 'invalid.pdf'), Buffer.from('not a pdf at all\n', 'utf8'));

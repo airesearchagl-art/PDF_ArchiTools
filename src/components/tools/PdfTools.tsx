@@ -18,8 +18,11 @@ import {
     PLAN_STATUS,
     ProcessorError,
     RunOwnership,
+    canStartNextFile,
+    checkActualOutput,
     defaultCeilings,
     planOperation,
+    planWholeJob,
     publishBatch,
     readSourceFacts,
     runBoth,
@@ -42,7 +45,17 @@ type ToolType = ProcessorOperation;
  * not worked. H10/H22: a person has to be able to tell "this document cannot be
  * processed safely" from "something went wrong" from "you superseded this run".
  */
-type RowStatus = 'idle' | 'planning' | 'processing' | 'succeeded' | 'refused' | 'failed' | 'cancelled';
+/**
+ * `processed` is deliberately not `succeeded`.
+ *
+ * A runner returning bytes is not a file the person has. The artifact still has
+ * to pass the output ceiling, the batch still has to fit its own budget, the
+ * archive still has to be built, and the run still has to be the one that
+ * matters. Turning the row green when the runner returned put a tick next to
+ * work that could still end with nothing written, so the green is held until
+ * publication is actually approved.
+ */
+type RowStatus = 'idle' | 'planning' | 'processing' | 'processed' | 'succeeded' | 'refused' | 'failed' | 'cancelled';
 
 interface ProcessFile {
     id: string;
@@ -70,6 +83,7 @@ const STATUS_LABEL: Record<RowStatus, string> = {
     idle: '待機',
     planning: '確認中',
     processing: '処理中',
+    processed: '書き出し待ち',
     succeeded: '完了',
     refused: '処理できません',
     failed: '失敗',
@@ -219,6 +233,31 @@ export function PdfTools() {
                 return;
             }
 
+            // ---- can the whole job afford itself? --------------------------------
+            //
+            // Every plan exists before the first raster, so a batch that cannot
+            // finish is refused before it starts rather than discovered with the
+            // memory already claimed.
+            const runnable = planned.filter(p => p.plan.status === PLAN_STATUS.READY);
+            if (runnable.length > 1) {
+                const job = planWholeJob(
+                    runnable.map(p => p.plan.filePeakBytes),
+                    runnable.map(p => p.plan.fileBytesEstimate),
+                    runnable.map(p => p.row.file.name),
+                    2048,
+                    ceilings,
+                );
+                if (!job.ok) {
+                    setFiles(prev => prev.map(f => ({
+                        ...f, status: 'refused', progress: 100,
+                        code: PLAN_STATUS.OVER_MEMORY_BUDGET, reason: job.reason,
+                    })));
+                    setBatchNote(job.reason);
+                    setIsProcessing(false);
+                    return;
+                }
+            }
+
             // ---- run ------------------------------------------------------------
             for (const { row, bytes, plan } of planned) {
                 token.assertCurrent();
@@ -230,6 +269,26 @@ export function PdfTools() {
                         status: FILE_RESULT.FAILED,
                         code: plan.code,
                         reason: plan.reason,
+                        bytes: null,
+                        outputName: null,
+                    });
+                    continue;
+                }
+
+                // What is already held, plus what this file will peak at. The
+                // ceiling is a job ceiling, so it is re-checked here rather than
+                // only at the archive.
+                const boundary = canStartNextFile(results, plan.filePeakBytes, ceilings);
+                if (!boundary.ok) {
+                    setRow(row.id, {
+                        status: 'refused', progress: 100,
+                        code: PLAN_STATUS.OVER_MEMORY_BUDGET, reason: boundary.reason,
+                    });
+                    results.push({
+                        name: row.file.name,
+                        status: FILE_RESULT.FAILED,
+                        code: PLAN_STATUS.OVER_MEMORY_BUDGET,
+                        reason: boundary.reason,
                         bytes: null,
                         outputName: null,
                     });
@@ -281,6 +340,27 @@ export function PdfTools() {
                     }
 
                     token.assertCurrent();
+
+                    // The ceiling applied to bytes that exist. Planning
+                    // estimated; this is the only check that knows — including
+                    // when 最適化 hands back the source unchanged.
+                    const actual = checkActualOutput(out.length, ceilings);
+                    if (!actual.ok) {
+                        setRow(row.id, {
+                            status: 'refused', progress: 100,
+                            code: PLAN_STATUS.OVER_OUTPUT_BUDGET, reason: actual.reason,
+                        });
+                        results.push({
+                            name: row.file.name,
+                            status: FILE_RESULT.FAILED,
+                            code: PLAN_STATUS.OVER_OUTPUT_BUDGET,
+                            reason: actual.reason,
+                            bytes: null,
+                            outputName: null,
+                        });
+                        continue;
+                    }
+
                     const base = row.file.name.replace(/\.pdf$/i, '');
                     const outputName = `${base}${suffix}.pdf`;
                     results.push({
@@ -293,9 +373,11 @@ export function PdfTools() {
                         bytes: out,
                         outputName,
                     });
+                    // Held at `processed`: the artifact exists, but nobody has
+                    // it yet. The green tick waits for publication.
                     setRow(row.id, {
-                        status: 'succeeded',
-                        progress: 100,
+                        status: 'processed',
+                        progress: 90,
                         code: 'SUCCEEDED',
                         reason: results[results.length - 1].reason,
                         summary,
@@ -319,8 +401,16 @@ export function PdfTools() {
             }
 
             // ---- publish, and only if this run is still the one that matters ----
+            //
+            // Nothing above this point turned a row green. A batch can still be
+            // refused its memory or its output here, and a superseded run still
+            // publishes nothing — in either case the rows stay at 書き出し待ち
+            // rather than claiming a file the person never received.
             token.assertCurrent();
             const successes = results.filter(r => r.status === FILE_RESULT.SUCCEEDED && r.bytes);
+            const markPublished = () => setFiles(prev => prev.map(f => (
+                f.status === 'processed' ? { ...f, status: 'succeeded', progress: 100 } : f
+            )));
 
             if (files.length === 1) {
                 const only = successes[0];
@@ -328,21 +418,36 @@ export function PdfTools() {
                     const blob = new Blob([only.bytes.slice().buffer as ArrayBuffer], { type: 'application/pdf' });
                     if (!token.isCurrent()) return;
                     saveAs(blob, only.outputName ?? only.name);
+                    markPublished();
                 }
             } else if (successes.length > 0) {
-                const batch = await publishBatch(
-                    TOOL_LABEL[activeTool], results, ceilings, () => token.isCurrent(),
-                );
-                if (batch.archive && batch.archiveName && token.isCurrent()) {
-                    saveAs(batch.archive, batch.archiveName);
+                try {
+                    const batch = await publishBatch(
+                        TOOL_LABEL[activeTool], results, ceilings, () => token.isCurrent(),
+                    );
+                    if (batch.archive && batch.archiveName && token.isCurrent()) {
+                        saveAs(batch.archive, batch.archiveName);
+                        markPublished();
+                        setBatchNote(
+                            batch.status === BATCH_RESULT.PARTIAL
+                                ? `${successes.length} / ${results.length} 件を書き出しました。失敗したファイルは manifest.json に記載しています。`
+                                : `${successes.length} 件すべてを書き出しました。`,
+                        );
+                    } else {
+                        setBatchNote('設定またはファイルが変更されたため、ZIPは保存しませんでした。');
+                    }
+                } catch (error) {
+                    // The batch was refused its own budget. The files were
+                    // produced; none of them was delivered, and the rows say so.
+                    const code = error instanceof ProcessorError ? error.code : PLAN_STATUS.OVER_OUTPUT_BUDGET;
+                    const message = error instanceof Error ? error.message : String(error);
+                    setFiles(prev => prev.map(f => (
+                        f.status === 'processed'
+                            ? { ...f, status: 'refused', progress: 100, code, reason: message }
+                            : f
+                    )));
+                    setBatchNote(`ZIPを作成できなかったため、書き出していません: ${message}`);
                 }
-                setBatchNote(
-                    batch.status === BATCH_RESULT.PARTIAL
-                        ? `${successes.length} / ${results.length} 件を書き出しました。失敗したファイルは manifest.json に記載しています。`
-                        : batch.status === BATCH_RESULT.CANCELLED
-                            ? '設定またはファイルが変更されたため、ZIPは保存しませんでした。'
-                            : `${successes.length} 件すべてを書き出しました。`,
-                );
             } else {
                 setBatchNote('書き出せたファイルはありません。各行の理由を確認してください。');
             }

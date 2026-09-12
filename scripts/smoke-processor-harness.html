@@ -17,6 +17,7 @@ import {
     BATCH_RESULT,
     DEFAULT_MEMORY_BUDGET,
     FILE_RESULT,
+    MANIFEST_NAME,
     MAX_OUTPUT_BYTES,
     MAX_RASTER_PIXELS,
     MEMORY_PRESETS,
@@ -27,14 +28,18 @@ import {
     RunOwnership,
     batchCost,
     buildManifest,
+    canStartNextFile,
+    checkActualOutput,
     deflateUpperBound,
     defaultCeilings,
     entryNameBytes,
     fileCost,
     manifestBytes,
+    needsUnicodePath,
     pageCost,
     planBatchPublication,
     planOperation,
+    planWholeJob,
     publishBatch,
     readSourceFacts,
     runBoth,
@@ -43,12 +48,14 @@ import {
     runMargin,
     runOptimizeLossless,
     snapshotKey,
+    unicodePathExtraBytes,
     withConfirmation,
 } from '/src/utils/processor/index.ts';
+import JSZip from 'jszip';
 import { normalizePageSize } from '/src/utils/page-size-normalizer.ts';
 import { updateTitleBlocks } from '/src/utils/title-block-updater.ts';
 import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
-import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, PDFString, PDFHexString, PDFRawStream } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, PDFString, PDFHexString, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 
 const FIXTURES = '/test-fixtures/processor';
@@ -384,6 +391,174 @@ window.__processor = {
       japaneseBytes: entryNameBytes(japanese),
       cost: batchCost([{ name: japanese, bytes: 1000 }], 200),
     };
+  },
+
+  /**
+   * RF-O5. Build real archives and compare them with the model.
+   *
+   * The model may over-price — a conservative bound is the point — but it must
+   * never under-price, because a batch the model called safe and JSZip made
+   * larger is exactly the failure the ceiling exists to prevent.
+   */
+  async zipModelVersusActual() {
+    const long = `${'図'.repeat(70)}.pdf`; // 70 chars, 3 bytes each, inside 255
+    const cases = [
+      { label: 'ascii', names: ['drawing_a.pdf', 'drawing_b.pdf'] },
+      { label: 'japanese', names: ['図面_A.pdf', '図面_B.pdf'] },
+      { label: 'japanese near the limit', names: [long] },
+      { label: 'mixed', names: ['plan.pdf', '図面_不透明レイヤ.pdf', '詳細図.pdf'] },
+    ];
+    const payload = new Uint8Array(4096).fill(0x41);
+    const rows = [];
+    for (const c of cases) {
+      const zip = new JSZip();
+      for (const name of c.names) zip.file(name, payload);
+      const manifest = new TextEncoder().encode('{"m5p":"manifest"}\n');
+      zip.file(MANIFEST_NAME, manifest);
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const modelled = batchCost(
+        c.names.map((name) => ({ name, bytes: payload.length })),
+        manifest.length,
+      );
+      rows.push({
+        label: c.label,
+        names: c.names.map((n) => ({ name: n, bytes: entryNameBytes(n), unicodePath: needsUnicodePath(n) })),
+        actualBytes: blob.size,
+        modelledBytes: modelled.archiveBytes,
+        overPricedBy: modelled.archiveBytes - blob.size,
+        unicodeExtraPerEntry: c.names.map((n) => unicodePathExtraBytes(n)),
+      });
+    }
+    return rows;
+  },
+
+  /**
+   * RF-O2. What the metadata looks like on both sides of an operation.
+   *
+   * Read structurally rather than through pdf-lib's getters: the getters know
+   * about a handful of standard keys, and the whole point is the ones they do
+   * not know about. The XMP is reported with its filter and its bytes so a
+   * round trip can be compared without decoding anything.
+   */
+  async metadataRoundTrip(name, operation, over = {}) {
+    const describe = async (bytes) => {
+      const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+      const out = { info: [], xmp: null };
+      const infoRef = doc.context.trailerInfo?.Info;
+      const info = infoRef ? doc.context.lookup(infoRef) : null;
+      if (info instanceof PDFDict) {
+        for (const [key, value] of info.entries()) {
+          out.info.push({
+            key: key.asString(),
+            value: value?.decodeText ? value.decodeText() : String(value ?? ''),
+          });
+        }
+      }
+      const stream = doc.catalog.lookup(PDFName.of('Metadata'));
+      if (stream instanceof PDFRawStream) {
+        const contents = stream.getContents();
+        let decoded = null;
+        try {
+          decoded = new TextDecoder('utf-8').decode(decodePDFRawStream(stream).decode());
+        } catch (e) { decoded = `DECODE FAILED: ${String(e?.message ?? e)}`; }
+        out.xmp = {
+          filter: nameOf(stream.dict.get(PDFName.of('Filter'))),
+          storedBytes: contents.length,
+          startsWithXpacket: decoded !== null && decoded.trimStart().startsWith('<?xpacket'),
+          hasTitleMarker: decoded !== null && /M5P-XMP-(PLAIN|FLATE)/.test(decoded),
+          hasCustomMarker: decoded !== null && decoded.includes('M5P-XMP-CUSTOM'),
+        };
+      }
+      return out;
+    };
+
+    const bytes = await bytesOf(name);
+    const before = await describe(bytes.slice());
+    const r = await this.run(name, operation, over);
+    if (!r.ran) return { ran: false, code: r.code, reason: r.reason, before, after: null };
+
+    // `run` does not hand the bytes back, so the operation is repeated here to
+    // get them. Same inputs, same settings, same code path.
+    const settings = settingsFor(operation, over);
+    let out;
+    if (operation === 'monochrome') {
+      out = await runFlatten(bytes.slice(), 'monochrome', { dpi: settings.dpi, contrast: settings.contrast });
+    } else if (operation === 'both') {
+      out = await runBoth(bytes.slice(), { dpi: settings.dpi, contrast: settings.contrast },
+        { color: '#ffffff', opacity: 0.5 });
+    } else if (operation === 'layer') {
+      out = await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 });
+    } else if (operation === 'margin') {
+      out = await runMargin(bytes.slice(), { scale: 0.8, position: 'center' });
+    } else {
+      out = (await runOptimizeLossless(bytes.slice())).bytes;
+    }
+    return { ran: true, before, after: await describe(out) };
+  },
+
+  /**
+   * RF-O4. Where a B2 batch of one-page A4 @150 files stops being affordable,
+   * derived from the production model rather than quoted from the research.
+   */
+  b2Boundaries(colourSpace) {
+    const A4 = [595.28, 841.89];
+    const filter = colourSpace === 'DeviceGray' ? 'flate' : 'none';
+    const page = pageCost(...A4, 150, colourSpace, filter);
+    const file = fileCost([page]);
+    const out = {};
+    for (const memory of MEMORY_PRESETS) {
+      const ceilings = defaultCeilings(memory);
+      const fits = (n) => {
+        const names = Array.from({ length: n }, (_, i) => `file-${i + 1}.pdf`);
+        const job = planWholeJob(
+          Array.from({ length: n }, () => file.peakBytes),
+          Array.from({ length: n }, () => file.outputBytes),
+          names, 2048, ceilings,
+        );
+        if (!job.ok) return { ok: false, why: 'OVER_MEMORY_BUDGET', peak: job.peakBytes };
+        const cost = batchCost(names.map((name) => ({ name, bytes: file.outputBytes })), 2048);
+        if (cost.archiveBytes > ceilings.maxOutputBytes) {
+          return { ok: false, why: 'OVER_OUTPUT_BUDGET', peak: job.peakBytes };
+        }
+        return { ok: true, peak: job.peakBytes };
+      };
+      let lo = 0;
+      let hi = 4000;
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (mid === 0 || fits(mid).ok) lo = mid; else hi = mid;
+      }
+      out[memory] = {
+        justUnder: lo, firstOver: hi, binding: fits(hi).why,
+        peakAtJustUnder: lo > 0 ? fits(lo).peak : 0,
+      };
+    }
+    return { perPageBytes: file.outputBytes, perPagePeak: file.peakBytes, presets: out };
+  },
+
+  /** RF-O3. The ceiling applied to bytes that exist, not to an estimate. */
+  actualOutputGuard() {
+    const ceilings = defaultCeilings();
+    const limit = ceilings.maxOutputBytes;
+    return {
+      limit,
+      justUnder: checkActualOutput(limit, ceilings),
+      first: checkActualOutput(limit + 1, ceilings),
+    };
+  },
+
+  /** RF-O4. The job refused before the first raster, and at each boundary. */
+  wholeJobPreflight(files, perFilePeakBytes, perFileOutputBytes, memoryBudgetBytes) {
+    const ceilings = defaultCeilings(memoryBudgetBytes ?? DEFAULT_MEMORY_BUDGET);
+    const names = Array.from({ length: files }, (_, i) => `file-${i + 1}.pdf`);
+    const peaks = Array.from({ length: files }, () => perFilePeakBytes);
+    const outputs = Array.from({ length: files }, () => perFileOutputBytes);
+    const whole = planWholeJob(peaks, outputs, names, 200, ceilings);
+    const retained = names.slice(0, files - 1).map((name, i) => ({
+      name, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED', reason: 'ok',
+      bytes: new Uint8Array(outputs[i]), outputName: name,
+    }));
+    return { whole, atLastBoundary: canStartNextFile(retained, perFilePeakBytes, ceilings) };
   },
 
   /** Ownership: a superseded run must publish nothing. */

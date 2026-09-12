@@ -17,6 +17,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'vite';
@@ -31,6 +32,36 @@ if (!fs.existsSync(path.join(ROOT, 'test-fixtures', 'processor', 'corpus.json'))
     execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'make-processor-fixtures.mjs')], { stdio: 'inherit' });
 }
 
+/**
+ * The H8 arithmetic is derived from a specific deflater, so the gate resolves
+ * the one pdf-lib actually gets rather than trusting a constant that happens to
+ * sit in our source. A lockfile change that moves it must turn this red.
+ *
+ * `PAKO_STATE_BYTES` and the 16,383 divisor are read off pako 1.0.11's
+ * `deflate.js`; if the resolved version is not that, the numbers in
+ * `src/utils/processor/budget.ts` describe a library this build does not use.
+ */
+const require_ = createRequire(import.meta.url);
+const resolvedVersions = (() => {
+    const versionOf = (spec, from) => {
+        try {
+            const paths = from
+                ? [path.dirname(require_.resolve(`${from}/package.json`))]
+                : [ROOT];
+            const file = require_.resolve(`${spec}/package.json`, { paths });
+            return { version: require_(file).version, file: path.relative(ROOT, file) };
+        } catch (error) {
+            return { version: null, file: null, error: String(error?.message ?? error).split('\n')[0] };
+        }
+    };
+    return {
+        pdfLib: versionOf('pdf-lib'),
+        jszip: versionOf('jszip'),
+        pdfjs: versionOf('pdfjs-dist'),
+        pakoUnderPdfLib: versionOf('pako', 'pdf-lib'),
+    };
+})();
+
 const checks = [];
 const check = (name, ok, detail = '') => {
     checks.push({ name, ok });
@@ -39,6 +70,15 @@ const check = (name, ok, detail = '') => {
 /** A check fed input that must make it fire, so the passing ones can be believed. */
 const probe = (name, ok, detail = '') => check(`negative probe: ${name}`, ok, detail);
 const note = (name, detail) => console.log(`  ----  ${name}  ${detail}`);
+const measureNote = note;
+/** Thousands separators, so a byte count reads as one. */
+const fmt = (n) => Number(n).toLocaleString('en-US');
+/** The derived B2 boundaries, reported at the end for the completion report. */
+const evidenceB2 = {};
+
+/** Every operation the orchestration covers. Declared here because both the
+ * facts section and the policy section below assert across all of them. */
+const ops = ['layer', 'monochrome', 'both', 'margin', 'optimize', 'normalize-size', 'title-block-update'];
 
 const server = await createServer({ root: ROOT, server: { port: PORT, strictPort: true }, logLevel: 'warn' });
 await server.listen();
@@ -96,6 +136,41 @@ try {
     check('a malformed source is reported as such rather than throwing',
         facts.invalid.readable === false || facts.invalid.pagesValid === false);
 
+    // RF-O1: /FT and /V are inheritable, and an unreadable tree is a refusal.
+    const inheritedFacts = await call('facts', [
+        'inherited-ft-signature', 'inherited-v-signature', 'inherited-empty-signature',
+        'cyclic-field-tree', 'over-depth-field-tree', 'malformed-fields-entry',
+    ]);
+    check('a /Sig inherited from the parent is seen, signature and all',
+        inheritedFacts['inherited-ft-signature'].hasAppliedSignature === true
+        && inheritedFacts['inherited-v-signature'].hasAppliedSignature === true,
+        `FT-on-parent: ${inheritedFacts['inherited-ft-signature'].hasAppliedSignature}, `
+        + `V-on-parent: ${inheritedFacts['inherited-v-signature'].hasAppliedSignature}`);
+    check('an inherited but empty /Sig field is a field, not a signature',
+        inheritedFacts['inherited-empty-signature'].hasSignatureField === true
+        && inheritedFacts['inherited-empty-signature'].hasAppliedSignature === false);
+    probe('a field tree that cannot be read completely is unreadable, not empty',
+        ['cyclic-field-tree', 'over-depth-field-tree', 'malformed-fields-entry']
+            .every((n) => inheritedFacts[n].formInspectionState === 'unreadable'
+                && inheritedFacts[n].signatureFields.length === 0),
+        ['cyclic-field-tree', 'over-depth-field-tree', 'malformed-fields-entry']
+            .map((n) => `${n}:${inheritedFacts[n].formInspectionState}`).join(' '));
+
+    const inheritedPlans = await call('plans', [
+        'inherited-ft-signature', 'inherited-v-signature',
+        'cyclic-field-tree', 'over-depth-field-tree', 'malformed-fields-entry',
+    ], ops);
+    probe('every operation refuses an inherited applied signature before mutating',
+        ['inherited-ft-signature', 'inherited-v-signature'].every(
+            (n) => ops.every((op) => inheritedPlans[n][op].status === 'SIGNATURE_UNSAFE'),
+        ));
+    probe('and refuses a form it could not enumerate',
+        ['cyclic-field-tree', 'over-depth-field-tree', 'malformed-fields-entry'].every(
+            (n) => ops.every((op) => inheritedPlans[n][op].status === 'SIGNATURE_UNSAFE'),
+        ));
+    check('an inherited empty field still processes',
+        (await call('plans', ['inherited-empty-signature'], ['layer', 'optimize']))['inherited-empty-signature'].layer.status === 'READY');
+
     const readOnly = await call('inspectionIsReadOnly');
     probe('looking at an XFA document does not delete its XFA',
         readOnly.xfaBefore === true && readOnly.xfaAfter === true);
@@ -104,7 +179,6 @@ try {
 
     // ---- 2. H7, applied to every operation -----------------------------------
     console.log('\n=== 2. the signature and XFA policy ===');
-    const ops = ['layer', 'monochrome', 'both', 'margin', 'optimize', 'normalize-size', 'title-block-update'];
     const plans = await call('plans', ['signature-a4', 'unsigned-signature-field', 'sigflags-only', 'xfa-a4'], ops);
     check('an applied signature is refused by every operation',
         ops.every((op) => plans['signature-a4'][op].status === 'SIGNATURE_UNSAFE'),
@@ -287,6 +361,36 @@ try {
     probe('and it does not rasterise anything',
         [optText, optOcr, optAnnot].every((r) => r.after.images.length === r.before.images.length && r.after.hasDct === false));
 
+    // ---- 7b. metadata, structurally (RF-O2) ------------------------------------
+    console.log('\n=== 7b. metadata carried, not reconstructed ===');
+    const customMono = await call('metadataRoundTrip', 'metadata-custom', 'monochrome', { confirm: true, dpi: 150 });
+    const customKeys = (side) => side.info.map((e) => e.key).sort();
+    check('every Info entry survives a rebuild, custom keys included',
+        customMono.ran
+        && ['/Company', '/M5PCustom', '/SourceModified', '/Keywords', '/Title', '/Author']
+            .every((k) => customKeys(customMono.after).includes(k)),
+        `before ${customKeys(customMono.before).join(',')} | after ${customKeys(customMono.after).join(',')}`);
+    const keywordsBefore = customMono.before.info.find((e) => e.key === '/Keywords')?.value;
+    const keywordsAfter = customMono.after.info.find((e) => e.key === '/Keywords')?.value;
+    probe('/Keywords is carried, not split and rebuilt into something else',
+        keywordsBefore === keywordsAfter,
+        `${JSON.stringify(keywordsBefore)} -> ${JSON.stringify(keywordsAfter)}`);
+    check('an unfiltered XMP packet arrives readable, with its custom field',
+        customMono.after.xmp?.startsWithXpacket === true
+        && customMono.after.xmp?.hasTitleMarker === true
+        && customMono.after.xmp?.hasCustomMarker === true,
+        JSON.stringify(customMono.after.xmp));
+
+    const flateMono = await call('metadataRoundTrip', 'metadata-xmp-flate', 'monochrome', { confirm: true, dpi: 150 });
+    probe('a FlateDecode XMP keeps its filter instead of becoming compressed bytes claiming to be XML',
+        flateMono.ran
+        && flateMono.after.xmp?.filter === '/FlateDecode'
+        && flateMono.after.xmp?.startsWithXpacket === true
+        && flateMono.after.xmp?.hasTitleMarker === true,
+        JSON.stringify(flateMono.after.xmp));
+    check('and the structure-preserving operations keep theirs untouched',
+        (await call('metadataRoundTrip', 'metadata-xmp-flate', 'layer')).after.xmp?.filter === '/FlateDecode');
+
     // ---- 8. B2 -----------------------------------------------------------------
     console.log('\n=== 8. batch (B2) ===');
     const batch = await call('batch', ['vector-a4', 'signature-a4', 'text-a4'], 'layer');
@@ -305,6 +409,55 @@ try {
         zipNames.japaneseBytes > zipNames.japaneseChars,
         `${zipNames.japaneseChars} chars = ${zipNames.japaneseBytes} bytes`);
 
+    // RF-O5: the model against archives JSZip actually wrote.
+    const zipReal = await call('zipModelVersusActual');
+    for (const r of zipReal) {
+        measureNote(`zip ${r.label}`,
+            `actual ${fmt(r.actualBytes)} B, modelled ${fmt(r.modelledBytes)} B, `
+            + `head-room ${fmt(r.overPricedBy)} B`);
+    }
+    probe('the hard model never under-prices a real archive',
+        zipReal.every((r) => r.overPricedBy >= 0),
+        zipReal.map((r) => `${r.label}:${r.overPricedBy}`).join(' '));
+    probe('and a non-ASCII name is charged its Unicode Path extra field',
+        zipReal.find((r) => r.label === 'japanese').unicodeExtraPerEntry.every((n) => n > 0)
+        && zipReal.find((r) => r.label === 'ascii').unicodeExtraPerEntry.every((n) => n === 0),
+        `japanese +${zipReal.find((r) => r.label === 'japanese').unicodeExtraPerEntry[0]} B/record`);
+
+    // RF-O3: the ceiling on the artifact that exists.
+    const guard = await call('actualOutputGuard');
+    probe('the output ceiling admits the last byte under it and refuses the first over',
+        guard.justUnder.ok === true && guard.first.ok === false,
+        `${fmt(guard.limit)} B ok, ${fmt(guard.limit + 1)} B refused`);
+
+    // RF-O4: the job refused before the first raster, and at each boundary.
+    const overJob = await call('wholeJobPreflight', 40, 120 * MIB, 40 * MIB, 512 * MIB);
+    const okJob = await call('wholeJobPreflight', 3, 120 * MIB, 40 * MIB, 512 * MIB);
+    probe('a batch that cannot finish is refused before it starts',
+        overJob.whole.ok === false && okJob.whole.ok === true,
+        `40 files: ${(overJob.whole.peakBytes / MIB).toFixed(0)} MiB; 3 files: ${(okJob.whole.peakBytes / MIB).toFixed(0)} MiB`);
+    probe('and a file boundary refuses before the next file is started',
+        overJob.atLastBoundary.ok === false,
+        `${(overJob.atLastBoundary.liveBytes / MIB).toFixed(0)} MiB live at the boundary`);
+
+    // The adopted boundaries, derived from the production model rather than
+    // quoted. If the corrected accounting moves them, these are the numbers.
+    for (const colourSpace of ['DeviceGray', 'DeviceRGB']) {
+        const b = await call('b2Boundaries', colourSpace);
+        evidenceB2[colourSpace] = b;
+        for (const memory of [512 * MIB, 1024 * MIB, 2048 * MIB]) {
+            const row = b.presets[memory];
+            note(`B2 ${colourSpace} at ${(memory / MIB)} MiB`,
+                `${row.justUnder} accepted, ${row.firstOver} first-over (${row.binding})`);
+        }
+        check(`B2 ${colourSpace}: a larger preset never admits fewer files`,
+            b.presets[512 * MIB].justUnder <= b.presets[1024 * MIB].justUnder
+            && b.presets[1024 * MIB].justUnder <= b.presets[2048 * MIB].justUnder);
+        probe(`B2 ${colourSpace}: the first-over file is refused by name`,
+            ['OVER_MEMORY_BUDGET', 'OVER_OUTPUT_BUDGET'].includes(b.presets[512 * MIB].binding),
+            b.presets[512 * MIB].binding);
+    }
+
     // ---- 9. ownership ----------------------------------------------------------
     console.log('\n=== 9. ownership and cancellation ===');
     const own = await call('ownership');
@@ -318,8 +471,27 @@ try {
     probe('a superseded batch produces no archive at all',
         superseded.cancelled === true && superseded.archive === true);
 
-    // ---- 10. local-only ---------------------------------------------------------
-    console.log('\n=== 10. local only ===');
+    // ---- 10. the dependencies the arithmetic is derived from --------------------
+    console.log('\n=== 10. the resolved dependencies (RF-O7) ===');
+    note('pdf-lib', `${resolvedVersions.pdfLib.version} (${resolvedVersions.pdfLib.file})`);
+    note("pdf-lib's pako", `${resolvedVersions.pakoUnderPdfLib.version} (${resolvedVersions.pakoUnderPdfLib.file})`);
+    check('pdf-lib resolves the pako the H8 bound was derived from',
+        resolvedVersions.pakoUnderPdfLib.version === '1.0.11',
+        resolvedVersions.pakoUnderPdfLib.version
+            ? `${resolvedVersions.pakoUnderPdfLib.version} at ${resolvedVersions.pakoUnderPdfLib.file}`
+            : `unresolvable: ${resolvedVersions.pakoUnderPdfLib.error}`);
+    check('and the direct dependencies are the pinned ones',
+        resolvedVersions.pdfLib.version === '1.17.1'
+        && resolvedVersions.jszip.version === '3.10.1'
+        && resolvedVersions.pdfjs.version === '5.4.449',
+        `pdf-lib ${resolvedVersions.pdfLib.version}, jszip ${resolvedVersions.jszip.version}, pdfjs-dist ${resolvedVersions.pdfjs.version}`);
+    probe('the constants in source are the ones that library implies',
+        budget.constants.literalsPerBlock === 16383 && budget.constants.PAKO_STATE_BYTES === 267160
+        && resolvedVersions.pakoUnderPdfLib.version === '1.0.11',
+        'a lockfile change that moves pako while leaving these numbers behind fails here');
+
+    // ---- 11. local-only ---------------------------------------------------------
+    console.log('\n=== 11. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));
     check('no page error during the run', pageErrors.length === 0, pageErrors.join(' | '));
 

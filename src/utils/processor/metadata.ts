@@ -8,46 +8,64 @@
  * ones) started from an empty one, so Title, Author, Subject, Keywords, the
  * dates and the XMP stream were all gone from the output, with nothing saying so.
  *
+ * Two things this module deliberately does *not* do:
+ *
+ *  - it does not rebuild the Info dictionary from the handful of keys pdf-lib
+ *    has getters for. A document may carry `/Company`, `/SourceModified` or any
+ *    other private key, and reconstructing "the standard ones" is how those are
+ *    lost. Every entry is copied.
+ *  - it does not copy a `/Metadata` stream's **bytes** into a fresh stream. The
+ *    bytes are the *stored* ones: if the source XMP is `/Filter /FlateDecode`,
+ *    writing them into an unfiltered stream produces a document whose XMP is
+ *    compressed data claiming to be XML. The stream is cloned with its
+ *    dictionary instead, so the filter travels with the payload.
+ *
  * Adopted: H12 — no operation changes metadata silently.
  */
-import { PDFName, PDFRawStream } from 'pdf-lib';
-import type { PDFDocument } from 'pdf-lib';
+import { PDFDict, PDFName, PDFRawStream, PDFRef } from 'pdf-lib';
+import type { PDFDocument, PDFObject } from 'pdf-lib';
 
 export interface DocumentMetadata {
-    title?: string;
-    author?: string;
-    subject?: string;
-    keywords?: string[];
-    creator?: string;
-    producer?: string;
-    creationDate?: Date;
-    modificationDate?: Date;
-    /** The raw XMP packet, copied byte for byte when one is present. */
-    xmp: Uint8Array | null;
+    /** Every Info entry, by key, exactly as the source held it. */
+    info: { key: string; value: PDFObject }[];
+    /** The `/Metadata` stream itself, not its bytes. */
+    xmp: PDFRawStream | null;
+    /** Present when the source had a `/Metadata` entry we could not read. */
+    xmpError: string | null;
 }
 
-const text = (value: unknown): string | undefined => {
-    if (value === undefined || value === null) return undefined;
-    const s = String(value);
-    return s.length > 0 ? s : undefined;
+const infoDictOf = (doc: PDFDocument): PDFDict | null => {
+    try {
+        const info = doc.context.trailerInfo?.Info;
+        if (info === undefined) return null;
+        const resolved = info instanceof PDFRef ? doc.context.lookup(info) : info;
+        return resolved instanceof PDFDict ? resolved : null;
+    } catch {
+        return null;
+    }
 };
 
 /** Read what the source carries, without altering it. */
 export function readMetadata(doc: PDFDocument): DocumentMetadata {
-    const meta: DocumentMetadata = { xmp: null };
-    try { meta.title = text(doc.getTitle()); } catch { /* absent */ }
-    try { meta.author = text(doc.getAuthor()); } catch { /* absent */ }
-    try { meta.subject = text(doc.getSubject()); } catch { /* absent */ }
-    try { meta.keywords = doc.getKeywords()?.split(/[,;\s]+/).filter(Boolean); } catch { /* absent */ }
-    try { meta.creator = text(doc.getCreator()); } catch { /* absent */ }
-    try { meta.producer = text(doc.getProducer()); } catch { /* absent */ }
-    try { meta.creationDate = doc.getCreationDate(); } catch { /* absent */ }
-    try { meta.modificationDate = doc.getModificationDate(); } catch { /* absent */ }
+    const meta: DocumentMetadata = { info: [], xmp: null, xmpError: null };
+
+    const info = infoDictOf(doc);
+    if (info) {
+        for (const [key, value] of info.entries()) {
+            meta.info.push({ key: key.asString(), value });
+        }
+    }
 
     try {
-        const stream = doc.catalog.lookup(PDFName.of('Metadata'));
-        if (stream instanceof PDFRawStream) meta.xmp = stream.getContents();
-    } catch { /* no XMP, or unreadable — reported by the caller, never invented */ }
+        const raw = doc.catalog.get(PDFName.of('Metadata'));
+        if (raw !== undefined) {
+            const stream = doc.catalog.lookup(PDFName.of('Metadata'));
+            if (stream instanceof PDFRawStream) meta.xmp = stream;
+            else meta.xmpError = '/Metadata is not a stream';
+        }
+    } catch (error) {
+        meta.xmpError = String((error as Error)?.message ?? error);
+    }
 
     return meta;
 }
@@ -55,23 +73,31 @@ export function readMetadata(doc: PDFDocument): DocumentMetadata {
 /**
  * Put it on a rebuilt document.
  *
- * The XMP packet is copied as bytes rather than regenerated: it can carry
- * fields this application does not model, and rewriting it from the Info
- * dictionary would silently drop them.
+ * Entries are cloned into the target's context — an object still owned by the
+ * source document would serialise as a dangling reference — and the XMP stream
+ * is cloned whole, dictionary included, so `/Filter`, `/Length` and anything
+ * else it carries stay with the bytes they describe.
  */
 export function applyMetadata(doc: PDFDocument, meta: DocumentMetadata): void {
-    if (meta.title !== undefined) doc.setTitle(meta.title);
-    if (meta.author !== undefined) doc.setAuthor(meta.author);
-    if (meta.subject !== undefined) doc.setSubject(meta.subject);
-    if (meta.keywords !== undefined && meta.keywords.length > 0) doc.setKeywords(meta.keywords);
-    if (meta.creator !== undefined) doc.setCreator(meta.creator);
-    if (meta.producer !== undefined) doc.setProducer(meta.producer);
-    if (meta.creationDate !== undefined) doc.setCreationDate(meta.creationDate);
-    if (meta.modificationDate !== undefined) doc.setModificationDate(meta.modificationDate);
+    if (meta.info.length > 0) {
+        const target = doc.context.obj({});
+        for (const { key, value } of meta.info) {
+            try {
+                target.set(PDFName.of(key.replace(/^\//, '')), value.clone(doc.context));
+            } catch {
+                // One unclonable entry must not cost the document the rest of
+                // its metadata; `metadataGaps` reports what did not arrive.
+            }
+        }
+        doc.context.trailerInfo.Info = doc.context.register(target);
+    }
 
     if (meta.xmp) {
-        const stream = doc.context.stream(meta.xmp, { Type: 'Metadata', Subtype: 'XML' });
-        doc.catalog.set(PDFName.of('Metadata'), doc.context.register(stream));
+        try {
+            doc.catalog.set(PDFName.of('Metadata'), doc.context.register(meta.xmp.clone(doc.context)));
+        } catch {
+            // Same: reported rather than pretended.
+        }
     }
 }
 
@@ -81,16 +107,10 @@ export function applyMetadata(doc: PDFDocument, meta: DocumentMetadata): void {
  */
 export function metadataGaps(source: DocumentMetadata, output: DocumentMetadata): string[] {
     const gaps: string[] = [];
-    const pairs: [keyof DocumentMetadata, string][] = [
-        ['title', 'タイトル'],
-        ['author', '作成者'],
-        ['subject', 'サブタイトル'],
-        ['creator', 'アプリケーション'],
-        ['creationDate', '作成日時'],
-    ];
-    for (const [key, label] of pairs) {
-        if (source[key] !== undefined && output[key] === undefined) gaps.push(label);
+    const have = new Set(output.info.map((e) => e.key));
+    for (const { key } of source.info) {
+        if (!have.has(key)) gaps.push(key);
     }
-    if (source.xmp && !output.xmp) gaps.push('XMPメタデータ');
+    if (source.xmp && !output.xmp) gaps.push('/Metadata (XMP)');
     return gaps;
 }

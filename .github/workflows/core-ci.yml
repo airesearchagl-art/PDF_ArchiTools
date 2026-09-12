@@ -174,6 +174,13 @@ jobs:
       - name: Processor reliability
         run: node scripts/smoke-processor-reliability.mjs
 
+      # The module gate proves the contract; this proves the wiring. The bug it
+      # exists for — a confirmation that set state and re-entered in the same
+      # tick, so accepting it did nothing — passed every module check and was
+      # visible only by driving the built app.
+      - name: Processor UI ownership
+        run: node scripts/smoke-processor-ui.mjs
+
       # Every PDF.js path in the app, not just the Annotator's: which worker a
       # feature fetches is a property of the built bundle and of module
       # evaluation order, so it is driven through the real UI of dist/.
