@@ -170,11 +170,19 @@ export function PdfTools() {
         setFiles(prev => prev.map(f => (f.id === id ? { ...f, ...patch } : f)));
     };
 
-    const startProcessing = async () => {
+    /**
+     * `justConfirmedKey` is passed by the confirmation button rather than read
+     * from state. `setConfirmedKey` does not take effect until the next render,
+     * so a re-entry that consulted the state variable would plan the same
+     * flattening, find it unconfirmed again, and ask again — forever. The key
+     * travels with the call that was authorised by it.
+     */
+    const startProcessing = async (justConfirmedKey?: string) => {
         if (files.length === 0 || isProcessing || titleBlockNotReady) return;
 
         const snapshot = snapshotOf();
         const key = snapshotKey(snapshot);
+        const confirmedForThisRun = (justConfirmedKey ?? confirmedKey) === key;
         const token = ownership.current.begin(snapshot);
         setIsProcessing(true);
         setBatchNote(null);
@@ -194,7 +202,7 @@ export function PdfTools() {
                     planOperation(facts, activeTool, {
                         dpi: monoDpi, contrast: monoContrast, memoryBudgetBytes: memoryBudget,
                     }),
-                    confirmedKey === key,
+                    confirmedForThisRun,
                 );
                 planned.push({ row, bytes, plan });
             }
@@ -355,10 +363,13 @@ export function PdfTools() {
 
     const acceptLosses = () => {
         if (!pendingLosses) return;
-        setConfirmedKey(pendingLosses.key);
+        const key = pendingLosses.key;
+        setConfirmedKey(key);
         setPendingLosses(null);
-        // Re-enter with the confirmation in hand; the snapshot must still match.
-        void startProcessing();
+        // The key goes with the call, not through state: the run that starts
+        // here is the one the person just authorised, and it must still match
+        // the snapshot they were shown.
+        void startProcessing(key);
     };
 
     const toolButton = (tool: ToolType, Icon: typeof Layers) => (
@@ -630,7 +641,7 @@ export function PdfTools() {
                 <button
                     className="process-btn"
                     data-usage-target="processor-run"
-                    onClick={startProcessing}
+                    onClick={() => { void startProcessing(); }}
                     disabled={isProcessing || files.length === 0 || titleBlockNotReady}
                     title={titleBlockNotReady ? '代表ページの読み込みが完了するまで実行できません' : undefined}
                 >

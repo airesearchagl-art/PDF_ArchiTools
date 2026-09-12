@@ -10,8 +10,14 @@
  * depended on evaluation order.
  *
  * Every production PDF.js entry point is covered here: the annotator, the
- * comparator, split/merge's extract and merge, and the processor's monochrome
- * and optimize.
+ * comparator, split/merge's extract and merge, and the processor's monochrome.
+ *
+ * 最適化 used to be a fifth: it rasterised every page through PDF.js. Since M5
+ * it is a lossless re-save that never renders, so it fetches no worker at all.
+ * It is still driven below — for its output, and to assert that it makes *no*
+ * worker request. Dropping it from the list would have been the weaker move:
+ * the claim "every PDF.js path is local" is only worth as much as the list of
+ * paths is honest.
  *
  * A source diff cannot close this. `workerSrc` is a single global that several
  * modules write to, and in a bundle they all evaluate on load with the last one
@@ -312,7 +318,14 @@ try {
         `${localWorkerCount() - before} request(s) to ${WORKER}`);
 
     // ---- the processor: monochrome and optimize --------------------------
-    for (const [label, tool] of [['モノクロ化', 'monochrome'], ['最適化', 'optimize']]) {
+    //
+    // Monochrome renders, so it must fetch the local worker. 最適化 does not
+    // render any more, so it must fetch nothing — and both are asserted, rather
+    // than only the one that still happens to make a request.
+    for (const [label, tool, renders] of [
+        ['モノクロ化', 'monochrome', true],
+        ['最適化', 'optimize', false],
+    ]) {
         console.log(`\n=== the processor: ${tool} ===`);
         check('the processor opens', await openTool('PDF加工'));
         await page.evaluate((t) => {
@@ -330,6 +343,28 @@ try {
         await page.evaluate(() => {
             document.querySelector('[data-usage-target="processor-run"]')?.click();
         });
+        await settle(900);
+
+        // A flattening operation asks first. The confirmation names every loss
+        // and is tied to this exact set of files and settings, so the run stops
+        // here until it is accepted — which is the behaviour, not an obstacle
+        // to route around.
+        const confirmed = await page.evaluate(() => {
+            const panel = document.querySelector('[data-usage-target="processor-confirm"]');
+            if (!panel) return false;
+            const button = [...panel.querySelectorAll('button')]
+                .find((b) => b.textContent?.includes('内容を理解して実行'));
+            if (!button) return false;
+            button.click();
+            return true;
+        });
+        if (renders) {
+            check(`${tool}: it asks before it flattens the page`,
+                confirmed, confirmed ? 'confirmation shown and accepted' : 'no confirmation appeared');
+        } else {
+            check(`${tool}: it does not ask, because it destroys nothing`,
+                confirmed === false, confirmed ? 'unexpected confirmation' : 'ran without a loss confirmation');
+        }
 
         let produced = null;
         for (let i = 0; i < 120 && !produced; i++) {
@@ -348,9 +383,15 @@ try {
                 reopened.getPageCount() === 1, `${reopened.getPageCount()} page`);
             fs.rmSync(path.join(downloads, produced));
         }
-        check(`${tool}: the worker came from this app`,
-            localWorkerCount() > before,
-            `${localWorkerCount() - before} request(s) to ${WORKER}`);
+        if (renders) {
+            check(`${tool}: the worker came from this app`,
+                localWorkerCount() > before,
+                `${localWorkerCount() - before} request(s) to ${WORKER}`);
+        } else {
+            check(`${tool}: fetched no worker, because it no longer renders`,
+                localWorkerCount() === before,
+                `${localWorkerCount() - before} request(s) to ${WORKER}`);
+        }
     }
 
     // ---- where every request went ----------------------------------------
@@ -363,8 +404,8 @@ try {
         } catch { return false; }
     };
     const external = requests.filter(isExternal);
-    check('every worker request was same-origin', localWorkerCount() >= 5,
-        `${localWorkerCount()} request(s) to ${WORKER} across five PDF.js paths`);
+    check('every worker request was same-origin', localWorkerCount() >= 4,
+        `${localWorkerCount()} request(s) to ${WORKER} across four PDF.js paths`);
     probe('not one went to unpkg', unpkgCount() === 0,
         unpkgCount() === 0 ? '0 requests' : `${unpkgCount()} requests`);
     probe('nor anywhere else off-origin', external.length === 0,
@@ -387,7 +428,9 @@ try {
         ['src/components/PdfViewer.tsx', 1],
         ['src/components/PdfComparator.tsx', 1],
         ['src/components/PdfSplitMerge.tsx', 2],
-        ['src/utils/pdf-processor.ts', 2],
+        // The Processor's PDF.js use moved here when the orchestration was
+        // split out; `pdf-processor.ts` is now a facade that renders nothing.
+        ['src/utils/processor/runners.ts', 1],
     ]) {
         const code = strip(sourceOf(file));
         const configured = (code.match(/configurePdfWorker\(\)/g) ?? []).length;
