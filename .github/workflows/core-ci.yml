@@ -105,6 +105,7 @@ jobs:
           node scripts/make-drawing-register-fixtures.mjs
           node scripts/make-annotator-save-fixtures.mjs
           node scripts/make-comparator-fixtures.mjs
+          node scripts/make-processor-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -163,6 +164,15 @@ jobs:
       # bytes -- including the ones that are about nothing being written at all.
       - name: Comparator artifacts
         run: node scripts/smoke-comparator-artifacts.mjs
+
+      # The Processor's adopted contract, most of which is about refusing.
+      # Drives the real planner, the real facts reader and the real runners over
+      # synthetic documents: an applied signature, an empty signature field,
+      # /SigFlags alone, XFA, an annotation crossing the CropBox, rotations, a
+      # partial batch. A green run here means the tool declined the things it
+      # cannot do safely and said which, before touching them.
+      - name: Processor reliability
+        run: node scripts/smoke-processor-reliability.mjs
 
       # Every PDF.js path in the app, not just the Annotator's: which worker a
       # feature fetches is a property of the built bundle and of module
