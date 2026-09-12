@@ -1,0 +1,2455 @@
+{
+ "ranAt": "2026-09-12T02:44:08.356Z",
+ "ranBy": "M5 raster encoder / memory sub-spike gate (local run on the spike branch)",
+ "productionBase": "78b5bd5ee676ee72621bccf9524225cd4ce8482a",
+ "researchHeadAtRun": "78b5bd5ee676ee72621bccf9524225cd4ce8482a",
+ "researchBranchAtRun": "research/m5-raster-encoder-memory-spike",
+ "workingTreeDirty": false,
+ "coreCiRunsThisGate": false,
+ "sections": {
+  "corpus": {
+   "vector-a4": {
+    "bytes": 1214,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "text-a4": {
+    "bytes": 1306,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "drawing-a4": {
+    "bytes": 1776,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "hatch-a4": {
+    "bytes": 6275,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "fine-line-a4": {
+    "bytes": 6537998,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "grey-scan-a4": {
+    "bytes": 1979104,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "colour-scan-a4": {
+    "bytes": 1619592,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "photo-a4": {
+    "bytes": 5425311,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "four-pages": {
+    "bytes": 3312,
+    "pages": 4,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "vector-a3": {
+    "bytes": 1202,
+    "pages": 1,
+    "widthPt": 841.89,
+    "heightPt": 1190.55
+   }
+  },
+  "pngContract": [
+   {
+    "w": 64,
+    "h": 64,
+    "production": 16516,
+    "model": 16516,
+    "actual": 16516,
+    "agree": true,
+    "bytesPerPixel": 4.0322265625
+   },
+   {
+    "w": 1240,
+    "h": 1754,
+    "production": 8702418,
+    "model": 8702418,
+    "actual": 8702418,
+    "agree": true,
+    "bytesPerPixel": 4.001185309155111
+   },
+   {
+    "w": 2480,
+    "h": 3508,
+    "production": 34805987,
+    "model": 34805987,
+    "actual": 34805987,
+    "agree": true,
+    "bytesPerPixel": 4.000761738146909
+   }
+  ],
+  "productionBaseline": {
+   "150": {
+    "drawing-a4": {
+     "sourceBytes": 1776,
+     "monochromeBytes": 53575,
+     "monochromeMs": 83.20000000298023,
+     "optimizeBytes": 53863,
+     "optimizeMs": 64.3999999910593
+    },
+    "hatch-a4": {
+     "sourceBytes": 6275,
+     "monochromeBytes": 329543,
+     "monochromeMs": 83.70000000298023,
+     "optimizeBytes": 329543,
+     "optimizeMs": 69.1000000089407
+    },
+    "fine-line-a4": {
+     "sourceBytes": 6537998,
+     "monochromeBytes": 374984,
+     "monochromeMs": 246.20000000298023,
+     "optimizeBytes": 374984,
+     "optimizeMs": 161.5
+    },
+    "grey-scan-a4": {
+     "sourceBytes": 1979104,
+     "monochromeBytes": 328191,
+     "monochromeMs": 122.1000000089407,
+     "optimizeBytes": 328191,
+     "optimizeMs": 92
+    },
+    "colour-scan-a4": {
+     "sourceBytes": 1619592,
+     "monochromeBytes": 124785,
+     "monochromeMs": 113.3999999910593,
+     "optimizeBytes": 132197,
+     "optimizeMs": 82.79999999701977
+    },
+    "photo-a4": {
+     "sourceBytes": 5425311,
+     "monochromeBytes": 65895,
+     "monochromeMs": 112.79999999701977,
+     "optimizeBytes": 81523,
+     "optimizeMs": 101.40000000596046
+    }
+   },
+   "300": {
+    "drawing-a4": {
+     "sourceBytes": 1776,
+     "monochromeBytes": 139656,
+     "monochromeMs": 136.09999999403954,
+     "optimizeBytes": 140184,
+     "optimizeMs": 97.5
+    },
+    "hatch-a4": {
+     "sourceBytes": 6275,
+     "monochromeBytes": 1192094,
+     "monochromeMs": 150.8999999910593,
+     "optimizeBytes": 1192094,
+     "optimizeMs": 110.79999999701977
+    },
+    "fine-line-a4": {
+     "sourceBytes": 6537998,
+     "monochromeBytes": 1449989,
+     "monochromeMs": 333.90000000596046,
+     "optimizeBytes": 1449989,
+     "optimizeMs": 222.20000000298023
+    },
+    "grey-scan-a4": {
+     "sourceBytes": 1979104,
+     "monochromeBytes": 1237587,
+     "monochromeMs": 207.59999999403954,
+     "optimizeBytes": 1237588,
+     "optimizeMs": 166.79999999701977
+    },
+    "colour-scan-a4": {
+     "sourceBytes": 1619592,
+     "monochromeBytes": 706164,
+     "monochromeMs": 219.40000000596046,
+     "optimizeBytes": 720530,
+     "optimizeMs": 146.70000000298023
+    },
+    "photo-a4": {
+     "sourceBytes": 5425311,
+     "monochromeBytes": 400037,
+     "monochromeMs": 212.5,
+     "optimizeBytes": 435239,
+     "optimizeMs": 161.5
+    }
+   }
+  },
+  "sizes": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "outputBytes": 53575,
+     "bytesPerPixel": 0.024646688625949983,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 52624,
+       "dataUrlChars": 70191,
+       "dataUrlExact": true
+      }
+     ],
+     "elapsedMs": 27.5,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 19144,
+     "bytesPerPixel": 0.008807022063559244,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 8697457,
+       "sizeExact": true,
+       "modelAgrees": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 186.1000000089407,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174656,
+     "bytesPerPixel": 1.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 34.6000000089407,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 9657,
+     "bytesPerPixel": 0.0044426145041679705,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 38.79999999701977,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522095,
+     "bytesPerPixel": 3.000430138196272,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 32.5,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 19187,
+     "bytesPerPixel": 0.008826803820179231,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 61.5,
+     "allExact": true
+    }
+   },
+   "fine-line-a4": {
+    "E1-jpeg": {
+     "outputBytes": 374984,
+     "bytesPerPixel": 0.17250795870673316,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 374026,
+       "dataUrlChars": 498727,
+       "dataUrlExact": true
+      }
+     ],
+     "elapsedMs": 128.20000000298023,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 1475282,
+     "bytesPerPixel": 0.6786899876709052,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 8697457,
+       "sizeExact": true,
+       "modelAgrees": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 616.7000000029802,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174656,
+     "bytesPerPixel": 1.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 113.1000000089407,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 860658,
+     "bytesPerPixel": 0.3959378392801281,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 457.29999999701977,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522095,
+     "bytesPerPixel": 3.000430138196272,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 117.1000000089407,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 1475276,
+     "bytesPerPixel": 0.6786872274257955,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 527.6999999880791,
+     "allExact": true
+    }
+   },
+   "grey-scan-a4": {
+    "E1-jpeg": {
+     "outputBytes": 328191,
+     "bytesPerPixel": 0.1509812671365217,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 327236,
+       "dataUrlChars": 436339,
+       "dataUrlExact": true
+      }
+     ],
+     "elapsedMs": 67.30000001192093,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 1977679,
+     "bytesPerPixel": 0.9098131314060689,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 8697457,
+       "sizeExact": true,
+       "modelAgrees": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 579,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174656,
+     "bytesPerPixel": 1.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 58.79999999701977,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 1196167,
+     "bytesPerPixel": 0.5502856853688608,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 168.69999998807907,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522095,
+     "bytesPerPixel": 3.000430138196272,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 45.1000000089407,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 1977674,
+     "bytesPerPixel": 0.9098108312018107,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 437.79999999701977,
+     "allExact": true
+    }
+   },
+   "photo-a4": {
+    "E1-jpeg": {
+     "outputBytes": 65903,
+     "bytesPerPixel": 0.03031807224481534,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 64952,
+       "dataUrlChars": 86627,
+       "dataUrlExact": true
+      }
+     ],
+     "elapsedMs": 70.30000001192093,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 1606898,
+     "bytesPerPixel": 0.7392387243987266,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 8697457,
+       "sizeExact": true,
+       "modelAgrees": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 576.2999999970198,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174656,
+     "bytesPerPixel": 1.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 59.8999999910593,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 1340755,
+     "bytesPerPixel": 0.6168020720239957,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 2173720,
+       "sampleBytes": 2173720,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 161,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522095,
+     "bytesPerPixel": 3.000430138196272,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 55.20000000298023,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 5421964,
+     "bytesPerPixel": 2.494324936054322,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "streamBytes": 6521160,
+       "sampleBytes": 6521160,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 332.09999999403954,
+     "allExact": true
+    }
+   }
+  },
+  "sizes300": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "outputBytes": 139656,
+     "bytesPerPixel": 0.016057286348961065,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 138699,
+       "dataUrlChars": 184955,
+       "dataUrlExact": true
+      }
+     ],
+     "elapsedMs": 96.5,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 58553,
+     "bytesPerPixel": 0.006732272781625689,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 34796061,
+       "sizeExact": true,
+       "modelAgrees": true,
+       "scratchBytes": 9921
+      }
+     ],
+     "elapsedMs": 570.4000000059605,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 8698297,
+     "bytesPerPixel": 1.0001077338410735,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 8697360,
+       "sampleBytes": 8697360,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 72.29999999701977,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 31929,
+     "bytesPerPixel": 0.003671113993211733,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 8697360,
+       "sampleBytes": 8697360,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 115.29999999701977,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 26093016,
+     "bytesPerPixel": 3.0001076188636553,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 26092080,
+       "sampleBytes": 26092080,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 62.80000001192093,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 58630,
+     "bytesPerPixel": 0.006741126042845185,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 26092080,
+       "sampleBytes": 26092080,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 204.09999999403954,
+     "allExact": true
+    }
+   },
+   "grey-scan-a4": {
+    "E1-jpeg": {
+     "outputBytes": 1237587,
+     "bytesPerPixel": 0.1422945583487403,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 1236628,
+       "dataUrlChars": 1648863,
+       "dataUrlExact": true
+      }
+     ],
+     "elapsedMs": 202.8999999910593,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 3153083,
+     "bytesPerPixel": 0.36253334345134614,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 34796061,
+       "sizeExact": true,
+       "modelAgrees": true,
+       "scratchBytes": 9921
+      }
+     ],
+     "elapsedMs": 1375.0999999940395,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 8698297,
+     "bytesPerPixel": 1.0001077338410735,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 8697360,
+       "sampleBytes": 8697360,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 102.6000000089407,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 1436055,
+     "bytesPerPixel": 0.16511389663070172,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 8697360,
+       "sampleBytes": 8697360,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 516.6000000089407,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 26093016,
+     "bytesPerPixel": 3.0001076188636553,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 26092080,
+       "sampleBytes": 26092080,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 114.90000000596046,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 3153077,
+     "bytesPerPixel": 0.36253265358683556,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "streamBytes": 26092080,
+       "sampleBytes": 26092080,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 894.8999999910593,
+     "allExact": true
+    }
+   }
+  },
+  "quality": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.8394827041147402,
+     "spurious": 0.005468752586628096,
+     "psnr": 22.91636153336089,
+     "outputBytes": 53575,
+     "sizeRatio": 30.166103603603602,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919476604496992,
+     "outputBytes": 19144,
+     "sizeRatio": 10.77927927927928,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919635550085115,
+     "outputBytes": 2174656,
+     "sizeRatio": 1224.4684684684685,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919635550085115,
+     "outputBytes": 9657,
+     "sizeRatio": 5.4375,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919476815064918,
+     "outputBytes": 19187,
+     "sizeRatio": 10.80349099099099,
+     "refPixels": 8697360
+    }
+   },
+   "hatch-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.47327329699554993,
+     "spurious": 0.06925335343530999,
+     "psnr": 13.590674874887487,
+     "outputBytes": 329543,
+     "sizeRatio": 52.51681274900398,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.585403977843086,
+     "outputBytes": 26329,
+     "sizeRatio": 4.195856573705179,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.583694869301159,
+     "outputBytes": 2174656,
+     "sizeRatio": 346.5587250996016,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.583694869301159,
+     "outputBytes": 11780,
+     "sizeRatio": 1.8772908366533865,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.585403977843086,
+     "outputBytes": 26324,
+     "sizeRatio": 4.195059760956175,
+     "refPixels": 8697360
+    }
+   },
+   "fine-line-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.08806080535232742,
+     "spurious": 0.005812234913734383,
+     "psnr": 15.894959532865546,
+     "outputBytes": 374984,
+     "sizeRatio": 0.05735456021858679,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91059866401566,
+     "outputBytes": 1475282,
+     "sizeRatio": 0.2256473617764949,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91056885029735,
+     "outputBytes": 2174656,
+     "sizeRatio": 0.33261802772041227,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91056885029735,
+     "outputBytes": 860658,
+     "sizeRatio": 0.13163937951648197,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91059866401566,
+     "outputBytes": 1475276,
+     "sizeRatio": 0.22564644406437567,
+     "refPixels": 8697360
+    }
+   },
+   "grey-scan-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.54387293050457,
+     "outputBytes": 328191,
+     "sizeRatio": 0.16582807169304897,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.531191480490847,
+     "outputBytes": 1977680,
+     "sizeRatio": 0.9992804824809611,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.5303598698639,
+     "outputBytes": 2174656,
+     "sizeRatio": 1.0988083496370074,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.5303598698639,
+     "outputBytes": 1196167,
+     "sizeRatio": 0.6043982529467881,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.531191480490847,
+     "outputBytes": 1977674,
+     "sizeRatio": 0.9992774508060213,
+     "refPixels": 8697360
+    }
+   },
+   "colour-scan-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.56637592747049,
+     "outputBytes": 124786,
+     "sizeRatio": 0.07704779969276213,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.60693086041396,
+     "outputBytes": 1678383,
+     "sizeRatio": 1.0362998829334795,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.593065879718665,
+     "outputBytes": 2174656,
+     "sizeRatio": 1.3427184130324181,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.593065879718665,
+     "outputBytes": 1195086,
+     "sizeRatio": 0.7378932471881807,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.76153004639708,
+     "outputBytes": 1618379,
+     "sizeRatio": 0.9992510459424349,
+     "refPixels": 8697360
+    }
+   },
+   "photo-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.9950778384478781,
+     "spurious": 0.011603974083856059,
+     "psnr": 43.48181201921684,
+     "outputBytes": 65904,
+     "sizeRatio": 0.012147506382583413,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.99641636101107,
+     "spurious": 0.011122689006272697,
+     "psnr": 43.598973280299475,
+     "outputBytes": 1606898,
+     "sizeRatio": 0.2961854168360118,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.9973968101173386,
+     "spurious": 0.016669589798613403,
+     "psnr": 43.840263525074135,
+     "outputBytes": 2174656,
+     "sizeRatio": 0.40083527008866404,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.9973968101173386,
+     "spurious": 0.016669589798613403,
+     "psnr": 43.840263525074135,
+     "outputBytes": 1340755,
+     "sizeRatio": 0.24712961155590896,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.9951579174480939,
+     "spurious": 0.005943586992406735,
+     "psnr": 44.210327768350794,
+     "outputBytes": 5421964,
+     "sizeRatio": 0.9993830768411248,
+     "refPixels": 8697360
+    }
+   }
+  },
+  "quality300": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.8965366632834728,
+     "spurious": 0.0014723973968884313,
+     "psnr": 28.416015184139294,
+     "outputBytes": 139656,
+     "sizeRatio": 78.63513513513513,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014716879217534064,
+     "psnr": 28.394617124482142,
+     "outputBytes": 58553,
+     "sizeRatio": 32.969031531531535,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014718061676092437,
+     "psnr": 28.39071264753642,
+     "outputBytes": 8698297,
+     "sizeRatio": 4897.689752252252,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014718061676092437,
+     "psnr": 28.39071264753642,
+     "outputBytes": 31929,
+     "sizeRatio": 17.97804054054054,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014716879217534064,
+     "psnr": 28.39465544555121,
+     "outputBytes": 58630,
+     "sizeRatio": 33.012387387387385,
+     "refPixels": 8697360
+    }
+   },
+   "fine-line-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.7634303139258366,
+     "spurious": 0.011547210709712185,
+     "psnr": 19.499946314518482,
+     "outputBytes": 1449989,
+     "sizeRatio": 0.22177874633794625,
+     "refPixels": 8697360
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.7640083288768532,
+     "spurious": 0.011564890695907265,
+     "psnr": 19.528751006871094,
+     "outputBytes": 6535793,
+     "sizeRatio": 0.9996627407961887,
+     "refPixels": 8697360
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.7645453821384277,
+     "spurious": 0.011596738890217579,
+     "psnr": 19.530247870545537,
+     "outputBytes": 8698297,
+     "sizeRatio": 1.3304220955711519,
+     "refPixels": 8697360
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.7645453821384277,
+     "spurious": 0.011596738890217579,
+     "psnr": 19.530247870545537,
+     "outputBytes": 3923728,
+     "sizeRatio": 0.6001421230168623,
+     "refPixels": 8697360
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.7640083288768532,
+     "spurious": 0.011564890695907265,
+     "psnr": 19.528751006871094,
+     "outputBytes": 6535788,
+     "sizeRatio": 0.9996619760360893,
+     "refPixels": 8697360
+    }
+   }
+  },
+  "terms": {
+   "E1-jpeg-hard": {
+    "peakBytes": 579824023,
+    "peakStep": "embed",
+    "encodedBytes": 173947200,
+    "bytesPerPixelEncoded": 20,
+    "admissible": false,
+    "unknown": [
+     "the browser JPEG encoder's working memory"
+    ],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "JPEG bytes",
+      "bytes": 173947200,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "ITU-T T.81 entropy coding + byte stuffing"
+     },
+     {
+      "name": "data URL string",
+      "bytes": 231929623,
+      "basis": "EXACT",
+      "source": "4*ceil(J/3) + 23, one byte per character"
+     },
+     {
+      "name": "embedJpg decoded bytes",
+      "bytes": 173947200,
+      "basis": "EXACT",
+      "source": "pdf-lib decodes the base64 back to Uint8Array"
+     },
+     {
+      "name": "JpegEmbedder retains imageData",
+      "bytes": 173947200,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "JpegEmbedder.js:30, kept until save"
+     },
+     {
+      "name": "the browser JPEG encoder's working memory",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "canvas.toDataURL is not owned; nothing here bounds its scratch"
+     }
+    ]
+   },
+   "E1-jpeg-planning": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 8697360,
+    "bytesPerPixelEncoded": 1,
+    "admissible": false,
+    "unknown": [
+     "the browser JPEG encoder's working memory"
+    ],
+    "measuredOnly": [
+     "JPEG bytes"
+    ],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "JPEG bytes",
+      "bytes": 8697360,
+      "basis": "MEASURED_ONLY",
+      "source": "M5 measured worst case x1.28"
+     },
+     {
+      "name": "data URL string",
+      "bytes": 11596503,
+      "basis": "EXACT",
+      "source": "4*ceil(J/3) + 23, one byte per character"
+     },
+     {
+      "name": "embedJpg decoded bytes",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "pdf-lib decodes the base64 back to Uint8Array"
+     },
+     {
+      "name": "JpegEmbedder retains imageData",
+      "bytes": 8697360,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "JpegEmbedder.js:30, kept until save"
+     },
+     {
+      "name": "the browser JPEG encoder's working memory",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "canvas.toDataURL is not owned; nothing here bounds its scratch"
+     }
+    ]
+   },
+   "E2-png-embed": {
+    "peakBytes": 139174509,
+    "peakStep": "decode",
+    "encodedBytes": 34796061,
+    "bytesPerPixelEncoded": 4.0007612654874585,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "owned stored PNG",
+      "bytes": 34796061,
+      "basis": "EXACT",
+      "source": "pngStoredSize; encodePngStored asserts it"
+     },
+     {
+      "name": "PNG encoder scratch",
+      "bytes": 9921,
+      "basis": "CONSERVATIVE_BOUND",
+      "source": "writes one row in place"
+     },
+     {
+      "name": "UPNG copy of the PNG",
+      "bytes": 34796061,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "UPNG.js:211 new Uint8Array(buff)"
+     },
+     {
+      "name": "inflated IDAT raster",
+      "bytes": 34792947,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "UPNG decode; stored blocks inflate to the raster"
+     },
+     {
+      "name": "UPNG RGBA frame",
+      "bytes": 34789440,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "UPNG.js:48 new Uint8Array(area*4)"
+     },
+     {
+      "name": "pdf-lib's copy of the frame",
+      "bytes": 34789440,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "png.js:48 new Uint8Array(frames[0])"
+     },
+     {
+      "name": "rgbChannel",
+      "bytes": 26092080,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "png.js:21 splitAlphaChannel"
+     },
+     {
+      "name": "alphaChannel",
+      "bytes": 8697360,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "png.js:22; dropped when fully opaque"
+     },
+     {
+      "name": "deflated image stream",
+      "bytes": 26094081,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "pako.deflate; stored-block worst case"
+     }
+    ]
+   },
+   "E3-gray-raw": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 8697360,
+    "bytesPerPixelEncoded": 1,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceGray samples",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "width * height * 1, taken from the readback"
+     },
+     {
+      "name": "stream bytes (retained until save)",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "context.stream keeps the array as given"
+     }
+    ]
+   },
+   "E3-gray-flate": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 8698031,
+    "bytesPerPixelEncoded": 1.0000771498477699,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceGray samples",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "width * height * 1, taken from the readback"
+     },
+     {
+      "name": "deflated stream",
+      "bytes": 8698031,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "pako.deflate; stored-block worst case"
+     }
+    ]
+   },
+   "E3-rgb-raw": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 26092080,
+    "bytesPerPixelEncoded": 3,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceRGB samples",
+      "bytes": 26092080,
+      "basis": "EXACT",
+      "source": "width * height * 3, taken from the readback"
+     },
+     {
+      "name": "stream bytes (retained until save)",
+      "bytes": 26092080,
+      "basis": "EXACT",
+      "source": "context.stream keeps the array as given"
+     }
+    ]
+   },
+   "E3-rgb-flate": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 26094081,
+    "bytesPerPixelEncoded": 3.0002300698142883,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceRGB samples",
+      "bytes": 26092080,
+      "basis": "EXACT",
+      "source": "width * height * 3, taken from the readback"
+     },
+     {
+      "name": "deflated stream",
+      "bytes": 26094081,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "pako.deflate; stored-block worst case"
+     }
+    ]
+   }
+  },
+  "boundaries": {
+   "E1-jpeg-hard": {
+    "512": {
+     "pages300": 0,
+     "firstOver300": 1,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 1,
+     "firstOver300": 2,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 1,
+     "firstOver300": 2,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E1-jpeg-planning": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E2-png-embed": {
+    "512": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-gray-raw": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-gray-flate": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-rgb-raw": {
+    "512": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-rgb-flate": {
+    "512": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   }
+  },
+  "batches": {
+   "E1-jpeg-hard": {
+    "files": 6,
+    "firstOver": 7,
+    "reason": "OVER_MEMORY_BUDGET"
+   },
+   "E1-jpeg-planning": {
+    "files": 123,
+    "firstOver": 124,
+    "reason": "OVER_MEMORY_BUDGET"
+   },
+   "E2-png-embed": {
+    "files": 41,
+    "firstOver": 42,
+    "reason": "OVER_MEMORY_BUDGET"
+   },
+   "E3-gray-raw": {
+    "files": 123,
+    "firstOver": 124,
+    "reason": "OVER_MEMORY_BUDGET"
+   },
+   "E3-gray-flate": {
+    "files": 123,
+    "firstOver": 124,
+    "reason": "OVER_MEMORY_BUDGET"
+   },
+   "E3-rgb-raw": {
+    "files": 41,
+    "firstOver": 42,
+    "reason": "OVER_MEMORY_BUDGET"
+   },
+   "E3-rgb-flate": {
+    "files": 41,
+    "firstOver": 42,
+    "reason": "OVER_MEMORY_BUDGET"
+   }
+  },
+  "canvasProbes": [
+   {
+    "label": "A4@300",
+    "width": 2480,
+    "height": 3508,
+    "pixels": 8699840,
+    "allocates": true
+   },
+   {
+    "label": "A1@300",
+    "width": 7016,
+    "height": 9933,
+    "pixels": 69689928,
+    "allocates": true
+   },
+   {
+    "label": "A1@600",
+    "width": 14031,
+    "height": 19866,
+    "pixels": 278739846,
+    "allocates": false
+   }
+  ],
+  "e4": {
+   "id": "E4",
+   "rejected": true,
+   "reason": "no JPEG encoder exists in the pinned dependencies, and adding or writing one is a dependency decision for a Human Gate; bounding an unowned encoder is what blocked H8 in the first place",
+   "dependencies": [
+    "@pdf-lib/fontkit",
+    "file-saver",
+    "jspdf",
+    "jszip",
+    "lucide-react",
+    "pdf-lib",
+    "pdfjs-dist",
+    "react",
+    "react-dom",
+    "tesseract.js"
+   ]
+  }
+ },
+ "summary": {
+  "assertions": 11,
+  "assertionsFailed": 0,
+  "probes": 11,
+  "probesFailed": 0,
+  "measurements": 94,
+  "baselineFails": 1,
+  "humanOpen": 2,
+  "external": 0,
+  "pageErrors": 0
+ },
+ "lines": [
+  {
+   "kind": "MEASURE",
+   "name": "corpus(vector-a4)",
+   "ok": null,
+   "detail": "1,214 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(text-a4)",
+   "ok": null,
+   "detail": "1,306 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(drawing-a4)",
+   "ok": null,
+   "detail": "1,776 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(hatch-a4)",
+   "ok": null,
+   "detail": "6,275 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(fine-line-a4)",
+   "ok": null,
+   "detail": "6,537,998 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(grey-scan-a4)",
+   "ok": null,
+   "detail": "1,979,104 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(colour-scan-a4)",
+   "ok": null,
+   "detail": "1,619,592 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(photo-a4)",
+   "ok": null,
+   "detail": "5,425,311 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(four-pages)",
+   "ok": null,
+   "detail": "3,312 B, 4 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(vector-a3)",
+   "ok": null,
+   "detail": "1,202 B, 1 page(s), 842x1191 pt"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the corpus covers every content class the contract names",
+   "ok": true,
+   "detail": "10 fixtures: vector, text, drawing with dimension strings, hatching, 1 px linework, grey scan, colour scan, photographic, multi-page, A3"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pngStoredSize(64x64)",
+   "ok": null,
+   "detail": "16,516 B actual, 4.032 B/px"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pngStoredSize(1240x1754)",
+   "ok": null,
+   "detail": "8,702,418 B actual, 4.001 B/px"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pngStoredSize(2480x3508)",
+   "ok": null,
+   "detail": "34,805,987 B actual, 4.001 B/px"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the model, production and the encoder agree on the exact encoded size",
+   "ok": true,
+   "detail": "model = production = bytes written, for every case"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome drawing-a4 @150/@300",
+   "ok": null,
+   "detail": "53,575 B / 139,656 B (83 ms / 136 ms)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome hatch-a4 @150/@300",
+   "ok": null,
+   "detail": "329,543 B / 1,192,094 B (84 ms / 151 ms)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome fine-line-a4 @150/@300",
+   "ok": null,
+   "detail": "374,984 B / 1,449,989 B (246 ms / 334 ms)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome grey-scan-a4 @150/@300",
+   "ok": null,
+   "detail": "328,191 B / 1,237,587 B (122 ms / 208 ms)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome colour-scan-a4 @150/@300",
+   "ok": null,
+   "detail": "124,785 B / 706,164 B (113 ms / 219 ms)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome photo-a4 @150/@300",
+   "ok": null,
+   "detail": "65,895 B / 400,037 B (113 ms / 213 ms)"
+  },
+  {
+   "kind": "BASELINE-FAIL",
+   "name": "the production encoding path cannot carry a hard memory contract",
+   "ok": false,
+   "detail": "its model still contains an UNKNOWN term: the browser JPEG encoder's working memory",
+   "rootCause": "canvas.toDataURL(\"image/jpeg\", 0.8) is the browser's encoder: neither its output size nor its working memory follows from anything this architecture owns",
+   "architecture": "replace the encoding step with an owned one (E3) whose stream size is the sample count"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, drawing-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.1 MiB, E2-png-embed 0.0 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 0.0 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, fine-line-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.4 MiB, E2-png-embed 1.4 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 0.8 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, grey-scan-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.3 MiB, E2-png-embed 1.9 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 1.1 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 1.9 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, photo-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.1 MiB, E2-png-embed 1.5 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 1.3 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 5.2 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @300, drawing-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.1 MiB, E2-png-embed 0.1 MiB, E3-gray-raw 8.3 MiB, E3-gray-flate 0.0 MiB, E3-rgb-raw 24.9 MiB, E3-rgb-flate 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @300, grey-scan-a4",
+   "ok": null,
+   "detail": "E1-jpeg 1.2 MiB, E2-png-embed 3.0 MiB, E3-gray-raw 8.3 MiB, E3-gray-flate 1.4 MiB, E3-rgb-raw 24.9 MiB, E3-rgb-flate 3.0 MiB"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every owned candidate wrote exactly the bytes its contract predicts",
+   "ok": true,
+   "detail": "raw streams are the sample count; the stored PNG is pngStoredSize, to the byte"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and the production path is the one whose size could only be observed",
+   "ok": true,
+   "detail": "the data URL length is exact given J — but J itself is only known after the fact"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "a raw DeviceGray stream is one byte per pixel, by construction",
+   "ok": true,
+   "detail": "2,173,720 B for 1240x1753"
+  },
+  {
+   "kind": "PROBE",
+   "name": "a deflated stream stays under DEFLATE's own stored-block bound",
+   "ok": true,
+   "detail": "the bound holds by derivation; the measurement is a sanity check on it"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 47.3%, spurious 6.9%, PSNR 13.6 dB, 0.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 8.8%, spurious 0.6%, PSNR 15.9 dB, 0.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 0.8 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 0.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 1.9 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 1.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 1.9 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 1.6 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 1.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.8 dB, 1.5 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 99.5%, spurious 1.2%, PSNR 43.5 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 99.6%, spurious 1.1%, PSNR 43.6 dB, 1.5 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 99.7%, spurious 1.7%, PSNR 43.8 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 99.7%, spurious 1.7%, PSNR 43.8 dB, 1.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 99.5%, spurious 0.6%, PSNR 44.2 dB, 5.2 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 8.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 76.3%, spurious 1.2%, PSNR 19.5 dB, 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 76.4%, spurious 1.2%, PSNR 19.5 dB, 6.2 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 76.5%, spurious 1.2%, PSNR 19.5 dB, 8.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 76.5%, spurious 1.2%, PSNR 19.5 dB, 3.7 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 76.4%, spurious 1.2%, PSNR 19.5 dB, 6.2 MiB"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the quality measure can see loss and its absence",
+   "ok": true,
+   "detail": "at the scan's own resolution the lossless owned path scores strictly better than the lossy production one"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and what destroys linework is the resolution, not the encoder",
+   "ok": true,
+   "detail": "the same lossless path keeps 3.5% at 150 dpi and 76.5% at 300 dpi"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E1-jpeg-hard",
+   "ok": null,
+   "detail": "peak 553.0 MiB at \"embed\", stream 20.000 B/px, hard-contract admissible: false (the browser JPEG encoder's working memory)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E1-jpeg-planning",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\", stream 1.000 B/px, hard-contract admissible: false (the browser JPEG encoder's working memory; JPEG bytes)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E2-png-embed",
+   "ok": null,
+   "detail": "peak 132.7 MiB at \"decode\", stream 4.001 B/px, hard-contract admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-gray-raw",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\", stream 1.000 B/px, hard-contract admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-gray-flate",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\", stream 1.000 B/px, hard-contract admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-rgb-raw",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\", stream 3.000 B/px, hard-contract admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-rgb-flate",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\", stream 3.000 B/px, hard-contract admissible: true"
+  },
+  {
+   "kind": "PROBE",
+   "name": "an unknown encoder scratch prevents a hard contract, whatever the numbers look like",
+   "ok": true,
+   "detail": "both JPEG models are refused: one carries an UNKNOWN term, the other that and a MEASURED_ONLY size"
+  },
+  {
+   "kind": "PROBE",
+   "name": "a measured compression ratio cannot masquerade as a hard bound",
+   "ok": true,
+   "detail": "the planning model is 486.6 MiB cheaper and is classified MEASURED_ONLY, so it cannot be adopted as a bound"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every owned candidate's model is free of unknowns",
+   "ok": true,
+   "detail": "exact or source-derived, every term"
+  },
+  {
+   "kind": "PROBE",
+   "name": "a partial model cannot claim READY: pricing one page admits a job the complete model refuses",
+   "ok": true,
+   "detail": "40 A4 pages at 300 dpi — complete: REFUSED OVER_MEMORY_BUDGET (peak 1990.7 MiB, it holds every page until save); one-page model: READY (peak 66.4 MiB)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "what the production path carries as text",
+   "ok": null,
+   "detail": "JPEG 64,952 B becomes a data URL of 86,627 characters (x1.33), then is decoded back to 64,952 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "what an owned path carries",
+   "ok": null,
+   "detail": "2,173,720 B of samples, handed to pdf-lib as a Uint8Array; no string exists"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the base64 step is a real term, not a rounding error",
+   "ok": true,
+   "detail": "4*ceil(J/3)+23 predicted the string exactly, and it is 33.4% larger than the bytes"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "grey vs colour vs RGBA PNG, drawing-a4 @150",
+   "ok": null,
+   "detail": "gray raw 2.1 MiB, gray flate 0.0 MiB, rgb raw 6.2 MiB, rgb flate 0.0 MiB, owned PNG through pdf-lib 0.0 MiB, production JPEG 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "grey vs colour vs RGBA PNG, grey-scan-a4 @150",
+   "ok": null,
+   "detail": "gray raw 2.1 MiB, gray flate 1.1 MiB, rgb raw 6.2 MiB, rgb flate 1.9 MiB, owned PNG through pdf-lib 1.9 MiB, production JPEG 0.3 MiB"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "a grayscale owned stream is a quarter of the RGBA PNG and a third of the RGB one, exactly",
+   "ok": true,
+   "detail": "1 B/px against 3 B/px against 4.001 B/px"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E1-jpeg-hard",
+   "ok": null,
+   "detail": "@300: 0 (1 refused, OVER_MEMORY_BUDGET); @150: 6 (7 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E1-jpeg-planning",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E2-png-embed",
+   "ok": null,
+   "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-gray-raw",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-gray-flate",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-rgb-raw",
+   "ok": null,
+   "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-rgb-flate",
+   "ok": null,
+   "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E1-jpeg-hard",
+   "ok": null,
+   "detail": "6 accepted, 7 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E1-jpeg-planning",
+   "ok": null,
+   "detail": "123 accepted, 124 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E2-png-embed",
+   "ok": null,
+   "detail": "41 accepted, 42 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-gray-raw",
+   "ok": null,
+   "detail": "123 accepted, 124 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-gray-flate",
+   "ok": null,
+   "detail": "123 accepted, 124 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-rgb-raw",
+   "ok": null,
+   "detail": "41 accepted, 42 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "one-page A4 @150 files in a B2 batch inside 512 MiB, E3-rgb-flate",
+   "ok": null,
+   "detail": "41 accepted, 42 refused (OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "raster first-over: the pixel ceiling refuses, and no memory preset buys past it",
+   "ok": true,
+   "detail": "A1 @600 is refused OVER_RASTER_LIMIT at 512 MiB, 1 GiB, 2 GiB and with memory unbounded"
+  },
+  {
+   "kind": "PROBE",
+   "name": "output first-over: the output ceiling refuses on its own, with memory unbounded",
+   "ok": true,
+   "detail": "the first page count over 256 MiB of output is refused OVER_OUTPUT_BUDGET, not by memory"
+  },
+  {
+   "kind": "PROBE",
+   "name": "memory first-over: the memory ceiling refuses with the other two unbounded",
+   "ok": true,
+   "detail": "isolated, the memory ceiling is the one that fires"
+  },
+  {
+   "kind": "PROBE",
+   "name": "an explicit preset moves nothing but memory",
+   "ok": true,
+   "detail": "A0 @300 stays refused by the raster ceiling at the largest preset"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "canvas A4@300 (9 Mpx)",
+   "ok": null,
+   "detail": "allocates"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "canvas A1@300 (70 Mpx)",
+   "ok": null,
+   "detail": "allocates"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "canvas A1@600 (279 Mpx)",
+   "ok": null,
+   "detail": "does not allocate"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the raster ceiling stays below what this machine refuses",
+   "ok": true,
+   "detail": "134.2 Mpx policy, 279 Mpx refused by the browser"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "E4 rejected, with the reason",
+   "ok": null,
+   "detail": "no JPEG encoder exists in the pinned dependencies, and adding or writing one is a dependency decision for a Human Gate; bounding an unowned encoder is what blocked H8 in the first place"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "no pinned dependency contains a JPEG encoder",
+   "ok": true,
+   "detail": "@pdf-lib/fontkit, file-saver, jspdf, jszip, lucide-react, pdf-lib, pdfjs-dist, react, react-dom, tesseract.js — pdf-lib parses JPEG, pdfjs decodes it, jsPDF embeds it, none writes one"
+  },
+  {
+   "kind": "HUMAN-OPEN",
+   "name": "H8 Raster encoder and operation memory: which encoding path, and which memory contract?",
+   "ok": null,
+   "detail": "recommendation: H8-A for Monochrome, H8-B for Optimize — adopt an owned image XObject (E3), written by pdf-lib itself: DeviceGray for Monochrome and DeviceRGB for Optimize, FlateDecode for the file size and no filter where the encoded size has to be exact. One A4 page at 300 dpi then peaks at 66.4 MiB, at the readback — every term EXACT or source-derived, no encoder in the model at all. Monochrome keeps the capacity the estimate used to promise: 30 pages at 300 dpi and 123 at 150 inside 512 MiB, against 30/123 estimated and 0/6 that the only fail-closed JPEG term allowed. Optimize keeps colour and so carries 10/41 — a smaller product limit, honestly bounded."
+  },
+  {
+   "kind": "HUMAN-OPEN",
+   "name": "H8-file-size Is a larger PDF acceptable as the price of an exact memory contract?",
+   "ok": null,
+   "detail": "recommendation: measured at 150 dpi on the grey scan: production JPEG 0.3 MiB, owned DeviceGray FlateDecode 1.1 MiB, owned DeviceGray raw 2.1 MiB. FlateDecode keeps the guarantee and most of the size; raw keeps the size exact before the page is rendered. MAX_OUTPUT_BYTES is enforced on the finished artifact either way."
+  },
+  {
+   "kind": "ASSERT",
+   "name": "no measurement left the machine",
+   "ok": true,
+   "detail": "0 external requests"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "no page error during the run",
+   "ok": true,
+   "detail": "none"
+  }
+ ]
+}

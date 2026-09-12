@@ -1,0 +1,329 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M5 raster encoder / memory — research harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** flattening path unchanged (E1) and the candidate
+ * encoding paths (E2, E3) over the same rendered pages, so that size, quality
+ * and the checkable memory terms are measured on one pipeline rather than
+ * argued about. Not part of the app; nothing here is imported by `src/`.
+ *
+ * The owned PNG encoder is imported from production as it stands
+ * (`src/utils/comparator/png.ts`) — reused, never modified.
+ */
+import { processMonochrome, processOptimize } from '/src/utils/pdf-processor.ts';
+import { pngStoredSize as productionPngStoredSize, encodePngStored, encoderScratchBytes } from '/src/utils/comparator/png.ts';
+import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+import { PDFDocument } from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
+import { encodeOwnedPage } from '/research/m5-raster-encoder-memory/prototype/image-xobject.mjs';
+import {
+  CANDIDATES, pagePlan, filePlan, batchPlan, preflight, admissibleForHardContract,
+  pngStoredSize, deflateUpperBound, jpegDataUrlChars, rawSampleBytes,
+  CEILINGS, BASIS, E4_REJECTION, JPEG_FORMAT_UPPER_BOUND,
+} from '/research/m5-raster-encoder-memory/prototype/encoders.mjs';
+
+const FIXTURES = '/test-fixtures/m5-encoder';
+const cache = new Map();
+async function bytesOf(name) {
+  if (!cache.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    cache.set(name, new Uint8Array(await r.arrayBuffer()));
+  }
+  return cache.get(name).slice();
+}
+const fileOf = (name, bytes) => new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
+
+configurePdfWorker();
+
+/** Render one page at a DPI, exactly as the production operations do. */
+async function renderPage(pdf, index, dpi) {
+  const page = await pdf.getPage(index);
+  const viewport = page.getViewport({ scale: dpi / 72 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  page.cleanup();
+  return { canvas, ctx, width: canvas.width, height: canvas.height, viewport };
+}
+
+/**
+ * PDF.js transfers the array it is given, which detaches the caller's view —
+ * so every open takes its own copy and the caller's bytes stay usable (and
+ * measurable) afterwards.
+ */
+const openDoc = async (bytes) => pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+
+/** Luminance of an RGBA readback, as the operations compute it. */
+function luminance(rgba) {
+  const out = new Uint8Array(rgba.length / 4);
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 1) {
+    out[j] = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+  }
+  return out;
+}
+
+/**
+ * What survived, measured the way a drawing is judged: how much of the source's
+ * ink is still ink, how much appeared that was not there, and PSNR.
+ */
+function compare(ref, out) {
+  if (ref.length !== out.length) return { comparable: false };
+  let kept = 0; let ink = 0; let spurious = 0; let light = 0; let se = 0;
+  for (let i = 0; i < ref.length; i += 1) {
+    const d = ref[i] - out[i];
+    se += d * d;
+    if (ref[i] < 128) { ink += 1; if (out[i] < 128) kept += 1; } else { light += 1; if (out[i] < 128) spurious += 1; }
+  }
+  const mse = se / ref.length;
+  return {
+    comparable: true,
+    inkKept: ink ? kept / ink : null,
+    spurious: light ? spurious / light : null,
+    psnr: mse === 0 ? Infinity : 10 * Math.log10((255 * 255) / mse),
+  };
+}
+
+/** A page rendered to luminance at a fixed resolution, for comparisons. */
+async function luminanceAt(bytes, index, dpi) {
+  const pdf = await openDoc(bytes);
+  const { ctx, width, height } = await renderPage(pdf, index, dpi);
+  const lum = luminance(ctx.getImageData(0, 0, width, height).data);
+  await pdf.destroy();
+  return { lum, width, height };
+}
+
+// ---------------------------------------------------------------------------
+// The candidate runners. Each renders the same pages and differs only in how
+// the pixels reach the PDF.
+// ---------------------------------------------------------------------------
+
+/** E1 mirror: exactly what production does, with the intermediate sizes reported. */
+async function runE1(bytes, dpi, { grey }) {
+  const pdf = await openDoc(bytes);
+  const out = await PDFDocument.create();
+  const pages = [];
+  const t0 = performance.now();
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const { canvas, ctx, width, height, viewport } = await renderPage(pdf, i, dpi);
+    if (grey) {
+      const img = ctx.getImageData(0, 0, width, height);
+      const d = img.data;
+      for (let j = 0; j < d.length; j += 4) {
+        const g = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+        d[j] = g; d[j + 1] = g; d[j + 2] = g;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    const url = canvas.toDataURL('image/jpeg', 0.8);
+    const jpegBytes = Math.floor((url.length - 23) * 3 / 4)
+      - (url.endsWith('==') ? 2 : (url.endsWith('=') ? 1 : 0));
+    const embedded = await out.embedJpg(url);
+    const page = out.addPage([viewport.width * (72 / dpi), viewport.height * (72 / dpi)]);
+    page.drawImage(embedded, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+    pages.push({ width, height, streamBytes: jpegBytes, dataUrlChars: url.length, dataUrlExact: url.length === jpegDataUrlChars(jpegBytes) });
+    canvas.width = 0; canvas.height = 0;
+  }
+  const saved = await out.save();
+  await pdf.destroy();
+  return { bytes: saved, pages, elapsedMs: performance.now() - t0 };
+}
+
+/** E2: the owned stored PNG, embedded through pdf-lib's PNG path. */
+async function runE2(bytes, dpi, { grey }) {
+  const pdf = await openDoc(bytes);
+  const out = await PDFDocument.create();
+  const pages = [];
+  const t0 = performance.now();
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const { canvas, ctx, width, height, viewport } = await renderPage(pdf, i, dpi);
+    const img = ctx.getImageData(0, 0, width, height);
+    const d = img.data;
+    for (let j = 0; j < d.length; j += 4) {
+      if (grey) {
+        const g = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+        d[j] = g; d[j + 1] = g; d[j + 2] = g;
+      }
+      d[j + 3] = 255; // the sheet is opaque; the owned encoder is told so
+    }
+    const png = encodePngStored(d, width, height);
+    const embedded = await out.embedPng(png);
+    const page = out.addPage([viewport.width * (72 / dpi), viewport.height * (72 / dpi)]);
+    page.drawImage(embedded, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+    pages.push({
+      width, height, streamBytes: png.length,
+      sizeExact: png.length === productionPngStoredSize(width, height),
+      modelAgrees: productionPngStoredSize(width, height) === pngStoredSize(width, height),
+      scratchBytes: encoderScratchBytes(width),
+    });
+    canvas.width = 0; canvas.height = 0;
+  }
+  const saved = await out.save();
+  await pdf.destroy();
+  return { bytes: saved, pages, elapsedMs: performance.now() - t0 };
+}
+
+/** E3: an owned image XObject, written as samples or deflated. */
+async function runE3(bytes, dpi, { colourSpace, filter, contrast = 1 }) {
+  const pdf = await openDoc(bytes);
+  const out = await PDFDocument.create();
+  const pages = [];
+  const t0 = performance.now();
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const { canvas, ctx, width, height, viewport } = await renderPage(pdf, i, dpi);
+    const page = out.addPage([viewport.width * (72 / dpi), viewport.height * (72 / dpi)]);
+    const r = encodeOwnedPage(out, page, ctx, { width, height, colourSpace, filter, contrast });
+    const components = colourSpace === 'DeviceGray' ? 1 : 3;
+    pages.push({
+      width, height, streamBytes: r.streamBytes,
+      sampleBytes: r.sampleBytes,
+      sizeExact: filter === 'none'
+        ? r.streamBytes === rawSampleBytes(width, height, components)
+        : r.streamBytes <= deflateUpperBound(rawSampleBytes(width, height, components)),
+    });
+    canvas.width = 0; canvas.height = 0;
+  }
+  const saved = await out.save();
+  await pdf.destroy();
+  return { bytes: saved, pages, elapsedMs: performance.now() - t0 };
+}
+
+const RUNNERS = {
+  'E1-jpeg': (b, dpi) => runE1(b, dpi, { grey: true }),
+  'E1-jpeg-colour': (b, dpi) => runE1(b, dpi, { grey: false }),
+  'E2-png-embed': (b, dpi) => runE2(b, dpi, { grey: true }),
+  'E3-gray-raw': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceGray', filter: 'none' }),
+  'E3-gray-flate': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceGray', filter: 'flate' }),
+  'E3-rgb-raw': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceRGB', filter: 'none' }),
+  'E3-rgb-flate': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceRGB', filter: 'flate' }),
+};
+
+// ---------------------------------------------------------------------------
+
+window.__m5e = {
+  async corpus(names) {
+    const out = {};
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const pdf = await openDoc(bytes);
+      const page = await pdf.getPage(1);
+      const [, , w, h] = page.view;
+      out[name] = { bytes: bytes.length, pages: pdf.numPages, widthPt: w, heightPt: h };
+      await pdf.destroy();
+    }
+    return out;
+  },
+
+  /** The owned PNG encoder's size contract, against the production code itself. */
+  async pngContract(cases) {
+    const rows = [];
+    for (const [w, h] of cases) {
+      const pixels = new Uint8ClampedArray(w * h * 4).fill(255);
+      const encoded = encodePngStored(pixels, w, h);
+      rows.push({
+        w, h,
+        production: productionPngStoredSize(w, h),
+        model: pngStoredSize(w, h),
+        actual: encoded.length,
+        agree: productionPngStoredSize(w, h) === pngStoredSize(w, h) && encoded.length === pngStoredSize(w, h),
+        bytesPerPixel: encoded.length / (w * h),
+      });
+    }
+    return rows;
+  },
+
+  /** The production operations themselves, unchanged, as the E1 baseline. */
+  async productionBaseline(names, dpi) {
+    const out = {};
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const t0 = performance.now();
+      const mono = await processMonochrome(fileOf(name, bytes), { dpi, contrast: 1.0 });
+      const tMono = performance.now() - t0;
+      const t1 = performance.now();
+      const opt = await processOptimize(fileOf(name, bytes), { dpi });
+      out[name] = {
+        sourceBytes: bytes.length,
+        monochromeBytes: mono.length,
+        monochromeMs: tMono,
+        optimizeBytes: opt.length,
+        optimizeMs: performance.now() - t1,
+      };
+    }
+    return out;
+  },
+
+  /** Every candidate over one fixture at one DPI: size, per-page streams, time. */
+  async candidates(name, dpi, keys) {
+    const bytes = await bytesOf(name);
+    const out = {};
+    for (const key of keys) {
+      const r = await RUNNERS[key](bytes.slice(), dpi);
+      const pixels = r.pages.reduce((n, p) => n + p.width * p.height, 0);
+      out[key] = {
+        outputBytes: r.bytes.length,
+        bytesPerPixel: r.bytes.length / pixels,
+        pages: r.pages,
+        elapsedMs: r.elapsedMs,
+        allExact: r.pages.every((p) => p.sizeExact !== false && p.dataUrlExact !== false),
+      };
+    }
+    return out;
+  },
+
+  /**
+   * What each candidate did to the drawing, judged at 300 dpi against the
+   * source rendered the same way. Greyscale candidates are compared on
+   * luminance, which is what they are supposed to preserve.
+   */
+  async quality(name, dpi, keys, refDpi = 300) {
+    const bytes = await bytesOf(name);
+    const ref = await luminanceAt(bytes, 1, refDpi);
+    const out = {};
+    for (const key of keys) {
+      const r = await RUNNERS[key](bytes.slice(), dpi);
+      const got = await luminanceAt(r.bytes, 1, refDpi);
+      out[key] = {
+        ...compare(ref.lum, got.lum),
+        outputBytes: r.bytes.length,
+        sizeRatio: r.bytes.length / bytes.length,
+        refPixels: ref.width * ref.height,
+      };
+    }
+    return out;
+  },
+
+  /** Whether the machine will allocate a canvas of a given size at all. */
+  canvasProbe(width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let allocates = false;
+    try {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 2, 2);
+      allocates = ctx.getImageData(0, 0, 1, 1).data[3] === 255;
+    } catch { allocates = false; }
+    canvas.width = 0; canvas.height = 0;
+    return { width, height, pixels: width * height, allocates };
+  },
+
+  /** The model, for the gate to read: terms, admissibility, ceilings. */
+  model() {
+    return {
+      candidates: Object.fromEntries(Object.entries(CANDIDATES).map(([k, v]) => [k, { id: v.id, label: v.label, owned: v.owned }])),
+      ceilings: CEILINGS,
+      basis: BASIS,
+      e4: E4_REJECTION,
+      jpegFormatUpperBound: JPEG_FORMAT_UPPER_BOUND,
+    };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m5eReady = true;
+</script>
