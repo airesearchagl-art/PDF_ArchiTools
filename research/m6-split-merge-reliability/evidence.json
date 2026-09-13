@@ -2,7 +2,7 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "bc6635f73fe63ab975a767fef15f8471e56b2ab5",
+    "testedResearchHead": "7d9bc26d8a28bb33bba3dc319e1f23b2ff708fff",
     "workingTreeDirty": true,
     "researchTreeDirty": true,
     "researchPackageDirtyBeforeRun": false,
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-13T08:24:22.567Z"
+    "ranAt": "2026-09-13T10:15:53.005Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -551,7 +551,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 2672
+      "bytesMeasuredOnly": 2673
     },
     "B+A": {
       "pages": 5,
@@ -569,7 +569,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 2668
+      "bytesMeasuredOnly": 2669
     },
     "A+A": {
       "pages": 6,
@@ -589,7 +589,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 3022
+      "bytesMeasuredOnly": 3023
     },
     "A+B+C": {
       "pages": 7,
@@ -1431,6 +1431,19 @@
           "output": null,
           "equal": true
         },
+        "order": {
+          "source": [
+            "M6-OCG-A",
+            "M6-OCG-B"
+          ],
+          "output": [
+            "M6-OCG-A",
+            "M6-OCG-B"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
         "pageProperties": {
           "source": [
             "0/M6A=M6-OCG-A",
@@ -1485,6 +1498,17 @@
         "baseState": {
           "source": null,
           "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": [
+            "M6-OCG-SHARED"
+          ],
+          "output": [
+            "M6-OCG-SHARED"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
           "equal": true
         },
         "pageProperties": {
@@ -1547,6 +1571,19 @@
         "baseState": {
           "source": null,
           "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": [
+            "M6-OCG-ORD-A",
+            "M6-OCG-ORD-B"
+          ],
+          "output": [
+            "M6-OCG-ORD-A",
+            "M6-OCG-ORD-B"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
           "equal": true
         },
         "pageProperties": {
@@ -1619,6 +1656,21 @@
           "output": null,
           "equal": true
         },
+        "order": {
+          "source": [
+            "M6-OCG-M1",
+            "M6-OCG-M2",
+            "M6-OCG-M3"
+          ],
+          "output": [
+            "M6-OCG-M1",
+            "M6-OCG-M2",
+            "M6-OCG-M3"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
         "pageProperties": {
           "source": [
             "0/M6A=M6-OCG-M1",
@@ -1679,6 +1731,17 @@
           "output": null,
           "equal": true
         },
+        "order": {
+          "source": [
+            "M6-OCG-NAMED"
+          ],
+          "output": [
+            "M6-OCG-NAMED"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
         "pageProperties": {
           "source": [
             "0/M6A=M6-OCG-NAMED"
@@ -1733,12 +1796,422 @@
           "output": "/ON",
           "equal": true
         },
+        "order": {
+          "source": [
+            "M6-OCG-BASE"
+          ],
+          "output": [
+            "M6-OCG-BASE"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
         "pageProperties": {
           "source": [
             "0/M6A=M6-OCG-BASE"
           ],
           "output": [
             "0/M6A=M6-OCG-BASE"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-order-flat": {
+      "label": "a flat /Order",
+      "status": "READY",
+      "carried": 3,
+      "comparison": {
+        "groupCount": {
+          "source": 3,
+          "output": 3,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "output": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-order-empty": {
+      "label": "an /Order that is present and empty",
+      "status": "READY",
+      "carried": 3,
+      "comparison": {
+        "groupCount": {
+          "source": 3,
+          "output": 3,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": [],
+          "output": [],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "output": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-order-absent": {
+      "label": "no /Order at all",
+      "status": "READY",
+      "carried": 3,
+      "comparison": {
+        "groupCount": {
+          "source": 3,
+          "output": 3,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": null,
+          "output": null,
+          "sourcePresent": false,
+          "outputPresent": false,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "output": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-order-nested": {
+      "label": "a nested /Order",
+      "status": "READY",
+      "carried": 3,
+      "comparison": {
+        "groupCount": {
+          "source": 3,
+          "output": 3,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": [
+            "M6-ORD-A",
+            [
+              "M6-ORD-B",
+              "M6-ORD-C"
+            ]
+          ],
+          "output": [
+            "M6-ORD-A",
+            [
+              "M6-ORD-B",
+              "M6-ORD-C"
+            ]
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "output": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-order-labeled-nested": {
+      "label": "a nested /Order opening with a text label",
+      "status": "READY",
+      "carried": 3,
+      "comparison": {
+        "groupCount": {
+          "source": 3,
+          "output": 3,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "output": [
+            "M6-ORD-A",
+            "M6-ORD-B",
+            "M6-ORD-C"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "order": {
+          "source": [
+            "M6-ORD-A",
+            [
+              "label:M6-ORDER-LABEL",
+              "M6-ORD-B",
+              "M6-ORD-C"
+            ]
+          ],
+          "output": [
+            "M6-ORD-A",
+            [
+              "label:M6-ORDER-LABEL",
+              "M6-ORD-B",
+              "M6-ORD-C"
+            ]
+          ],
+          "sourcePresent": true,
+          "outputPresent": true,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
+          ],
+          "output": [
+            "0/M6A=M6-ORD-A",
+            "0/M6B=M6-ORD-B",
+            "0/M6C=M6-ORD-C"
           ],
           "equal": true
         }
@@ -1763,6 +2236,13 @@
       "code": "UNSUPPORTED_OPTIONAL_CONTENT",
       "unsupported": [
         "/D /BaseState /OFF"
+      ]
+    },
+    "ocg-order-malformed": {
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/D /Order holds an entry that is neither a group, an array nor a label"
       ]
     }
   },
