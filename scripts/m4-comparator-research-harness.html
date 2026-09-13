@@ -1,0 +1,2262 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M4 comparator research — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * RESEARCH ONLY.
+ *
+ * The compositing measured here is the **production** code
+ * (`src/utils/pdfDiff.ts`), because measuring a rewrite of it would say nothing
+ * about what ships. The geometry policies are research prototypes.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import { renderPageToCanvas, computeMultiPdfComposite, detectChangeBounds }
+  from '/src/utils/pdfDiff.ts';
+import {
+  pageGeometry, compareGeometry, uprightGeometry, displayPlaneScale,
+} from '/research/m4-comparator-reliability/prototype/geometry.mjs';
+import {
+  PLAN, RESULT, verdictFor, canonicalVerdict, MATCH_RATIO_FLOOR,
+  GEOMETRY_TOLERANCE_PT, MULTI_MEMBER, planMultiMember, IMPLEMENTED_CONTRACTS,
+  candidateBaseline, candidateStrict, candidateNormalise, candidateHumanAlignment,
+  assertRigidPlan,
+  estimateMemory, checkBudget, pixelRadiusFor, millimetresFor, MAX_COMPARISON_BYTES,
+  INK_PREDICATES, inkMask, dilateMask, pairChangeMask, pairChangeMaskScan,
+  pairChangeMaskSteps, compositeFromMasks, presentReferencePairs,
+  visiblyChangedPixels,
+  runCancellable, runCancellableAsync, checkComparisonWork,
+  MAX_COMPARISON_WORK_UNITS, COMPARISON_ALGORITHM, M4_PLANNER_ALGORITHM,
+  estimateComparisonWork,
+  estimatePhaseMemory, checkPhaseBudget, EXPORT_STRATEGIES, BUDGETED_EXPORT_STRATEGY,
+  OUTPUT_SINK, M4_OUTPUT_SINK, DEFERRED_OUTPUT_SINK, OUTPUT_PATHS,
+  MAX_SPOOL_CHUNK_BYTES, MAX_PUBLISH_CHUNK_BYTES, MAX_OUTPUT_BYTES,
+  PAIR_RESULT_LIFETIME, checkJobMemory, pairResultShape,
+  STORAGE_VERDICT, STORAGE_HEADROOM, checkStorageCapacity,
+  spoolNamespace, ownsNamespace, reclaimableNamespaces,
+  PNG_STORED_CONTRACT, pngStoredSize, encodePngStored, encoderScratchUpperBound,
+  estimateJobWork,
+  SPATIAL_TOLERANCE_POLICY, isDefaultSpatialTolerance,
+} from '/research/m4-comparator-reliability/prototype/candidates.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/m4-comparator';
+const docs = new Map();
+async function open(name) {
+  if (!docs.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    const data = new Uint8Array(await r.arrayBuffer());
+    docs.set(name, await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise);
+  }
+  return docs.get(name);
+}
+
+/** What a page looks like before anything is rendered. */
+async function describe(name, pageNumber = 1, label = name) {
+  const doc = await open(name);
+  if (pageNumber > doc.numPages) {
+    return { label, name, pageNumber, available: false, renderError: false };
+  }
+  const page = await doc.getPage(pageNumber);
+  const vp = page.getViewport({ scale: 1 });
+  return {
+    label, name, pageNumber, available: true, renderError: false,
+    view: page.view, rotate: page.rotate,
+    displayWidth: vp.width, displayHeight: vp.height,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Rendering, exactly as production does it
+// ---------------------------------------------------------------------------
+
+/** The caps that ship today (PdfComparator.tsx:271-272). */
+const MAX_DIM = 12000;
+const MAX_AREA = 80000000;
+
+function productionExportScale(dpi, vp) {
+  const requested = dpi / 72;
+  let safe = requested;
+  const estW = vp.width * requested;
+  const estH = vp.height * requested;
+  if (estW > MAX_DIM || estH > MAX_DIM || estW * estH > MAX_AREA) {
+    const ratioW = MAX_DIM / estW;
+    const ratioH = MAX_DIM / estH;
+    const ratioA = Math.sqrt(MAX_AREA / (estW * estH));
+    safe = requested * Math.min(ratioW, ratioH, ratioA);
+  }
+  return { requested, safe, capped: safe < requested };
+}
+
+/**
+ * Compose the way the shipped export loop does: render each member, take the
+ * largest dimensions, draw each at the top-left of a white field, composite.
+ */
+async function composeAsProduction(
+  members, scale, threshold,
+  {
+    failMember = null, upright = false,
+    matchColor = [0, 0, 0], matchOpacity = 1,
+  } = {},
+) {
+  const started = performance.now();
+  const raw = [];
+  let maxW = 0;
+  let maxH = 0;
+  const dropped = [];
+
+  for (const m of members) {
+    if (!m.available) { dropped.push(`${m.label}: page absent`); continue; }
+    try {
+      if (failMember === m.label) throw new Error('injected render failure');
+      const doc = await open(m.name);
+      // `upright` renders with /Rotate undone, which is what the proposed
+      // design does and what makes a rotation-only pair comparable at all.
+      const canvas = upright
+        ? await renderUpright(doc, m.pageNumber, scale)
+        : await renderPageToCanvas(doc, m.pageNumber, scale);
+      maxW = Math.max(maxW, canvas.width);
+      maxH = Math.max(maxH, canvas.height);
+      raw.push({ canvas, color: m.color });
+    } catch (error) {
+      // Production catches here and carries on with whatever is left.
+      dropped.push(`${m.label}: ${error.message}`);
+    }
+  }
+  if (raw.length === 0 || maxW === 0) {
+    return { produced: false, dropped, ms: Math.round(performance.now() - started) };
+  }
+
+  const temp = document.createElement('canvas');
+  temp.width = maxW;
+  temp.height = maxH;
+  const ctx = temp.getContext('2d', { willReadFrequently: true });
+  const layers = [];
+  for (const layer of raw) {
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, maxW, maxH);
+    ctx.drawImage(layer.canvas, 0, 0);
+    layers.push({ data: ctx.getImageData(0, 0, maxW, maxH).data, color: layer.color });
+    layer.canvas.width = 0;
+    layer.canvas.height = 0;
+  }
+
+  const compositeStarted = performance.now();
+  const composite = computeMultiPdfComposite(
+    layers, maxW, maxH, threshold, matchColor, matchOpacity,
+  );
+  const compositeMs = Math.round(performance.now() - compositeStarted);
+  const bounds = detectChangeBounds(layers, maxW, maxH, threshold);
+
+  // Pixels that are neither white nor black: the composite paints an unmatched
+  // layer in that layer's colour, so these are what the tool is calling a
+  // change.
+  let changePixels = 0;
+  let inkPixels = 0;
+  const d = composite.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
+    if (r > 245 && g > 245 && b > 245) continue;
+    inkPixels += 1;
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 30) changePixels += 1;
+  }
+
+  temp.width = 1;
+  temp.height = 1;
+  return {
+    produced: true,
+    dropped,
+    width: maxW,
+    height: maxH,
+    members: raw.length,
+    changePixels,
+    inkPixels,
+    changeRatio: inkPixels === 0 ? 0 : changePixels / inkPixels,
+    bounds,
+    compositeMs,
+    ms: Math.round(performance.now() - started),
+    memory: estimateMemory({ width: maxW, height: maxH, layers: raw.length }).total,
+  };
+}
+
+/** The same page with /Rotate undone. */
+async function renderUpright(doc, pageNumber, scale) {
+  const page = await doc.getPage(pageNumber);
+  const vp = page.getViewport({ scale, rotation: 0 });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(vp.width);
+  canvas.height = Math.ceil(vp.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas;
+}
+
+// ---------------------------------------------------------------------------
+// The canonical comparison
+// ---------------------------------------------------------------------------
+
+/**
+ * Every member rendered in the canonical upright frame, at the same size.
+ *
+ * Sizes that do not agree are not normalised here by padding or stretching:
+ * that is a plan-level question and the plan has already answered it. If they
+ * disagree at this point something upstream let through a comparison it should
+ * have refused, so it is reported rather than papered over.
+ */
+async function renderMembersUpright(members, scale) {
+  const buffers = [];
+  let width = 0;
+  let height = 0;
+  for (const m of members) {
+    const doc = await open(m.name);
+    const canvas = await renderUpright(doc, m.pageNumber, scale);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (width === 0) { width = canvas.width; height = canvas.height; }
+    buffers.push({ label: m.label, data, width: canvas.width, height: canvas.height });
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+  return {
+    buffers,
+    width,
+    height,
+    sameSize: buffers.every((b) => b.width === width && b.height === height),
+  };
+}
+
+/**
+ * The verdict, taken from ink rather than from the picture.
+ *
+ * This is the whole of RF-N2's shape: an ink predicate and a physical spatial
+ * tolerance produce a change mask, the mask produces the verdict, and only then
+ * is anything painted. `presentation` here exists to prove the separation --
+ * the same comparison run with different layer colours, match colour and match
+ * opacity has to give the same verdict.
+ */
+async function canonicalCompare(members, scale, radius, {
+  isInk = INK_PREDICATES.mean, presentation = null,
+} = {}) {
+  const rendered = await renderMembersUpright(members, scale);
+  const { width, height } = rendered;
+  const masks = rendered.buffers.map((b) => inkMask(b.data, width, height, isInk));
+  // Reference pairs: slot 1 against each of the others, independently.
+  const pairs = [];
+  for (let i = 1; i < masks.length; i++) {
+    const mask = pairChangeMask({
+      a: masks[0], b: masks[i], width, height, radius,
+    });
+    pairs.push({
+      member: rendered.buffers[i].label,
+      changePixels: mask.changePixels,
+      inkPixels: mask.inkPixels,
+      ratio: mask.inkPixels === 0 ? 0 : mask.changePixels / mask.inkPixels,
+      verdict: canonicalVerdict(mask).status,
+    });
+  }
+  const changePixels = pairs.reduce((n, p) => n + p.changePixels, 0);
+  const inkPixels = Math.max(...pairs.map((p) => p.inkPixels), 0);
+  const out = {
+    width,
+    height,
+    sameSize: rendered.sameSize,
+    changePixels,
+    inkPixels,
+    ratio: inkPixels === 0 ? 0 : changePixels / inkPixels,
+    pairs,
+    // MATCH only when every pair matches. No pair can be cancelled by another.
+    verdict: pairs.every((p) => p.verdict === RESULT.MATCH) ? RESULT.MATCH : RESULT.CHANGE,
+  };
+  if (presentation) {
+    // What the user is shown, for the same input. Nothing here may reach the
+    // verdict above.
+    const coloured = members.map((m, i) => ({ ...m, color: presentation.colors[i] }));
+    const shown = await composeAsProduction(coloured, scale, radius, {
+      upright: true,
+      matchColor: presentation.matchColor,
+      matchOpacity: presentation.matchOpacity,
+    });
+    out.presentation = {
+      label: presentation.label,
+      // The colour-spread count the earlier rounds used: derived from the
+      // painted composite, and therefore a property of the palette.
+      compositeChangePixels: shown.changePixels,
+      compositeInkPixels: shown.inkPixels,
+      compositeRatio: shown.changeRatio,
+    };
+  }
+  return out;
+}
+
+const RED = [1, 0, 0];
+const BLUE = [0, 0, 1];
+const member = (name, color, label = name, pageNumber = 1) =>
+  describe(name, pageNumber, label).then((m) => ({ ...m, color }));
+
+const pair = async (a, b, pageNumber = 1) => ([
+  await member(a, BLUE, a, pageNumber),
+  await member(b, RED, b, pageNumber),
+]);
+
+// ---------------------------------------------------------------------------
+// The probes
+// ---------------------------------------------------------------------------
+
+const DPI = 150;
+const SCALE = DPI / 72;
+
+window.__m4 = {
+  /** The corpus has to differ in the ways it claims to. */
+  async corpus() {
+    const out = {};
+    for (const name of [
+      'base-a4', 'identical-a4', 'added-line-a4', 'removed-line-a4', 'offset-a4',
+      'grey-line-a4', 'colour-line-a4', 'pale-hatch-a4',
+      'base-a3', 'base-a1', 'base-a0', 'landscape-a4', 'nearly-a4', 'same-ratio-larger',
+      'rotate-0', 'rotate-90', 'rotate-180', 'rotate-270',
+      'crop-origin-0', 'crop-origin-50-70', 'mediabox-larger',
+      'three-pages', 'two-pages', 'three-pages-blank-third',
+      'base-a4-copy', 'wall-at-y-a4', 'wall-at-y-a4-copy',
+      'dense-a', 'dense-b', 'sheet-plus-0-99', 'sheet-plus-1-01',
+      'rotate-0-copy', 'crop-rot-90', 'crop-rot-180', 'crop-rot-270',
+      'small-base', 'small-base-copy', 'small-digit', 'small-fine-line',
+      'small-symbol', 'small-revision-mark', 'small-hatch',
+    ]) {
+      const doc = await open(name);
+      const page = await doc.getPage(1);
+      const vp = page.getViewport({ scale: 1 });
+      const ops = await page.getOperatorList();
+      out[name] = {
+        pages: doc.numPages,
+        view: page.view.map((v) => Math.round(v)),
+        rotate: page.rotate,
+        display: [Math.round(vp.width), Math.round(vp.height)],
+        ops: ops.fnArray.length,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * What the shipped comparator does with each pair.
+   *
+   * The number that matters is `changeRatio`: how much of the ink it painted in
+   * a layer colour rather than in the matched colour. On a pair whose drawing
+   * is identical, every one of those pixels is the tool reporting its own
+   * coordinate handling as a design change.
+   */
+  async baseline() {
+    const cases = {
+      'identical drawing': ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      'a wall removed': ['base-a4', 'removed-line-a4'],
+      'the drawing shifted 2pt': ['base-a4', 'offset-a4'],
+      'A4 vs A3, same drawing': ['base-a4', 'base-a3'],
+      'A4 vs A1, same drawing': ['base-a4', 'base-a1'],
+      'portrait vs landscape': ['base-a4', 'landscape-a4'],
+      'A4 vs a sheet 3pt bigger': ['base-a4', 'nearly-a4'],
+      'same aspect, 1.4x': ['base-a4', 'same-ratio-larger'],
+      '/Rotate 0 vs 90': ['rotate-0', 'rotate-90'],
+      '/Rotate 0 vs 180': ['rotate-0', 'rotate-180'],
+      '/Rotate 0 vs 270': ['rotate-0', 'rotate-270'],
+      'crop origin (0,0) vs (50,70)': ['crop-origin-0', 'crop-origin-50-70'],
+      'MediaBox larger, same CropBox': ['base-a4', 'mediabox-larger'],
+      'black vs grey ink': ['base-a4', 'grey-line-a4'],
+      'black vs cyan ink': ['base-a4', 'colour-line-a4'],
+      'a pale hatch added': ['base-a4', 'pale-hatch-a4'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      out[label] = await composeAsProduction(await pair(a, b), SCALE, 0);
+    }
+    return out;
+  },
+
+  /** Page 3 of a three-page document against a two-page one. */
+  async missingPage() {
+    const out = {};
+    for (const n of [1, 2, 3]) {
+      out[`page ${n}`] = {
+        production: await composeAsProduction(
+          await pair('three-pages', 'two-pages', n), SCALE, 0),
+        strict: candidateStrict({ pages: await pair('three-pages', 'two-pages', n) }),
+      };
+    }
+    // A page that exists and is empty is a different statement from a page that
+    // is not there, and a comparison must not turn one into the other.
+    out['blank page 3'] = {
+      production: await composeAsProduction(
+        await pair('three-pages', 'three-pages-blank-third', 3), SCALE, 0),
+      strict: candidateStrict({
+        pages: await pair('three-pages', 'three-pages-blank-third', 3),
+      }),
+    };
+    return out;
+  },
+
+  /** One member fails to render; the other does not. */
+  async renderFailure() {
+    const members = await pair('base-a4', 'added-line-a4');
+    const production = await composeAsProduction(members, SCALE, 0,
+      { failMember: 'added-line-a4' });
+    const withFailure = members.map(
+      (m) => (m.label === 'added-line-a4' ? { ...m, renderError: true } : m),
+    );
+    return {
+      production,
+      strict: candidateStrict({ pages: withFailure }),
+      // What the same pair produces when nothing fails, for contrast.
+      intact: await composeAsProduction(members, SCALE, 0),
+    };
+  },
+
+  /** What each candidate says about each geometry pair. */
+  async candidates() {
+    const cases = {
+      'identical drawing': ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      '/Rotate 0 vs 90': ['rotate-0', 'rotate-90'],
+      'crop origin (0,0) vs (50,70)': ['crop-origin-0', 'crop-origin-50-70'],
+      'MediaBox larger, same CropBox': ['base-a4', 'mediabox-larger'],
+      'A4 vs A3, same drawing': ['base-a4', 'base-a3'],
+      'portrait vs landscape': ['base-a4', 'landscape-a4'],
+      'A4 vs a sheet 3pt bigger': ['base-a4', 'nearly-a4'],
+      'same aspect, 1.4x': ['base-a4', 'same-ratio-larger'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const withAlignment = { x: 12, y: -4, rotation: 0, scale: 1 };
+      out[label] = {
+        geometry: compareGeometry(pageGeometry(pages[0]), pageGeometry(pages[1])),
+        baseline: candidateBaseline({ pages }),
+        strict: candidateStrict({ pages }),
+        normalise: candidateNormalise({ pages }),
+        human: candidateHumanAlignment({ pages }),
+        humanWithAlignment: candidateHumanAlignment({ pages, alignment: withAlignment }),
+      };
+    }
+    return out;
+  },
+
+  /**
+   * Rendering upright: does undoing /Rotate remove the difference?
+   *
+   * PDF.js applies /Rotate unless told otherwise, so the same drawing at four
+   * rotations renders to four different canvases. Asking for `rotation: 0`
+   * renders the page upright, which is what makes the comparison possible.
+   */
+  async rotationUpright() {
+    const out = {};
+    for (const angle of [90, 180, 270]) {
+      const upright = [];
+      for (const name of ['rotate-0', `rotate-${angle}`]) {
+        const doc = await open(name);
+        const page = await doc.getPage(1);
+        const vp = page.getViewport({ scale: SCALE, rotation: 0 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(vp.width);
+        canvas.height = Math.ceil(vp.height);
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        upright.push({ data: ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas });
+      }
+      const w = upright[0].canvas.width;
+      const h = upright[0].canvas.height;
+      const sameSize = w === upright[1].canvas.width && h === upright[1].canvas.height;
+      let differing = 0;
+      let ink = 0;
+      if (sameSize) {
+        const a = upright[0].data;
+        const b = upright[1].data;
+        for (let i = 0; i < a.length; i += 4) {
+          const inkA = (a[i] + a[i + 1] + a[i + 2]) / 3 < 200;
+          const inkB = (b[i] + b[i + 1] + b[i + 2]) / 3 < 200;
+          if (inkA || inkB) ink += 1;
+          if (inkA !== inkB) differing += 1;
+        }
+      }
+      for (const u of upright) { u.canvas.width = 1; u.canvas.height = 1; }
+      out[`0 vs ${angle}`] = {
+        sameSize, width: w, height: h, ink, differing,
+        ratio: ink === 0 ? 0 : differing / ink,
+      };
+    }
+    return out;
+  },
+
+  /** What the shipped caps do to a requested DPI. */
+  async dpiContract() {
+    const out = {};
+    for (const sheet of ['base-a4', 'base-a3', 'base-a1', 'base-a0']) {
+      const doc = await open(sheet);
+      const page = await doc.getPage(1);
+      const vp = page.getViewport({ scale: 1 });
+      out[sheet] = {};
+      for (const dpi of [72, 150, 300, 600]) {
+        const s = productionExportScale(dpi, vp);
+        const width = Math.round(vp.width * s.safe);
+        const height = Math.round(vp.height * s.safe);
+        const budget = checkBudget({ width, height, layers: 2 });
+        out[sheet][dpi] = {
+          requestedDpi: dpi,
+          actualDpi: Math.round(72 * s.safe),
+          capped: s.capped,
+          width,
+          height,
+          megapixels: +(width * height / 1e6).toFixed(2),
+          estimatedBytes: budget.total,
+          estimatedMB: +(budget.total / 1e6).toFixed(1),
+          withinBudget: budget.withinBudget,
+        };
+      }
+    }
+    return out;
+  },
+
+  /** What a comparison actually costs, measured rather than modelled. */
+  async cost() {
+    const rows = {};
+    for (const [label, sheet, dpi, threshold, layers] of [
+      ['A4 150dpi, 2 layers, threshold 0', 'base-a4', 150, 0, 2],
+      ['A4 150dpi, 2 layers, threshold 2', 'base-a4', 150, 2, 2],
+      ['A4 150dpi, 2 layers, threshold 4', 'base-a4', 150, 4, 2],
+      ['A4 300dpi, 2 layers, threshold 0', 'base-a4', 300, 0, 2],
+      ['A4 150dpi, 4 layers, threshold 0', 'base-a4', 150, 0, 4],
+      ['A3 150dpi, 2 layers, threshold 0', 'base-a3', 150, 0, 2],
+      ['A1 150dpi, 2 layers, threshold 0', 'base-a1', 150, 0, 2],
+    ]) {
+      const others = ['identical-a4', 'added-line-a4', 'removed-line-a4'];
+      const members = [await member(sheet, BLUE, sheet)];
+      for (let i = 1; i < layers; i++) {
+        const name = sheet === 'base-a4' ? others[(i - 1) % others.length] : sheet;
+        members.push(await member(name, RED, `${name}#${i}`));
+      }
+      // Twice, keeping the faster: the neighbourhood rows are a 30-50 ms
+      // workload and one scheduling hiccup is larger than the effect being
+      // measured. The stable figure is the 300 dpi adversarial pair below.
+      const first = await composeAsProduction(members, dpi / 72, threshold);
+      const second = await composeAsProduction(members, dpi / 72, threshold);
+      rows[label] = first.compositeMs <= second.compositeMs ? first : second;
+    }
+    return rows;
+  },
+
+  /** Threshold as a physical distance rather than a pixel count. */
+  thresholdContract() {
+    const out = { pixelToMm: {}, mmToPixel: {} };
+    for (const dpi of [72, 150, 300, 600]) {
+      out.pixelToMm[dpi] = +millimetresFor(2, dpi).toFixed(3);
+      out.mmToPixel[dpi] = pixelRadiusFor(0.5, dpi);
+    }
+    return out;
+  },
+
+  /** What the shipped ink test calls ink. */
+  async inkBoundary() {
+    const swatches = {
+      black: '#000000', 'dark grey': '#404040', 'mid grey': '#8c8c8c',
+      'pale grey': '#d2d2d2', 'cad cyan': '#009ed9', 'cad yellow': '#ffe100',
+      // Bright but not dark on average: the mean is over 200 while one
+      // channel is under it, which is where the two ink tests part company.
+      'pale yellow': '#ffff8c', 'near white': '#f5f5f5', white: '#ffffff',
+    };
+    // Sized from the swatches rather than a literal: a reading taken outside the
+    // canvas comes back as transparent black, which would look like ink.
+    const canvas = document.createElement('canvas');
+    canvas.width = Object.keys(swatches).length;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const out = {};
+    let x = 0;
+    for (const [name, colour] of Object.entries(swatches)) {
+      ctx.fillStyle = colour;
+      ctx.fillRect(x, 0, 1, 1);
+      const d = ctx.getImageData(x, 0, 1, 1).data;
+      out[name] = {
+        rgb: [d[0], d[1], d[2]],
+        // computeMultiPdfComposite: the mean.
+        compositeSaysInk: (d[0] + d[1] + d[2]) / 3 < 200,
+        // detectChangeBounds: any channel.
+        boundsSaysInk: d[0] < 200 || d[1] < 200 || d[2] < 200,
+      };
+      x += 1;
+    }
+    return out;
+  },
+
+  /** Twice through, same input. */
+  async determinism() {
+    const members = await pair('base-a4', 'added-line-a4');
+    const first = await composeAsProduction(members, SCALE, 0);
+    const second = await composeAsProduction(members, SCALE, 0);
+    return {
+      changePixels: [first.changePixels, second.changePixels],
+      inkPixels: [first.inkPixels, second.inkPixels],
+      bounds: [first.bounds, second.bounds],
+      identical: first.changePixels === second.changePixels
+        && first.inkPixels === second.inkPixels
+        && JSON.stringify(first.bounds) === JSON.stringify(second.bounds),
+    };
+  },
+
+  /** The budget arithmetic, and the largest thing it refuses. */
+  budget() {
+    const cases = {};
+    for (const [label, w, h, layers] of [
+      ['A4 at 150dpi, 2 layers', 1240, 1754, 2],
+      ['A3 at 300dpi, 2 layers', 3508, 4961, 2],
+      ['A1 at 300dpi, 2 layers', 7016, 9933, 2],
+      ['A1 at 300dpi, 4 layers', 7016, 9933, 4],
+      ['A0 at 300dpi, 2 layers', 9933, 14043, 2],
+      ['A0 at 600dpi, 2 layers', 19866, 28087, 2],
+    ]) {
+      const b = checkBudget({ width: w, height: h, layers });
+      cases[label] = {
+        megapixels: +(w * h / 1e6).toFixed(1),
+        totalMB: +(b.total / 1e6).toFixed(0),
+        withinBudget: b.withinBudget,
+      };
+    }
+    return { limitMB: MAX_COMPARISON_BYTES / 1e6, cases };
+  },
+
+  /**
+   * A plan, then a verdict — the two stages kept apart.
+   *
+   * The first version of this returned CHANGE as soon as the geometry was
+   * eligible, so an identical drawing came back as CHANGE. A plan says whether
+   * the comparison can be made; only a comparison that actually ran may say
+   * MATCH or CHANGE.
+   */
+  async planThenVerdict() {
+    const cases = {
+      identical: ['base-a4', 'identical-a4'],
+      'a wall added': ['base-a4', 'added-line-a4'],
+      'rotation only': ['rotate-0', 'rotate-90'],
+      'crop origin only': ['crop-origin-0', 'crop-origin-50-70'],
+      'a different sheet': ['base-a4', 'base-a3'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const plan = candidateStrict({ pages });
+      if (plan.status !== PLAN.READY_TO_COMPARE) {
+        out[label] = { plan: plan.status, verdict: null, reported: plan.reported };
+        continue;
+      }
+      // Rotation is settled by rendering upright, which is what makes the plan
+      // ready in the first place; the diff has to see the same frame. The
+      // verdict comes from the ink masks, not from the painted composite.
+      const compared = await canonicalCompare(pages, SCALE, 0);
+      const verdict = canonicalVerdict(compared);
+      out[label] = {
+        plan: plan.status,
+        verdict: verdict.status,
+        ratio: verdict.ratio,
+        changePixels: verdict.changePixels,
+        tolerance: verdict.tolerance,
+      };
+    }
+
+    // The same pair, with a human alignment supplied. Candidate C records the
+    // numbers; it does not define what they mean, so it may not claim a plan
+    // that is ready. See the alignment sub-spike this defers to.
+    const mismatched = await pair('base-a4', 'base-a3');
+    const withAlignment = candidateHumanAlignment({
+      pages: mismatched, alignment: { x: 12, y: -4, rotation: 0, scale: 1 },
+    });
+    out['a different sheet, aligned by a human'] = {
+      plan: withAlignment.status,
+      implementationReady: withAlignment.implementationReady,
+      requires: withAlignment.requires,
+      recordedAlignment: withAlignment.recordedAlignment,
+      appliedAlignment: withAlignment.appliedAlignment,
+      missingContract: withAlignment.missingContract,
+      verdict: null,
+      reported: withAlignment.reported,
+    };
+    return out;
+  },
+
+  /**
+   * What "matched" means with more than two members.
+   *
+   * The shipped rule is *any other layer*. With four members two agreeing pairs
+   * cancel: A and B put a wall in one place, C and D put it in another, every
+   * pixel finds a partner, and the comparison comes back clean.
+   */
+  async multiMember() {
+    const sets = {
+      'four identical': ['base-a4', 'identical-a4', 'base-a4-copy', 'base-a4'],
+      'three the same, one changed': ['base-a4', 'identical-a4', 'base-a4-copy', 'added-line-a4'],
+      'two against two': ['base-a4', 'identical-a4', 'wall-at-y-a4', 'wall-at-y-a4-copy'],
+      'reference and three different': ['base-a4', 'added-line-a4', 'removed-line-a4', 'wall-at-y-a4'],
+    };
+    const colours = [[0, 0, 1], [1, 0, 0], [0, 0.6, 0], [0.8, 0, 0.8]];
+    const out = {};
+    for (const [label, names] of Object.entries(sets)) {
+      const members = [];
+      for (let i = 0; i < names.length; i++) {
+        members.push(await member(names[i], colours[i], `${names[i]}#${i}`));
+      }
+      const all = await composeAsProduction(members, SCALE, 0);
+      // The same set, but each non-reference member against slot 1 alone.
+      const pairs = [];
+      for (let i = 1; i < members.length; i++) {
+        const two = await composeAsProduction([members[0], members[i]], SCALE, 0);
+        pairs.push({
+          member: names[i],
+          ratio: two.changeRatio,
+          verdict: verdictFor({
+            changePixels: two.changePixels, inkPixels: two.inkPixels,
+          }).status,
+        });
+      }
+      out[label] = {
+        members: names.length,
+        anyOtherLayer: {
+          ratio: all.changeRatio,
+          verdict: verdictFor({
+            changePixels: all.changePixels, inkPixels: all.inkPixels,
+          }).status,
+        },
+        referencePairs: {
+          pairs,
+          // MATCH only if every pair matches -- no pair can be cancelled.
+          verdict: pairs.every((p) => p.verdict === RESULT.MATCH) ? RESULT.MATCH : RESULT.CHANGE,
+        },
+      };
+    }
+    out.plans = {
+      two: planMultiMember({ members: 2, contract: MULTI_MEMBER.TWO_ONLY }).status,
+      fourTwoOnly: planMultiMember({ members: 4, contract: MULTI_MEMBER.TWO_ONLY }).status,
+      fourReferencePairs: planMultiMember({
+        members: 4, contract: MULTI_MEMBER.REFERENCE_PAIRS,
+      }),
+      one: planMultiMember({ members: 1, contract: MULTI_MEMBER.REFERENCE_PAIRS }).status,
+      // Consensus is described, not implemented. Nothing has been run against
+      // a blank member, a missing member or a member that failed to render
+      // under it, so it is refused at every member count rather than offered.
+      twoConsensus: planMultiMember({ members: 2, contract: MULTI_MEMBER.CONSENSUS }),
+      fourConsensus: planMultiMember({ members: 4, contract: MULTI_MEMBER.CONSENSUS }),
+      implemented: IMPLEMENTED_CONTRACTS,
+    };
+    return out;
+  },
+
+  /** The tolerance for calling two sheets the same, probed either side. */
+  async geometryTolerance() {
+    const out = { tolerancePt: GEOMETRY_TOLERANCE_PT, cases: {} };
+    for (const [label, other] of [
+      ['+0.99pt', 'sheet-plus-0-99'],
+      ['+1.01pt', 'sheet-plus-1-01'],
+      ['+3.00pt', 'nearly-a4'],
+    ]) {
+      const pages = await pair('base-a4', other);
+      const g = [pageGeometry(pages[0]), pageGeometry(pages[1])];
+      out.cases[label] = {
+        widths: [g[0].physical.width, g[1].physical.width],
+        delta: +(g[1].physical.width - g[0].physical.width).toFixed(2),
+        plan: candidateStrict({ pages }).status,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * Three code paths, three answers.
+   *
+   * Preview, the full export and the change report each compute their own render
+   * scale, and only two of them cap it. The change report also drops any page
+   * where fewer than two members rendered, rather than reporting it.
+   *
+   * Arithmetic only: nothing here allocates a canvas, because the point is the
+   * size the change report would ask for.
+   */
+  async pipelineDivergence() {
+    const out = {};
+    for (const sheet of ['base-a4', 'base-a1']) {
+      const doc = await open(sheet);
+      const vp = (await doc.getPage(1)).getViewport({ scale: 1 });
+      out[sheet] = {};
+      for (const [zoom, dpi] of [[1, 300], [2, 300], [6, 600]]) {
+        const previewRequested = zoom * (dpi / 72);
+        const preview = productionExportScale(dpi * zoom, vp);
+        const exportOnly = productionExportScale(dpi, vp);
+        // PdfComparator.tsx:416 -- `scale * (dpi / 72)` with no cap at all.
+        const reportScale = previewRequested;
+        const reportW = Math.round(vp.width * reportScale);
+        const reportH = Math.round(vp.height * reportScale);
+        out[sheet][`zoom ${zoom}, ${dpi}dpi`] = {
+          previewScale: +preview.safe.toFixed(2),
+          previewCapped: preview.capped,
+          exportScale: +exportOnly.safe.toFixed(2),
+          exportCapped: exportOnly.capped,
+          reportScale: +reportScale.toFixed(2),
+          reportCapped: false,
+          reportPixels: reportW * reportH,
+          reportMegapixels: +(reportW * reportH / 1e6).toFixed(1),
+          reportWorkingSetMB: +(estimateMemory({
+            width: reportW, height: reportH, layers: 2,
+          }).total / 1e6).toFixed(0),
+        };
+      }
+    }
+    // The third divergence is not about size.
+    out.missingPageHandling = {
+      preview: 'skips the member (PdfComparator.tsx:173)',
+      export: 'skips the member, still adds the page (PdfComparator.tsx:316)',
+      changeReport: 'skips the whole page when fewer than 2 members render '
+        + '(PdfComparator.tsx:437)',
+    };
+    return out;
+  },
+
+  /**
+   * The threshold cost when the drawings do not match.
+   *
+   * Every earlier figure is a floor: `hasNeighborInAny` returns on the first ink
+   * it finds, so a wider search exits sooner when the marks agree. These two
+   * sheets share only the border and grid, so the search runs to completion on
+   * nearly every ink pixel.
+   */
+  async adversarialThreshold() {
+    const rows = {};
+    for (const [label, a, b, dpi, mm] of [
+      ['matching, A4 150dpi, 0mm', 'base-a4', 'identical-a4', 150, 0],
+      ['matching, A4 150dpi, 0.5mm', 'base-a4', 'identical-a4', 150, 0.5],
+      ['NOT matching, A4 150dpi, 0mm', 'dense-a', 'dense-b', 150, 0],
+      ['NOT matching, A4 150dpi, 0.5mm', 'dense-a', 'dense-b', 150, 0.5],
+      ['NOT matching, A4 300dpi, 0mm', 'dense-a', 'dense-b', 300, 0],
+      ['NOT matching, A4 300dpi, 0.5mm', 'dense-a', 'dense-b', 300, 0.5],
+    ]) {
+      const radius = pixelRadiusFor(mm, dpi);
+      const members = await pair(a, b);
+      // Best of two, for the same reason as section 9: the effect being
+      // measured is smaller than a scheduling hiccup on a single run.
+      const first = await composeAsProduction(members, dpi / 72, radius);
+      const second = await composeAsProduction(members, dpi / 72, radius);
+      const r = first.compositeMs <= second.compositeMs ? first : second;
+      rows[label] = {
+        dpi,
+        millimetres: mm,
+        radius,
+        width: r.width,
+        height: r.height,
+        pixels: r.width * r.height,
+        members: r.members,
+        inkPixels: r.inkPixels,
+        changeRatio: r.changeRatio,
+        compositeMs: r.compositeMs,
+        totalMs: r.ms,
+      };
+    }
+    return rows;
+  },
+
+  /**
+   * Candidate B, in the canonical upright frame.
+   *
+   * The pair that broke the earlier version is `/Rotate 0` against `/Rotate
+   * 90`: a scale taken in the display plane comes out at x = 0.707, y = 1.414
+   * — an anisotropic stretch on two pages that are the same piece of paper —
+   * and the plan returned `READY_TO_COMPARE` anyway. Both numbers are recorded
+   * here, the rejected one beside the one that replaced it, so the difference
+   * is visible rather than asserted.
+   */
+  async rigidMapping() {
+    const cases = {
+      '/Rotate 0 vs 0': ['rotate-0', 'rotate-0-copy'],
+      '/Rotate 0 vs 90': ['rotate-0', 'rotate-90'],
+      '/Rotate 0 vs 180': ['rotate-0', 'rotate-180'],
+      '/Rotate 0 vs 270': ['rotate-0', 'rotate-270'],
+      'crop origin only': ['crop-origin-0', 'crop-origin-50-70'],
+      'crop origin + /Rotate 90': ['crop-origin-0', 'crop-rot-90'],
+      'crop origin + /Rotate 180': ['crop-origin-0', 'crop-rot-180'],
+      'crop origin + /Rotate 270': ['crop-origin-0', 'crop-rot-270'],
+    };
+    const out = {};
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const geometry = [pageGeometry(pages[0]), pageGeometry(pages[1])];
+      const plan = candidateNormalise({ pages });
+      const invariant = assertRigidPlan(plan);
+      const compared = plan.status === PLAN.READY_TO_COMPARE
+        ? await canonicalCompare(pages, SCALE, 0)
+        : null;
+      out[label] = {
+        plan: plan.status,
+        alignment: plan.alignment ?? null,
+        renderRotation: plan.renderRotation ?? null,
+        mappings: (plan.mappings ?? []).map((m) => ({
+          member: m.member,
+          rigid: m.rigid,
+          scaleX: m.scaleX,
+          scaleY: m.scaleY,
+          scaleDelta: m.scaleDelta,
+          renderRotation: m.renderRotation,
+          sourceRotate: m.sourceRotate,
+          residualWidthPt: m.residualWidthPt,
+          residualHeightPt: m.residualHeightPt,
+        })),
+        invariantHolds: invariant.holds,
+        // What the rejected mapping would have produced for the same pair.
+        displayPlane: displayPlaneScale(geometry[0], geometry[1]),
+        upright: uprightGeometry(geometry[1]),
+        verdict: compared?.verdict ?? null,
+        changePixels: compared?.changePixels ?? null,
+        inkPixels: compared?.inkPixels ?? null,
+        ratio: compared?.ratio ?? null,
+        width: compared?.width ?? null,
+        height: compared?.height ?? null,
+        sameSize: compared?.sameSize ?? null,
+      };
+    }
+    // The control. Rendering upright must not turn a different sheet into a
+    // comparable one.
+    const different = await pair('base-a4', 'base-a3');
+    const diffPlan = candidateNormalise({ pages: different });
+    out['a different physical sheet'] = {
+      plan: diffPlan.status,
+      mappings: [],
+      invariantHolds: assertRigidPlan(diffPlan).holds,
+      reported: diffPlan.reported,
+      verdict: null,
+      displayPlane: displayPlaneScale(
+        pageGeometry(different[0]), pageGeometry(different[1]),
+      ),
+    };
+    return out;
+  },
+
+  /**
+   * Changes small enough for a ratio floor to swallow.
+   *
+   * Every pair below except the control is a **true** change to the drawing.
+   * `canonical` is the verdict with no floor at all; `underOldFloor` is what
+   * the 0.5%-of-ink floor from the previous round would have said about the
+   * same measurement. Where those two disagree, the floor is the thing
+   * reporting a revised drawing as unrevised.
+   *
+   * `spatial` is the alternative: the tolerance applied to the mask as a
+   * physical distance rather than to the total as a share. It is not free —
+   * a wide enough radius erodes a small change too — which is exactly why it
+   * has to be stated in millimetres the user chose rather than assumed.
+   */
+  async smallChanges() {
+    const cases = {
+      'nothing changed (control)': ['small-base', 'small-base-copy'],
+      'one digit of a dimension': ['small-base', 'small-digit'],
+      'one short fine line added': ['small-base', 'small-fine-line'],
+      'a symbol swapped': ['small-base', 'small-symbol'],
+      'a 4mm revision triangle added': ['small-base', 'small-revision-mark'],
+      'a light hatch added': ['small-base', 'small-hatch'],
+      'the pale hatch fixture': ['base-a4', 'pale-hatch-a4'],
+      'a wall added, for scale': ['base-a4', 'added-line-a4'],
+    };
+    const out = { cases: {}, spatial: {} };
+    for (const [label, [a, b]] of Object.entries(cases)) {
+      const pages = await pair(a, b);
+      const compared = await canonicalCompare(pages, SCALE, 0);
+      const canonical = canonicalVerdict(compared).status;
+      const underOldFloor = verdictFor({
+        changePixels: compared.changePixels,
+        inkPixels: compared.inkPixels,
+        tolerance: 0.005,
+      }).status;
+      out.cases[label] = {
+        changePixels: compared.changePixels,
+        inkPixels: compared.inkPixels,
+        ratio: compared.ratio,
+        canonical,
+        underOldFloor,
+        // The failure the floor introduces, stated as a boolean so it can be
+        // asserted rather than read off a percentage.
+        floorWouldHide: canonical === RESULT.CHANGE && underOldFloor === RESULT.MATCH,
+      };
+    }
+    // The physical tolerance, swept finely enough to find where a real change
+    // stops being visible rather than only to show that it does.
+    const sweep = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
+    for (const [label, [a, b]] of Object.entries({
+      'nothing changed (control)': ['small-base', 'small-base-copy'],
+      'one digit of a dimension': ['small-base', 'small-digit'],
+      'a 4mm revision triangle': ['small-base', 'small-revision-mark'],
+    })) {
+      const pages = await pair(a, b);
+      out.spatial[label] = {};
+      for (const mm of sweep) {
+        const radius = pixelRadiusFor(mm, DPI);
+        const compared = await canonicalCompare(pages, SCALE, radius);
+        out.spatial[label][`${mm}mm`] = {
+          radius,
+          changePixels: compared.changePixels,
+          verdict: compared.verdict,
+        };
+      }
+    }
+    // The same millimetres at twice the resolution. A tolerance stated in
+    // millimetres should mean the same thing; the rounding to whole pixels is
+    // where it stops doing so, and that belongs in the policy rather than in a
+    // footnote.
+    out.spatialAtHigherDpi = {};
+    const digitPages = await pair('small-base', 'small-digit');
+    for (const mm of sweep) {
+      const radius = pixelRadiusFor(mm, 300);
+      const compared = await canonicalCompare(digitPages, 300 / 72, radius);
+      out.spatialAtHigherDpi[`${mm}mm`] = {
+        radius,
+        changePixels: compared.changePixels,
+        verdict: compared.verdict,
+      };
+    }
+    out.floor = MATCH_RATIO_FLOOR;
+    out.policy = SPATIAL_TOLERANCE_POLICY;
+    // The assertion the implementation gate has to carry: at the contract's
+    // default, a changed dimension is a change.
+    out.atTheDefault = {
+      millimetres: SPATIAL_TOLERANCE_POLICY.default,
+      isDefault: isDefaultSpatialTolerance(SPATIAL_TOLERANCE_POLICY.default),
+      radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.default, DPI),
+      verdict: out.spatial['one digit of a dimension']
+        [`${SPATIAL_TOLERANCE_POLICY.default}mm`].verdict,
+    };
+    return out;
+  },
+
+  /**
+   * The verdict must not be a property of the palette.
+   *
+   * The same comparison, painted three ways. `verdict` comes from the ink
+   * masks and must not move. `composite` is the colour-spread count the
+   * earlier rounds took from the painted result, and it moves a great deal —
+   * which is why it cannot be what MATCH and CHANGE are decided from.
+   */
+  async presentationIndependence() {
+    const presentations = {
+      'blue/red, black match, opaque': {
+        colors: [[0, 0, 1], [1, 0, 0]], matchColor: [0, 0, 0], matchOpacity: 1,
+      },
+      'grey/grey, grey match, faint': {
+        colors: [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],
+        matchColor: [0.5, 0.5, 0.5], matchOpacity: 0.2,
+      },
+      'green/magenta, white match': {
+        colors: [[0, 0.6, 0], [0.8, 0, 0.8]], matchColor: [1, 1, 1], matchOpacity: 1,
+      },
+    };
+    const out = {};
+    for (const [setLabel, [a, b]] of Object.entries({
+      'a changed pair': ['small-base', 'small-digit'],
+      'an identical pair': ['small-base', 'small-base-copy'],
+    })) {
+      const pages = await pair(a, b);
+      out[setLabel] = {};
+      for (const [label, p] of Object.entries(presentations)) {
+        const compared = await canonicalCompare(pages, SCALE, 0, {
+          presentation: { label, ...p },
+        });
+        out[setLabel][label] = {
+          verdict: compared.verdict,
+          changePixels: compared.changePixels,
+          composite: compared.presentation,
+        };
+      }
+    }
+    return out;
+  },
+
+  /**
+   * What a comparison would cost, before anything is allocated.
+   *
+   * Memory and work are separate ceilings. These are the work one, in units of
+   * one pixel read, computed from the member count, the multi-member contract,
+   * the neighbourhood box and the algorithm — all four, because leaving any of
+   * them out is how the previous shape managed to report zero for a radius-0
+   * comparison that still reads every pixel of every member.
+   */
+  workBudget() {
+    const unrepresentableSide = Math.ceil(Math.sqrt(Number.MAX_SAFE_INTEGER / 24))
+      + 1000000;
+    const rows = [
+      ['A4 300dpi, 2 members, radius 0', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 0],
+      ['A4 300dpi, 2 members, radius 1', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 1],
+      ['A4 300dpi, 2 members, radius 2', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 2],
+      ['A4 300dpi, 2 members, 0.5mm', 2480, 3507, 2, MULTI_MEMBER.TWO_ONLY, 6],
+      ['A4 300dpi, 4 members, ref-pairs, 0.5mm', 2480, 3507, 4,
+        MULTI_MEMBER.REFERENCE_PAIRS, 6],
+      ['A3 300dpi, 2 members, 0.5mm', 3508, 4961, 2, MULTI_MEMBER.TWO_ONLY, 6],
+      ['A1 300dpi, 2 members, 0.5mm', 7016, 9933, 2, MULTI_MEMBER.TWO_ONLY, 6],
+      ['A0 600dpi, 2 members, 0.5mm', 19866, 28087, 2, MULTI_MEMBER.TWO_ONLY, 12],
+    ];
+    const cases = {};
+    for (const [label, w, h, members, contract, radiusPx] of rows) {
+      const checked = checkComparisonWork({
+        width: w, height: h, members, contract, radiusPx,
+        algorithm: M4_PLANNER_ALGORITHM,
+      });
+      // The rejected algorithm, on the same job, so the difference a unit
+      // hides is visible rather than asserted.
+      const scan = checkComparisonWork({
+        width: w, height: h, members, contract, radiusPx,
+        algorithm: COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
+      });
+      cases[label] = {
+        scanUnits: scan.units,
+        scanWithinBudget: scan.withinBudget,
+        pixels: checked.pixels,
+        members: checked.members,
+        contract: checked.contract,
+        radiusPx: checked.radiusPx,
+        neighbourhoodBox: checked.neighbourhoodBox,
+        groups: checked.groups,
+        units: checked.units,
+        withinBudget: checked.withinBudget,
+        refusal: checked.refusal,
+        requested: checked.requested,
+        effective: checked.effective,
+        degraded: checked.degraded,
+      };
+    }
+    // The same sheet under the algorithm that removes the radius from the cost.
+    const scan = checkComparisonWork({
+      width: 7016, height: 9933, members: 2,
+      contract: MULTI_MEMBER.TWO_ONLY, radiusPx: 6,
+      algorithm: COMPARISON_ALGORITHM.ANY_NEIGHBOUR_SCAN,
+    });
+    const separable = checkComparisonWork({
+      width: 7016, height: 9933, members: 2,
+      contract: MULTI_MEMBER.TWO_ONLY, radiusPx: 6,
+      algorithm: COMPARISON_ALGORITHM.SEPARABLE_DILATION,
+    });
+    return {
+      limit: MAX_COMPARISON_WORK_UNITS,
+      cases,
+      byAlgorithm: {
+        'any-neighbour-scan': { units: scan.units, withinBudget: scan.withinBudget },
+        'separable-dilation': {
+          units: separable.units, withinBudget: separable.withinBudget,
+        },
+      },
+      // A contract with no measured implementation gets no bound, and no bound
+      // is a refusal rather than a default.
+      consensus: checkComparisonWork({
+        width: 2480, height: 3507, members: 4,
+        contract: MULTI_MEMBER.CONSENSUS, radiusPx: 6,
+        algorithm: M4_PLANNER_ALGORITHM,
+      }).refusal,
+      // No algorithm, no bound. A job may not be costed against a guess.
+      noAlgorithm: checkComparisonWork({
+        width: 2480, height: 3507, members: 2,
+        contract: MULTI_MEMBER.TWO_ONLY, radiusPx: 6,
+      }).refusal,
+      selectedAlgorithm: M4_PLANNER_ALGORITHM,
+      // Arithmetic that would leave the safe-integer range is a refusal too.
+      // Sized from that limit rather than picked, so it stays unrepresentable
+      // under whichever algorithm is selected.
+      unrepresentable: checkComparisonWork({
+        width: unrepresentableSide, height: unrepresentableSide, members: 4,
+        contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 5000,
+        algorithm: M4_PLANNER_ALGORITHM,
+      }).refusal,
+      oneMember: checkComparisonWork({
+        width: 2480, height: 3507, members: 1,
+        contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 0,
+        algorithm: M4_PLANNER_ALGORITHM,
+      }).refusal,
+    };
+  },
+
+  /**
+   * An accepted comparison also has to be abandonable.
+   *
+   * The shipped loop is a synchronous nested scan: by the time it can be told
+   * to stop it has already finished. Both replacements are measured here — the
+   * separable dilation, which is the same answer at a fraction of the reads,
+   * and the banded generator, which returns control between bounded chunks so
+   * a cancellation can actually be observed.
+   *
+   * A cancelled comparison yields no verdict. Half a change mask is not a
+   * smaller change; it is a different drawing.
+   */
+  async cancellableComparison() {
+    const pages = await pair('dense-a', 'dense-b');
+    const rendered = await renderMembersUpright(pages, SCALE);
+    const { width, height } = rendered;
+    const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+    const args = { a: masks[0], b: masks[1], width, height };
+
+    const timings = {};
+    for (const mm of [0, 0.25, 0.5]) {
+      const radius = pixelRadiusFor(mm, DPI);
+      const scanStarted = performance.now();
+      const scan = pairChangeMaskScan({ ...args, radius });
+      const scanMs = Math.round(performance.now() - scanStarted);
+      const dilationStarted = performance.now();
+      const dilation = pairChangeMask({ ...args, radius });
+      const dilationMs = Math.round(performance.now() - dilationStarted);
+      timings[`${mm}mm`] = {
+        radius,
+        box: (2 * radius + 1) ** 2,
+        scanMs,
+        dilationMs,
+        scanChangePixels: scan.changePixels,
+        dilationChangePixels: dilation.changePixels,
+        // The separable form is not an approximation of the nested loop.
+        identical: scan.changePixels === dilation.changePixels
+          && scan.inkPixels === dilation.inkPixels,
+      };
+    }
+
+    // The case a bound has to cover, which is not the case on the corpus.
+    //
+    // The scan exits on the first ink it finds, so on a sparse drawing whose
+    // marks mostly agree it never runs the box. Its worst case is ink
+    // everywhere that matches nothing: two half-sheets of solid ink, which is
+    // what a scanned dark drawing against a redrawn one looks like. The scan
+    // then does the full `(2r+1)²` per pixel and the dilation does not.
+    const left = new Uint8Array(width * height);
+    const right = new Uint8Array(width * height);
+    const half = Math.floor(width / 2);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (x < half) left[y * width + x] = 1; else right[y * width + x] = 1;
+      }
+    }
+    const worstCase = {};
+    for (const mm of [0.25, 0.5]) {
+      const r = pixelRadiusFor(mm, DPI);
+      const scanStarted = performance.now();
+      const scan = pairChangeMaskScan({ a: left, b: right, width, height, radius: r });
+      const scanMs = Math.round(performance.now() - scanStarted);
+      const dilationStarted = performance.now();
+      const dilation = pairChangeMask({ a: left, b: right, width, height, radius: r });
+      const dilationMs = Math.round(performance.now() - dilationStarted);
+      worstCase[`${mm}mm`] = {
+        radius: r,
+        box: (2 * r + 1) ** 2,
+        scanMs,
+        dilationMs,
+        identical: scan.changePixels === dilation.changePixels,
+        changePixels: dilation.changePixels,
+      };
+    }
+
+    const radius = pixelRadiusFor(0.5, DPI);
+    const full = runCancellable(pairChangeMaskSteps({ ...args, radius, band: 256 }));
+    const stopped = runCancellable(
+      pairChangeMaskSteps({ ...args, radius, band: 256 }),
+      (_step, bands) => bands < 3,
+    );
+    return {
+      width,
+      height,
+      pixels: width * height,
+      inkFraction: masks[0].reduce((n, v) => n + v, 0) / (width * height),
+      timings,
+      worstCase,
+      banded: {
+        status: full.status,
+        bands: full.bands,
+        changePixels: full.result?.changePixels ?? null,
+        matchesDilation: full.result?.changePixels
+          === pairChangeMask({ ...args, radius }).changePixels,
+      },
+      cancelled: {
+        status: stopped.status,
+        bands: stopped.bands,
+        // No partial verdict, by construction.
+        result: stopped.result,
+        stoppedEarly: stopped.bands < full.bands,
+      },
+    };
+  },
+
+  /**
+   * The picture, painted from the masks alone.
+   *
+   * The memory model rests on this: if the composite is a function of the ink
+   * masks and nothing else, then no member's RGBA has to survive the phase that
+   * extracted its mask. Asserting it byte-for-byte against the production
+   * compositor is what turns that from a design intention into a fact.
+   */
+  async compositeEquivalence() {
+    const colours = [[0, 0, 1], [1, 0, 0], [0, 0.6, 0], [0.8, 0, 0.8]];
+    const sets = {
+      'two members, exact': {
+        names: ['base-a4', 'added-line-a4'], radius: 0, matchOpacity: 1,
+      },
+      'two members, 0.5mm': {
+        names: ['base-a4', 'added-line-a4'], radius: pixelRadiusFor(0.5, DPI), matchOpacity: 1,
+      },
+      'two members, faint match colour': {
+        names: ['base-a4', 'added-line-a4'], radius: 0, matchOpacity: 0.25,
+      },
+      'four members, 0.25mm': {
+        names: ['base-a4', 'identical-a4', 'wall-at-y-a4', 'added-line-a4'],
+        radius: pixelRadiusFor(0.25, DPI), matchOpacity: 1,
+      },
+    };
+    const out = {};
+    for (const [label, spec] of Object.entries(sets)) {
+      const members = [];
+      for (let i = 0; i < spec.names.length; i++) {
+        members.push(await member(spec.names[i], colours[i], `${spec.names[i]}#${i}`));
+      }
+      const rendered = await renderMembersUpright(members, SCALE);
+      const { width, height } = rendered;
+      const layers = rendered.buffers.map((b, i) => ({ data: b.data, color: colours[i] }));
+      const production = computeMultiPdfComposite(
+        layers, width, height, spec.radius, [0, 0, 0], spec.matchOpacity,
+      );
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const dilated = masks.map((m) => dilateMask(m, width, height, spec.radius));
+      const fromMasks = compositeFromMasks({
+        masks, dilated, colors: colours.slice(0, masks.length),
+        width, height, matchColor: [0, 0, 0], matchOpacity: spec.matchOpacity,
+      });
+      let differingBytes = 0;
+      const produced = production.data;
+      for (let i = 0; i < produced.length; i++) {
+        if (produced[i] !== fromMasks[i]) differingBytes += 1;
+      }
+      out[label] = {
+        width,
+        height,
+        members: masks.length,
+        radius: spec.radius,
+        matchOpacity: spec.matchOpacity,
+        bytes: produced.length,
+        differingBytes,
+        identical: differingBytes === 0,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * The verdict and the picture, produced by the same rule.
+   *
+   * `reference-pairs` gets the two-against-two set right and the previous
+   * round still painted it with the any-other-member rule, in which A finds B
+   * at one wall and C finds D at the other and the sheet comes back clean. The
+   * status said CHANGE over a picture that said nothing did. This measures both
+   * presentations on the four sets that matter.
+   */
+  async pairPresentation() {
+    const colours = [[0, 0, 1], [1, 0, 0], [0, 0.6, 0], [0.8, 0, 0.8]];
+    const sets = {
+      'four identical': ['base-a4', 'identical-a4', 'base-a4-copy', 'base-a4'],
+      'three the same, one changed':
+        ['base-a4', 'identical-a4', 'base-a4-copy', 'added-line-a4'],
+      'two against two':
+        ['base-a4', 'identical-a4', 'wall-at-y-a4', 'wall-at-y-a4-copy'],
+      'reference and three different':
+        ['base-a4', 'added-line-a4', 'removed-line-a4', 'wall-at-y-a4'],
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(sets)) {
+      const members = [];
+      for (let i = 0; i < names.length; i++) {
+        members.push(await member(names[i], colours[i], `${names[i]}#${i}`));
+      }
+      const rendered = await renderMembersUpright(members, SCALE);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const dilated = masks;
+      // The rejected presentation: every member against every other.
+      const allMembers = compositeFromMasks({
+        masks, dilated, colors: colours.slice(0, masks.length), width, height,
+      });
+      // The one that matches the contract: slot 1 against each member, alone.
+      const visuals = presentReferencePairs({
+        masks, dilated, colors: colours.slice(0, masks.length), width, height,
+      });
+      const pairs = visuals.map((v, i) => {
+        const mask = pairChangeMask({
+          a: masks[0], b: masks[i + 1], width, height, radius: 0,
+        });
+        return {
+          member: names[i + 1],
+          shownAsChanged: visiblyChangedPixels(v.pixels),
+          changePixels: mask.changePixels,
+          verdict: canonicalVerdict(mask).status,
+        };
+      });
+      out[label] = {
+        members: names.length,
+        anyOtherMemberPresentation: {
+          shownAsChanged: visiblyChangedPixels(allMembers),
+        },
+        pairs,
+        overallVerdict: pairs.every((p) => p.verdict === RESULT.MATCH)
+          ? RESULT.MATCH : RESULT.CHANGE,
+        // Every pair whose status says CHANGE must have a picture that shows it.
+        everyChangedPairIsVisible: pairs
+          .filter((p) => p.verdict === RESULT.CHANGE)
+          .every((p) => p.shownAsChanged > 0),
+        // And the count the user sees must be the count the verdict used.
+        visibleMatchesMask: pairs.every((p) => p.shownAsChanged === p.changePixels),
+        totalShownByPairs: pairs.reduce((n, p) => n + p.shownAsChanged, 0),
+      };
+    }
+    return out;
+  },
+
+  /**
+   * The encoder the memory bound belongs to.
+   *
+   * A formula for `canvas.toBlob` is not a guarantee: the browser picks its own
+   * DEFLATE strategy, block layout, IDAT chunking and internal scratch, and
+   * exposes none of them. This encodes with a stated contract instead — RGBA8,
+   * filter 0, stored blocks of a stated size, IDAT chunks of a stated size —
+   * so the output size is exact rather than bounded, and the round trip proves
+   * the bytes are a real PNG rather than a plausible-looking buffer.
+   */
+  async ownedEncoder() {
+    const rows = {};
+    for (const [label, sheet, other, dpi] of [
+      ['A4 150dpi, changed', 'base-a4', 'added-line-a4', 150],
+      ['A4 150dpi, dense', 'dense-a', 'dense-b', 150],
+      ['A3 150dpi, matched', 'base-a3', 'base-a3', 150],
+    ]) {
+      const members = [
+        await member(sheet, BLUE, sheet), await member(other, RED, `${other}#1`),
+      ];
+      const rendered = await renderMembersUpright(members, dpi / 72);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const pixels = compositeFromMasks({
+        masks, dilated: masks, colors: [BLUE, RED], width, height,
+      });
+
+      const started = performance.now();
+      const encoded = encodePngStored({ pixels, width, height });
+      const encodeMs = Math.round(performance.now() - started);
+      const predicted = pngStoredSize({ width, height });
+
+      // The round trip: the browser has to accept it as a PNG and give back
+      // the same pixels.
+      const bitmap = await createImageBitmap(new Blob([encoded], { type: 'image/png' }));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0);
+      const back = ctx.getImageData(0, 0, width, height).data;
+      let differingBytes = 0;
+      for (let i = 0; i < back.length; i++) {
+        if (back[i] !== pixels[i]) differingBytes += 1;
+      }
+      bitmap.close();
+      canvas.width = 1;
+      canvas.height = 1;
+
+      // What the browser's own encoder produced, for contrast only.
+      const browserCanvas = document.createElement('canvas');
+      browserCanvas.width = width;
+      browserCanvas.height = height;
+      browserCanvas.getContext('2d')
+        .putImageData(new ImageData(pixels, width, height), 0, 0);
+      const browserPng = browserCanvas.toDataURL('image/png');
+      const browserJpeg = browserCanvas.toDataURL('image/jpeg');
+      browserCanvas.width = 1;
+      browserCanvas.height = 1;
+
+      rows[label] = {
+        width,
+        height,
+        pixels: width * height,
+        encodedBytes: encoded.length,
+        predictedBytes: predicted,
+        exact: encoded.length === predicted,
+        bytesPerPixel: +(encoded.length / (width * height)).toFixed(3),
+        roundTripDifferingBytes: differingBytes,
+        roundTripLossless: differingBytes === 0,
+        encodeMs,
+        scratchBytes: encoderScratchUpperBound({ width }),
+        // Performance evidence only. Not the bound.
+        browserPngBytesPerPixel: +(browserPng.length / (width * height)).toFixed(4),
+        browserJpegBytesPerPixel: +(browserJpeg.length / (width * height)).toFixed(4),
+      };
+    }
+    return {
+      contract: PNG_STORED_CONTRACT,
+      strategies: EXPORT_STRATEGIES,
+      budgetedStrategy: BUDGETED_EXPORT_STRATEGY,
+      rows,
+      boundIsExactNotEstimated: true,
+    };
+  },
+
+  /**
+   * What the whole operation's output costs, and where it lives.
+   *
+   * The phase model bounds one page. It does not bound the operation: nothing
+   * is published until every page has succeeded, and reference-pairs makes
+   * n − 1 visuals per source page. Five A4 pages at 300 dpi with four members
+   * is about half a gigabyte of finished output while every individual page
+   * passes its own check.
+   */
+  outputBudget() {
+    const A4 = [2480, 3507];
+    const cases = {};
+    for (const [label, pages, members, contract, sink, dataUrl] of [
+      ['1 page, 2 members, in RAM', 1, 2, MULTI_MEMBER.TWO_ONLY, 'memory', false],
+      ['5 pages, 2 members, in RAM', 5, 2, MULTI_MEMBER.TWO_ONLY, 'memory', false],
+      ['5 pages, 4 members, in RAM', 5, 4, MULTI_MEMBER.REFERENCE_PAIRS, 'memory', false],
+      ['5 pages, 4 members, as data URLs', 5, 4, MULTI_MEMBER.REFERENCE_PAIRS,
+        'memory', true],
+      ['5 pages, 4 members, spooled', 5, 4, MULTI_MEMBER.REFERENCE_PAIRS, 'spool', false],
+      ['200 pages, 4 members, spooled', 200, 4, MULTI_MEMBER.REFERENCE_PAIRS,
+        'spool', false],
+    ]) {
+      const checked = checkJobMemory({
+        pages, members, contract, width: A4[0], height: A4[1], radiusPx: 6,
+        sink, encodeAsDataUrl: dataUrl,
+      });
+      cases[label] = {
+        pages,
+        members,
+        sink,
+        pairsPerPage: checked.output.pairsPerPage,
+        visuals: checked.output.visuals,
+        perVisualMB: +(checked.output.perVisualBytes / 1e6).toFixed(1),
+        totalOutputMB: +(checked.output.totalEncodedBytes / 1e6).toFixed(0),
+        spooledMB: +(checked.output.spooledBytes / 1e6).toFixed(0),
+        perPagePeakMB: +(checked.perPagePeak / 1e6).toFixed(0),
+        duringLastPageMB: +(checked.duringLastPage / 1e6).toFixed(0),
+        publishPhaseMB: +(checked.publishPhase / 1e6).toFixed(0),
+        jobPeakMB: +(checked.jobPeak / 1e6).toFixed(0),
+        peakPhase: checked.peakPhase,
+        withinBudget: checked.withinBudget,
+        refusal: checked.refusal,
+        retainedPerCompletedPageMB:
+          +(checked.output.retainedPerCompletedPage / 1e6).toFixed(1),
+      };
+    }
+    // Storage is a third budget and it is not RAM. The spooled rows above are
+    // "within" on RAM and say nothing at all about whether 20.9 GB fits.
+    const storage = {};
+    for (const [label, pages] of [['5 pages, 4 members, spooled', 5],
+      ['200 pages, 4 members, spooled', 200]]) {
+      const required = cases[label].totalOutputMB * 1e6;
+      storage[label] = {
+        requiredBytes: required,
+        unknownQuota: checkStorageCapacity({ requiredBytes: required }),
+        againstTwoGigabytes: checkStorageCapacity({
+          requiredBytes: required, quotaBytes: 2e9, usageBytes: 0,
+        }),
+        againstOneTerabyte: checkStorageCapacity({
+          requiredBytes: required, quotaBytes: 1e12, usageBytes: 0,
+        }),
+      };
+    }
+    // How large a job the RAM-bounded MVP actually accepts, found rather than
+    // asserted: the largest page count that passes every preflight.
+    let mvpPages = 0;
+    for (let n = 1; n <= 64; n += 1) {
+      const checked = checkJobMemory({
+        pages: n, members: 2, contract: MULTI_MEMBER.TWO_ONLY,
+        width: A4[0], height: A4[1], radiusPx: 6, sink: OUTPUT_SINK.MEMORY,
+      });
+      if (!checked.withinBudget) break;
+      mvpPages = n;
+    }
+    return {
+      limit: MAX_COMPARISON_BYTES,
+      outputLimit: MAX_OUTPUT_BYTES,
+      mvpPagesAtA4300: mvpPages,
+      spoolChunkBytes: MAX_SPOOL_CHUNK_BYTES,
+      publishChunkBytes: MAX_PUBLISH_CHUNK_BYTES,
+      selectedSink: M4_OUTPUT_SINK,
+      deferredSink: DEFERRED_OUTPUT_SINK,
+      paths: OUTPUT_PATHS,
+      shippedSink: OUTPUT_SINK.MEMORY,
+      lifetime: PAIR_RESULT_LIFETIME,
+      storage,
+      storageVerdicts: STORAGE_VERDICT,
+      cases,
+      // One source page, four members: what the artifact contains and in what
+      // order, so a person can tell the pairs apart.
+      shape: pairResultShape({
+        page: 3, members: 4,
+        labels: ['reference', 'member 2', 'member 3', 'member 4'],
+      }),
+    };
+  },
+
+  /**
+   * Publishing nothing until everything has succeeded.
+   *
+   * The bytes are spooled to browser-local storage — no new dependency, no
+   * external service — and the final artifact only exists once every page is
+   * done. A cancellation, a supersession or a failure part-way through has to
+   * leave nothing behind that could be mistaken for a finished comparison.
+   */
+  async atomicPublish() {
+    if (!navigator.storage || typeof navigator.storage.getDirectory !== 'function') {
+      return { available: false };
+    }
+    const root = await navigator.storage.getDirectory();
+    const listDirs = async () => {
+      const names = [];
+      for await (const [name, handle] of root.entries()) {
+        if (handle.kind === 'directory') names.push(name);
+      }
+      return names.sort();
+    };
+    const removeAll = async () => {
+      const names = [];
+      for await (const [name] of root.entries()) names.push(name);
+      for (const name of names) {
+        try {
+          await root.removeEntry(name, { recursive: true });
+        } catch { /* gone */ }
+      }
+    };
+    const exists = async (name) => {
+      try {
+        await root.getFileHandle(name);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    // A real encoded visual, deliberately larger than one chunk so that a
+    // whole-file read on the publish side could not hide inside the bound.
+    const members = [
+      await member('base-a4', BLUE, 'base-a4'),
+      await member('added-line-a4', RED, 'added-line-a4'),
+    ];
+    const rendered = await renderMembersUpright(members, SCALE);
+    const { width, height } = rendered;
+    const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+    const visual = encodePngStored({
+      pixels: compositeFromMasks({
+        masks, dilated: masks, colors: [BLUE, RED], width, height,
+      }),
+      width,
+      height,
+    });
+
+    /** Stage a run's parts: bounded going in, into a namespace only it owns. */
+    const stage = async ({ runId, generation, pages, stopAfter = null }) => {
+      const dir = await root.getDirectoryHandle(
+        spoolNamespace({ runId, generation }), { create: true },
+      );
+      let spooled = 0;
+      let writePeak = 0;
+      let cancelled = false;
+      for (let p = 1; p <= pages; p += 1) {
+        if (stopAfter !== null && p > stopAfter) { cancelled = true; break; }
+        const handle = await dir.getFileHandle(`part-${p}.png`, { create: true });
+        const writable = await handle.createWritable();
+        for (let at = 0; at < visual.length; at += MAX_SPOOL_CHUNK_BYTES) {
+          const chunk = visual.subarray(at, at + MAX_SPOOL_CHUNK_BYTES);
+          writePeak = Math.max(writePeak, chunk.length);
+          await writable.write(chunk);
+        }
+        await writable.close();
+        spooled += visual.length;
+      }
+      const names = [];
+      for await (const key of dir.keys()) names.push(key);
+      return { dir, spooled, writePeak, cancelled, staged: names.sort() };
+    };
+
+    /**
+     * Assemble by reading the spool back in bounded slices.
+     *
+     * `file.arrayBuffer()` would pull a whole part into RAM at once, which is
+     * what the previous version did while reporting a 4 MiB bound: it was
+     * measuring the write side of the same file.
+     */
+    const assemble = async ({ dir, staged, finalName }) => {
+      const finalHandle = await root.getFileHandle(finalName, { create: true });
+      const writable = await finalHandle.createWritable();
+      let readPeak = 0;
+      for (const name of staged) {
+        const file = await (await dir.getFileHandle(name)).getFile();
+        for (let at = 0; at < file.size; at += MAX_PUBLISH_CHUNK_BYTES) {
+          const end = Math.min(file.size, at + MAX_PUBLISH_CHUNK_BYTES);
+          const bytes = new Uint8Array(await file.slice(at, end).arrayBuffer());
+          readPeak = Math.max(readPeak, bytes.length);
+          await writable.write(bytes);
+        }
+      }
+      await writable.close();
+      return readPeak;
+    };
+
+    const run = async ({
+      runId, pages, stopAfter = null, supersedeBefore = false, finalName,
+    }) => {
+      let generation = 1;
+      const staged = await stage({ runId, generation, pages, stopAfter });
+      if (supersedeBefore) generation = 2;
+      let published = false;
+      let readPeak = 0;
+      if (!staged.cancelled && generation === 1) {
+        readPeak = await assemble({ dir: staged.dir, staged: staged.staged, finalName });
+        published = true;
+      }
+      // Ownership-aware: this run removes its own namespace and nothing else.
+      const before = await listDirs();
+      for (const name of before) {
+        if (ownsNamespace(name, { runId })) {
+          await root.removeEntry(name, { recursive: true });
+        }
+      }
+      const finalExists = await exists(finalName);
+      const finalSize = finalExists
+        ? (await (await root.getFileHandle(finalName)).getFile()).size : 0;
+      return {
+        runId,
+        pages,
+        stagedParts: staged.staged.length,
+        spooledBytes: staged.spooled,
+        spoolWritePeakBytes: staged.writePeak,
+        publishReadPeakBytes: readPeak,
+        published,
+        finalExists,
+        finalSize,
+        dirsLeft: await listDirs(),
+      };
+    };
+
+    await removeAll();
+    const completed = await run({ runId: 'a1', pages: 3, finalName: 'final-a1.bin' });
+    await removeAll();
+    const cancelledMidway = await run({
+      runId: 'a2', pages: 3, stopAfter: 2, finalName: 'final-a2.bin',
+    });
+    await removeAll();
+    const supersededBeforePublish = await run({
+      runId: 'a3', pages: 3, supersedeBefore: true, finalName: 'final-a3.bin',
+    });
+    await removeAll();
+    // Does the publish peak grow with the number of finished parts?
+    const onePart = await run({ runId: 'a4', pages: 1, finalName: 'final-a4.bin' });
+    await removeAll();
+    const fiveParts = await run({ runId: 'a5', pages: 5, finalName: 'final-a5.bin' });
+    await removeAll();
+
+    // Two runs at once: one stages and stops, the other stages and publishes.
+    const abandoned = await stage({ runId: 'b1', generation: 1, pages: 2 });
+    const second = await run({ runId: 'b2', pages: 2, finalName: 'final-b2.bin' });
+    const dirsAfterSecond = await listDirs();
+    const abandonedName = spoolNamespace({ runId: 'b1', generation: 1 });
+    const abandonedSurvived = dirsAfterSecond.includes(abandonedName);
+    let abandonedPartsIntact = false;
+    try {
+      const dir = await root.getDirectoryHandle(abandonedName);
+      const names = [];
+      for await (const key of dir.keys()) names.push(key);
+      abandonedPartsIntact = names.length === abandoned.staged.length;
+    } catch { /* gone */ }
+    const reclaimableWhileLive = reclaimableNamespaces(dirsAfterSecond, {
+      liveRunIds: ['b1'],
+    });
+    const reclaimableOnceReleased = reclaimableNamespaces(dirsAfterSecond, {
+      liveRunIds: [],
+    });
+    await removeAll();
+
+    const quota = typeof navigator.storage.estimate === 'function'
+      ? await navigator.storage.estimate() : null;
+
+    return {
+      available: true,
+      perVisualBytes: visual.length,
+      width,
+      height,
+      writeChunkBytes: MAX_SPOOL_CHUNK_BYTES,
+      publishChunkBytes: MAX_PUBLISH_CHUNK_BYTES,
+      partLargerThanChunk: visual.length > MAX_PUBLISH_CHUNK_BYTES,
+      completed,
+      cancelledMidway,
+      supersededBeforePublish,
+      publishPeakByParts: {
+        one: onePart.publishReadPeakBytes,
+        five: fiveParts.publishReadPeakBytes,
+        oneSize: onePart.finalSize,
+        fiveSize: fiveParts.finalSize,
+      },
+      isolation: {
+        abandonedRun: 'b1',
+        publishingRun: 'b2',
+        abandonedSurvived,
+        abandonedPartsIntact,
+        secondPublished: second.published,
+        secondFinalSize: second.finalSize,
+        reclaimableWhileLive,
+        reclaimableOnceReleased,
+      },
+      storage: quota === null ? null : {
+        quotaBytes: quota.quota ?? null,
+        usageBytes: quota.usage ?? 0,
+        headroom: STORAGE_HEADROOM,
+      },
+    };
+  },
+
+  /**
+   * Milliseconds per work unit, for the algorithm M4 actually selects.
+   *
+   * The ceiling is in work units and a work unit means a different amount of
+   * work under each algorithm, so the wall-clock reading of the ceiling has to
+   * be calibrated against the one that ships. The previous round calibrated
+   * against the nested scan while recommending the dilation.
+   */
+  async separableCalibration() {
+    const rows = {};
+    for (const [label, a, b, dpi, mm] of [
+      ['A4 150dpi, 0.15mm', 'dense-a', 'dense-b', 150, 0.15],
+      ['A4 150dpi, 0.5mm', 'dense-a', 'dense-b', 150, 0.5],
+      ['A4 300dpi, 0.15mm', 'dense-a', 'dense-b', 300, 0.15],
+      ['A3 150dpi, 0.15mm', 'base-a3', 'base-a3', 150, 0.15],
+      ['A1 150dpi, 0.15mm', 'base-a1', 'base-a1', 150, 0.15],
+    ]) {
+      const members = [
+        await member(a, BLUE, a), await member(b, RED, `${b}#1`),
+      ];
+      const rendered = await renderMembersUpright(members, dpi / 72);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((m) => inkMask(m.data, width, height));
+      const radius = pixelRadiusFor(mm, dpi);
+      // Warm, then take the best of three. The ceiling's wall-clock reading is
+      // derived from the worst of these rows, so noise here would push the
+      // whole calibration in one direction.
+      pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+      let ms = Infinity;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const started = performance.now();
+        pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+        ms = Math.min(ms, performance.now() - started);
+      }
+      const work = estimateComparisonWork({
+        width, height, members: 2, contract: MULTI_MEMBER.TWO_ONLY,
+        radiusPx: radius, algorithm: M4_PLANNER_ALGORITHM,
+      });
+      rows[label] = {
+        width,
+        height,
+        pixels: width * height,
+        radius,
+        units: work.units,
+        ms: +ms.toFixed(1),
+        msPerUnit: ms / work.units,
+      };
+    }
+    const worstMsPerUnit = Math.max(...Object.values(rows).map((r) => r.msPerUnit));
+    return {
+      algorithm: M4_PLANNER_ALGORITHM,
+      rows,
+      worstMsPerUnit,
+      ceiling: MAX_COMPARISON_WORK_UNITS,
+      projectedWorstSeconds: +(MAX_COMPARISON_WORK_UNITS * worstMsPerUnit / 1000)
+        .toFixed(1),
+    };
+  },
+
+  /**
+   * What the export actually costs to hold, measured rather than assumed.
+   *
+   * `toDataURL` returns a string, so the figure that matters is the length of
+   * that string per pixel. Kept as performance evidence only; the memory bound
+   * comes from the owned encoder above.
+   */
+  async exportEncoding() {
+    const rows = {};
+    for (const [label, sheet, other, dpi] of [
+      ['A4 150dpi, changed', 'base-a4', 'added-line-a4', 150],
+      ['A4 300dpi, changed', 'base-a4', 'added-line-a4', 300],
+      ['A4 150dpi, dense', 'dense-a', 'dense-b', 150],
+      ['A3 150dpi, matched', 'base-a3', 'base-a3', 150],
+    ]) {
+      const members = [
+        await member(sheet, BLUE, sheet), await member(other, RED, `${other}#1`),
+      ];
+      const rendered = await renderMembersUpright(members, dpi / 72);
+      const { width, height } = rendered;
+      const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+      const pixels = compositeFromMasks({
+        masks, dilated: masks, colors: [BLUE, RED], width, height,
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').putImageData(new ImageData(pixels, width, height), 0, 0);
+      const jpeg = canvas.toDataURL('image/jpeg');
+      const png = canvas.toDataURL('image/png');
+      canvas.width = 1;
+      canvas.height = 1;
+      const area = width * height;
+      rows[label] = {
+        width,
+        height,
+        pixels: area,
+        jpegBytes: jpeg.length,
+        pngBytes: png.length,
+        jpegBytesPerPixel: +(jpeg.length / area).toFixed(4),
+        pngBytesPerPixel: +(png.length / area).toFixed(4),
+      };
+    }
+    // These are **performance** evidence and nothing else. What the browser's
+    // encoder produces says nothing about what it allocates while producing
+    // it, and a compression ratio cannot gate a fail-closed budget in any case.
+    // The bound comes from the owned encoder; see `ownedEncoder`.
+    return {
+      rows,
+      worstMeasured: Math.max(...Object.values(rows).flatMap(
+        (r) => [r.jpegBytesPerPixel, r.pngBytesPerPixel],
+      )),
+      isPerformanceEvidenceOnly: true,
+    };
+  },
+
+  /**
+   * The spatial tolerance, at every resolution the Comparator actually offers.
+   *
+   * `PdfComparator.tsx` offers 72, 150, 300 and 450 DPI. A maximum justified on
+   * two of those is not a maximum for the product: millimetres round to a whole
+   * pixel radius, so the same setting is a different search at each one, and
+   * the resolution where the smallest true change disappears first is the one
+   * that has to set the ceiling.
+   */
+  async spatialToleranceAcrossDpi() {
+    const uprightMasks = async (members, scale) => {
+      const rendered = await renderMembersUpright(members, scale);
+      const { width, height } = rendered;
+      return {
+        width,
+        height,
+        masks: rendered.buffers.map((b) => inkMask(b.data, width, height)),
+      };
+    };
+    const sweep = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
+    const changedPair = await pair('small-base', 'small-digit');
+    const controlPair = await pair('small-base', 'small-base-copy');
+    const symbolPair = await pair('small-base', 'small-symbol');
+
+    const out = {
+      supportedDpi: SPATIAL_TOLERANCE_POLICY.supportedDpi,
+      sweep,
+      rounding: {},
+      changed: {},
+      control: {},
+      symbol: {},
+      largestSafeMm: {},
+      atDefault: {},
+    };
+    for (const dpi of SPATIAL_TOLERANCE_POLICY.supportedDpi) {
+      const scale = dpi / 72;
+      const changed = await uprightMasks(changedPair, scale);
+      const control = await uprightMasks(controlPair, scale);
+      const symbol = await uprightMasks(symbolPair, scale);
+      out.rounding[dpi] = {};
+      out.changed[dpi] = {};
+      out.control[dpi] = {};
+      out.symbol[dpi] = {};
+      let largestSafe = null;
+      for (const mm of sweep) {
+        const radius = pixelRadiusFor(mm, dpi);
+        out.rounding[dpi][`${mm}mm`] = radius;
+        for (const [key, set] of [['changed', changed], ['control', control],
+          ['symbol', symbol]]) {
+          const m = pairChangeMask({
+            a: set.masks[0], b: set.masks[1],
+            width: set.width, height: set.height, radius,
+          });
+          out[key][dpi][`${mm}mm`] = {
+            radius,
+            changePixels: m.changePixels,
+            verdict: canonicalVerdict(m).status,
+          };
+        }
+        if (out.changed[dpi][`${mm}mm`].verdict === RESULT.CHANGE) largestSafe = mm;
+      }
+      // The largest setting at which the smallest measured true change is still
+      // reported at this resolution. Only contiguous from zero counts: a
+      // setting that works again above one that does not is not a safe range.
+      let contiguous = null;
+      for (const mm of sweep) {
+        if (out.changed[dpi][`${mm}mm`].verdict !== RESULT.CHANGE) break;
+        contiguous = mm;
+      }
+      out.largestSafeMm[dpi] = { contiguous, anywhere: largestSafe };
+      out.atDefault[dpi] = {
+        millimetres: SPATIAL_TOLERANCE_POLICY.default,
+        radius: pixelRadiusFor(SPATIAL_TOLERANCE_POLICY.default, dpi),
+        changed: out.changed[dpi][`${SPATIAL_TOLERANCE_POLICY.default}mm`].verdict,
+        control: out.control[dpi][`${SPATIAL_TOLERANCE_POLICY.default}mm`].verdict,
+        width: changed.width,
+        height: changed.height,
+      };
+    }
+    const safe = Object.values(out.largestSafeMm).map((r) => r.contiguous);
+    out.minimumSafeAcrossDpi = safe.every((v) => v === null)
+      ? null : Math.min(...safe.map((v) => (v === null ? 0 : v)));
+    out.policyMaximum = SPATIAL_TOLERANCE_POLICY.maximum;
+    out.policyMaximumIsSafeEverywhere = Object.entries(out.changed).every(
+      ([, rows]) => Object.entries(rows)
+        .filter(([mm]) => parseFloat(mm) <= SPATIAL_TOLERANCE_POLICY.maximum)
+        .every(([, r]) => r.verdict === RESULT.CHANGE),
+    );
+    return out;
+  },
+
+  /**
+   * What the whole operation costs, not what one page costs.
+   *
+   * Memory is a peak and pages are serial, so the page-level model is right for
+   * it. Work accumulates: an export of a range runs every page, and a ceiling
+   * checked per page would pass a job that is a hundred times over it.
+   */
+  jobWork() {
+    const A4 = [2480, 3507];
+    const A1 = [7016, 9933];
+    const page = (label, [width, height], members, radiusPx, extra = {}) => ({
+      label, width, height, members,
+      contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx, ...extra,
+    });
+    const repeat = (n, make) => Array.from({ length: n }, (_, i) => make(i + 1));
+    // Derived from the ceiling rather than hard-coded, so these stay the cases
+    // they are meant to be if the ceiling is ever recalibrated.
+    const perPage = estimateComparisonWork({
+      width: A4[0], height: A4[1], members: 2,
+      contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx: 6,
+      algorithm: M4_PLANNER_ALGORITHM,
+    }).units;
+    const pagesToExceed = Math.floor(MAX_COMPARISON_WORK_UNITS / perPage) + 1;
+    const overSide = Math.ceil(Math.sqrt(MAX_COMPARISON_WORK_UNITS / 8)) + 1000;
+    const unrepresentableSide = Math.ceil(Math.sqrt(Number.MAX_SAFE_INTEGER / 24))
+      + 1000000;
+    const jobs = {
+      'one page, below the ceiling': [page('page 1', A4, 2, 6)],
+      'three pages, total below': repeat(3, (n) => page(`page ${n}`, A4, 2, 6)),
+      [`${pagesToExceed} pages, each below, the total above`]:
+        repeat(pagesToExceed, (n) => page(`page ${n}`, A4, 2, 6)),
+      'one page over on its own': [page('page 1', [overSide, overSide], 2, 6)],
+      'reference-pairs over three pages':
+        repeat(3, (n) => page(`page ${n}`, A4, 4, 1)),
+      'a page that cannot be compared is still in the plan': [
+        page('page 1', A4, 2, 6),
+        page('page 2', A4, 2, 6, { comparable: false, reason: 'MISSING_PAGE' }),
+        page('page 3', A4, 2, 6, { comparable: false, reason: 'RENDER_FAILED' }),
+      ],
+      'an export range costs only the pages asked for':
+        repeat(2, (n) => page(`page ${n + 2}`, A4, 2, 6)),
+      'arithmetic outside the safe-integer range': [
+        // Sized from the safe-integer limit rather than picked, so it stays
+        // unrepresentable under whichever algorithm is selected.
+        page('page 1', [unrepresentableSide, unrepresentableSide], 4, 5000),
+      ],
+    };
+    const out = {};
+    for (const [label, pages] of Object.entries(jobs)) {
+      const job = estimateJobWork({ pages, algorithm: M4_PLANNER_ALGORITHM });
+      out[label] = {
+        requestedPages: pages.length,
+        comparablePages: job.comparablePages,
+        skipped: job.skippedPages.map((p) => `${p.label}: ${p.reason}`),
+        perPageUnits: job.pages.map((p) => p.units),
+        jobWorkUnits: job.jobWorkUnits,
+        representable: job.representable,
+        withinBudget: job.withinBudget,
+        refusal: job.refusal,
+        everyPageWithinPageCeiling: job.pages
+          .filter((p) => p.comparable)
+          .every((p) => p.withinPageCeiling === true),
+      };
+    }
+    return {
+      limit: MAX_COMPARISON_WORK_UNITS,
+      algorithm: M4_PLANNER_ALGORITHM,
+      perPageUnits: perPage,
+      pagesToExceed,
+      aggregateLabel: `${pagesToExceed} pages, each below, the total above`,
+      jobs: out,
+      // A job with no algorithm named is refused rather than costed.
+      noAlgorithm: estimateJobWork({
+        pages: [page('page 1', A4, 2, 6)],
+      }).refusal,
+    };
+  },
+
+  /**
+   * The working set of the architecture that was actually selected.
+   *
+   * The shipped model counts layer canvases, normalised copies, a normalising
+   * canvas, a composite and an encoder, because that is what the shipped
+   * pipeline holds. The proposed pipeline holds masks, and the phase that peaks
+   * is not the one that used to.
+   */
+  phaseBudget() {
+    const rows = [
+      ['A4 300dpi, 2 members, 0mm', 2480, 3507, 2, 0],
+      ['A4 300dpi, 2 members, 0.5mm', 2480, 3507, 2, 6],
+      ['A3 300dpi, 2 members, 0.5mm', 3508, 4961, 2, 6],
+      ['A2 300dpi, 2 members, 0.5mm', 4961, 7016, 2, 6],
+      ['A1 300dpi, 2 members, 0.5mm', 7016, 9933, 2, 6],
+      ['A1 300dpi, 4 members, 0.5mm', 7016, 9933, 4, 6],
+      ['A0 600dpi, 2 members, 0.5mm', 19866, 28087, 2, 12],
+    ];
+    const cases = {};
+    for (const [label, width, height, members, radiusPx] of rows) {
+      const checked = checkPhaseBudget({
+        width, height, members, contract: MULTI_MEMBER.REFERENCE_PAIRS, radiusPx,
+      });
+      cases[label] = {
+        pixels: checked.pixels,
+        members: checked.members,
+        radiusPx: checked.radiusPx,
+        phaseTotals: Object.fromEntries(
+          Object.entries(checked.phases).map(([k, v]) => [k, v.total]),
+        ),
+        peakPhase: checked.peakPhase,
+        peakWorkingSet: checked.peakWorkingSet,
+        peakMB: +(checked.peakWorkingSet / 1e6).toFixed(0),
+        bytesPerPixel: +checked.bytesPerPixel.toFixed(2),
+        withinBudget: checked.withinBudget,
+        refusal: checked.refusal,
+        memberProcessing: checked.memberProcessing,
+        pairProcessing: checked.pairProcessing,
+        referenceMaskReused: checked.referenceMaskReused,
+        exportStrategy: checked.exportStrategy,
+        encoder: checked.encoder,
+        encodedOutputIsExact: checked.encodedOutputIsExact,
+        presentationContract: checked.presentationContract,
+        presentationLive: checked.phases.presentation.live,
+      };
+    }
+    // The same sheet under the shipped model, which is what the previous
+    // round's "within 512 MiB" claim was resting on.
+    const shipped = checkBudget({ width: 3508, height: 4961, layers: 2 });
+    return {
+      limit: MAX_COMPARISON_BYTES,
+      limitMB: +(MAX_COMPARISON_BYTES / 1e6).toFixed(1),
+      cases,
+      shippedModelA3: {
+        totalMB: +(shipped.total / 1e6).toFixed(1),
+        withinBudget: shipped.withinBudget,
+      },
+      byStrategy: Object.fromEntries(Object.keys(EXPORT_STRATEGIES).map((strategy) => [
+        strategy,
+        +(estimatePhaseMemory({
+          width: 3508, height: 4961, members: 2, radiusPx: 6, exportStrategy: strategy,
+        }).peakWorkingSet / 1e6).toFixed(1),
+      ])),
+      a3Detail: estimatePhaseMemory({
+        width: 3508, height: 4961, members: 2, radiusPx: 6,
+      }),
+    };
+  },
+
+  /**
+   * A cancellation that arrives while the comparison is running.
+   *
+   * The banded structure proves a decision point exists. It does not prove
+   * anything can reach it. Both drivers are given the *same* cancellation,
+   * scheduled from a timer while the comparison runs: the synchronous one never
+   * returns to the event loop, so the timer cannot fire and the comparison
+   * finishes and publishes; the asynchronous one yields between bands, so the
+   * timer fires and the comparison stops with nothing to publish.
+   */
+  async asyncCancellation() {
+    const pages = await pair('dense-a', 'dense-b');
+    const rendered = await renderMembersUpright(pages, SCALE);
+    const { width, height } = rendered;
+    const masks = rendered.buffers.map((b) => inkMask(b.data, width, height));
+    const radius = pixelRadiusFor(0.5, DPI);
+    const band = 512;
+    const args = { a: masks[0], b: masks[1], width, height, radius, band };
+    const expected = pairChangeMask({ a: masks[0], b: masks[1], width, height, radius });
+
+    // The control: uncancelled, asynchronous, and still the right answer.
+    const completed = await runCancellableAsync(pairChangeMaskSteps({ ...args }));
+
+    // A synchronous driver, given a cancellation it cannot see.
+    let syncCancelRequested = false;
+    const syncTimer = setTimeout(() => { syncCancelRequested = true; }, 0);
+    const syncStarted = performance.now();
+    const syncRun = runCancellable(
+      pairChangeMaskSteps({ ...args }), () => !syncCancelRequested,
+    );
+    const syncMs = Math.round(performance.now() - syncStarted);
+    clearTimeout(syncTimer);
+
+    // The same cancellation, against a driver that yields between bands.
+    let asyncCancelRequested = false;
+    const asyncStarted = performance.now();
+    setTimeout(() => { asyncCancelRequested = true; }, 20);
+    const asyncRun = await runCancellableAsync(pairChangeMaskSteps({ ...args }), {
+      shouldContinue: () => !asyncCancelRequested,
+    });
+    const asyncMs = Math.round(performance.now() - asyncStarted);
+
+    // Ownership: superseded by a newer run rather than cancelled by a user.
+    let generation = 1;
+    setTimeout(() => { generation = 2; }, 20);
+    const supersededRun = await runCancellableAsync(pairChangeMaskSteps({ ...args }), {
+      owner: { token: 1, current: () => generation },
+    });
+
+    return {
+      width,
+      height,
+      radius,
+      band,
+      expectedChangePixels: expected.changePixels,
+      completed: {
+        status: completed.status,
+        bands: completed.bands,
+        publishable: completed.publishable,
+        changePixels: completed.result?.changePixels ?? null,
+        matchesDirect: completed.result?.changePixels === expected.changePixels,
+      },
+      synchronousDriver: {
+        status: syncRun.status,
+        bands: syncRun.bands,
+        ms: syncMs,
+        // The timer was due long before this returned, and never ran.
+        cancellationObserved: syncRun.status === PLAN.CANCELLED,
+        cancellationFlagAtEnd: syncCancelRequested,
+        produced: syncRun.result !== null,
+      },
+      asynchronousDriver: {
+        status: asyncRun.status,
+        bands: asyncRun.bands,
+        ms: asyncMs,
+        reason: asyncRun.reason,
+        cancellationObserved: asyncRun.status === PLAN.CANCELLED,
+        publishable: asyncRun.publishable,
+        result: asyncRun.result,
+        stoppedEarly: asyncRun.bands < completed.bands,
+      },
+      supersededByOwnership: {
+        status: supersededRun.status,
+        bands: supersededRun.bands,
+        reason: supersededRun.reason,
+        publishable: supersededRun.publishable,
+        result: supersededRun.result,
+      },
+    };
+  },
+
+  PLAN,
+  RESULT,
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m4ready = true;
+</script>
