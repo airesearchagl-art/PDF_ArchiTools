@@ -2,7 +2,7 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "945fa14efbd12e653b1df5d458a968dca77aeab9",
+    "testedResearchHead": "bc6635f73fe63ab975a767fef15f8471e56b2ab5",
     "workingTreeDirty": true,
     "researchTreeDirty": true,
     "researchPackageDirtyBeforeRun": false,
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-13T07:57:19.003Z"
+    "ranAt": "2026-09-13T08:24:22.567Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -127,7 +127,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 1464
+      "bytesMeasuredOnly": 1463
     },
     "geometry": {
       "rotate-90": {
@@ -472,7 +472,7 @@
     "signature": {
       "beforeSigned": true,
       "afterHasForm": false,
-      "bytesMeasuredOnly": 1559
+      "bytesMeasuredOnly": 1560
     },
     "xfa": {
       "before": true,
@@ -589,7 +589,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 3023
+      "bytesMeasuredOnly": 3022
     },
     "A+B+C": {
       "pages": 7,
@@ -1379,6 +1379,447 @@
     "dedupe": {
       "count": 1,
       "visits": 2
+    }
+  },
+  "optionalContentMultiPage": {
+    "ocg-two-pages-opposite": {
+      "label": "A ON on page 1, B OFF on page 2",
+      "status": "READY",
+      "carried": 2,
+      "comparison": {
+        "groupCount": {
+          "source": 2,
+          "output": 2,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-OCG-A",
+            "M6-OCG-B"
+          ],
+          "output": [
+            "M6-OCG-A",
+            "M6-OCG-B"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-OCG-A"
+          ],
+          "output": [
+            "M6-OCG-A"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [
+            "M6-OCG-B"
+          ],
+          "output": [
+            "M6-OCG-B"
+          ],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-OCG-A",
+            "1/M6B=M6-OCG-B"
+          ],
+          "output": [
+            "0/M6A=M6-OCG-A",
+            "1/M6B=M6-OCG-B"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-shared-across-pages": {
+      "label": "one group referenced from both pages",
+      "status": "READY",
+      "carried": 1,
+      "comparison": {
+        "groupCount": {
+          "source": 1,
+          "output": 1,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-OCG-SHARED"
+          ],
+          "output": [
+            "M6-OCG-SHARED"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-OCG-SHARED"
+          ],
+          "output": [
+            "M6-OCG-SHARED"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6S=M6-OCG-SHARED",
+            "1/M6S=M6-OCG-SHARED"
+          ],
+          "output": [
+            "0/M6S=M6-OCG-SHARED",
+            "1/M6S=M6-OCG-SHARED"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-reordered-properties": {
+      "label": "the same groups keyed in opposite order",
+      "status": "READY",
+      "carried": 2,
+      "comparison": {
+        "groupCount": {
+          "source": 2,
+          "output": 2,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-OCG-ORD-A",
+            "M6-OCG-ORD-B"
+          ],
+          "output": [
+            "M6-OCG-ORD-A",
+            "M6-OCG-ORD-B"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-OCG-ORD-A"
+          ],
+          "output": [
+            "M6-OCG-ORD-A"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [
+            "M6-OCG-ORD-B"
+          ],
+          "output": [
+            "M6-OCG-ORD-B"
+          ],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-OCG-ORD-A",
+            "0/M6B=M6-OCG-ORD-B",
+            "1/M6A=M6-OCG-ORD-A",
+            "1/M6B=M6-OCG-ORD-B"
+          ],
+          "output": [
+            "0/M6A=M6-OCG-ORD-A",
+            "0/M6B=M6-OCG-ORD-B",
+            "1/M6A=M6-OCG-ORD-A",
+            "1/M6B=M6-OCG-ORD-B"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-many-pages": {
+      "label": "three groups over three pages, one shared",
+      "status": "READY",
+      "carried": 3,
+      "comparison": {
+        "groupCount": {
+          "source": 3,
+          "output": 3,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-OCG-M1",
+            "M6-OCG-M2",
+            "M6-OCG-M3"
+          ],
+          "output": [
+            "M6-OCG-M1",
+            "M6-OCG-M2",
+            "M6-OCG-M3"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-OCG-M1",
+            "M6-OCG-M3"
+          ],
+          "output": [
+            "M6-OCG-M1",
+            "M6-OCG-M3"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [
+            "M6-OCG-M2"
+          ],
+          "output": [
+            "M6-OCG-M2"
+          ],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-OCG-M1",
+            "1/M6B=M6-OCG-M2",
+            "1/M6C=M6-OCG-M3",
+            "2/M6C=M6-OCG-M3"
+          ],
+          "output": [
+            "0/M6A=M6-OCG-M1",
+            "1/M6B=M6-OCG-M2",
+            "1/M6C=M6-OCG-M3",
+            "2/M6C=M6-OCG-M3"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-d-name": {
+      "label": "/D /Name",
+      "status": "READY",
+      "carried": 1,
+      "comparison": {
+        "groupCount": {
+          "source": 1,
+          "output": 1,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-OCG-NAMED"
+          ],
+          "output": [
+            "M6-OCG-NAMED"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-OCG-NAMED"
+          ],
+          "output": [
+            "M6-OCG-NAMED"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": "M6-CONFIG-NAME",
+          "output": "M6-CONFIG-NAME",
+          "equal": true
+        },
+        "baseState": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-OCG-NAMED"
+          ],
+          "output": [
+            "0/M6A=M6-OCG-NAMED"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocg-basestate-on": {
+      "label": "supported /BaseState /ON",
+      "status": "READY",
+      "carried": 1,
+      "comparison": {
+        "groupCount": {
+          "source": 1,
+          "output": 1,
+          "equal": true
+        },
+        "groupNames": {
+          "source": [
+            "M6-OCG-BASE"
+          ],
+          "output": [
+            "M6-OCG-BASE"
+          ],
+          "equal": true
+        },
+        "on": {
+          "source": [
+            "M6-OCG-BASE"
+          ],
+          "output": [
+            "M6-OCG-BASE"
+          ],
+          "equal": true
+        },
+        "off": {
+          "source": [],
+          "output": [],
+          "equal": true
+        },
+        "dName": {
+          "source": null,
+          "output": null,
+          "equal": true
+        },
+        "baseState": {
+          "source": "/ON",
+          "output": "/ON",
+          "equal": true
+        },
+        "pageProperties": {
+          "source": [
+            "0/M6A=M6-OCG-BASE"
+          ],
+          "output": [
+            "0/M6A=M6-OCG-BASE"
+          ],
+          "equal": true
+        }
+      }
+    },
+    "ocmd": {
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /OCMD"
+      ]
+    },
+    "ocmd-nested": {
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /OCMD with a /VE visibility expression"
+      ]
+    },
+    "ocg-basestate-off": {
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/D /BaseState /OFF"
+      ]
+    }
+  },
+  "nextShapes": {
+    "js-next-chain": {
+      "label": "/Next as a dictionary",
+      "foundInSource": 1,
+      "scanComplete": true,
+      "status": "READY",
+      "removed": 1,
+      "remainingAfterReadback": 0,
+      "readbackComplete": true
+    },
+    "js-next-array": {
+      "label": "/Next as an array",
+      "foundInSource": 1,
+      "scanComplete": true,
+      "status": "READY",
+      "removed": 1,
+      "remainingAfterReadback": 0,
+      "readbackComplete": true
+    },
+    "js-next-array-mixed": {
+      "label": "/Next array whose second element is JavaScript",
+      "foundInSource": 1,
+      "scanComplete": true,
+      "status": "READY",
+      "removed": 1,
+      "remainingAfterReadback": 0,
+      "readbackComplete": true
+    },
+    "js-next-nested": {
+      "label": "JavaScript two /Next links down",
+      "foundInSource": 1,
+      "scanComplete": true,
+      "status": "READY",
+      "removed": 1,
+      "remainingAfterReadback": 0,
+      "readbackComplete": true
+    },
+    "js-action-shared": {
+      "label": "one action referenced from two annotations",
+      "foundInSource": 2,
+      "scanComplete": true,
+      "status": "READY",
+      "removed": 2,
+      "remainingAfterReadback": 0,
+      "readbackComplete": true
+    },
+    "js-action-cycle": {
+      "label": "a cyclic action graph",
+      "scanComplete": false,
+      "incomplete": [
+        "page 0 /Annots: cyclic action chain"
+      ],
+      "status": "REFUSED",
+      "code": "UNSCANNABLE_ACTIONS"
     }
   }
 }
