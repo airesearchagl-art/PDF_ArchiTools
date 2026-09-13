@@ -34,6 +34,8 @@ import { planExtract, extractE1, extractE2 } from '../prototype/extract-destinat
 import {
     readForm, planFormForExtract, extractWithForm, mergeWithForms, SUPPORTED_FIELD_TYPES,
 } from '../prototype/form-subset.mjs';
+import { extractWithOptionalContent } from '../prototype/optional-content.mjs';
+import { scanJavaScript, extractSanitized, MAX_ACTION_DEPTH } from '../prototype/javascript-scan.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RESEARCH = path.resolve(HERE, '..');
@@ -737,6 +739,150 @@ try {
     humanOpen('M6-H9 uncommon catalog structures (revised)',
         'each needs its own policy: a half-dropped structure tree and a dangling optional-content '
         + 'reference are not the same kind of loss as an attachment that simply goes');
+
+    // ---- 10. RF-S1: the form subset, narrowed to what is proven -------------
+    //
+    // The previous round advertised /Tx /Btn /Ch /Sig on the strength of one
+    // type's evidence. Each row below is a fixture, and each refusal is
+    // refused against a document rather than against a category name.
+    console.log('\n=== 10. the proven form subset (RF-S1) ===');
+    evidence.formSubset = { supportedTypes: SUPPORTED_FIELD_TYPES, cases: {} };
+
+    const proven = await extractWithForm(bytesOf('form-tx-plain'), [0]);
+    const provenStruct = await structureOf(proven.bytes);
+    evidence.formSubset.cases['form-tx-plain'] = {
+        status: proven.status,
+        acroForm: provenStruct.form.present,
+        fields: provenStruct.form.fields.map((f) => ({ name: f.name, ft: f.ft, value: f.value })),
+        orphanWidgets: provenStruct.form.orphanWidgets.length,
+    };
+    assert_('a simple /Tx field is rebuilt with its value and no orphan widget',
+        proven.status === 'READY' && provenStruct.form.present === true
+        && provenStruct.form.orphanWidgets.length === 0
+        && provenStruct.form.fields.length === 1
+        && provenStruct.form.fields[0].value === 'M6-TX-VALUE',
+        JSON.stringify(evidence.formSubset.cases['form-tx-plain']));
+
+    const refusals = [
+        ['form-tx-ff', '/Ff is read and never restored'],
+        ['form-tx-dv', '/DV is not restored'],
+        ['form-dr', 'the /DA names a font from AcroForm /DR, which is not carried'],
+        ['form-separate-widget', 'a separate widget dictionary keeps the field entries elsewhere'],
+        ['form-hierarchical', '/FT and /V are inherited rather than carried'],
+        ['form-checkbox', '/Btn — /AS and /AP consistency is unproven'],
+        ['form-radio', '/Btn group — kids hold their own appearance states'],
+        ['form-choice', '/Ch — /Opt is not restored'],
+    ];
+    for (const [fixture, why] of refusals) {
+        const r = await extractWithForm(bytesOf(fixture), [0]);
+        evidence.formSubset.cases[fixture] = { status: r.status, code: r.code, why };
+        probe(`${fixture} is refused rather than half-rebuilt`,
+            r.status === 'REFUSED' && typeof r.code === 'string',
+            `${r.code} — ${why}`);
+    }
+    humanOpen('M6-H3 AcroForm (narrowed)',
+        'supported reconstruction is simple /Tx only; every other shape above is a typed refusal, '
+        + 'and widening the subset means adding fixtures and post-readback proof, not editing a list');
+
+    // ---- 11. RF-S2A: optional content, carried or refused -------------------
+    console.log('\n=== 11. optional content (RF-S2A) ===');
+    evidence.optionalContent = {};
+    for (const fixture of ['ocproperties', 'ocg-multiple']) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        const after = r.status === 'READY' ? await remnants(r.bytes) : null;
+        evidence.optionalContent[fixture] = {
+            status: r.status, carried: r.carried ?? null, on: r.on ?? null, off: r.off ?? null,
+            ocPropertiesAfter: after?.ocProperties ?? null,
+            pagePropertiesAfter: after?.pageOptionalContentProperties ?? null,
+        };
+        assert_(`${fixture}: the configuration is carried, not left dangling`,
+            r.status === 'READY' && after?.ocProperties === true
+            && after?.pageOptionalContentProperties === true && (r.carried ?? 0) > 0,
+            JSON.stringify(evidence.optionalContent[fixture]));
+    }
+    for (const fixture of ['ocmd', 'ocmd-nested']) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.optionalContent[fixture] = { status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${fixture} is refused rather than carried with its semantics guessed`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
+            (r.unsupported ?? []).join(', '));
+    }
+    humanOpen('M6-H9b optional content (revised)',
+        'direct /OCG: carry the configuration, proven by readback; /OCMD or a /VE expression: typed refusal');
+
+    // ---- 12. RF-S2B: every JavaScript site, and a readback ------------------
+    console.log('\n=== 12. JavaScript sanitization (RF-S2B) ===');
+    evidence.javascript = { sites: {}, maxDepth: MAX_ACTION_DEPTH };
+
+    const jsCases = [
+        ['attachment-and-js', '/Names /JavaScript'],
+        ['js-openaction', '/OpenAction is a JavaScript action'],
+        ['js-annot-a', 'annotation /A'],
+        ['js-annot-aa', 'annotation /AA'],
+        ['js-page-aa', 'page /AA'],
+        ['js-field-aa', 'field /AA'],
+        ['js-next-chain', 'JavaScript behind a /Next'],
+    ];
+    for (const [fixture, site] of jsCases) {
+        const src = bytesOf(fixture);
+        const doc = await PDFDocument.load(src, { updateMetadata: false });
+        const before = scanJavaScript(doc);
+        const sanitized = await extractSanitized(src, [0]);
+        // A removal count of zero is not always the sanitizer working. For the
+        // catalog-level sites, `copyPages` does not copy the structure at all,
+        // so the artifact never contains the action and there is nothing to
+        // remove. The contract — zero JavaScript in the output, measured by
+        // reopening it — holds either way, but through a different mechanism,
+        // and a table that did not distinguish them would credit the sanitizer
+        // with work the copier's blindness happened to do.
+        const droppedByCopy = before.count > 0
+            && (sanitized.removed ?? 0) === 0
+            && sanitized.remainingAfterReadback === 0;
+        evidence.javascript.sites[fixture] = {
+            site,
+            foundInSource: before.count,
+            scanVisits: before.visits,
+            scanComplete: before.complete,
+            status: sanitized.status,
+            removed: sanitized.removed ?? null,
+            remainingAfterReadback: sanitized.remainingAfterReadback ?? null,
+            mechanism: droppedByCopy ? 'never copied into the artifact' : 'removed by the sanitizer',
+        };
+        assert_(`${site}: found in the source`, before.count > 0 && before.complete === true,
+            `${before.count} action(s)`);
+        probe(`${site}: none survives the sanitized output, measured by reopening it`,
+            sanitized.status === 'READY' && sanitized.remainingAfterReadback === 0
+            && sanitized.readbackComplete === true,
+            `removed ${sanitized.removed}, remaining ${sanitized.remainingAfterReadback}`);
+    }
+    const totalRemaining = Object.values(evidence.javascript.sites)
+        .reduce((n, s) => n + (s.remainingAfterReadback ?? 0), 0);
+    probe('across every site, the sanitized JavaScript action count is zero',
+        totalRemaining === 0, `${totalRemaining} remaining across ${jsCases.length} sites`);
+
+    const byMechanism = Object.entries(evidence.javascript.sites)
+        .map(([k, v]) => `${k}:${v.mechanism === 'removed by the sanitizer' ? 'removed' : 'not-copied'}`);
+    measure('how each site reached zero', byMechanism.join(' '));
+
+    // A negative control. The earlier version of this row asserted that the
+    // scanner function existed, which is true of any function and says nothing
+    // about any document.
+    const cleanDoc = await PDFDocument.load(bytesOf('text-vector'), { updateMetadata: false });
+    const cleanScan = scanJavaScript(cleanDoc);
+    evidence.javascript.negativeControl = { count: cleanScan.count, complete: cleanScan.complete };
+    assert_('a document with no JavaScript scans clean, and the scan completes',
+        cleanScan.count === 0 && cleanScan.complete === true,
+        `${cleanScan.count} action(s), complete ${cleanScan.complete}`);
+
+    const doubleReached = await PDFDocument.load(bytesOf('js-field-aa'), { updateMetadata: false });
+    const doubleScan = scanJavaScript(doubleReached);
+    evidence.javascript.dedupe = { count: doubleScan.count, visits: doubleScan.visits };
+    probe('an action reachable by two routes is counted once, not twice',
+        doubleScan.count === 1 && doubleScan.visits > doubleScan.count,
+        `${doubleScan.count} action from ${doubleScan.visits} visits`);
+    humanOpen('M6-H9c JavaScript (revised)',
+        'a bounded recursive scanner over the action-bearing structures M6 supports, with an '
+        + 'unscannable document refused rather than passed');
 
     fs.writeFileSync(
         path.join(RESEARCH, 'evidence.json'),

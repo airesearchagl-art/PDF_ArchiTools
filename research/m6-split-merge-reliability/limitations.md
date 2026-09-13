@@ -93,6 +93,42 @@ has never been wrong has usually never been checked.
    side of it were identical at 4,325 in both runs. A volatile-value audit that
    covers one of two instruments is not an audit; it is a fix that happens to
    make the louder half quiet.
+8. **Narrowing the form subset made one of its own refusal codes unreachable.**
+   Once a field with separate widget dictionaries was refused as outside the
+   supported subset, `form-field-across-pages` stopped reporting
+   `FIELD_SPANS_SELECTION` and started reporting the vaguer `UNSUPPORTED_FORM`
+   — both true, one useful. The straddling check now runs first and carries the
+   other reasons with it. Worth recording because the refusal did not get
+   weaker, it got *less specific*, and that is the kind of regression a
+   pass/fail count does not show.
+9. **The JavaScript scanner counted one action twice.** A form field's widget is
+   reachable both as a page annotation and as an AcroForm field, so its `/AA`
+   was visited on both routes and `js-field-aa` was reported as holding two
+   actions when it holds one. Sites are now identified by the dictionary that
+   holds them and the key it sits under, and the scan reports `visits`
+   alongside `count`: 1 action from 2 visits.
+
+## A note on how each JavaScript site reached zero
+
+The sanitized outputs contain no JavaScript, measured by reopening them. But
+two of the seven sites got there without the sanitizer doing anything:
+
+```text
+attachment-and-js   /Names /JavaScript    not copied into the artifact at all
+js-openaction       /OpenAction           not copied into the artifact at all
+js-annot-a          annotation /A         removed by the sanitizer
+js-annot-aa         annotation /AA        removed by the sanitizer
+js-page-aa          page /AA              removed by the sanitizer
+js-field-aa         field /AA             removed by the sanitizer
+js-next-chain       /Next chain           removed by the sanitizer
+```
+
+`copyPages` copies no catalog-level structure, so the first two never reach the
+output. The contract holds either way, and the mechanism is recorded per site
+rather than summarised, because a table that showed only "0 remaining" would
+credit the sanitizer with work the copier's blindness happened to do — and a
+future change that started copying `/Names` would move those rows from one
+column to the other without any check noticing.
 
 ## Not attempted
 

@@ -705,6 +705,253 @@ await destinationPair('dest-named-2p', 'named', 'named destinations to page 1 (k
 }
 
 // ---------------------------------------------------------------------------
+// Form shapes, one per fixture
+//
+// The previous round claimed /Tx /Btn /Ch /Sig as a supported subset while the
+// prototype only ever restored /T, /FT and /V. These exist so each claim has a
+// document behind it — and so the ones that are refused are refused against a
+// real example rather than against a category name.
+// ---------------------------------------------------------------------------
+
+/** One page, one AcroForm, whatever `build` puts in it. */
+async function formCase(name, note, build) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const page = sheet(doc, font, SHEET.A4, `M6-PAGE-${name.toUpperCase()}-1`);
+    const { fields, acroExtra = {}, annots } = build(doc, page, font);
+    page.node.set(PDFName.of('Annots'), doc.context.obj(annots ?? fields));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: fields, DA: PDFString.of('/Helv 12 Tf 0 g'), ...acroExtra,
+    })));
+    await write(name, doc, note);
+}
+
+/** A merged field/widget: the one shape the prototype has actually proven. */
+const mergedText = (doc, extra = {}) => doc.context.register(doc.context.obj({
+    Type: 'Annot', Subtype: 'Widget', FT: 'Tx',
+    T: PDFString.of('m6.text'), V: PDFString.of('M6-TX-VALUE'),
+    Rect: [120, 300, 400, 330], F: 4, DA: PDFString.of('/Helv 12 Tf 0 g'),
+    ...extra,
+}));
+
+await formCase('form-tx-plain', 'a single merged text field, the proven shape',
+    (doc) => ({ fields: [mergedText(doc)] }));
+
+await formCase('form-tx-ff', 'a text field carrying /Ff (multiline)',
+    (doc) => ({ fields: [mergedText(doc, { Ff: 4096 })] }));
+
+await formCase('form-tx-dv', 'a text field carrying /DV',
+    (doc) => ({ fields: [mergedText(doc, { DV: PDFString.of('M6-TX-DEFAULT') })] }));
+
+await formCase('form-dr', 'a field whose /DA names a font that lives in AcroForm /DR',
+    (doc) => ({
+        fields: [mergedText(doc, { DA: PDFString.of('/M6Helv 12 Tf 0 g') })],
+        acroExtra: {
+            DR: {
+                Font: {
+                    M6Helv: { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica' },
+                },
+            },
+        },
+    }));
+
+await formCase('form-separate-widget', 'a field dictionary with a separate widget kid',
+    (doc) => {
+        const widget = doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 400, 330], F: 4,
+        }));
+        const field = doc.context.obj({
+            FT: 'Tx', T: PDFString.of('m6.separate'), V: PDFString.of('M6-SEPARATE-VALUE'),
+            DA: PDFString.of('/Helv 12 Tf 0 g'), Kids: [widget],
+        });
+        const fieldRef = doc.context.register(field);
+        const kid = doc.context.lookup(widget);
+        if (kid instanceof PDFDict) kid.set(PDFName.of('Parent'), fieldRef);
+        return { fields: [fieldRef], annots: [widget] };
+    });
+
+await formCase('form-hierarchical', 'a child field inheriting /FT and /V from its parent',
+    (doc) => {
+        const child = doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', T: PDFString.of('child'),
+            Rect: [120, 300, 400, 330], F: 4,
+        });
+        const childRef = doc.context.register(child);
+        const parent = doc.context.obj({
+            T: PDFString.of('m6.parent'), FT: 'Tx', V: PDFString.of('M6-INHERITED-VALUE'),
+            Kids: [childRef],
+        });
+        const parentRef = doc.context.register(parent);
+        child.set(PDFName.of('Parent'), parentRef);
+        return { fields: [parentRef], annots: [childRef] };
+    });
+
+/** An appearance state dictionary, so /AS has something to point at. */
+const stateAppearance = (doc, label) => doc.context.register(doc.context.stream(
+    Buffer.from(`0 0 0 RG 1 w 1 1 16 16 re S BT /Helv 9 Tf 3 5 Td (${label}) Tj ET`, 'utf8'),
+    {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 18, 18],
+        Resources: { Font: { Helv: { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica' } } },
+    },
+));
+
+await formCase('form-checkbox', 'a checkbox with /AS and an /AP appearance-state dictionary',
+    (doc) => ({
+        fields: [doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', FT: 'Btn',
+            T: PDFString.of('m6.check'), V: PDFName.of('Yes'), AS: PDFName.of('Yes'),
+            Rect: [120, 300, 138, 318], F: 4,
+            AP: { N: { Yes: stateAppearance(doc, 'Y'), Off: stateAppearance(doc, 'O') } },
+        }))],
+    }));
+
+await formCase('form-radio', 'a radio group whose two kids hold different appearance states',
+    (doc) => {
+        const kidA = doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 138, 318], F: 4,
+            AS: PDFName.of('A'),
+            AP: { N: { A: stateAppearance(doc, 'A'), Off: stateAppearance(doc, 'O') } },
+        });
+        const kidB = doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [150, 300, 168, 318], F: 4,
+            AS: PDFName.of('Off'),
+            AP: { N: { B: stateAppearance(doc, 'B'), Off: stateAppearance(doc, 'O') } },
+        });
+        const kidARef = doc.context.register(kidA);
+        const kidBRef = doc.context.register(kidB);
+        const group = doc.context.obj({
+            FT: 'Btn', T: PDFString.of('m6.radio'), V: PDFName.of('A'),
+            Ff: 32768, Kids: [kidARef, kidBRef],
+        });
+        const groupRef = doc.context.register(group);
+        kidA.set(PDFName.of('Parent'), groupRef);
+        kidB.set(PDFName.of('Parent'), groupRef);
+        return { fields: [groupRef], annots: [kidARef, kidBRef] };
+    });
+
+await formCase('form-choice', 'a choice field with /Opt and a selected value',
+    (doc) => ({
+        fields: [doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', FT: 'Ch',
+            T: PDFString.of('m6.choice'), V: PDFString.of('beta'),
+            Opt: [PDFString.of('alpha'), PDFString.of('beta'), PDFString.of('gamma')],
+            Rect: [120, 300, 400, 330], F: 4, DA: PDFString.of('/Helv 12 Tf 0 g'),
+        }))],
+    }));
+
+// ---------------------------------------------------------------------------
+// Optional content, one visibility mechanism per fixture
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 two optional-content groups');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGMULTI-1');
+    const a = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-LAYER-A') }));
+    const b = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-LAYER-B') }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b], D: { Order: [a, b], ON: [a], OFF: [b] },
+    }));
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) {
+        resources.set(PDFName.of('Properties'), doc.context.obj({ M6A: a, M6B: b }));
+    }
+    await write('ocg-multiple', doc, 'two OCGs, one on and one off in the default configuration');
+}
+{
+    const { doc, font } = await newDoc('M6 OCMD');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCMD-1');
+    const ocg = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-LAYER-MD') }));
+    const ocmd = doc.context.register(doc.context.obj({ Type: 'OCMD', OCGs: [ocg], P: PDFName.of('AllOn') }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [ocg], D: { Order: [ocg], ON: [ocg] } }));
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) {
+        resources.set(PDFName.of('Properties'), doc.context.obj({ M6MD: ocmd }));
+    }
+    await write('ocmd', doc, 'page content governed by an /OCMD rather than a bare /OCG');
+}
+{
+    const { doc, font } = await newDoc('M6 OCMD visibility expression');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCMDVE-1');
+    const a = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-VE-A') }));
+    const b = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-VE-B') }));
+    const ocmd = doc.context.register(doc.context.obj({
+        Type: 'OCMD', OCGs: [a, b], VE: [PDFName.of('Not'), [PDFName.of('And'), a, b]],
+    }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [a, b], D: { Order: [a, b], ON: [a, b] } }));
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) {
+        resources.set(PDFName.of('Properties'), doc.context.obj({ M6VE: ocmd }));
+    }
+    await write('ocmd-nested', doc, 'an /OCMD carrying a nested /VE visibility expression');
+}
+
+// ---------------------------------------------------------------------------
+// JavaScript, one action site per fixture
+//
+// "The three sites we happened to look at were clean" is not a sanitization
+// contract. Each of these puts a JavaScript action somewhere a scanner has to
+// reach on purpose.
+// ---------------------------------------------------------------------------
+const jsAction = (doc, marker) => doc.context.obj({
+    Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of(`/* ${marker} */ app.alert(1);`),
+});
+
+{
+    const { doc, font } = await newDoc('M6 JavaScript in /OpenAction');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-JSOPEN-1');
+    doc.catalog.set(PDFName.of('OpenAction'), doc.context.register(jsAction(doc, 'M6-JS-OPENACTION')));
+    await write('js-openaction', doc, '/OpenAction is a JavaScript action rather than a destination');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on an annotation /A');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSANNOTA-1');
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-ANNOT-A */') },
+    }]);
+    await write('js-annot-a', doc, 'a link annotation whose /A is a JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on an annotation /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSANNOTAA-1');
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 400, 330], F: 4,
+        AA: { E: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-ANNOT-AA */') } },
+    }]);
+    await write('js-annot-aa', doc, 'an annotation additional-action dictionary holding JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on a page /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSPAGEAA-1');
+    page.node.set(PDFName.of('AA'), doc.context.obj({
+        O: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-PAGE-AA */') },
+    }));
+    await write('js-page-aa', doc, 'a page additional-action dictionary holding JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on a field /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSFIELDAA-1');
+    const widget = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Tx', T: PDFString.of('m6.js'),
+        V: PDFString.of('M6-JS-FIELD'), Rect: [120, 300, 400, 330], F: 4,
+        AA: { K: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-FIELD-AA */') } },
+    }));
+    page.node.set(PDFName.of('Annots'), doc.context.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({ Fields: [widget] })));
+    await write('js-field-aa', doc, 'a form field whose additional actions hold JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript through a /Next chain');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXT-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT */') },
+        },
+    }]);
+    await write('js-next-chain', doc, 'a GoTo action whose /Next is a JavaScript action');
+}
+
+// ---------------------------------------------------------------------------
 // Invalid and hostile
 // ---------------------------------------------------------------------------
 writeRaw('invalid', Buffer.from('not a pdf at all\n', 'utf8'), 'not a PDF');

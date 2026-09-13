@@ -126,10 +126,18 @@ which can reach a field by name from somewhere a structural rewrite does not
 look. Without that detector, "rename on collision" would be a guess dressed as a
 contract, which is what the review was right to refuse.
 
-**Recommended:** rename on collision within the supported subset; `refuse`
-available as a setting; `UNSUPPORTED_FORM` outside the subset. Whether the MVP
-ships reconstruction at all, or refuses forms and defers to a Form
-Reconstruction Sub-Spike, is M6-H3.
+**And the subset it applies within is now `/Tx` only.** Both collision sources
+are simple merged text fields, which is the one shape the reconstruction has
+been shown to rebuild. A merge whose sources carry `/Btn`, `/Ch`, `/Sig`,
+`/Ff`, `/DV`, separate widget dictionaries, inherited `/FT` or `/V`, or a `/DA`
+naming a font from AcroForm `/DR` is `UNSUPPORTED_FORM` — each refusal measured
+against its own fixture, listed in
+[`extract-contract.md`](extract-contract.md).
+
+**Recommended:** rename on collision within that subset; `refuse` available as a
+setting; `UNSUPPORTED_FORM` outside it. Whether the MVP ships reconstruction at
+all, or refuses AcroForm entirely and defers to a Form Reconstruction
+Sub-Spike, is M6-H3.
 
 ## Metadata (M6-H8)
 

@@ -42,17 +42,35 @@
       "id": "M6-H3",
       "question": "AcroForm and widget preservation",
       "candidates": [
-        "reconstruct over a stated supported subset",
-        "typed refusal whenever a form is present",
-        "explicitly unsupported, named as a loss"
+        "S1-A — reconstruct simple /Tx only, typed refusal for everything else",
+        "S1-B — AcroForm is a typed refusal in the M6 MVP, with a Form Reconstruction Sub-Spike to follow",
+        "reconstruct a broader subset, once each type has fixtures and post-readback proof"
       ],
-      "measured": "Prototyped in prototype/form-subset.mjs. Extract of a two-field form wholly inside the selection rebuilds a valid AcroForm: 2 fields, values M6-FIELD-ONE and M6-FIELD-TWO preserved, 0 orphan widgets. A field whose widgets straddle the selection is refused with FIELD_SPANS_SELECTION. Merge of two documents sharing the name shared.field, renamed on collision, yields one form with source1.shared.field and source2.shared.field, both values preserved, 0 orphan widgets; refusing the same input with DUPLICATE_FIELD_NAMES is also available.",
-      "recommended": "reconstruct over the stated subset — /Tx /Btn /Ch /Sig — refusing anything outside it",
-      "why": "The prototype shows reconstruction is implementable and that the orphan-widget state can be eliminated rather than merely described. Rename-on-collision is offered ONLY because the detector rejects the documents where a rename could break something invisible: AcroForm /CO, any field /AA, and a document-level /Names /JavaScript tree. Without that detector the rename would not be recommendable, which was the review's point.",
+      "measured": "The previous round advertised /Tx /Btn /Ch /Sig on the strength of one type's evidence: the reconstruction only ever restored /T, /FT and /V. It read /Ff without writing it back, never touched /DV, never carried AcroForm /DR, and never checked that a button's /AS still names a state in its /AP. Each shape now has a fixture. Rebuilt: form-tx-plain, value M6-TX-VALUE preserved, 0 orphan widgets. Refused as UNSUPPORTED_FORM: form-tx-ff, form-tx-dv, form-dr, form-separate-widget, form-hierarchical, form-checkbox, form-radio, form-choice. Refused as FIELD_SPANS_SELECTION: form-field-across-pages, which reports the straddle as its primary reason and carries the other subset reasons with it. Refused as DUPLICATE_FIELD_NAMES on request: collide-a + collide-b, which rename to source1./source2. with both values intact and 0 orphan widgets when renaming is chosen.",
+      "supportedSubset": ["/Tx, merged field/widget, with none of /Ff, /DV, /AA, no separate widget dictionaries, no inherited /FT or /V, and a /DA that does not name a font from AcroForm /DR"],
+      "refusedWithFixtures": {
+        "/Ff": "form-tx-ff — read, never restored",
+        "/DV": "form-tx-dv — not restored",
+        "AcroForm /DR": "form-dr — the /DA names a /DR font that is not carried",
+        "separate field + widget dictionaries": "form-separate-widget",
+        "inherited /FT or /V": "form-hierarchical",
+        "/Btn checkbox": "form-checkbox — /AS and /AP consistency unproven",
+        "/Btn radio group": "form-radio — kids hold their own appearance states",
+        "/Ch": "form-choice — /Opt not restored",
+        "/CO, field /AA, document JavaScript": "detected and refused, which is what makes rename-on-collision offerable at all"
+      },
+      "preservedCodes": ["FIELD_SPANS_SELECTION", "DUPLICATE_FIELD_NAMES", "zero orphan widgets in any successful output"],
+      "recommended": "S1-A — supported reconstruction is simple /Tx only",
+      "why": "This is what the committed evidence proves, and no more. Widening the subset means adding fixtures and post-readback proof for each type, not editing a list of names — which is how the previous recommendation came to claim four types on one type's evidence. Applied signatures stay governed by M6-H1 and M6-H2 rather than by generic form reconstruction.",
       "defer": [
-        "radio groups and checkbox /AS appearance-state consistency after a rename",
-        "/DR resource merging when two sources declare different default resources",
-        "whether the MVP should ship reconstruction at all, or refuse forms and follow with a Form Reconstruction Sub-Spike"
+        "/Btn checkbox and radio groups, including /AS to /AP consistency",
+        "/Ch and /Opt",
+        "ordinary /Sig form reconstruction",
+        "/Ff and /DV restoration",
+        "AcroForm /DR carrying and merging",
+        "separate field and widget dictionaries",
+        "hierarchical /FT and /V inheritance",
+        "whether the MVP ships /Tx reconstruction at all (S1-A) or refuses AcroForm entirely (S1-B)"
       ]
     },
     {
@@ -126,22 +144,40 @@
     {
       "id": "M6-H9b",
       "question": "Optional content — /OCProperties",
-      "candidates": ["carry /OCProperties for groups referenced by kept pages", "refuse", "drop and confirm the visibility change"],
-      "measured": "Also not clean. Before: {ocProperties: true, pageOptionalContentProperties: true}. After: {false, true}. The page's marked content still names an optional-content group that the document no longer configures, so what a viewer shows is its own default rather than the author's.",
+      "candidates": [
+        "carry the configuration for groups the kept pages reference, refusing anything outside the handled envelope",
+        "refuse every document carrying optional content",
+        "drop and confirm the visibility change"
+      ],
+      "measured": "Today's drop is not clean: before {ocProperties: true, pageOptionalContentProperties: true}, after {false, true} — the page's marked content still names a group the document no longer configures, so a viewer shows its own default rather than the author's. A carry prototype now exists and is proven by readback: `ocproperties` carries 1 group (1 on, 0 off) and `ocg-multiple` carries 2 (1 on, 1 off), with /OCProperties present again in the artifact and the page /Properties still resolving. `ocmd` and `ocmd-nested` are refused with UNSUPPORTED_OPTIONAL_CONTENT.",
+      "envelope": {
+        "carried": "page /Resources /Properties entries resolving to plain /OCG dictionaries, with a /D whose keys are within Order, ON, OFF, Name, BaseState",
+        "refused": "/OCMD in any form, a /VE visibility expression, /D BaseState /OFF, any other /D key, and any /Properties entry that is neither /OCG nor /OCMD"
+      },
       "detector": "catalog /OCProperties present, or any page /Resources /Properties entry resolving to an /OCG or /OCMD",
-      "recommended": "carry the /OCProperties configuration for groups the kept pages reference",
-      "why": "Unlike a structure tree, this one is small and local: the groups referenced by the kept pages, and the /D default configuration that says which are on. Dropping it changes what is visible, which makes 'a harmless named loss' the wrong classification — and that classification is exactly what the review asked not to assume.",
-      "defer": ["nested /OCMD visibility expressions"]
+      "recommended": "carry within the envelope above; typed refusal outside it",
+      "why": "Carrying is proven for the direct-/OCG case and the refusal is proven for /OCMD, so neither half is asserted. An /OCMD decides visibility from a set of groups and optionally a nested boolean expression; carrying a subset of that evaluation would silently change what the reader sees, which is the failure this decision exists to prevent.",
+      "defer": ["/OCMD and /VE visibility expressions — refused for now, not designed"]
     },
     {
       "id": "M6-H9c",
       "question": "Document JavaScript and /OpenAction",
-      "candidates": ["refuse", "sanitize: remove and report", "carry"],
-      "measured": "A document-level /Names /JavaScript tree and /OpenAction are both dropped silently. nav-4p's /OpenAction: present before, absent after.",
-      "detector": "catalog /Names /JavaScript present; catalog /OpenAction present; any annotation action whose /S is /JavaScript",
-      "recommended": "sanitize — remove and report — and retarget /OpenAction when its target page is kept, drop and report when it is not",
-      "why": "Carrying document JavaScript into a derived document is a security decision nobody asked for, and refusing on its presence would block documents where the script is incidental. /OpenAction is different: it is a page reference, so it belongs with the M6-H5 destination contract.",
-      "defer": ["whether any user workflow depends on document JavaScript surviving"]
+      "candidates": ["refuse any JavaScript-bearing source", "sanitize: remove and prove by readback", "carry"],
+      "measured": "Seven sites, each with its own fixture, each found by the scanner in the source and absent from the sanitized output measured by reopening it: /Names /JavaScript, /OpenAction as a JavaScript action, annotation /A, annotation /AA, page /AA, field /AA, and JavaScript behind a /Next. Total remaining after readback across all seven: 0. A document with no JavaScript scans 0 and completes. An action reachable by two routes is counted once — 1 action from 2 visits.",
+      "scannerScope": [
+        "catalog /OpenAction",
+        "catalog /AA",
+        "catalog /Names /JavaScript, including /Kids",
+        "page /AA",
+        "annotation /A and every /AA sub-entry",
+        "AcroForm fields walked through /Kids: /A and /AA",
+        "/Next on every action found above"
+      ],
+      "boundedBy": "MAX_ACTION_DEPTH 32, with a per-chain cycle set; a chain deeper than the bound, a cycle, or an action dictionary that cannot be read makes the document UNSCANNABLE_ACTIONS rather than a quiet pass",
+      "mechanismNote": "Two of the seven sites reach zero because copyPages never copies catalog-level structure, not because the sanitizer removed them. Recorded per site rather than summarised, so a future change that started copying /Names would not silently move a row from one column to the other.",
+      "recommended": "sanitize and prove by readback, refusing any document the scanner cannot finish inspecting; /OpenAction whose action is a page destination stays with M6-H5",
+      "why": "Carrying document JavaScript into a derived document is a security decision nobody asked for, and refusing on mere presence would block documents where the script is incidental. What makes sanitization recommendable rather than hopeful is the readback count, and what makes it safe is that an uninspectable document is refused.",
+      "defer": ["action types beyond JavaScript — /Launch, /ImportData and friends are not part of this envelope"]
     },
     {
       "id": "M6-H9d",

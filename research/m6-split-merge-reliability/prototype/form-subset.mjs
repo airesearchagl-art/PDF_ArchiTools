@@ -23,8 +23,50 @@ const look = (doc, v) => {
     }
 };
 
-/** Field types this prototype is willing to carry. */
-export const SUPPORTED_FIELD_TYPES = ['/Tx', '/Btn', '/Ch', '/Sig'];
+/** An inheritable attribute, resolved up `/Parent` with a bound and a cycle set. */
+function inherited(doc, field, key) {
+    const seen = new Set();
+    let current = field;
+    for (let depth = 0; current && depth <= 32; depth += 1) {
+        const own = current.get(PDFName.of(key));
+        if (own !== undefined) return look(doc, own);
+        const parentRaw = current.get(PDFName.of('Parent'));
+        if (parentRaw === undefined) return undefined;
+        if (parentRaw instanceof PDFRef) {
+            if (seen.has(parentRaw.tag)) return undefined;
+            seen.add(parentRaw.tag);
+        }
+        const parent = look(doc, parentRaw);
+        current = parent instanceof PDFDict ? parent : null;
+    }
+    return undefined;
+}
+
+/**
+ * The one field type this prototype has actually proven it can rebuild.
+ *
+ * An earlier version advertised `/Tx /Btn /Ch /Sig`. The reconstruction only
+ * ever restored `/T`, `/FT` and `/V`: it read `/Ff` without writing it back,
+ * never touched `/DV`, never carried AcroForm `/DR`, and never checked that a
+ * button's `/AS` still names an appearance state in its `/AP`. Four type names
+ * were claimed on the strength of one type's evidence.
+ *
+ * So the subset is what the evidence supports — a simple text field — and
+ * everything else is refused against a real fixture rather than against a
+ * category. Widening it means adding the fixtures and the post-readback proof,
+ * not editing this array.
+ */
+export const SUPPORTED_FIELD_TYPES = ['/Tx'];
+
+/**
+ * Field entries that take a `/Tx` outside the proven shape.
+ *
+ * Each is refused because the prototype does not restore it, and a field that
+ * comes back without its default value, its flags or the resources its `/DA`
+ * names is not the field that went in — it is a field-shaped thing with the
+ * same name.
+ */
+export const UNRESTORED_FIELD_KEYS = ['Ff', 'DV', 'AA'];
 
 /**
  * Entries whose presence means the form does something this prototype cannot
@@ -70,12 +112,23 @@ export function readForm(doc) {
         xfa: acro instanceof PDFDict && acro.get(PDFName.of('XFA')) !== undefined,
         needAppearances: acro instanceof PDFDict && acro.get(PDFName.of('NeedAppearances')) !== undefined,
         dr: acro instanceof PDFDict && acro.get(PDFName.of('DR')) !== undefined,
+        drFonts: [],
         da: acro instanceof PDFDict ? textOf(look(doc, acro.get(PDFName.of('DA')))) : null,
         fields: [],
         outsideSubset: [],
         readable: true,
     };
     if (!(acro instanceof PDFDict)) return out;
+
+    // Which resource names /DR actually supplies, so a field's /DA can be
+    // checked against them rather than against the presence of /DR alone.
+    const dr = acro.lookup(PDFName.of('DR'));
+    if (dr instanceof PDFDict) {
+        const fonts = dr.lookup(PDFName.of('Font'));
+        if (fonts instanceof PDFDict) {
+            for (const [key] of fonts.entries()) out.drFonts.push(key.asString().replace(/^\//, ''));
+        }
+    }
 
     for (const key of DISQUALIFYING) {
         if (acro.get(PDFName.of(key)) !== undefined) out.outsideSubset.push(`AcroForm /${key}`);
@@ -125,8 +178,43 @@ export function readForm(doc) {
             }
 
             const widgetRefs = widgets.length > 0 ? widgets : (ref ? [ref] : []);
-            const ft = nameOf(field.get(PDFName.of('FT')));
+
+            // `/FT` and `/V` are inheritable, so a terminal field may carry
+            // neither. The proven shape does carry both on itself; anything
+            // relying on inheritance is outside it, and saying so is cheaper
+            // than a reconstruction that guesses.
+            const ownFt = nameOf(field.get(PDFName.of('FT')));
+            const inheritedFt = ownFt || nameOf(inherited(doc, field, 'FT'));
+            const ownValue = field.get(PDFName.of('V')) !== undefined;
+            if (!ownFt && inheritedFt) out.outsideSubset.push(`${full} inherits /FT`);
+            if (!ownValue && inherited(doc, field, 'V') !== undefined) {
+                out.outsideSubset.push(`${full} inherits /V`);
+            }
+
+            const ft = inheritedFt;
             if (ft && !SUPPORTED_FIELD_TYPES.includes(ft)) out.outsideSubset.push(`${full} ${ft}`);
+
+            // Entries the reconstruction does not restore. Present means
+            // refused, because a field that comes back without them is not the
+            // field that went in.
+            for (const key of UNRESTORED_FIELD_KEYS) {
+                if (field.get(PDFName.of(key)) !== undefined) out.outsideSubset.push(`${full} /${key}`);
+            }
+
+            // A separate widget dictionary keeps the field's own /DA, /Ff and
+            // value on a dictionary the copy does not preserve as a field.
+            if (widgets.length > 0) out.outsideSubset.push(`${full} has separate widget dictionaries`);
+
+            // A /DA naming a font that lives in AcroForm /DR needs /DR carried,
+            // which this prototype does not do.
+            const da = textOf(look(doc, field.get(PDFName.of('DA'))));
+            if (da && out.dr) {
+                const named = /\/([A-Za-z0-9_.+-]+)\s+[\d.]+\s+Tf/.exec(da)?.[1];
+                if (named && out.drFonts.includes(named)) {
+                    out.outsideSubset.push(`${full} /DA names /${named} from AcroForm /DR`);
+                }
+            }
+
             out.fields.push({
                 ref,
                 name: full,
@@ -135,6 +223,10 @@ export function readForm(doc) {
                 value: textOf(look(doc, field.get(PDFName.of('V')))),
                 signed: look(doc, field.get(PDFName.of('V'))) instanceof PDFDict,
                 flags: look(doc, field.get(PDFName.of('Ff')))?.asNumber?.() ?? null,
+                defaultValue: textOf(look(doc, field.get(PDFName.of('DV')))),
+                da,
+                appearanceState: nameOf(field.get(PDFName.of('AS'))) || null,
+                hasAppearance: field.get(PDFName.of('AP')) !== undefined,
                 widgetRefs,
                 widgetPages: widgetRefs.map((w) => pageOf(w)),
             });
@@ -164,26 +256,39 @@ export function planFormForExtract(form, selection) {
     if (!form.present) return { status: 'NO_FORM' };
     if (!form.readable) return { status: 'REFUSE', code: 'UNSUPPORTED_DOCUMENT', reason: 'フォーム構造を読み取れません。' };
     if (form.xfa) return { status: 'REFUSE', code: 'XFA_UNSAFE', reason: 'XFAフォームは保持できません。' };
-    if (form.outsideSubset.length > 0) {
-        return {
-            status: 'REFUSE',
-            code: 'UNSUPPORTED_FORM',
-            reason: `対応範囲外のフォーム要素があります: ${form.outsideSubset.join(', ')}`,
-        };
-    }
 
+    // Straddling is decided **before** the general subset check, and on purpose.
+    //
+    // A field whose widgets sit on both kept and dropped pages necessarily has
+    // separate widget dictionaries, which the narrowed subset also refuses — so
+    // checking the subset first would make `FIELD_SPANS_SELECTION` unreachable
+    // and report the vaguer reason. Both facts are true; the sharper one is the
+    // one worth telling someone, and the other reasons travel with it.
     const straddling = form.fields.filter((f) => {
         const pagesOfField = f.widgetPages.filter((p) => p !== null);
         const inside = pagesOfField.filter((p) => kept.has(p));
         return inside.length > 0 && inside.length < pagesOfField.length;
     });
     if (straddling.length > 0) {
+        const also = form.outsideSubset.length > 0
+            ? `（このフォームは他にも対応範囲外の要素を含みます: ${form.outsideSubset.join(', ')}）`
+            : '';
         return {
             status: 'REFUSE',
             code: 'FIELD_SPANS_SELECTION',
             reason: `フィールド ${straddling.map((f) => f.name).join(', ')} は選択外のページにも部品を持つため、`
-                + '分割すると入力値の意味が失われます。',
+                + `分割すると入力値の意味が失われます。${also}`,
             straddling: straddling.map((f) => f.name),
+            alsoOutsideSubset: form.outsideSubset,
+        };
+    }
+
+    if (form.outsideSubset.length > 0) {
+        return {
+            status: 'REFUSE',
+            code: 'UNSUPPORTED_FORM',
+            reason: `対応範囲外のフォーム要素があります: ${form.outsideSubset.join(', ')}`,
+            outsideSubset: form.outsideSubset,
         };
     }
 

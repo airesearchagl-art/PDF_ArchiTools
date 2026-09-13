@@ -118,6 +118,16 @@ detected during planning rather than discovered in the artifact.
 | `/StructTreeRoot` | **dropped, and not cleanly**: `/StructTreeRoot` and `/MarkInfo` go, while the page keeps `/StructParents` | measured before `{structTreeRoot: true, markInfo: true, pageStructParents: true}` → after `{false, false, **true**}` |
 | `/OCProperties` | **dropped, and not cleanly**: the catalog entry goes while the page keeps the `/Properties` naming the group | measured before `{ocProperties: true, pageOptionalContentProperties: true}` → after `{false, **true**}` |
 | `/OpenAction` | **dropped** | `nav-4p`: present before, absent after |
+| document JavaScript | **dropped** by the copy, for the catalog-level sites — but an annotation's, a page's or a field's JavaScript travels with the page | seven fixtures, one per site |
+
+### With the optional-content and JavaScript prototypes
+
+| | today | prototyped |
+| --- | --- | --- |
+| `/OCProperties`, one group | dropped, page reference left dangling | **carried** — 1 group, 1 on, catalog entry present again |
+| `/OCProperties`, two groups with on/off | dropped | **carried** — 2 groups, 1 on, 1 off |
+| `/OCMD`, `/VE` | dropped, semantics changed silently | **`UNSUPPORTED_OPTIONAL_CONTENT`** |
+| JavaScript, seven sites | survives wherever it travels with a page | **0 remaining after readback, all seven** |
 
 ---
 

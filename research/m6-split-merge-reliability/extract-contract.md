@@ -139,29 +139,87 @@ E2 preserves the user's intent while making the loss explicit and, critically,
 removing the reference that causes the orphan copy. E3 is not recommended, and
 E0 must not survive contact with M6.
 
-## Forms — a stated subset, or a refusal
+## Forms — simple `/Tx`, and a refusal for everything else
 
-`prototype/form-subset.mjs`. Supported field types: `/Tx`, `/Btn`, `/Ch`,
-`/Sig`. A document leaves the subset — and is refused with `UNSUPPORTED_FORM` —
-when it carries AcroForm `/CO`, any field `/AA`, or a document-level
-`/Names /JavaScript` tree, because those can reach a field by name from
-somewhere a structural rewrite does not look.
+`prototype/form-subset.mjs`. **Supported: `/Tx` only**, and only in its simple
+shape — a merged field/widget dictionary with none of `/Ff`, `/DV`, `/AA`, no
+separate widget dictionaries, no inherited `/FT` or `/V`, and a `/DA` that does
+not name a font living in AcroForm `/DR`.
 
-Measured:
+An earlier version of this document advertised `/Tx /Btn /Ch /Sig`. The
+reconstruction only ever restored `/T`, `/FT` and `/V` — it read `/Ff` without
+writing it back, never touched `/DV`, never carried `/DR`, and never checked a
+button's `/AS` against its `/AP`. Four type names on one type's evidence.
+
+Measured, one fixture per shape:
 
 | case | result |
 | --- | --- |
-| form wholly inside the selection | AcroForm rebuilt, **2 fields, values `M6-FIELD-ONE` / `M6-FIELD-TWO` preserved, 0 orphan widgets** |
-| field whose widgets straddle the selection | typed refusal `FIELD_SPANS_SELECTION` |
+| `form-tx-plain` | AcroForm rebuilt, value `M6-TX-VALUE` preserved, **0 orphan widgets** |
+| `form-tx-ff` | `UNSUPPORTED_FORM` — `/Ff` is read and never restored |
+| `form-tx-dv` | `UNSUPPORTED_FORM` — `/DV` is not restored |
+| `form-dr` | `UNSUPPORTED_FORM` — the `/DA` names a `/DR` font that is not carried |
+| `form-separate-widget` | `UNSUPPORTED_FORM` — the field's entries live on a dictionary the copy does not keep as a field |
+| `form-hierarchical` | `UNSUPPORTED_FORM` — `/FT` and `/V` are inherited rather than carried |
+| `form-checkbox` | `UNSUPPORTED_FORM` — `/AS` ↔ `/AP` consistency is unproven |
+| `form-radio` | `UNSUPPORTED_FORM` — kids hold their own appearance states |
+| `form-choice` | `UNSUPPORTED_FORM` — `/Opt` is not restored |
+| `form-field-across-pages` | `FIELD_SPANS_SELECTION`, reported **before** the general subset refusal so the sharper reason is the one given |
 
-The straddling case is a refusal rather than a best effort because half a field
-is not a smaller field: the value belongs to neither half, and a widget that
-renders while bound to nothing is precisely the state this contract exists to
-forbid.
+The straddling case keeps its own code deliberately. Once separate widget
+dictionaries became a subset refusal, a straddling field would have reported the
+vaguer `UNSUPPORTED_FORM`; both statements are true and only one is useful, so
+the straddle is decided first and the other reasons travel with it in the
+message.
 
-**Recommended:** reconstruct over the stated subset; refuse outside it. Whether
-the MVP should ship reconstruction at all, or refuse forms outright and follow
-with a Form Reconstruction Sub-Spike, is left open in `human-gate.json` M6-H3.
+Half a field is not a smaller field: the value belongs to neither half, and a
+widget that renders while bound to nothing is exactly the state this contract
+exists to forbid.
+
+**Recommended: S1-A** — reconstruct simple `/Tx`, refuse everything else.
+Widening the subset means adding fixtures and post-readback proof per type, not
+editing a list of names. Whether the MVP ships even this much, or refuses
+AcroForm entirely and defers to a Form Reconstruction Sub-Spike, is M6-H3.
+
+## Optional content — carried inside a stated envelope
+
+`prototype/optional-content.mjs`. Today the catalog entry is dropped while the
+page keeps the `/Properties` naming the group, so the artifact's marked content
+references a configuration the document no longer has.
+
+| case | result |
+| --- | --- |
+| `ocproperties` (one group) | carried — **1 group, 1 on**, `/OCProperties` present again in the artifact |
+| `ocg-multiple` (two groups) | carried — **2 groups, 1 on, 1 off** |
+| `ocmd` | `UNSUPPORTED_OPTIONAL_CONTENT` |
+| `ocmd-nested` (a `/VE` expression) | `UNSUPPORTED_OPTIONAL_CONTENT` |
+
+Carried: page `/Properties` entries resolving to plain `/OCG` dictionaries, with
+a `/D` whose keys stay within `Order`, `ON`, `OFF`, `Name`, `BaseState`.
+Refused: `/OCMD` in any form, a `/VE` visibility expression, `BaseState /OFF`,
+or any other `/D` key. An `/OCMD` decides visibility from a set of groups and
+optionally a nested boolean expression; carrying part of that evaluation would
+silently change what the reader sees.
+
+## JavaScript — sanitized, and proven by reopening the file
+
+`prototype/javascript-scan.mjs`. The contract is *no JavaScript action survives
+a sanitized result*, not *the sites we happened to inspect were clean*.
+
+Scanner scope: catalog `/OpenAction`, catalog `/AA`, catalog
+`/Names /JavaScript` including `/Kids`, page `/AA`, annotation `/A` and every
+`/AA` sub-entry, AcroForm fields walked through `/Kids`, and `/Next` on every
+action found. Bounded at depth 32 with a per-chain cycle set; a document the
+scanner cannot finish inspecting is `UNSCANNABLE_ACTIONS`, not a quiet pass.
+
+Seven fixtures, one per site. Each is found in the source and **absent from the
+sanitized output, measured by reopening it — 0 remaining across all seven.**
+A document with no JavaScript scans 0 and completes, and an action reachable by
+two routes is counted once (1 action from 2 visits).
+
+Two of the seven reach zero because `copyPages` never copies catalog-level
+structure, not because the sanitizer removed anything. The mechanism is recorded
+per site rather than summarised — see `limitations.md`.
 
 ## Signatures — the appearance is the finding
 
