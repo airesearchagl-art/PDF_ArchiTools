@@ -22,7 +22,7 @@ AcroForm and its field values, XFA, named destinations, outlines, page labels,
 JavaScript, and all document metadata including the XMP packet — which is then
 replaced by pdf-lib's own `/Producer` and `/ModDate`.
 
-Three findings go further than "something was lost":
+Four findings go further than "something was lost":
 
 1. **Extract ships pages nobody selected.** A link on a selected page whose
    destination is a page outside the selection causes that page to be copied
@@ -30,9 +30,23 @@ Three findings go further than "something was lost":
    present in the bytes. Extracting page 1 of a four-page document produced a
    file holding three page objects. For an extract made to share part of a
    confidential set, that is a disclosure.
-2. **A signed source produces an ordinary-looking file with no warning.**
-3. **Widgets survive without the form they belonged to** — they render, and they
+2. **Even a link to a page that *was* selected lands outside the page tree.**
+   Measured per shape: `/Dest` to a selected page, both pages kept — 2 pages in
+   the tree, 1 orphan, **0 destinations landing in the document**. The link
+   resolves and navigates nowhere a reader can reach, and nothing reports it.
+   And `/Annots` is not the only route: an article bead reaches another page
+   with no link annotation involved.
+3. **A signed source produces an ordinary-looking file — and it still looks
+   signed.** The signature is gone; the signature *appearance* is not. Rendering
+   the signature rectangle gives **4,325 non-white pixels of 24,300 in both the
+   source and the extract**, pixel for pixel.
+4. **Widgets survive without the form they belonged to** — they render, and they
    are bound to nothing.
+
+All four have prototypes showing the contract is implementable: destinations
+stripped before copying and rebuilt afterwards give **0 orphan pages in all ten
+destination shapes**, and a form wholly inside a selection is rebuilt with its
+values and **0 orphan widgets**.
 
 None of this is a misuse of pdf-lib; the library's own doc comment says it does
 not copy acroforms or outlines. The defect is that the product presents page
@@ -51,6 +65,8 @@ copying as document splitting and merging, and reports success.
 | [`budget.md`](budget.md) | memory lifetimes with basis classifications, and why a hard memory budget cannot be closed today |
 | [`limitations.md`](limitations.md) | what was not measured, caveats on what was, and the instrument defects found on the way |
 | [`human-gate.json`](human-gate.json) | M6-H1 … M6-H14, each with candidates, measured consequences, a recommendation and what stays DEFER |
+| `prototype/extract-destinations.mjs` | E1 and E2, prototyped far enough to prove the orphan-page invariant is reachable |
+| `prototype/form-subset.mjs` | the supported form subset, its detector, Extract reconstruction and Merge collision handling |
 | `evidence.json` | structural measurements, written by the research gate |
 | `evidence-browser.json` | preview and lifetime measurements, written by the browser gate |
 
@@ -86,8 +102,8 @@ while the product is wrong, and each row says which.
 Latest run:
 
 ```text
-research gate   ASSERT 11  PROBE 3  MEASURE 20  BASELINE-FAIL 15  HUMAN-OPEN 14   29/29
-browser gate    ASSERT  3  PROBE 1  MEASURE 11  BASELINE-FAIL  4  HUMAN-OPEN  2     8/8
+research gate   ASSERT 26  PROBE 18  MEASURE 39  BASELINE-FAIL 18  HUMAN-OPEN 17   62/62
+browser gate    ASSERT  3  PROBE  1  MEASURE 12  BASELINE-FAIL  5  HUMAN-OPEN  3     9/9
 external HTTP(S) during document work: 0
 ```
 

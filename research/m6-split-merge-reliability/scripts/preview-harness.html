@@ -295,6 +295,61 @@ window.__m6 = {
     const [slow, fast] = await Promise.all([run(firstName, 'first'), run(secondName, 'second')]);
     return { finishOrder: order, first: slow, second: fast, lastWriterWins: order[order.length - 1] };
   },
+
+  /**
+   * RF-R3: does a signature still *look* signed after the signature is gone?
+   *
+   * Structural readback can say the AcroForm is absent and the widget remains.
+   * It cannot say whether anything draws. Rendering both documents and
+   * comparing the pixels inside the signature rectangle can: if the appearance
+   * stream survived the copy, the derived page shows a signature block that the
+   * document no longer carries.
+   */
+  async signatureAppearance(name, rect) {
+    configurePdfWorker();
+    const bytes = await bytesOf(name);
+
+    // The production extract route, verbatim.
+    const srcDoc = await PDFDocument.load(bytes.slice());
+    const newDoc = await PDFDocument.create();
+    const copied = await newDoc.copyPages(srcDoc, [0]);
+    copied.forEach((p) => newDoc.addPage(p));
+    const extracted = await newDoc.save();
+
+    const inkInside = async (data) => {
+      const pdf = await pdfjsLib.getDocument({ data: data.slice() }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // PDF user space is bottom-up; the canvas is top-down.
+      const x = Math.floor(rect[0] * 1.5);
+      const w = Math.ceil((rect[2] - rect[0]) * 1.5);
+      const yTop = Math.floor(canvas.height - rect[3] * 1.5);
+      const h = Math.ceil((rect[3] - rect[1]) * 1.5);
+      const image = ctx.getImageData(Math.max(0, x), Math.max(0, yTop), w, h);
+      let nonWhite = 0;
+      for (let i = 0; i < image.data.length; i += 4) {
+        const [r, g, b, a] = [image.data[i], image.data[i + 1], image.data[i + 2], image.data[i + 3]];
+        if (a > 0 && (r < 240 || g < 240 || b < 240)) nonWhite += 1;
+      }
+      page.cleanup();
+      canvas.width = 0;
+      canvas.height = 0;
+      await pdf.destroy();
+      return { nonWhitePixels: nonWhite, sampled: image.data.length / 4 };
+    };
+
+    return {
+      source: await inkInside(bytes),
+      extracted: await inkInside(extracted),
+      extractedBytes: extracted.length,
+    };
+  },
 };
 
 document.getElementById('state').textContent = 'ready';

@@ -400,9 +400,27 @@ for (const n of [10, 50, 100, 200]) {
         ByteRange: [0, 0, 0, 0], Contents: PDFHexString.of('00'.repeat(32)),
         M: PDFString.of('D:20260101000000Z'),
     }));
+    // The signature's **appearance**, which is a separate thing from the
+    // signature. Without an /AP there is no way to ask whether a derived
+    // document still shows a signature it no longer carries, and that is
+    // exactly the question the Human Gate needs answered.
+    const appearance = doc.context.stream(
+        Buffer.from(
+            '0.05 0.35 0.15 RG 2 w 4 4 172 52 re S '
+            + 'BT /Helv 12 Tf 14 22 Td 0.05 0.35 0.15 rg (M6-SIGNED-BY-APPEARANCE) Tj ET',
+            'utf8',
+        ),
+        {
+            Type: 'XObject',
+            Subtype: 'Form',
+            BBox: [0, 0, 180, 60],
+            Resources: { Font: { Helv: { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica' } } },
+        },
+    );
     const widget = doc.context.register(doc.context.obj({
         Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFString.of('m6.sig'),
         V: sigRef, Rect: [380, 80, 560, 140], F: 4,
+        AP: { N: doc.context.register(appearance) },
     }));
     pages[0].node.set(PDFName.of('Annots'), doc.context.obj([widget]));
     doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
@@ -581,6 +599,110 @@ await collisionSource('collide-a', 'M6-PAGE-COLLIDE-A', {
 await collisionSource('collide-b', 'M6-PAGE-COLLIDE-B', {
     fieldName: 'shared.field', destName: 'M6-SHARED-DEST', outlineTitle: 'M6 shared outline', label: 'B-',
 });
+
+// ---------------------------------------------------------------------------
+// Destinations, one shape per fixture
+//
+// `nav-4p` mixes every kind of internal navigation into one document, which is
+// useful for a survey and useless for a contract: when its extract reported
+// "4 links, 0 of them landing in the document", there was no way to say which
+// shape caused it. These separate the cases so each one answers for itself.
+// ---------------------------------------------------------------------------
+
+/** Two pages, page 1 linking to page 2 by whichever mechanism is asked for. */
+async function destinationPair(name, kind, note) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-${name.toUpperCase()}-${i}`));
+    const target = [pages[1].ref, PDFName.of('XYZ'), PDFNumber.of(70), PDFNumber.of(700), PDFNumber.of(0)];
+
+    if (kind === 'dest') {
+        addAnnots(doc, pages[0], [{
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            Dest: target,
+        }]);
+    } else if (kind === 'goto') {
+        addAnnots(doc, pages[0], [{
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            A: { Type: 'Action', S: 'GoTo', D: target },
+        }]);
+    } else if (kind === 'named') {
+        doc.catalog.set(PDFName.of('Names'), doc.context.register(doc.context.obj({
+            Dests: {
+                Names: [
+                    PDFString.of('M6-DEST-P1'), [pages[0].ref, PDFName.of('Fit')],
+                    PDFString.of('M6-DEST-P2'), target,
+                ],
+            },
+        })));
+        addAnnots(doc, pages[0], [
+            {
+                Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+                A: { Type: 'Action', S: 'GoTo', D: PDFString.of('M6-DEST-P1') },
+            },
+            {
+                Type: 'Annot', Subtype: 'Link', Rect: [100, 660, 320, 680], Border: [0, 0, 0],
+                A: { Type: 'Action', S: 'GoTo', D: PDFString.of('M6-DEST-P2') },
+            },
+        ]);
+    }
+    await write(name, doc, note);
+}
+
+await destinationPair('dest-direct-2p', 'dest', 'page 1 links to page 2 with a direct /Dest');
+await destinationPair('dest-goto-2p', 'goto', 'page 1 links to page 2 with /A /GoTo /D');
+await destinationPair('dest-named-2p', 'named', 'named destinations to page 1 (kept) and page 2 (droppable)');
+
+{
+    // Each page points at the other. A copier that follows destinations without
+    // a stopping rule has to be shown not to loop.
+    const { doc, font } = await newDoc('M6 cyclic destinations');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-CYCDEST-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        Dest: [pages[1].ref, PDFName.of('Fit')],
+    }]);
+    addAnnots(doc, pages[1], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        Dest: [pages[0].ref, PDFName.of('Fit')],
+    }]);
+    await write('dest-cyclic-2p', doc, 'page 1 and page 2 each hold a destination to the other');
+}
+{
+    // Two selected pages pointing at the same third page: if the copier
+    // duplicates per reference rather than per target, this is where it shows.
+    const { doc, font } = await newDoc('M6 shared destination target');
+    const pages = [1, 2, 3].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-SHAREDDEST-${i}`));
+    for (const from of [pages[0], pages[1]]) {
+        addAnnots(doc, from, [{
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            Dest: [pages[2].ref, PDFName.of('Fit')],
+        }]);
+    }
+    await write('dest-shared-target-3p', doc, 'pages 1 and 2 both address page 3');
+}
+{
+    // A page can reach another page without any annotation at all. Article
+    // threads do it through /B: a bead on page 1 chains to a bead whose /P is
+    // page 2. If a contract assumes /Annots is the only route, this is the
+    // fixture that disproves it.
+    const { doc, font } = await newDoc('M6 page references beyond /Annots');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-BEADS-${i}`));
+    const threadRef = PDFRef.of(doc.context.largestObjectNumber + 10, 0);
+    const bead1 = doc.context.obj({ T: threadRef, P: pages[0].ref, R: [50, 50, 300, 300] });
+    const bead2 = doc.context.obj({ T: threadRef, P: pages[1].ref, R: [50, 50, 300, 300] });
+    const bead1Ref = doc.context.register(bead1);
+    const bead2Ref = doc.context.register(bead2);
+    bead1.set(PDFName.of('N'), bead2Ref);
+    bead1.set(PDFName.of('V'), bead2Ref);
+    bead2.set(PDFName.of('N'), bead1Ref);
+    bead2.set(PDFName.of('V'), bead1Ref);
+    const thread = doc.context.obj({ F: bead1Ref, I: { Title: PDFString.of('M6-THREAD') } });
+    doc.context.assign(threadRef, thread);
+    pages[0].node.set(PDFName.of('B'), doc.context.obj([bead1Ref]));
+    pages[1].node.set(PDFName.of('B'), doc.context.obj([bead2Ref]));
+    doc.catalog.set(PDFName.of('Threads'), doc.context.obj([threadRef]));
+    await write('page-refs-beyond-annots', doc, 'an article thread whose beads chain page 1 to page 2');
+}
 
 // ---------------------------------------------------------------------------
 // Invalid and hostile

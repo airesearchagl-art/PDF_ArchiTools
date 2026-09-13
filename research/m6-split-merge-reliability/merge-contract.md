@@ -106,9 +106,30 @@ renumbers every copied object (`core/PDFObjectCopier.js:100`).
 | named destinations | reconstruct with a per-source prefix on collision; report the renaming |
 | outlines | reconstruct as one outline per source, titled by source filename, preserving each source's items beneath it |
 | page labels | reconstruct as concatenated ranges; where sources disagree, prefix by source |
-| AcroForm / duplicate field names | M6-H3. A merged form with two fields called `shared.field` is ambiguous by construction: one value would overwrite the other. Recommended: rename on collision (`<source>.shared.field`) and report, or refuse — never ship two widgets bound to one name |
+| AcroForm / duplicate field names | M6-H3, and now prototyped — see below |
 | XFA | M6-H4 — recommended: refuse a source carrying XFA, following M5 |
 | attachments, OCG, tags, JavaScript | M6-H9 — recommended: declare unsupported and name the loss |
+
+### Duplicate field names, prototyped rather than assumed
+
+`prototype/form-subset.mjs`, on two documents that each declare `shared.field`:
+
+| strategy | result |
+| --- | --- |
+| rename on collision | one valid AcroForm, fields `source1.shared.field` and `source2.shared.field`, **both values preserved, 0 orphan widgets** |
+| refuse | `DUPLICATE_FIELD_NAMES`, naming the colliding field |
+
+So renaming is implementable — but it is only *offered* because the reader first
+rejects the documents where a rename could break something invisible: AcroForm
+`/CO`, any field `/AA`, and a document-level `/Names /JavaScript` tree, any of
+which can reach a field by name from somewhere a structural rewrite does not
+look. Without that detector, "rename on collision" would be a guess dressed as a
+contract, which is what the review was right to refuse.
+
+**Recommended:** rename on collision within the supported subset; `refuse`
+available as a setting; `UNSUPPORTED_FORM` outside the subset. Whether the MVP
+ships reconstruction at all, or refuses forms and defers to a Form
+Reconstruction Sub-Spike, is M6-H3.
 
 ## Metadata (M6-H8)
 

@@ -9,13 +9,25 @@ anything. This is what that costs, measured in the browser by
 
 | quantity | basis | why |
 | --- | --- | --- |
-| retained Data URL bytes | **EXACT** | a base64 string costs what it costs; counted as UTF-16, which is how a JS engine holds it |
-| peak canvas RGBA | **EXACT** | `width × height × 4` for the largest page |
+| Data URL character count | **EXACT** | counted, not sampled |
+| logical UTF-16 payload bytes (`chars × 2`) | **EXACT by definition** | the code-unit payload the string represents — an arithmetic restatement of the character count, not a measurement of memory |
+| actual JS engine string allocation | **UNKNOWN** | engines may store one-byte-wide strings for ASCII, rope or intern them, and none of that is observable from the page |
+| string and object bookkeeping | **UNKNOWN** | headers, the array holding them, React's own retention |
+| peak canvas RGBA | **EXACT** | `width × height × 4` for the largest page, which is what the backing store must be |
+| Blob payload bytes | **EXACT** | `blob.size`, measured |
+| Blob URL string + JS object bookkeeping | **UNKNOWN** | small, and still not zero |
 | elapsed ms | MEASURED_ONLY | machine-dependent |
 | `performance.memory` delta | MEASURED_ONLY | Chrome-only, quantised, moves with collection nobody controls |
 
-No bound in this research is derived from a heap reading. Where a number has to
-hold, it comes from the first two rows.
+**An earlier version of this table called `chars × 2` "exact retained heap bytes".
+It is not.** It is an exact statement about the payload and says nothing
+portable about what a JavaScript engine allocates to hold it. The correction
+does not change the comparison between strategies — every figure below is
+computed the same way for all of them — but it changes what may be claimed
+about total browser memory, which is: nothing.
+
+No bound in this research is derived from a heap reading, and none is claimed
+over total browser heap.
 
 ## The current strategy (P1), by page count
 
@@ -44,12 +56,16 @@ bounded and none of it asked for.
 
 ## The alternatives, priced on the same 100-page source
 
-| strategy | retained | note |
+| strategy | retained payload | note |
 | --- | --- | --- |
-| **P1** all pages as Data URLs (current) | 8.4 MiB | 1,727 ms before anything is shown |
-| **P2** a 12-page window | **1.0 MiB** | renders what is on screen; `page.cleanup()` and canvas release after each |
-| **P3** Blob URLs for the same window | **0.4 MiB out of the JS heap, 0 B in it** | the bytes live in the blob store; each URL must be revoked |
+| **P1** all pages as Data URLs (current) | 8.4 MiB of UTF-16 payload | 1,727 ms before anything is shown |
+| **P2** a 12-page window | **1.0 MiB** of UTF-16 payload | renders what is on screen; `page.cleanup()` and canvas release after each |
+| **P3** Blob URLs for the same window | **0.4 MiB of Blob payload, held outside the JS heap** | the image bytes live in the blob store rather than as JS strings; the URL strings and their JS objects remain, and each URL must be revoked |
 | **P4** regenerated cache | not separately measured | P2 plus discard-and-redraw on scroll; strictly between P2 and re-rendering cost |
+
+P3's entry previously read "0 B in the JS heap". That was wrong in the direction
+that flatters the recommendation: the *image payload* leaves the heap, the
+bookkeeping does not.
 
 P2 and P3 were measured through the same render path as P1, so the comparison is
 between strategies rather than between implementations.
@@ -88,6 +104,26 @@ superseding it releases everything.
 
 The reason is not that P1 is slow. It is that P1 has **no bound at all**: the
 cost is set by the document the user happens to open, and the product currently
-promises nothing about it. A bounded window turns preview cost into a number the
-product chooses. This is a recommendation, not an adoption — see
-[`human-gate.json`](human-gate.json) M6-H12.
+promises nothing about it.
+
+### What the bound may actually say
+
+The product controls four quantities, and those are what a stated bound may be
+written in terms of:
+
+```text
+maximum active thumbnail count          N
+maximum thumbnail pixel dimensions      w × h
+maximum retained Blob payload           N × (encoded bytes per thumbnail)
+canvas pixel ceiling                    the largest single backing store allowed
+```
+
+All four are enforceable and observable. What may **not** be claimed is that
+this bounds total browser heap: the JS engine's string and object bookkeeping,
+PDF.js's own retained state, and the decoded-image cache the browser keeps for
+displayed `<img>` elements are all UNKNOWN terms this research did not close.
+
+So the honest form of the recommendation is: *a bounded preview whose retained
+payload and canvas allocation are chosen by the product rather than by the
+document*, not *a preview with a hard memory budget*. This is a recommendation,
+not an adoption — see [`human-gate.json`](human-gate.json) M6-H12.

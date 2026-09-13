@@ -2,14 +2,18 @@
   "gate": "M6 Split / Merge Reliability Architecture",
   "status": "OPEN — no decision below has been adopted by this research",
   "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+  "revision": "answers Required Fix 6 (RF-M6-R1 … R6)",
   "evidence": [
     "evidence.json",
     "evidence-browser.json",
     "baseline.md",
     "source-preservation-matrix.md",
     "structure-policy.md",
+    "extract-contract.md",
+    "merge-contract.md",
     "preview-memory.md",
-    "budget.md"
+    "budget.md",
+    "limitations.md"
   ],
   "decisions": [
     {
@@ -17,37 +21,39 @@
       "question": "Applied signature policy for Extract",
       "candidates": [
         "A — hard refuse any source carrying an applied signature",
-        "B — permit with an explicit confirmation that the derived PDF is unsigned"
+        "B — allow the unsigned derivative, but remove the signature widget and its appearance stream",
+        "C — allow, with a persistent artifact-level indication that this is an unsigned derivative"
       ],
-      "measured": "A signed source produces a 1,242 B ordinary-looking file with no AcroForm and no warning of any kind.",
+      "measured": "The cryptographic signature is removed and the appearance is not. After a legacy extract the AcroForm is absent, no signature field remains, and one widget survives carrying its /AP. Rendering the signature rectangle gives 4,325 non-white pixels out of 24,300 in the source and 4,325 out of 24,300 in the extract — pixel for pixel identical. A reader opening the derived file sees a signed-looking block on a document that carries no signature.",
       "recommended": "B",
-      "why": "An Extract artifact is openly a new derived document, and taking two pages from a signed set to share is legitimate. The confirmation must say the result is not signed, per-run, with no 'always allow'.",
-      "defer": []
+      "why": "The previous recommendation allowed the unsigned derivative without saying anything about the appearance, which the measurement now shows is the part the reader actually sees. Removing the widget and its /AP makes the derived document honestly unsigned. C is a reasonable addition to B rather than an alternative to it; A remains correct for anyone who does not want derived copies of signed documents at all.",
+      "defer": ["what a persistent artifact-level indication should be (C) — visible watermark, metadata, or both"]
     },
     {
       "id": "M6-H2",
       "question": "Applied signature policy for Merge",
-      "candidates": [
-        "A — refuse any source carrying an applied signature",
-        "B — permit with explicit confirmation"
-      ],
-      "measured": "Merging a signed source produced a 5-page ordinary file with no mention of the signature.",
+      "candidates": ["A — refuse any source carrying an applied signature", "B — permit with explicit confirmation"],
+      "measured": "Merging a signed source produced a 5-page ordinary file with no mention of the signature. The appearance finding in M6-H1 applies here too, and is worse: the signed document's appearance now sits among other people's content.",
       "recommended": "A",
-      "why": "A merge mixes a signed document into other content, so the combined artifact carries its appearance without its guarantee. The asymmetry with M6-H1 is deliberate.",
+      "why": "Unchanged by the new evidence, and strengthened by it. The asymmetry with M6-H1 is deliberate: an extract is openly a derivative of one document, a merge is a new document that would carry another's signature block.",
       "defer": []
     },
     {
       "id": "M6-H3",
       "question": "AcroForm and widget preservation",
       "candidates": [
-        "reconstruct the field tree for kept pages",
-        "typed refusal when a form is present",
+        "reconstruct over a stated supported subset",
+        "typed refusal whenever a form is present",
         "explicitly unsupported, named as a loss"
       ],
-      "measured": "Extract of both pages of a two-field form: AcroForm absent, 2 widgets left on the pages belonging to no field. Merge of two sources sharing a field name: same shape, 2 orphan widgets.",
-      "recommended": "reconstruct for Extract where every widget of a field is on a kept page; typed refusal where a field straddles kept and dropped pages; rename-on-collision for Merge",
-      "why": "A widget that renders and is bound to nothing is the worst of the three: it looks like a form and is not one. Whatever is chosen must forbid that state.",
-      "defer": ["calculation and field-order relationships were not researched"]
+      "measured": "Prototyped in prototype/form-subset.mjs. Extract of a two-field form wholly inside the selection rebuilds a valid AcroForm: 2 fields, values M6-FIELD-ONE and M6-FIELD-TWO preserved, 0 orphan widgets. A field whose widgets straddle the selection is refused with FIELD_SPANS_SELECTION. Merge of two documents sharing the name shared.field, renamed on collision, yields one form with source1.shared.field and source2.shared.field, both values preserved, 0 orphan widgets; refusing the same input with DUPLICATE_FIELD_NAMES is also available.",
+      "recommended": "reconstruct over the stated subset — /Tx /Btn /Ch /Sig — refusing anything outside it",
+      "why": "The prototype shows reconstruction is implementable and that the orphan-widget state can be eliminated rather than merely described. Rename-on-collision is offered ONLY because the detector rejects the documents where a rename could break something invisible: AcroForm /CO, any field /AA, and a document-level /Names /JavaScript tree. Without that detector the rename would not be recommendable, which was the review's point.",
+      "defer": [
+        "radio groups and checkbox /AS appearance-state consistency after a rename",
+        "/DR resource merging when two sources declare different default resources",
+        "whether the MVP should ship reconstruction at all, or refuse forms and follow with a Form Reconstruction Sub-Spike"
+      ]
     },
     {
       "id": "M6-H4",
@@ -63,22 +69,26 @@
       "question": "Internal destinations pointing at pages excluded from an Extract",
       "candidates": [
         "E1 — refuse the selected set, naming the pages that would break",
-        "E2 — keep the set, remove the broken link, report it",
+        "E2 — keep the set, remove or retarget the link, report the loss",
         "E3 — drop the link silently (not recommended)"
       ],
-      "measured": "Today is none of these: the link is kept AND the excluded page is copied into the file as an orphan. Extracting page 1 of a 4-page document produced 1 page in the tree and 2 page objects outside it.",
-      "recommended": "E2 as the default, E1 available as a stricter setting",
-      "why": "The current behaviour is worse than E3: it ships content the user did not select. Whatever is chosen, the contract must forbid any page outside the selection from appearing in the output at all.",
+      "measured": "Today is none of these. Measured per shape: a destination to a SELECTED page still produces an orphan copy and lands outside the page tree (dest-direct-2p with both pages kept: 2 in tree, 1 orphan, 0 destinations landing in the document); the same holds for /A /GoTo /D. Cyclic destinations produce 2 orphans from a one-page selection. An article bead reaches another page with no annotation involved at all. The E2 prototype produces 0 orphan pages in all ten cases, every surviving destination lands in the output page tree, and every removed one is reported; E1 refuses before copying anything.",
+      "recommended": "E2 as the default, E1 available as a stricter setting, and the invariant below adopted as a production contract",
+      "invariant": "every indirect /Page object in an Extract artifact is a member of its output page tree (orphanPageCount === 0), and every surviving internal destination targets a page of that tree",
+      "why": "E0 — what ships today — is worse than E3: it keeps a link that navigates nowhere a reader can reach AND ships the content of pages the user did not select. The invariant is checkable after serialization, which is where it is checked in the gate.",
       "defer": []
     },
     {
       "id": "M6-H6",
       "question": "Outlines, named destinations and page labels",
       "candidates": ["reconstruct for kept pages", "declare dropped and name the loss"],
-      "measured": "All three are dropped by both operations, even when every page is extracted: 2 named destinations to 0, 4 outline items to 0, 2 label ranges to 0.",
-      "recommended": "reconstruct — entries whose target is kept are reconstructable from the selection, and page labels are arithmetic on /Nums",
-      "why": "These are the navigation a drawing set is used through; losing them silently is the difference between a document and a stack of pages.",
-      "defer": ["outline hierarchies deeper than one level were not measured"]
+      "measured": "All three are dropped by both operations today, even when every page is extracted. Named destinations ARE reconstructable: the E2 prototype rebuilds the entries whose target survives and reports the rest — with both pages of dest-named-2p kept, 4 destinations land in the document and nothing is lost; keeping only page 1, the surviving entry is rebuilt and 2 losses are reported by name. Outlines and page labels were NOT prototyped.",
+      "recommended": "reconstruct named destinations (proven); treat outlines and page labels as reconstructable in principle but unproven here",
+      "why": "Saying 'reconstruct' for all three would claim evidence that exists for one of them. Page labels are arithmetic on /Nums and outlines are a tree walk, so neither looks hard — but neither has been shown to work, and the difference between those two statements is the point of this document.",
+      "defer": [
+        "outline reconstruction, including hierarchies deeper than one level",
+        "page-label range arithmetic across a non-contiguous selection"
+      ]
     },
     {
       "id": "M6-H7",
@@ -104,13 +114,44 @@
       "defer": []
     },
     {
-      "id": "M6-H9",
-      "question": "Attachments, /OCProperties, /StructTreeRoot, document JavaScript, /OpenAction",
-      "candidates": ["preserve", "typed refusal", "explicitly unsupported and named as a loss"],
-      "measured": "All dropped by both operations. pdf-lib implements none of them; /StructParents survives on the page, pointing at a structure tree that is not there.",
-      "recommended": "explicitly unsupported and named as a loss, with a typed refusal where the source depends on them",
-      "why": "Preserving them means implementing them from scratch against no library support. Saying so is honest; dropping them quietly is what happens now.",
-      "defer": ["whether a tagged-PDF workflow exists among this product's users"]
+      "id": "M6-H9a",
+      "question": "Tagged documents — /StructTreeRoot",
+      "candidates": ["refuse a tagged document", "strip every tagging remnant and confirm the accessibility loss", "reconstruct the structure tree"],
+      "measured": "The drop is not clean. Before: {structTreeRoot: true, markInfo: true, pageStructParents: true}. After a legacy extract: {false, false, true}. The artifact keeps a page claiming membership of a structure tree it does not contain.",
+      "detector": "catalog /StructTreeRoot present, or any page carrying /StructParents",
+      "recommended": "strip every remnant — /StructParents included — and report the accessibility loss explicitly",
+      "why": "Shipping the half-structure is not an option once it is known about: a page that claims a parent tree that is absent is a document that lies about itself. Refusing tagged documents outright would block a legitimate and common case; reconstruction is a genuine feature, not an MVP.",
+      "defer": ["structure-tree reconstruction for kept pages"]
+    },
+    {
+      "id": "M6-H9b",
+      "question": "Optional content — /OCProperties",
+      "candidates": ["carry /OCProperties for groups referenced by kept pages", "refuse", "drop and confirm the visibility change"],
+      "measured": "Also not clean. Before: {ocProperties: true, pageOptionalContentProperties: true}. After: {false, true}. The page's marked content still names an optional-content group that the document no longer configures, so what a viewer shows is its own default rather than the author's.",
+      "detector": "catalog /OCProperties present, or any page /Resources /Properties entry resolving to an /OCG or /OCMD",
+      "recommended": "carry the /OCProperties configuration for groups the kept pages reference",
+      "why": "Unlike a structure tree, this one is small and local: the groups referenced by the kept pages, and the /D default configuration that says which are on. Dropping it changes what is visible, which makes 'a harmless named loss' the wrong classification — and that classification is exactly what the review asked not to assume.",
+      "defer": ["nested /OCMD visibility expressions"]
+    },
+    {
+      "id": "M6-H9c",
+      "question": "Document JavaScript and /OpenAction",
+      "candidates": ["refuse", "sanitize: remove and report", "carry"],
+      "measured": "A document-level /Names /JavaScript tree and /OpenAction are both dropped silently. nav-4p's /OpenAction: present before, absent after.",
+      "detector": "catalog /Names /JavaScript present; catalog /OpenAction present; any annotation action whose /S is /JavaScript",
+      "recommended": "sanitize — remove and report — and retarget /OpenAction when its target page is kept, drop and report when it is not",
+      "why": "Carrying document JavaScript into a derived document is a security decision nobody asked for, and refusing on its presence would block documents where the script is incidental. /OpenAction is different: it is a page reference, so it belongs with the M6-H5 destination contract.",
+      "defer": ["whether any user workflow depends on document JavaScript surviving"]
+    },
+    {
+      "id": "M6-H9d",
+      "question": "Embedded files and attachments",
+      "candidates": ["carry", "remove with explicit confirmation", "refuse"],
+      "measured": "Dropped silently by both operations. pdf-lib has a write path for embedding files but no read path for copying a source's.",
+      "detector": "catalog /Names /EmbeddedFiles present, or any /Filespec with an /EF",
+      "recommended": "remove with explicit confirmation for Extract; carry for Merge is DEFER",
+      "why": "An attachment belongs to the document, not to a page, so an extract of two pages has no principled claim to it — but losing one silently is the behaviour being corrected. The confirmation names the files being dropped.",
+      "defer": ["carrying attachments through a Merge, where the union is at least well defined"]
     },
     {
       "id": "M6-H10",
@@ -129,7 +170,7 @@
         "derive M6-specific ceilings",
         "adopt the output ceiling now and defer the memory budget to a sub-spike"
       ],
-      "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is UNKNOWN and is a function of document structure, not byte length. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B. No such check exists today.",
+      "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is a function of document structure rather than byte length, and is UNKNOWN. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B, at a boundary taken from a real artifact. No such check exists today.",
       "recommended": "adopt an actual-artifact output ceiling now, sharing M5's constant; do NOT adopt a memory preset until an Object-Graph Memory Sub-Spike closes the UNKNOWN",
       "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
       "defer": ["M6 Object-Graph Memory Sub-Spike — scope stated in budget.md"]
@@ -143,9 +184,16 @@
         "P3 — bounded Blob URLs",
         "P4 — regenerated cache"
       ],
-      "measured": "P1 retains 88,616 B per A4 page and 538,997 B per A1 sheet (6.2x), 16.9 MiB for 200 A4 pages, 1,727 ms before anything is shown for 100 pages, with no ceiling anywhere. P2 at a 12-page window retains 1.0 MiB against P1's 8.4 MiB on the same source; P3 holds 0 B in the JS heap.",
+      "measured": "P1 retains 88,616 B of UTF-16 payload per A4 page and 538,997 B per A1 sheet (6.2x), 16.9 MiB for 200 A4 pages, 1,727 ms before anything is shown for 100 pages, with no ceiling anywhere. P2 at a 12-page window retains 1.0 MiB against P1's 8.4 MiB on the same source. P3 moves the image payload out of the JS heap: 0.4 MiB of Blob payload, with the URL strings and their JS objects still held.",
       "recommended": "P2 with P3's Blob URLs for the retained window, owned by the run",
-      "why": "The problem with P1 is not speed but that it has no bound: the cost is set by whatever document the user opens.",
+      "basisNote": "Character counts and logical UTF-16 payload bytes are EXACT; what a JS engine allocates to hold a string, and the engine's own bookkeeping, are UNKNOWN. An earlier version of this research called characters × 2 'exact retained heap bytes', which it is not, and called P3 '0 B in the JS heap', which overstates it.",
+      "boundTerms": [
+        "maximum active thumbnail count",
+        "maximum thumbnail pixel dimensions",
+        "maximum retained Blob payload",
+        "canvas pixel ceiling"
+      ],
+      "why": "The problem with P1 is not speed but that it has no bound: the cost is set by whatever document the user opens. The four terms above are quantities the product chooses and can enforce. No claim is made about total browser heap, which still contains UNKNOWN engine, PDF.js and decoded-image-cache terms.",
       "defer": ["P4 was not separately measured"]
     },
     {

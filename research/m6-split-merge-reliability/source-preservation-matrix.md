@@ -45,8 +45,10 @@ Subsets exercised on every applicable fixture: **all pages**, **one page**,
 | --- | --- | --- |
 | annotations on a kept page | preserved | `/Annots` travels as a page entry |
 | URI links | preserved | no page reference involved |
-| internal link to a **kept** page | preserved, retargeted | the copier remaps the reference |
-| internal link to an **excluded** page | **transformed into something worse**: the link survives *and the excluded page is copied into the file as an orphan* | extracting page 1 of `nav-4p` yielded 1 page in the tree and **2 orphan page objects** |
+| internal link to a **kept** page | **dangling — corrected.** The link survives and points at a *duplicate* of the target that is not in the output page tree | `dest-direct-2p` with **both** pages kept: 2 pages in tree, **1 orphan**, **0 destinations landing in the document**. Same for `/A /GoTo /D`. The earlier version of this row said "preserved, retargeted" and was wrong |
+| internal link to an **excluded** page | the link survives *and the excluded page is copied into the file as an orphan* | `dest-direct-2p` keeping page 1 only: 1 page in tree, 1 orphan |
+| cyclic destinations | both pages copied as orphans | keeping one page of `dest-cyclic-2p` left **2 orphans** |
+| page reference outside `/Annots` (article bead `/B`) | the chained page is copied as an orphan | `page-refs-beyond-annots` keeping page 1: 1 in tree, **2 orphans** — `/Annots` is not the only route |
 | link whose destination was already dangling | dangling | reported as `dangling` by the structure reader |
 | named destinations | **dropped** | 2 in source, 0 in output, even when all pages are extracted |
 | outlines | **dropped** | 4 items in source, 0 in output |
@@ -58,6 +60,36 @@ destination chain has no termination condition in the copier, so an extract of
 one page from a heavily cross-linked document can pull in an arbitrary part of
 the rest of it — invisibly, because none of those pages is in `/Pages`.
 
+**Correction.** An earlier version of this table claimed that a link to a kept
+page was "preserved, retargeted". It is not, and the measurement said so from
+the first run — `nav-4p` reported `inDocumentDests: 0` while the row asserted
+retargeting. Measured per shape now: with **both** pages of `dest-direct-2p`
+selected, the output holds 2 pages in its tree, 1 orphan, and **no destination
+landing in the document at all**. The reason is in the library:
+`copyPDFPage` clones the leaf before memoising it
+(`core/PDFObjectCopier.js:43,64`), so a page reached both as a `copyPages`
+argument *and* through a destination reference is copied **twice** — and the
+destination is remapped onto the copy that never enters `/Pages`. The link
+resolves perfectly and navigates nowhere a reader can go, which is worse than a
+plainly broken link because nothing reports it.
+
+### With the E2 prototype
+
+Prototyped in `prototype/extract-destinations.mjs`, which strips internal
+destinations **before** copying and rebuilds them from the output's own page
+references afterwards. Across all ten destination cases:
+
+| | today | E2 |
+| --- | --- | --- |
+| orphan page objects | 1–2 in every case that has a page reference | **0 in all ten** |
+| destinations landing in the output page tree | **0** | every surviving one |
+| dangling destinations | 2 per affected case | **0** |
+| losses | unreported | reported by name, per link |
+
+Two pages addressing the same target both retarget to it (`targets: [2,2]`),
+cyclic destinations resolve without looping, and the article-bead route is
+detected during planning rather than discovered in the artifact.
+
 ### Forms and signatures
 
 | item | result | evidence |
@@ -67,7 +99,8 @@ the rest of it — invisibly, because none of those pages is in `/Pages`.
 | field values | **dropped** | no field tree survives to hold them |
 | field whose widgets straddle kept and dropped pages | **dropped**, same shape | one widget kept, no field |
 | empty `/Sig` field | reads as a field, not a signature | matches M5 H7 |
-| applied signature | **dropped**, silently: an ordinary 1,242 B file | no AcroForm, no warning |
+| applied signature — the signature | **dropped**, silently | AcroForm absent, no signature field, no warning |
+| applied signature — the **appearance** | **preserved, pixel for pixel** | the widget survives with its `/AP`; rendering the signature rectangle gives **4,325 non-white pixels of 24,300 in both the source and the extract** |
 | XFA | **dropped**, unreported | `xfa` fixture |
 
 ### Metadata and catalog
@@ -82,7 +115,9 @@ the rest of it — invisibly, because none of those pages is in `/Pages`.
 | attachments / embedded files | **dropped** | `attachment-and-js` |
 | document JavaScript | **dropped** | same fixture |
 | `/OCProperties` | **dropped** | `ocproperties` |
-| `/StructTreeRoot` | **dropped** (the page keeps its `/StructParents`, pointing at a tree that is not there) | `structtree` |
+| `/StructTreeRoot` | **dropped, and not cleanly**: `/StructTreeRoot` and `/MarkInfo` go, while the page keeps `/StructParents` | measured before `{structTreeRoot: true, markInfo: true, pageStructParents: true}` → after `{false, false, **true**}` |
+| `/OCProperties` | **dropped, and not cleanly**: the catalog entry goes while the page keeps the `/Properties` naming the group | measured before `{ocProperties: true, pageOptionalContentProperties: true}` → after `{false, **true**}` |
+| `/OpenAction` | **dropped** | `nav-4p`: present before, absent after |
 
 ---
 

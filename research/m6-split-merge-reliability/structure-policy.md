@@ -53,6 +53,20 @@ orphan page objects**. Extracting all four produced 4 in the tree and still 2
 orphans, because `copyPDFPage` clones the leaf before memoising it (`:43`, `:64`),
 so a page reached both as an argument and through a reference is copied twice.
 
+That double-copy is also why a destination to a page that **was** selected still
+fails: the reference is remapped onto the copy reached through it, and that copy
+is the one that never enters `/Pages`. Measured on `dest-direct-2p` with both
+pages kept — 2 pages in the tree, 1 orphan, **0 destinations landing in the
+document**. A link that resolves and navigates nowhere is the worst of the three
+possible outcomes, because nothing reports it.
+
+**And `/Annots` is not the only way out of a page.** A page's `/B` array holds
+article beads, and a bead chains through `/N` to a bead whose `/P` is a
+different page. Measured on `page-refs-beyond-annots`: extracting page 1, which
+has no link annotations at all, produced **2 orphan page objects**. Any contract
+that enumerated annotations to find page references would have been wrong, and
+would have passed its own tests.
+
 **3. A reference whose referent is missing becomes a real dangling reference.**
 `core/PDFObjectCopier.js:97-109`:
 

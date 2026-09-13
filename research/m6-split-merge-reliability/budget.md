@@ -107,14 +107,24 @@ this research recommends sharing the constant and gating it once, because a user
 cannot be expected to learn a different ceiling per tool, while noting that
 Split/Merge outputs and Processor outputs have different size distributions.
 
-### Preview budget, which *can* be bounded
+### Preview budget, which *can* be bounded — in the terms the product controls
 
-Unlike the document graph, the preview cost is EXACT and per page. A bounded
-window of `N` pages costs at most
+Unlike the document graph, the preview's cost is driven by quantities the
+product chooses rather than by the document's structure. A bounded window of `N`
+pages holds at most
 
 ```text
-N × (retained bytes per page)  +  peak canvas RGBA for the largest page
+N × (encoded bytes per thumbnail)      retained payload   EXACT, measured per sheet size
+peak canvas RGBA for the largest page  w × h × 4          EXACT
 ```
 
-with both terms measured per sheet size. This is a real budget and does not need
-the sub-spike above.
+Both are enforceable: the product picks `N`, the thumbnail dimensions, and the
+canvas ceiling.
+
+**This is not a bound on total browser heap, and must not be written as one.**
+The JS engine's string and object bookkeeping, PDF.js's retained state, and the
+browser's decoded-image cache for displayed thumbnails are UNKNOWN terms this
+research did not close. What can be stated is that the retained payload and the
+largest single allocation stop being a function of whatever document the user
+opened — which is the property P1 lacks entirely, and the reason the
+recommendation stands.

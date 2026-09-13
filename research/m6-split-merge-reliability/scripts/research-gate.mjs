@@ -27,7 +27,13 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument, PDFName } from 'pdf-lib';
-import { structureOf } from './structure.mjs';
+import {
+    structureOf, orphanPages, destinationTargets, classifyDanglingTargets, signatureRemnants,
+} from './structure.mjs';
+import { planExtract, extractE1, extractE2 } from '../prototype/extract-destinations.mjs';
+import {
+    readForm, planFormForExtract, extractWithForm, mergeWithForms, SUPPORTED_FIELD_TYPES,
+} from '../prototype/form-subset.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RESEARCH = path.resolve(HERE, '..');
@@ -148,6 +154,21 @@ try {
         researchTreeDirty: git([
             'status', '--porcelain=v1', '--untracked-files=all', '--', 'research/m6-split-merge-reliability',
         ]).length > 0,
+        // The one a reviewer actually needs: is the *source* that produced
+        // these numbers committed? Measured before anything is written, and
+        // excluding the two files this run is about to write — otherwise a gate
+        // can never report a clean package, because writing its own evidence is
+        // what makes the tree dirty.
+        researchPackageDirtyBeforeRun: git([
+            'status', '--porcelain=v1', '--untracked-files=all', '--',
+            'research/m6-split-merge-reliability',
+            ':!research/m6-split-merge-reliability/evidence.json',
+            ':!research/m6-split-merge-reliability/evidence-browser.json',
+        ]).length > 0,
+        untrackedOutsideResearch: git(['status', '--porcelain=v1', '--untracked-files=all'])
+            .split('\n')
+            .filter((line) => line.startsWith('??') && !line.includes('research/m6-split-merge-reliability'))
+            .map((line) => line.slice(3)),
         coreCiRunsThisGate: false,
         dependencies: {
             'pdf-lib': versionOf('pdf-lib'),
@@ -465,6 +486,238 @@ try {
         ['M6-H13 ownership and cancellation', 'generalize M5 RunOwnership or define a separate contract'],
         ['M6-H14 output naming', 'extracted_<source>.pdf and merged_document.pdf collide on repeat'],
     ]) humanOpen(h[0], h[1]);
+
+    // ---- 6. RF-R1: destinations, one shape at a time -------------------------
+    //
+    // `nav-4p` reported "4 links, 0 of them landing in the document" and could
+    // not say which shape caused it. These can.
+    console.log('\n=== 6. destinations (RF-R1) ===');
+    evidence.destinations = {};
+
+    const destCases = [
+        { fixture: 'dest-direct-2p', keep: [0, 1], label: 'selected → selected, /Dest' },
+        { fixture: 'dest-direct-2p', keep: [0], label: 'selected → excluded, /Dest' },
+        { fixture: 'dest-goto-2p', keep: [0, 1], label: 'selected → selected, /A /GoTo /D' },
+        { fixture: 'dest-goto-2p', keep: [0], label: 'selected → excluded, /A /GoTo /D' },
+        { fixture: 'dest-named-2p', keep: [0, 1], label: 'named destination, both pages kept' },
+        { fixture: 'dest-named-2p', keep: [0], label: 'named destination → excluded page' },
+        { fixture: 'dest-cyclic-2p', keep: [0], label: 'cyclic destinations, one page kept' },
+        { fixture: 'dest-shared-target-3p', keep: [0, 1], label: 'shared target, target excluded' },
+        { fixture: 'dest-shared-target-3p', keep: [0, 1, 2], label: 'shared target, target kept' },
+        { fixture: 'page-refs-beyond-annots', keep: [0], label: 'page reference outside /Annots (/B bead)' },
+    ];
+
+    for (const c of destCases) {
+        const src = bytesOf(c.fixture);
+        const key = `${c.fixture}[${c.keep.join(',')}]`;
+
+        const legacyOut = await legacyExtract(src, c.keep);
+        const legacy = await structureOf(legacyOut);
+        const legacyOrphans = await orphanPages(legacyOut);
+        const legacyDangling = await classifyDanglingTargets(legacyOut, legacy);
+
+        const e2 = await extractE2(src, c.keep);
+        const after = await structureOf(e2.bytes);
+        const orphansAfter = await orphanPages(e2.bytes);
+        const targetsAfter = destinationTargets(after);
+        const danglingAfter = await classifyDanglingTargets(e2.bytes, after);
+
+        evidence.destinations[key] = {
+            label: c.label,
+            legacy: {
+                pagesInTree: legacy.pageCount,
+                orphanPages: legacyOrphans.count,
+                targets: destinationTargets(legacy),
+                orphanTargetDests: legacyDangling.orphanTarget,
+            },
+            e2: {
+                pagesInTree: after.pageCount,
+                orphanPages: orphansAfter.count,
+                targets: targetsAfter,
+                orphanTargetDests: danglingAfter.orphanTarget,
+                rebuilt: e2.rebuilt,
+                losses: e2.losses,
+            },
+        };
+
+        measure(`${c.label} — today`,
+            `${legacy.pageCount} page(s) in tree, ${legacyOrphans.count} orphan, `
+            + `${destinationTargets(legacy).inDocument} destination(s) landing in the document`);
+        probe(`${c.label} — E2 leaves no page outside the tree`,
+            orphansAfter.count === 0,
+            `${after.pageCount} in tree, ${orphansAfter.count} orphan`);
+        assert_(`${c.label} — every surviving destination lands in the output page tree`,
+            targetsAfter.dangling === 0 && danglingAfter.orphanTarget === 0,
+            `in-document ${targetsAfter.inDocument}, dangling ${targetsAfter.dangling}, `
+            + `named ${targetsAfter.named}, reported losses ${e2.losses.length}`);
+    }
+
+    baselineFail('today an internal link survives and lands on a page the reader cannot reach',
+        evidence.destinations['dest-direct-2p[0,1]'].legacy.orphanPages > 0
+        && evidence.destinations['dest-direct-2p[0,1]'].legacy.targets.inDocument === 0,
+        'even when the target page is selected, the copied destination points at a duplicate outside /Pages');
+
+    // Retargeting has to land on the *right* page, not merely on a page. Two
+    // pages addressing one target is where a rebuild indexed by position would
+    // quietly pick the wrong one.
+    const retarget = await extractE2(bytesOf('dest-shared-target-3p'), [0, 1, 2]);
+    const retargetStruct = await structureOf(retarget.bytes);
+    const retargetTargets = retargetStruct.links.map((l) => l.dest?.pageIndex);
+    assert_('two pages addressing the same target both retarget to it',
+        retargetTargets.length === 2 && retargetTargets.every((t) => t === 2),
+        `targets: ${JSON.stringify(retargetTargets)}`);
+
+    const e1Refuse = await extractE1(bytesOf('dest-direct-2p'), [0]);
+    const e1Allow = await extractE1(bytesOf('dest-direct-2p'), [0, 1]);
+    evidence.destinations.e1 = { refused: e1Refuse.status, allowed: e1Allow.status };
+    probe('E1 refuses a selection that would break navigation, before copying anything',
+        e1Refuse.status === 'REFUSED' && e1Refuse.code === 'BROKEN_DESTINATIONS',
+        String(e1Refuse.reason ?? '').slice(0, 90));
+    assert_('E1 allows a selection that keeps its targets', e1Allow.status === 'READY');
+
+    const beads = await planExtract(bytesOf('page-refs-beyond-annots'), [0]);
+    assert_('a page reference outside /Annots is detected during planning',
+        beads.otherPageReferenceSites.length > 0,
+        JSON.stringify(beads.otherPageReferenceSites));
+
+    // ---- 7. RF-R2: the form subset -------------------------------------------
+    console.log('\n=== 7. AcroForm subset (RF-R2) ===');
+    evidence.forms = { supportedTypes: SUPPORTED_FIELD_TYPES };
+
+    const formDoc = await PDFDocument.load(bytesOf('form-2p'), { updateMetadata: false });
+    const formRead = readForm(formDoc);
+    evidence.forms.form2p = {
+        fields: formRead.fields.map((f) => ({ name: f.name, ft: f.ft, pages: f.widgetPages })),
+        outsideSubset: formRead.outsideSubset,
+    };
+    measure('form-2p as the subset reader sees it',
+        formRead.fields.map((f) => `${f.name}${f.ft} p${f.widgetPages.join('/')}`).join(' '));
+
+    const bothPages = await extractWithForm(bytesOf('form-2p'), [0, 1]);
+    const bothStruct = await structureOf(bothPages.bytes);
+    evidence.forms.extractBothPages = {
+        status: bothPages.status,
+        rebuiltFields: bothPages.rebuiltFields,
+        acroForm: bothStruct.form.present,
+        orphanWidgets: bothStruct.form.orphanWidgets.length,
+        fields: bothStruct.form.fields.map((f) => ({ name: f.name, value: f.value })),
+    };
+    assert_('a form wholly inside the selection is rebuilt, with no orphan widgets',
+        bothPages.status === 'READY' && bothStruct.form.present === true
+        && bothStruct.form.orphanWidgets.length === 0
+        && bothStruct.form.fields.length === 2,
+        `AcroForm ${bothStruct.form.present}, fields ${bothStruct.form.fields.length}, `
+        + `orphans ${bothStruct.form.orphanWidgets.length}, `
+        + `values ${JSON.stringify(bothStruct.form.fields.map((f) => f.value))}`);
+
+    const straddle = await extractWithForm(bytesOf('form-field-across-pages'), [0]);
+    evidence.forms.straddling = { status: straddle.status, code: straddle.code };
+    probe('a field whose widgets straddle the selection is a typed refusal, not half a form',
+        straddle.status === 'REFUSED' && straddle.code === 'FIELD_SPANS_SELECTION',
+        String(straddle.reason ?? '').slice(0, 90));
+
+    const collideRename = await mergeWithForms(
+        [bytesOf('collide-a'), bytesOf('collide-b')], { onCollision: 'rename' },
+    );
+    const collideRefuse = await mergeWithForms(
+        [bytesOf('collide-a'), bytesOf('collide-b')], { onCollision: 'refuse' },
+    );
+    const renameStruct = collideRename.status === 'READY' ? await structureOf(collideRename.bytes) : null;
+    evidence.forms.mergeCollision = {
+        renameStatus: collideRename.status,
+        collisions: collideRename.collisions,
+        renamed: collideRename.renamed,
+        refuseStatus: collideRefuse.status,
+        refuseCode: collideRefuse.code,
+        afterRename: renameStruct ? {
+            acroForm: renameStruct.form.present,
+            fields: renameStruct.form.fields.map((f) => ({ name: f.name, value: f.value })),
+            orphanWidgets: renameStruct.form.orphanWidgets.length,
+        } : null,
+    };
+    assert_('renaming on collision yields one valid form, distinct names, no orphan widgets',
+        collideRename.status === 'READY' && renameStruct?.form.present === true
+        && renameStruct.form.orphanWidgets.length === 0
+        && new Set(renameStruct.form.fields.map((f) => f.name)).size === renameStruct.form.fields.length,
+        JSON.stringify(evidence.forms.mergeCollision.afterRename));
+    probe('and refusing the same input is available',
+        collideRefuse.status === 'REFUSED' && collideRefuse.code === 'DUPLICATE_FIELD_NAMES',
+        String(collideRefuse.reason ?? '').slice(0, 90));
+    humanOpen('M6-H3 AcroForm / widget preservation (revised)',
+        'the prototype carries /Tx /Btn /Ch /Sig and refuses /AA, /CO and document JavaScript; '
+        + 'rename-on-collision is offered only because those three are absent');
+
+    // ---- 8. RF-R3: what a signature leaves behind ----------------------------
+    console.log('\n=== 8. signature remnants (RF-R3) ===');
+    const sigSrc = bytesOf('sig-applied');
+    const sigBefore = await structureOf(sigSrc);
+    const sigLegacy = await structureOf(await legacyExtract(sigSrc, [0]));
+    evidence.signature = {
+        before: signatureRemnants(sigBefore),
+        afterLegacyExtract: signatureRemnants(sigLegacy),
+        widgetsOnPage: sigLegacy.annots.filter((a) => a.subtype === '/Widget').length,
+        orphanWidgetDetail: sigLegacy.form.orphanWidgets,
+    };
+    measure('sig-applied before', JSON.stringify(evidence.signature.before));
+    measure('sig-applied after a legacy extract', JSON.stringify(evidence.signature.afterLegacyExtract));
+    baselineFail('the signature appearance survives while the signature does not',
+        sigLegacy.form.orphanWidgets.length > 0
+        && sigLegacy.form.orphanWidgets.some((w) => w.hasAppearance === true),
+        `${sigLegacy.form.orphanWidgets.length} widget(s) left, `
+        + `${sigLegacy.form.orphanWidgets.filter((w) => w.hasAppearance).length} with an /AP that still draws`);
+    humanOpen('M6-H1 applied signature policy — Extract (revised)',
+        'A hard refuse / B allow an unsigned derivative but remove the signature widget and its '
+        + 'appearance / C allow with a persistent artifact-level unsigned-derivative indication');
+
+    // ---- 9. RF-R6: catalog structures, each with its own consequence ---------
+    //
+    // "All of these are dropped" is true and useless as a policy. What a
+    // contract needs is a deterministic detector and a statement of what the
+    // drop actually changes — and for two of them the drop is not clean: the
+    // page keeps a reference to the structure that left.
+    console.log('\n=== 9. catalog structures (RF-R6) ===');
+    evidence.catalogStructures = {};
+
+    const remnants = async (bytes) => {
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const page = doc.getPages()[0];
+        const resources = page.node.lookup(PDFName.of('Resources'));
+        const properties = resources && typeof resources.lookup === 'function'
+            ? resources.lookup(PDFName.of('Properties'))
+            : undefined;
+        return {
+            structTreeRoot: doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined,
+            markInfo: doc.catalog.get(PDFName.of('MarkInfo')) !== undefined,
+            pageStructParents: page.node.get(PDFName.of('StructParents')) !== undefined,
+            ocProperties: doc.catalog.get(PDFName.of('OCProperties')) !== undefined,
+            pageOptionalContentProperties: properties !== undefined,
+            openAction: doc.catalog.get(PDFName.of('OpenAction')) !== undefined,
+        };
+    };
+
+    for (const fixture of ['structtree', 'ocproperties', 'nav-4p']) {
+        const src = bytesOf(fixture);
+        const before = await remnants(src);
+        const after = await remnants(await legacyExtract(src, [0]));
+        evidence.catalogStructures[fixture] = { before, after };
+        measure(`${fixture} remnants`, `before ${JSON.stringify(before)}`);
+        measure(`${fixture} after extract`, `after ${JSON.stringify(after)}`);
+    }
+
+    probe('a tagged page keeps /StructParents after its structure tree is dropped',
+        evidence.catalogStructures.structtree.after.pageStructParents === true
+        && evidence.catalogStructures.structtree.after.structTreeRoot === false,
+        'the artifact claims membership of a structure tree it does not contain');
+    probe('an optional-content page keeps its /Properties after /OCProperties is dropped',
+        evidence.catalogStructures.ocproperties.after.pageOptionalContentProperties === true
+        && evidence.catalogStructures.ocproperties.after.ocProperties === false,
+        'marked content still names an optional-content group the document no longer configures');
+    baselineFail('/OpenAction is dropped rather than retargeted or refused',
+        evidence.catalogStructures['nav-4p'].before.openAction === true
+        && evidence.catalogStructures['nav-4p'].after.openAction === false);
+    humanOpen('M6-H9 uncommon catalog structures (revised)',
+        'each needs its own policy: a half-dropped structure tree and a dangling optional-content '
+        + 'reference are not the same kind of loss as an attachment that simply goes');
 
     fs.writeFileSync(
         path.join(RESEARCH, 'evidence.json'),

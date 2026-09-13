@@ -59,6 +59,21 @@ has never been wrong has usually never been checked.
    content stream in behind pdf-lib's own, which would have made the page's
    drawing order depend on an implementation detail. Rewritten to use pdf-lib's
    operator helpers.
+4. **The preservation matrix asserted something the evidence had already
+   contradicted.** It said an internal link to a kept page was "preserved,
+   retargeted" while `evidence.json` recorded `inDocumentDests: 0` in every
+   Extract case. The evidence was right; the sentence was written from what
+   `copyPages` ought to do. This is the failure mode worth naming: a document
+   that describes a measurement it did not read. The per-shape fixtures in
+   RF-R1 exist so the claim now has one case each rather than one summary.
+5. `extractWithForm` returned `{ status: 'REFUSED', ...plan }`, and the spread
+   overwrote the status with the plan's own `'REFUSE'`. A refusal that worked
+   correctly — right code, right reason — failed its own check, and for one run
+   the gate reported the straddling-field case as broken when it was not.
+6. A gate section was written against a section heading copied from the M5 gate
+   (`// ---- 9. ownership`) that does not exist in this file. The edit was
+   rejected rather than applied, which is the good failure; the bad version of
+   the same mistake would have been an anchor that matched something else.
 
 ## Not attempted
 

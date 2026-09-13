@@ -204,6 +204,9 @@ External HTTP(S) during all of it: **0**.
 | # | FAIL | Root cause | Fix direction |
 | --- | --- | --- | --- |
 | B1 | A page nobody selected is copied into the output | `PDFObjectCopier` follows a `/Dest` page reference with no branch for what the referent is (`core/PDFObjectCopier.js:97-109`) | decide the destination policy **before** copying; see [`extract-contract.md`](extract-contract.md) |
+| B1b | **Even a link to a page that *was* selected lands outside the output page tree** | `copyPDFPage` clones the leaf before memoising it (`:43`, `:64`), so a page reached both as an argument and through a reference is copied twice, and the destination is remapped onto the copy that never enters `/Pages` | strip internal destinations before copying and rebuild them from the output's own page refs — prototyped, 0 orphans in all ten cases |
+| B1c | **A page can reach another page without any annotation**: an article bead `/B` chains to a bead whose `/P` is a different page | the copier follows every reference, and `/B` is a page entry like any other | detect page references outside `/Annots` during planning — `page-refs-beyond-annots` left 2 orphans from a one-page extract |
+| B1d | **A signature's appearance survives its signature** | the widget travels with the page carrying its `/AP`; the AcroForm does not travel at all | 4,325 non-white pixels of 24,300 before and after — identical; see M6-H1 candidates A/B/C |
 | B2 | Every catalog-level structure is dropped | `copyPages` touches only the page leaf; pdf-lib copies no document-level structure at all | an explicit structure policy per item: reconstruct, refuse, or state as unsupported |
 | B3 | Source metadata replaced by pdf-lib's own | `load`/`create` default to `updateMetadata: true` (`api/PDFDocument.js:121,144`) | `updateMetadata: false` plus the M5 H12 carry-or-refuse contract |
 | B4 | A signed source produces an ordinary-looking file | nothing inspects the source | M6-H1 / M6-H2 |

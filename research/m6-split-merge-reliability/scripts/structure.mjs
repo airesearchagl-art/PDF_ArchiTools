@@ -252,7 +252,12 @@ function form(doc, pageRefs, annotRefsByPage) {
                     ref: entry.tag,
                     fieldName: textOf(look(doc, annot.get(PDFName.of('T')))),
                     value: textOf(look(doc, annot.get(PDFName.of('V')))),
+                    ft: nameOf(annot.get(PDFName.of('FT'))),
                     hasParent: annot.get(PDFName.of('Parent')) !== undefined,
+                    // The appearance is what actually draws. A widget that has
+                    // one still shows a filled field — or a signature — after
+                    // the structure that gave it meaning has gone.
+                    hasAppearance: annot.get(PDFName.of('AP')) !== undefined,
                 });
             }
         }
@@ -430,3 +435,96 @@ export async function structureOf(bytes, { ignoreEncryption = true } = {}) {
 
 /** The page markers, in the order the document actually holds them. */
 export const pageOrderMarkers = (structure) => structure.pages.map((p) => p.index);
+
+/**
+ * Page objects that exist in the file but are not members of its page tree.
+ *
+ * This is the invariant an Extract has to satisfy and currently does not: a
+ * destination that references a page causes that page to be copied
+ * (`core/PDFObjectCopier.js:97-109` has no branch for what the referent is),
+ * and the copy is registered without ever being inserted into `/Pages`
+ * (`api/PDFDocument.js:611`). The result is invisible to a reader and present
+ * in the bytes — content nobody selected, shipped.
+ */
+export async function orphanPages(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false, ignoreEncryption: true });
+    const inTree = new Set(doc.getPages().map((p) => p.ref.tag));
+    const orphans = [];
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        const type = obj?.get?.(PDFName.of('Type'));
+        if (nameOf(type) === '/Page' && !inTree.has(ref.tag)) orphans.push(ref.tag);
+    }
+    return { count: orphans.length, refs: orphans, inTree: inTree.size };
+}
+
+/**
+ * Every internal destination in a document, classified by where it lands.
+ *
+ * The distinction that matters is not "does the reference resolve" but "does it
+ * resolve to a page of *this document's* page tree". A destination pointing at
+ * an orphan copy resolves perfectly and navigates nowhere a reader can go,
+ * which is worse than a link that is plainly broken because nothing reports it.
+ */
+export function destinationTargets(structure) {
+    const out = { inDocument: 0, orphanTarget: 0, dangling: 0, named: 0, pageNumber: 0, unknown: 0 };
+    const consider = (dest) => {
+        if (!dest) return;
+        if (dest.target === 'in-document') out.inDocument += 1;
+        else if (dest.target === 'dangling') out.dangling += 1;
+        else if (dest.target === 'named') out.named += 1;
+        else if (dest.target === 'page-number') out.pageNumber += 1;
+        else out.unknown += 1;
+    };
+    for (const link of structure.links) consider(link.dest);
+    for (const entry of structure.namedDests) consider(entry.dest);
+    for (const item of structure.outlines?.items ?? []) consider(item.dest);
+    consider(structure.openAction);
+    return out;
+}
+
+/**
+ * A destination classified as `dangling` may be one of two different things,
+ * and the difference decides which fix applies: the referent may be missing
+ * entirely, or it may be a perfectly good page object that is simply not in the
+ * page tree. Only a reader that enumerates indirect objects can tell.
+ */
+export async function classifyDanglingTargets(bytes, structure) {
+    const { refs } = await orphanPages(bytes);
+    const orphanTags = new Set(refs);
+    let orphanTarget = 0;
+    let missing = 0;
+    const seen = [];
+    const check = (dest) => {
+        if (!dest || dest.target !== 'dangling' || !dest.ref) return;
+        if (orphanTags.has(dest.ref)) orphanTarget += 1;
+        else missing += 1;
+        seen.push({ ref: dest.ref, orphan: orphanTags.has(dest.ref) });
+    };
+    for (const link of structure.links) check(link.dest);
+    for (const entry of structure.namedDests) check(entry.dest);
+    for (const item of structure.outlines?.items ?? []) check(item.dest);
+    check(structure.openAction);
+    return { orphanTarget, missing, seen };
+}
+
+/**
+ * What a signature leaves behind once its document has been rebuilt.
+ *
+ * "The signature is gone" and "the document still looks signed" are different
+ * statements, and only the second one is visible to whoever opens the file. The
+ * appearance stream is the thing that draws, so it is reported separately from
+ * the field and the value.
+ */
+export function signatureRemnants(structure) {
+    const widgets = [
+        ...structure.form.fields.filter((f) => f.ft === '/Sig'),
+    ];
+    return {
+        acroFormPresent: structure.form.present,
+        signatureFields: widgets.length,
+        appliedValues: widgets.filter((f) => f.signed).length,
+        orphanWidgets: structure.form.orphanWidgets.length,
+        orphanWidgetsWithAppearance: structure.form.orphanWidgets.filter((w) => w.hasAppearance).length,
+        sigFlags: structure.form.sigFlags,
+    };
+}

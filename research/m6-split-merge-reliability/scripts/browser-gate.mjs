@@ -72,6 +72,19 @@ const provenanceOf = () => {
         researchTreeDirty: git([
             'status', '--porcelain=v1', '--untracked-files=all', '--', 'research/m6-split-merge-reliability',
         ]).length > 0,
+        // As in the node gate: the question worth answering is whether the
+        // source that produced these numbers is committed, which the generated
+        // evidence files cannot be part of.
+        researchPackageDirtyBeforeRun: git([
+            'status', '--porcelain=v1', '--untracked-files=all', '--',
+            'research/m6-split-merge-reliability',
+            ':!research/m6-split-merge-reliability/evidence.json',
+            ':!research/m6-split-merge-reliability/evidence-browser.json',
+        ]).length > 0,
+        untrackedOutsideResearch: git(['status', '--porcelain=v1', '--untracked-files=all'])
+            .split('\n')
+            .filter((line) => line.startsWith('??') && !line.includes('research/m6-split-merge-reliability'))
+            .map((line) => line.slice(3)),
         coreCiRunsThisGate: false,
         dependencies: {
             'pdf-lib': versionOf('pdf-lib'),
@@ -209,6 +222,28 @@ try {
         'there is no run token in the component, so a slow first source can overwrite a fast second one');
     humanOpen('M6-H13 ownership and cancellation',
         'generalize the M5 RunOwnership primitive, or define a Split/Merge-specific contract');
+
+    // ---- 4b. does a derived document still look signed? ---------------------
+    //
+    // RF-R3. Structural readback can say the AcroForm is gone and the widget
+    // stayed. Only rendering can say whether anything draws, and "the
+    // cryptographic signature was removed" and "the page still shows a
+    // signature block" are different facts for whoever opens the file.
+    console.log('\n=== 4b. signature appearance after an extract ===');
+    const sigRect = [380, 80, 560, 140];
+    const sig = await call('signatureAppearance', 'sig-applied', sigRect);
+    evidence.signatureAppearance = { rect: sigRect, ...sig };
+    measure('ink inside the signature rectangle',
+        `source ${fmt(sig.source.nonWhitePixels)} / ${fmt(sig.source.sampled)} px, `
+        + `extracted ${fmt(sig.extracted.nonWhitePixels)} / ${fmt(sig.extracted.sampled)} px`);
+    baselineFail('the extracted document still draws the signature appearance',
+        sig.extracted.nonWhitePixels > 0
+        && sig.extracted.nonWhitePixels >= Math.floor(sig.source.nonWhitePixels * 0.5),
+        `${fmt(sig.extracted.nonWhitePixels)} non-white pixels remain where the signature block was `
+        + `(source ${fmt(sig.source.nonWhitePixels)})`);
+    humanOpen('M6-H1 applied signature policy — Extract (revised)',
+        'the appearance is what a reader sees, so removing the widget and its /AP is a distinct '
+        + 'option from refusing the operation');
 
     // ---- 5. local only -----------------------------------------------------
     console.log('\n=== 5. local only ===');
