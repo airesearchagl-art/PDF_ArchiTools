@@ -2,7 +2,7 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "7d9bc26d8a28bb33bba3dc319e1f23b2ff708fff",
+    "testedResearchHead": "3560ec652416bdf5ae5d2a7d02c7cb4d542694c9",
     "workingTreeDirty": true,
     "researchTreeDirty": true,
     "researchPackageDirtyBeforeRun": false,
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-13T10:15:53.005Z"
+    "ranAt": "2026-09-13T11:27:30.551Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -104,7 +104,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 2114
+      "bytesMeasuredOnly": 2113
     },
     "middle": {
       "requested": 2,
@@ -127,7 +127,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 1463
+      "bytesMeasuredOnly": 1464
     },
     "geometry": {
       "rotate-90": {
@@ -472,7 +472,7 @@
     "signature": {
       "beforeSigned": true,
       "afterHasForm": false,
-      "bytesMeasuredOnly": 1560
+      "bytesMeasuredOnly": 1558
     },
     "xfa": {
       "before": true,
@@ -569,7 +569,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 2669
+      "bytesMeasuredOnly": 2668
     },
     "A+A": {
       "pages": 6,
@@ -2300,6 +2300,150 @@
       ],
       "status": "REFUSED",
       "code": "UNSCANNABLE_ACTIONS"
+    }
+  },
+  "ocEnvelope": {
+    "ocg-configs": {
+      "label": "A1 — /OCProperties /Configs, an alternate configuration",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/OCProperties /Configs with 1 alternate configuration(s)"
+      ]
+    },
+    "annot-oc": {
+      "label": "A2 — an annotation whose /OC puts it in a group",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 annotation /OC"
+      ]
+    },
+    "xobject-oc": {
+      "label": "A3 — a form XObject whose /OC puts it in a group",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 XObject /M6Layered-9742682568 /OC"
+      ]
+    },
+    "malformed-ocproperties": {
+      "label": "A4 — /OCGs is a dictionary and /D is a number",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/OCProperties /OCGs is not an array",
+        "/OCProperties /D is not a dictionary"
+      ]
+    }
+  },
+  "orderLabels": {
+    "ocg-order-invalid-top-label": {
+      "label": "a text label at the top level of /Order",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/D /Order holds a text label away from the start of its group"
+      ]
+    },
+    "ocg-order-invalid-mid-label": {
+      "label": "a text label part-way through a nested array",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/D /Order holds a text label away from the start of its group"
+      ]
+    },
+    "ocg-order-unused-group": {
+      "label": "/Order naming a group no kept page uses",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/D /Order names a group no kept page uses"
+      ]
+    },
+    "supported": {
+      "status": "READY",
+      "order": [
+        "M6-ORD-A",
+        [
+          "label:M6-ORDER-LABEL",
+          "M6-ORD-B",
+          "M6-ORD-C"
+        ]
+      ]
+    }
+  },
+  "artifactWideJs": {
+    "js-indirect-a": {
+      "label": "annotation /A to an indirect action",
+      "reachableInSource": 1,
+      "objectTableInSource": 1,
+      "objectTableAfterCopy": 1,
+      "removedReferences": 1,
+      "removedObjects": 1,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
+    },
+    "js-indirect-aa": {
+      "label": "annotation /AA to an indirect action",
+      "reachableInSource": 1,
+      "objectTableInSource": 1,
+      "objectTableAfterCopy": 1,
+      "removedReferences": 1,
+      "removedObjects": 1,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
+    },
+    "js-indirect-next": {
+      "label": "/Next to an indirect action",
+      "reachableInSource": 1,
+      "objectTableInSource": 1,
+      "objectTableAfterCopy": 1,
+      "removedReferences": 1,
+      "removedObjects": 1,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
+    },
+    "js-indirect-nested": {
+      "label": "two indirect /Next links down",
+      "reachableInSource": 1,
+      "objectTableInSource": 1,
+      "objectTableAfterCopy": 1,
+      "removedReferences": 1,
+      "removedObjects": 1,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
+    },
+    "js-action-shared": {
+      "label": "one indirect action referenced twice",
+      "reachableInSource": 2,
+      "objectTableInSource": 1,
+      "objectTableAfterCopy": 1,
+      "removedReferences": 2,
+      "removedObjects": 1,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
+    },
+    "js-next-array": {
+      "label": "/Next array holding an action",
+      "reachableInSource": 1,
+      "objectTableInSource": 0,
+      "objectTableAfterCopy": 0,
+      "removedReferences": 1,
+      "removedObjects": 0,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
+    },
+    "js-annot-a": {
+      "label": "a direct action on /A, for contrast",
+      "reachableInSource": 1,
+      "objectTableInSource": 0,
+      "objectTableAfterCopy": 0,
+      "removedReferences": 1,
+      "removedObjects": 0,
+      "reachableAfterReadback": 0,
+      "artifactWideAfterReadback": 0
     }
   }
 }
