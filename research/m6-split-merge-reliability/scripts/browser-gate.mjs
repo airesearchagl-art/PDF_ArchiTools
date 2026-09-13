@@ -235,7 +235,8 @@ try {
     evidence.signatureAppearance = { rect: sigRect, ...sig };
     measure('ink inside the signature rectangle',
         `source ${fmt(sig.source.nonWhitePixels)} / ${fmt(sig.source.sampled)} px, `
-        + `extracted ${fmt(sig.extracted.nonWhitePixels)} / ${fmt(sig.extracted.sampled)} px`);
+        + `extracted ${fmt(sig.extracted.nonWhitePixels)} / ${fmt(sig.extracted.sampled)} px `
+        + `(artifact ${fmt(sig.extractedBytesMeasuredOnly)} B, MEASURED_ONLY)`);
     baselineFail('the extracted document still draws the signature appearance',
         sig.extracted.nonWhitePixels > 0
         && sig.extracted.nonWhitePixels >= Math.floor(sig.source.nonWhitePixels * 0.5),

@@ -347,7 +347,11 @@ window.__m6 = {
     return {
       source: await inkInside(bytes),
       extracted: await inkInside(extracted),
-      extractedBytes: extracted.length,
+      // MEASURED_ONLY, and named so. `PDFDocument.create()` defaults to
+      // updateMetadata: true, so every run writes a fresh /ModDate and the
+      // serialised offsets move a digit with it — 1,559 one run, 1,560 the
+      // next. The ink counts either side of it do not move.
+      extractedBytesMeasuredOnly: extracted.length,
     };
   },
 };

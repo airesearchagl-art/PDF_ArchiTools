@@ -86,6 +86,14 @@ has never been wrong has usually never been checked.
    stability check would have been answerable on the first attempt instead of
    looking like non-determinism in the measurements.
 
+   The first correction was also incomplete, in a way worth recording because
+   it is the same mistake twice: the node gate's fields were renamed and the
+   browser harness's `extractedBytes` was not, so the next stability run failed
+   again on a single leaf — 1,559 against 1,560 — while the ink counts either
+   side of it were identical at 4,325 in both runs. A volatile-value audit that
+   covers one of two instruments is not an audit; it is a fix that happens to
+   make the louder half quiet.
+
 ## Not attempted
 
 - No production file was changed. `src/` diff against
