@@ -2,14 +2,15 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "testedResearchHead": "d72418756ca3287e88a3b6d8dcc6b539f3f91c64",
     "workingTreeDirty": true,
+    "researchTreeDirty": true,
     "coreCiRunsThisGate": false,
     "dependencies": {
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-13T02:43:29.943Z"
+    "ranAt": "2026-09-13T02:55:18.867Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -103,7 +104,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytes": 1464
+      "bytes": 1463
     },
     "geometry": {
       "rotate-90": {
@@ -440,7 +441,7 @@
     "signature": {
       "beforeSigned": true,
       "afterHasForm": false,
-      "producedBytes": 1242
+      "producedBytes": 1241
     },
     "xfa": {
       "before": true,

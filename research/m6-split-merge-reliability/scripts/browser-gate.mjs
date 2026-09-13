@@ -21,6 +21,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import puppeteer from 'puppeteer';
@@ -47,7 +49,46 @@ const measure = (name, detail = '') => say('MEASURE', name, null, detail);
 const baselineFail = (name, reproduced, detail = '') => say('BASELINE-FAIL', name, !!reproduced, detail);
 const humanOpen = (name, detail = '') => say('HUMAN-OPEN', name, null, detail);
 
-const evidence = { preview: {}, strategies: {}, lifetime: {}, ownership: {}, network: {} };
+/**
+ * The same provenance the node gate records, because this file is committed
+ * evidence too. Numbers that cannot be traced to a head and a set of committed
+ * scripts are numbers nobody can check.
+ */
+const provenanceOf = () => {
+    const require_ = createRequire(import.meta.url);
+    const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+    const versionOf = (spec) => {
+        try {
+            return require_(require_.resolve(`${spec}/package.json`, { paths: [ROOT] })).version;
+        } catch (error) {
+            return `unresolvable: ${String(error?.message ?? error).split('\n')[0]}`;
+        }
+    };
+    return {
+        productionBase: git(['rev-parse', 'origin/main']),
+        researchBranchAtRun: git(['rev-parse', '--abbrev-ref', 'HEAD']),
+        testedResearchHead: git(['rev-parse', 'HEAD']),
+        workingTreeDirty: git(['status', '--porcelain=v1', '--untracked-files=all']).length > 0,
+        researchTreeDirty: git([
+            'status', '--porcelain=v1', '--untracked-files=all', '--', 'research/m6-split-merge-reliability',
+        ]).length > 0,
+        coreCiRunsThisGate: false,
+        dependencies: {
+            'pdf-lib': versionOf('pdf-lib'),
+            'pdfjs-dist': versionOf('pdfjs-dist'),
+        },
+        ranAt: new Date().toISOString(),
+    };
+};
+
+const evidence = {
+    provenance: provenanceOf(),
+    preview: {},
+    strategies: {},
+    lifetime: {},
+    ownership: {},
+    network: {},
+};
 
 const server = await createServer({
     root: ROOT, server: { port: PORT, strictPort: true }, logLevel: 'warn',

@@ -138,7 +138,16 @@ try {
         testedResearchHead: git(['rev-parse', 'HEAD']),
         // Untracked files count. Evidence bound to a tree with uncommitted work
         // in it is evidence about something nobody else can check out.
+        //
+        // Both figures are kept because they answer different questions. The
+        // repository carries untracked directories that predate this research
+        // (`public/tessdata/`, `public/tesseract/`, `spike/`), so the whole-tree
+        // flag is true whatever this branch does; what a reviewer needs to know
+        // is whether the *research* that produced these numbers is committed.
         workingTreeDirty: git(['status', '--porcelain=v1', '--untracked-files=all']).length > 0,
+        researchTreeDirty: git([
+            'status', '--porcelain=v1', '--untracked-files=all', '--', 'research/m6-split-merge-reliability',
+        ]).length > 0,
         coreCiRunsThisGate: false,
         dependencies: {
             'pdf-lib': versionOf('pdf-lib'),

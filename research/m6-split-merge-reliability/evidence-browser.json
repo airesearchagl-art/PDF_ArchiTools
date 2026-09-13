@@ -1,73 +1,86 @@
 {
+  "provenance": {
+    "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
+    "testedResearchHead": "d72418756ca3287e88a3b6d8dcc6b539f3f91c64",
+    "workingTreeDirty": true,
+    "researchTreeDirty": true,
+    "coreCiRunsThisGate": false,
+    "dependencies": {
+      "pdf-lib": "1.17.1",
+      "pdfjs-dist": "5.4.449"
+    },
+    "ranAt": "2026-09-13T02:56:34.062Z"
+  },
   "preview": {
     "pages-10": {
       "name": "pages-10",
       "pages": 10,
       "scale": 1.5,
-      "elapsedMs": 252,
+      "elapsedMs": 249,
       "peakCanvasRgbaBytes": 4502816,
       "totalCanvasRgbaBytes": 45028160,
       "retainedDataUrlChars": 433460,
       "retainedDataUrlBytes": 866920,
-      "heapBefore": 8401334,
-      "heapAfter": 8468602,
-      "heapDelta": 67268,
+      "heapBefore": 8409918,
+      "heapAfter": 8465698,
+      "heapDelta": 55780,
       "retainedCount": 10
     },
     "pages-50": {
       "name": "pages-50",
       "pages": 50,
       "scale": 1.5,
-      "elapsedMs": 891,
+      "elapsedMs": 893,
       "peakCanvasRgbaBytes": 4502816,
       "totalCanvasRgbaBytes": 225140800,
       "retainedDataUrlChars": 2202588,
       "retainedDataUrlBytes": 4405176,
-      "heapBefore": 8526469,
-      "heapAfter": 10485196,
-      "heapDelta": 1958727,
+      "heapBefore": 8523565,
+      "heapAfter": 10482348,
+      "heapDelta": 1958783,
       "retainedCount": 50
     },
     "pages-100": {
       "name": "pages-100",
       "pages": 100,
       "scale": 1.5,
-      "elapsedMs": 1728,
+      "elapsedMs": 1725,
       "peakCanvasRgbaBytes": 4502816,
       "totalCanvasRgbaBytes": 450281600,
       "retainedDataUrlChars": 4388036,
       "retainedDataUrlBytes": 8776072,
-      "heapBefore": 10593763,
-      "heapAfter": 13061032,
-      "heapDelta": 2467269,
+      "heapBefore": 10590915,
+      "heapAfter": 13058180,
+      "heapDelta": 2467265,
       "retainedCount": 100
     },
     "pages-200": {
       "name": "pages-200",
       "pages": 200,
       "scale": 1.5,
-      "elapsedMs": 3393,
+      "elapsedMs": 3385,
       "peakCanvasRgbaBytes": 4502816,
       "totalCanvasRgbaBytes": 900563200,
       "retainedDataUrlChars": 8861592,
       "retainedDataUrlBytes": 17723184,
-      "heapBefore": 13271787,
-      "heapAfter": 18196274,
-      "heapDelta": 4924487,
+      "heapBefore": 13268935,
+      "heapAfter": 18191906,
+      "heapDelta": 4922971,
       "retainedCount": 200
     },
     "pages-10-a1": {
       "name": "pages-10-a1",
       "pages": 10,
       "scale": 1.5,
-      "elapsedMs": 594,
+      "elapsedMs": 635,
       "peakCanvasRgbaBytes": 36107500,
       "totalCanvasRgbaBytes": 361075000,
       "retainedDataUrlChars": 2694984,
       "retainedDataUrlBytes": 5389968,
-      "heapBefore": 18215307,
-      "heapAfter": 12084521,
-      "heapDelta": -6130786,
+      "heapBefore": 18210943,
+      "heapAfter": 12067007,
+      "heapDelta": -6143936,
       "retainedCount": 10
     }
   },
@@ -77,7 +90,7 @@
     "p1AllDataUrls": {
       "retainedBytes": 8776072,
       "peakCanvasRgbaBytes": 4502816,
-      "elapsedMs": 1727
+      "elapsedMs": 1730
     },
     "p2LazyWindow": {
       "window": 12,
