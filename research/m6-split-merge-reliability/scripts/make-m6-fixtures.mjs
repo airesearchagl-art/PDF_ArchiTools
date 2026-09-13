@@ -1054,6 +1054,51 @@ const setProperties = (doc, page, entries) => {
 }
 
 // ---------------------------------------------------------------------------
+// /D /Order, in every shape that matters
+//
+// `/Order` is not necessarily a flat list of groups: it nests, it carries text
+// labels to title a section of the layer panel, it may be empty, and it may be
+// absent. Each is a different statement about how a viewer draws that panel,
+// and a carry that flattens them holds the same groups while showing something
+// else.
+// ---------------------------------------------------------------------------
+
+/** A one-page document whose /D is whatever the caller builds. */
+async function orderCase(name, note, build) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const page = sheet(doc, font, SHEET.A4, `M6-PAGE-${name.toUpperCase()}-1`);
+    const a = ocg(doc, 'M6-ORD-A');
+    const b = ocg(doc, 'M6-ORD-B');
+    const c = ocg(doc, 'M6-ORD-C');
+    setProperties(doc, page, [['M6A', a], ['M6B', b], ['M6C', c]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b, c], D: build(doc, { a, b, c }),
+    }));
+    await write(name, doc, note);
+}
+
+await orderCase('ocg-order-flat', 'a flat /Order listing all three groups',
+    (doc, g) => ({ Order: [g.a, g.b, g.c], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-empty', 'an /Order that is present and empty',
+    (doc, g) => ({ Order: [], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-absent', 'no /Order at all',
+    (doc, g) => ({ ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-nested', 'a nested /Order: one group, then a group of two',
+    (doc, g) => ({ Order: [g.a, [g.b, g.c]], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-labeled-nested', 'a nested /Order whose inner array opens with a text label',
+    (doc, g) => ({
+        Order: [g.a, [PDFString.of('M6-ORDER-LABEL'), g.b, g.c]],
+        ON: [g.a, g.b, g.c],
+    }));
+
+await orderCase('ocg-order-malformed', 'an /Order holding a number, which is none of the allowed shapes',
+    (doc, g) => ({ Order: [g.a, PDFNumber.of(42), g.c], ON: [g.a, g.b, g.c] }));
+
+// ---------------------------------------------------------------------------
 // /Next, in every shape the specification allows
 // ---------------------------------------------------------------------------
 {

@@ -56,6 +56,43 @@ const refsOf = (arr) => {
     return out;
 };
 
+/** How deep a nested `/Order` will be followed before it is unreadable. */
+export const MAX_ORDER_DEPTH = 32;
+
+/**
+ * `/Order` as a comparable shape: group names where it names groups, quoted
+ * labels where it carries text, nested arrays where it nests.
+ *
+ * Names rather than references, because references cannot survive a copy and a
+ * comparison made of them would only ever agree with itself.
+ */
+function orderShapeOf(doc, node, nameOfGroup, depth, unsupported) {
+    if (depth > MAX_ORDER_DEPTH) {
+        unsupported.push(`/D /Order nested deeper than ${MAX_ORDER_DEPTH}`);
+        return '(too deep)';
+    }
+    const value = look(doc, node);
+    if (value instanceof PDFArray) {
+        const shape = [];
+        for (let i = 0; i < value.size(); i += 1) {
+            shape.push(orderShapeOf(doc, value.get(i), nameOfGroup, depth + 1, unsupported));
+        }
+        return shape;
+    }
+    if (value instanceof PDFDict) {
+        const type = nameOf(value.get(PDFName.of('Type')));
+        if (type !== '/OCG') {
+            unsupported.push(`/D /Order holds a ${type || 'untyped'} dictionary`);
+            return `(unsupported ${type || 'dictionary'})`;
+        }
+        return nameOfGroup(node);
+    }
+    const label = textOf(value);
+    if (label !== null) return `label:${label}`;
+    unsupported.push('/D /Order holds an entry that is neither a group, an array nor a label');
+    return '(unsupported entry)';
+}
+
 /**
  * What a document's optional content is, in terms that survive a copy.
  *
@@ -72,6 +109,8 @@ export function describeOptionalContent(doc, selection = null) {
         off: [],
         dName: null,
         baseState: null,
+        orderPresent: false,
+        orderShape: null,
         pageProperties: [],
         unsupported: [],
     };
@@ -103,6 +142,21 @@ export function describeOptionalContent(doc, selection = null) {
             if (out.baseState !== SUPPORTED_BASE_STATE) {
                 out.unsupported.push(`/D /BaseState ${out.baseState}`);
             }
+        }
+
+        // `/Order` is not necessarily a flat list of groups. It may nest, it may
+        // carry a text label as the first element of a nested array to title a
+        // section, it may be empty, and it may be absent — and each of those is
+        // a different statement about how a viewer draws its layer panel.
+        //
+        // The first version of this reader collected only the refs it found at
+        // any depth and rewrote a flat array, so a nested or labelled order was
+        // silently flattened, an empty one was filled in, and an absent one was
+        // invented. The comparison never noticed because it compared the *set*
+        // of groups. It compares the shape now.
+        out.orderPresent = d.get(PDFName.of('Order')) !== undefined;
+        if (out.orderPresent) {
+            out.orderShape = orderShapeOf(doc, d.lookup(PDFName.of('Order')), nameOfGroup, 0, out.unsupported);
         }
     }
 
@@ -210,8 +264,8 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
         outputRefByTag.set(raw.tag, raw);
     }
 
-    // Deduplicated, in the order the source's /D /Order named them where it
-    // named them at all, then anything else the kept pages reference.
+    // The group list, deduplicated: the source's own `/OCGs` order where it can
+    // be mapped, then anything else the kept pages reference.
     const ordered = [];
     const pushOnce = (ref) => {
         if (!ref) return;
@@ -220,12 +274,38 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
     };
     const sourceOc = doc.catalog.lookup(PDFName.of('OCProperties'));
     const sourceD = sourceOc instanceof PDFDict ? sourceOc.lookup(PDFName.of('D')) : null;
-    if (sourceD instanceof PDFDict) {
-        for (const ref of refsOf(sourceD.lookup(PDFName.of('Order')))) {
+    if (sourceOc instanceof PDFDict) {
+        for (const ref of refsOf(sourceOc.lookup(PDFName.of('OCGs')))) {
             pushOnce(sourceRefToOutputRef.get(ref.tag));
         }
     }
     for (const ref of outputRefByTag.values()) pushOnce(ref);
+
+    /**
+     * `/Order`, mapped recursively rather than flattened.
+     *
+     * Nesting is reproduced as nesting, a label is reproduced as the same
+     * label, and a reference this extract cannot map — a group no kept page
+     * uses — is a refusal rather than a silent omission, because dropping an
+     * entry changes the structure the panel is drawn from.
+     */
+    const mapOrder = (node, depth) => {
+        if (depth > MAX_ORDER_DEPTH) throw new Error('/D /Order nested too deep to reproduce');
+        const value = look(doc, node);
+        if (value instanceof PDFArray) {
+            const mapped = [];
+            for (let i = 0; i < value.size(); i += 1) mapped.push(mapOrder(value.get(i), depth + 1));
+            return mapped;
+        }
+        if (node instanceof PDFRef) {
+            const target = sourceRefToOutputRef.get(node.tag);
+            if (!target) throw new Error('/D /Order names a group no kept page uses');
+            return target;
+        }
+        const label = textOf(value);
+        if (label !== null) return PDFString.of(label);
+        throw new Error('/D /Order holds an entry that cannot be reproduced');
+    };
 
     const mapAll = (refs) => {
         const mapped = [];
@@ -239,7 +319,22 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
     const off = sourceD instanceof PDFDict ? mapAll(refsOf(sourceD.lookup(PDFName.of('OFF')))) : [];
 
     if (ordered.length > 0) {
-        const d = { Order: ordered };
+        const d = {};
+        // Absent stays absent and empty stays empty. Fabricating an /Order for
+        // a document that had none, or filling in one that was deliberately
+        // empty, is a change to what a viewer shows.
+        if (source.orderPresent && sourceD instanceof PDFDict) {
+            try {
+                d.Order = mapOrder(sourceD.get(PDFName.of('Order')), 0);
+            } catch (error) {
+                return {
+                    status: 'REFUSED',
+                    code: 'UNSUPPORTED_OPTIONAL_CONTENT',
+                    reason: `オプショナルコンテンツの表示順を再現できません: ${String(error?.message ?? error)}`,
+                    unsupported: [String(error?.message ?? error)],
+                };
+            }
+        }
         if (on.length > 0) d.ON = on;
         if (off.length > 0) d.OFF = off;
         // The /D semantics, reproduced rather than merely tolerated.
@@ -291,6 +386,14 @@ export async function compareOptionalContent(sourceBytes, selection, outputBytes
         },
         dName: { source: a.dName, output: b.dName, equal: a.dName === b.dName },
         baseState: { source: a.baseState, output: b.baseState, equal: a.baseState === b.baseState },
+        // Structure, not the set of groups: a flattened order and a nested one
+        // hold the same groups and are not the same document.
+        order: {
+            source: a.orderShape, output: b.orderShape,
+            sourcePresent: a.orderPresent, outputPresent: b.orderPresent,
+            equal: a.orderPresent === b.orderPresent
+                && JSON.stringify(a.orderShape) === JSON.stringify(b.orderShape),
+        },
         pageProperties: {
             source: keyed(a.pageProperties), output: keyed(b.pageProperties),
             equal: JSON.stringify(keyed(a.pageProperties)) === JSON.stringify(keyed(b.pageProperties)),

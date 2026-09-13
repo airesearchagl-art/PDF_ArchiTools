@@ -138,7 +138,12 @@ group count, group names, `ON`, `OFF`, `/D /Name`, `/BaseState` and page
 | three groups over three pages, one shared | dropped | **carried** — 3 groups, 2 on, 1 off |
 | `/D /Name` | dropped | **reproduced** |
 | `/BaseState /ON` | dropped | **reproduced** |
-| `/OCMD`, `/VE`, `/BaseState /OFF` | dropped, semantics changed silently | **`UNSUPPORTED_OPTIONAL_CONTENT`** |
+| `/D /Order`, flat | dropped | **carried** — `["A","B","C"]` |
+| `/D /Order`, nested | dropped | **carried as nested** — `["A",["B","C"]]`, not flattened |
+| `/D /Order` with a text label | dropped | **carried** — `["A",["label:M6-ORDER-LABEL","B","C"]]` |
+| `/D /Order`, empty | dropped | **stays empty**, not filled in |
+| `/D /Order`, absent | dropped | **stays absent**, not invented |
+| `/OCMD`, `/VE`, `/BaseState /OFF`, malformed `/Order` | dropped, semantics changed silently | **`UNSUPPORTED_OPTIONAL_CONTENT`** |
 
 JavaScript is found by a bounded scanner whose treatment of an array depends on
 the key holding it — a destination under `/OpenAction`, `/Dest` or `/D`, a list

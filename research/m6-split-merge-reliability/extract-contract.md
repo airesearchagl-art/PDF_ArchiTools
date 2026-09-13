@@ -208,13 +208,26 @@ worked and two silently swapped `ON` for `OFF`.
 | `ocg-many-pages` | carried — 3 groups over 3 pages, 2 on, 1 off |
 | `ocg-d-name` | carried — `/D /Name` reproduced |
 | `ocg-basestate-on` | carried — `/BaseState /ON` reproduced |
+| `ocg-order-flat` | carried — `["M6-ORD-A","M6-ORD-B","M6-ORD-C"]` |
+| `ocg-order-nested` | carried — **`["M6-ORD-A",["M6-ORD-B","M6-ORD-C"]]`**, nesting intact |
+| `ocg-order-labeled-nested` | carried — **`["M6-ORD-A",["label:M6-ORDER-LABEL","M6-ORD-B","M6-ORD-C"]]`** |
+| `ocg-order-empty` | carried — present and **empty**, not filled in |
+| `ocg-order-absent` | carried — **absent**, not invented |
+| `ocg-order-malformed` | `UNSUPPORTED_OPTIONAL_CONTENT` |
 | `ocmd` | `UNSUPPORTED_OPTIONAL_CONTENT` |
 | `ocmd-nested` (a `/VE` expression) | `UNSUPPORTED_OPTIONAL_CONTENT` |
 | `ocg-basestate-off` | `UNSUPPORTED_OPTIONAL_CONTENT` |
 
 Every carried case is compared with its source **after reopening the artifact**,
-on group count, group names, `ON`, `OFF`, `/D /Name`, `/BaseState` and page
-`/Properties` resolution — all equal in all six.
+on group count, group names, `ON`, `OFF`, `/D /Name`, `/BaseState`, **the
+`/Order` structure** and page `/Properties` resolution — all equal in every one.
+
+`/Order` is mapped **recursively, not flattened**: a group reference becomes the
+mapped output reference, a nested array stays a nested array, a text label is
+preserved as itself, an absent `/Order` stays absent and an empty one stays
+empty. An entry that is none of those three, or one naming a group no kept page
+uses, is a refusal — dropping it would change the structure the layer panel is
+drawn from while leaving the same groups behind.
 
 Carried: page `/Properties` entries resolving to plain `/OCG` dictionaries, with
 a `/D` whose keys stay within `Order`, `ON`, `OFF`, `Name`, `BaseState` — and

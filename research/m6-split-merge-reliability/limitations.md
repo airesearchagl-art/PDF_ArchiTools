@@ -129,6 +129,23 @@ has never been wrong has usually never been checked.
     of actions under `/Next`. The five `/Next` fixtures exist because "seven
     sites were clean" had been measured only against the shape that happened to
     be written first.
+12. **The optional-content carry flattened `/D /Order`, and invented one where
+    there was none.** `/Order` may nest, may carry a text label to title a
+    section of the layer panel, may be empty, and may be absent — each a
+    different statement about how that panel is drawn. The carry collected only
+    the references it found at any depth and always wrote a flat array, filled
+    in an empty `/Order`, and fabricated one for documents that had none. The
+    readback comparison did not notice, because it compared the **set** of
+    groups: a flattened order and a nested one hold exactly the same groups.
+    `/Order` is now mapped recursively and compared as a structure, and five
+    shapes have fixtures. This is the third time in this research that a
+    comparison agreed with itself by looking at the wrong dimension.
+13. **The same identifier collision, twice.** A new gate section declared
+    `const orderCases` in a scope that already had one, exactly as an earlier
+    section had done with `sharedAfter`. Node refused to parse the file, so
+    nothing false was reported — but the lesson from the first occurrence, that
+    a long `try` block makes every new `const` a collision risk, had not been
+    applied.
 
 ## A note on how each JavaScript site reached zero
 

@@ -936,10 +936,61 @@ try {
         && JSON.stringify(opposite.on.output) !== JSON.stringify(opposite.off.output),
         `on ${JSON.stringify(opposite?.on.output)}, off ${JSON.stringify(opposite?.off.output)}`);
 
+    // RF-V1: /Order is not necessarily a flat list of groups, and a carry that
+    // flattens it holds the same groups while showing something else.
+    console.log('\n--- /D /Order shapes ---');
+    const orderShapeCases = [
+        ['ocg-order-flat', 'a flat /Order'],
+        ['ocg-order-empty', 'an /Order that is present and empty'],
+        ['ocg-order-absent', 'no /Order at all'],
+        ['ocg-order-nested', 'a nested /Order'],
+        ['ocg-order-labeled-nested', 'a nested /Order opening with a text label'],
+    ];
+    for (const [fixture, label] of orderShapeCases) {
+        const src = bytesOf(fixture);
+        const r = await extractWithOptionalContent(src, [0]);
+        const same = r.status === 'READY' ? await compareOptionalContent(src, [0], r.bytes) : null;
+        const fields = same
+            ? ['groupCount', 'groupNames', 'on', 'off', 'dName', 'baseState', 'order', 'pageProperties']
+            : [];
+        const allEqual = fields.every((f) => same[f].equal === true);
+        evidence.optionalContentMultiPage[fixture] = {
+            label, status: r.status, carried: r.carried ?? null, comparison: same,
+        };
+        measure(`${label}`,
+            r.status === 'READY'
+                ? `carried ${r.carried}, order ${JSON.stringify(same?.order.output)}`
+                : `${r.code}`);
+        assert_(`${label}: the order structure survives, not just the set of groups`,
+            r.status === 'READY' && allEqual,
+            same
+                ? fields.filter((f) => !same[f].equal).map((f) => `${f} differs`).join(', ') || 'all equal'
+                : String(r.code));
+    }
+
+    // The three shapes an earlier version could not tell apart.
+    const flat = evidence.optionalContentMultiPage['ocg-order-flat'].comparison;
+    const nested = evidence.optionalContentMultiPage['ocg-order-nested'].comparison;
+    const labelled = evidence.optionalContentMultiPage['ocg-order-labeled-nested'].comparison;
+    const empty = evidence.optionalContentMultiPage['ocg-order-empty'].comparison;
+    const absent = evidence.optionalContentMultiPage['ocg-order-absent'].comparison;
+    probe('a nested order is not flattened into the flat one',
+        JSON.stringify(nested?.order.output) !== JSON.stringify(flat?.order.output),
+        `nested ${JSON.stringify(nested?.order.output)} vs flat ${JSON.stringify(flat?.order.output)}`);
+    probe('a text label inside the order is carried, not dropped',
+        JSON.stringify(labelled?.order.output).includes('label:M6-ORDER-LABEL'),
+        JSON.stringify(labelled?.order.output));
+    probe('an empty order stays empty and an absent one stays absent',
+        empty?.order.outputPresent === true
+        && JSON.stringify(empty?.order.output) === '[]'
+        && absent?.order.outputPresent === false,
+        `empty ${JSON.stringify(empty?.order.output)}, absent present: ${absent?.order.outputPresent}`);
+
     for (const [fixture, why] of [
         ['ocmd', '/OCMD'],
         ['ocmd-nested', '/OCMD with a /VE expression'],
         ['ocg-basestate-off', '/D /BaseState /OFF, which this reader does not reproduce'],
+        ['ocg-order-malformed', 'an /Order entry that is neither a group, an array nor a label'],
     ]) {
         const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
         evidence.optionalContentMultiPage[fixture] = { status: r.status, code: r.code, unsupported: r.unsupported };
