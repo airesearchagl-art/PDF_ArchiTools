@@ -1,0 +1,712 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Processor reliability — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** Processor orchestration over the synthetic corpus.
+ *
+ * Everything the gate asserts is measured from a real document: the facts from
+ * a real catalog, the plan from the real planner, the output's structure from
+ * what a reader can still extract out of the bytes that were produced. Nothing
+ * here re-implements a check — if this file and `src/utils/processor` disagree,
+ * the gate fails, which is the point.
+ */
+import {
+    BATCH_RESULT,
+    DEFAULT_MEMORY_BUDGET,
+    FILE_RESULT,
+    MANIFEST_NAME,
+    MAX_OUTPUT_BYTES,
+    MAX_RASTER_PIXELS,
+    MEMORY_PRESETS,
+    PLAN_STATUS,
+    PAKO,
+    PAKO_STATE_BYTES,
+    ProcessorError,
+    RunOwnership,
+    batchCost,
+    buildManifest,
+    canStartNextFile,
+    checkActualOutput,
+    deflateUpperBound,
+    defaultCeilings,
+    entryNameBytes,
+    fileCost,
+    manifestBytes,
+    manifestUpperBound,
+    needsUnicodePath,
+    pageCost,
+    planBatchPublication,
+    planOperation,
+    planWholeJob,
+    publishBatch,
+    readSourceFacts,
+    runBoth,
+    runFlatten,
+    runLayer,
+    runMargin,
+    runOptimizeLossless,
+    snapshotKey,
+    unicodePathExtraBytes,
+    withConfirmation,
+} from '/src/utils/processor/index.ts';
+import JSZip from 'jszip';
+import { normalizePageSize } from '/src/utils/page-size-normalizer.ts';
+import { updateTitleBlocks } from '/src/utils/title-block-updater.ts';
+import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, PDFRef, PDFString, PDFHexString, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
+
+const FIXTURES = '/test-fixtures/processor';
+const cache = new Map();
+async function bytesOf(name) {
+  if (!cache.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    cache.set(name, new Uint8Array(await r.arrayBuffer()));
+  }
+  return cache.get(name).slice();
+}
+const fileOf = (name, bytes) => new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
+
+configurePdfWorker();
+const openPdfjs = async (bytes) => pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+
+const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : String(v ?? ''));
+
+/**
+ * What a reader can still get out of a document. "Preserved" is decided from
+ * this, never from a picture.
+ */
+async function structureOf(bytes) {
+  const out = {
+    loadError: null, pages: 0, text: [], annots: [], links: [], fields: [],
+    hasAcroForm: false, hasXfa: false, rotations: [], boxes: [], images: [],
+    filters: [], colourSpaces: [], info: {}, hasXmp: false, bytes: bytes.length,
+    pathOps: 0, textShows: 0, hasBase64Marker: false,
+  };
+  let doc;
+  try {
+    doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  } catch (e) {
+    out.loadError = String(e?.message ?? e);
+    return out;
+  }
+  const pages = doc.getPages();
+  out.pages = pages.length;
+  out.info = {
+    title: doc.getTitle() ?? null, author: doc.getAuthor() ?? null,
+    subject: doc.getSubject() ?? null, creator: doc.getCreator() ?? null,
+  };
+  out.hasXmp = doc.catalog.get(PDFName.of('Metadata')) !== undefined;
+
+  const acro = doc.catalog.lookup(PDFName.of('AcroForm'));
+  if (acro instanceof PDFDict) {
+    out.hasAcroForm = true;
+    out.hasXfa = acro.get(PDFName.of('XFA')) !== undefined;
+    const fields = acro.lookup(PDFName.of('Fields'));
+    if (fields instanceof PDFArray) {
+      for (let i = 0; i < fields.size(); i += 1) {
+        const f = doc.context.lookup(fields.get(i));
+        if (!(f instanceof PDFDict)) continue;
+        const t = f.get(PDFName.of('T'));
+        const v = f.get(PDFName.of('V'));
+        const da = f.get(PDFName.of('DA'));
+        out.fields.push({
+          name: t?.decodeText?.() ?? String(t ?? ''),
+          value: v?.decodeText?.() ?? (v === undefined ? null : String(v)),
+          ft: nameOf(f.get(PDFName.of('FT'))),
+          da: da?.decodeText?.() ?? null,
+        });
+      }
+    }
+  }
+
+  for (const page of pages) {
+    out.rotations.push(page.getRotation().angle);
+    const m = page.getMediaBox();
+    const c = page.getCropBox();
+    out.boxes.push({ media: [m.x, m.y, m.width, m.height], crop: [c.x, c.y, c.width, c.height] });
+
+    const annots = page.node.lookup(PDFName.of('Annots'));
+    if (annots instanceof PDFArray) {
+      for (let i = 0; i < annots.size(); i += 1) {
+        const a = doc.context.lookup(annots.get(i));
+        if (!(a instanceof PDFDict)) continue;
+        const subtype = nameOf(a.get(PDFName.of('Subtype')));
+        const rect = doc.context.lookup(a.get(PDFName.of('Rect')));
+        const coords = rect instanceof PDFArray
+          ? [0, 1, 2, 3].map((k) => doc.context.lookup(rect.get(k))?.asNumber?.() ?? null) : null;
+        out.annots.push({ subtype, rect: coords });
+        if (subtype === '/Link') {
+          const dest = doc.context.lookup(a.get(PDFName.of('Dest')));
+          const action = doc.context.lookup(a.get(PDFName.of('A')));
+          let kind = null; let values = null; let uri = null;
+          const readDest = (d) => {
+            if (!(d instanceof PDFArray)) return;
+            kind = nameOf(d.get(1));
+            values = [];
+            for (let k = 2; k < d.size(); k += 1) {
+              const n = doc.context.lookup(d.get(k));
+              values.push(n?.asNumber?.() ?? null);
+            }
+          };
+          readDest(dest);
+          if (action instanceof PDFDict) {
+            const s = nameOf(action.get(PDFName.of('S')));
+            if (s === '/URI') uri = action.get(PDFName.of('URI'))?.decodeText?.() ?? null;
+            if (s === '/GoTo') readDest(doc.context.lookup(action.get(PDFName.of('D'))));
+          }
+          out.links.push({ kind, values, uri });
+        }
+      }
+    }
+
+    // Image XObjects: what the page is actually made of.
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    const xobjects = resources instanceof PDFDict ? resources.lookup(PDFName.of('XObject')) : null;
+    if (xobjects instanceof PDFDict) {
+      for (const [, ref] of xobjects.entries()) {
+        const x = doc.context.lookup(ref);
+        if (!(x instanceof PDFRawStream)) continue;
+        if (nameOf(x.dict.get(PDFName.of('Subtype'))) !== '/Image') continue;
+        out.images.push({
+          width: x.dict.lookup(PDFName.of('Width'))?.asNumber?.() ?? null,
+          height: x.dict.lookup(PDFName.of('Height'))?.asNumber?.() ?? null,
+          bits: x.dict.lookup(PDFName.of('BitsPerComponent'))?.asNumber?.() ?? null,
+          bytes: x.getContentsSize(),
+        });
+        out.colourSpaces.push(nameOf(x.dict.get(PDFName.of('ColorSpace'))));
+        out.filters.push(nameOf(x.dict.get(PDFName.of('Filter'))));
+      }
+    }
+  }
+
+  // Text, and the operator counts that say whether vectors survived.
+  try {
+    const pdf = await openPdfjs(bytes);
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      out.text.push(content.items.map((it) => it.str).join(' '));
+      const ops = await page.getOperatorList();
+      for (const fn of ops.fnArray) {
+        if (fn === pdfjsLib.OPS.constructPath) out.pathOps += 1;
+        if (fn === pdfjsLib.OPS.showText) out.textShows += 1;
+      }
+      page.cleanup();
+    }
+    await pdf.destroy();
+  } catch (e) {
+    out.textError = String(e?.message ?? e);
+  }
+
+  // A JPEG or a base64 payload would both show in the raw bytes.
+  const head = new TextDecoder('latin1').decode(bytes.subarray(0, Math.min(bytes.length, 4_000_000)));
+  out.hasBase64Marker = head.includes('data:image/');
+  out.hasDct = head.includes('/DCTDecode');
+  return out;
+}
+
+const settingsFor = (operation, over = {}) => ({
+  dpi: 300, contrast: 1.0, memoryBudgetBytes: DEFAULT_MEMORY_BUDGET, ...over,
+});
+
+async function planFor(name, operation, over = {}) {
+  const bytes = await bytesOf(name);
+  const facts = await readSourceFacts(bytes);
+  const plan = planOperation(facts, operation, settingsFor(operation, over));
+  return { facts, plan };
+}
+
+window.__processor = {
+  async facts(names) {
+    const out = {};
+    for (const name of names) {
+      const f = await readSourceFacts(await bytesOf(name));
+      out[name] = {
+        readable: f.readable, encrypted: f.encrypted, pageCount: f.pageCount,
+        pagesValid: f.pagesValid, hasAcroForm: f.hasAcroForm, hasXfa: f.hasXfa,
+        sigFlags: f.sigFlags, fieldCount: f.fieldCount,
+        signatureFields: f.signatureFields,
+        hasSignatureField: f.hasSignatureField, hasAppliedSignature: f.hasAppliedSignature,
+        formInspectionState: f.formInspectionState,
+      };
+    }
+    return out;
+  },
+
+  /** Does looking create an AcroForm or delete XFA? It must not. */
+  async inspectionIsReadOnly() {
+    const before = await structureOf(await bytesOf('xfa-a4'));
+    await readSourceFacts(await bytesOf('xfa-a4'));
+    const after = await structureOf(await bytesOf('xfa-a4'));
+    const plain = await readSourceFacts(await bytesOf('vector-a4'));
+    return { xfaBefore: before.hasXfa, xfaAfter: after.hasXfa, plainGainedForm: plain.hasAcroForm };
+  },
+
+  async plans(names, operations, over = {}) {
+    const out = {};
+    for (const name of names) {
+      out[name] = {};
+      for (const operation of operations) {
+        const { plan } = await planFor(name, operation, over);
+        out[name][operation] = {
+          status: plan.status, code: plan.code, losses: plan.losses,
+          raster: plan.raster ? {
+            dpi: plan.raster.dpi, pixels: plan.raster.pixels,
+            peakBytes: plan.raster.peakBytes, peakStep: plan.raster.peakStep,
+          } : null,
+          filePeakBytes: plan.filePeakBytes,
+          fileBytesEstimate: plan.fileBytesEstimate,
+        };
+      }
+    }
+    return out;
+  },
+
+  /** Run one operation, and report the structure on both sides of it. */
+  async run(name, operation, over = {}) {
+    const bytes = await bytesOf(name);
+    const before = await structureOf(bytes.slice());
+    const facts = await readSourceFacts(bytes.slice());
+    const settings = settingsFor(operation, over);
+    let plan = planOperation(facts, operation, settings);
+    if (over.confirm) plan = withConfirmation(plan, true);
+
+    if (plan.status !== PLAN_STATUS.READY) {
+      return { ran: false, code: plan.code, reason: plan.reason, before, after: null };
+    }
+
+    let out;
+    try {
+      if (operation === 'layer') {
+        out = await runLayer(bytes.slice(), { color: over.color ?? '#ffffff', opacity: over.opacity ?? 0.5 });
+      } else if (operation === 'monochrome') {
+        out = await runFlatten(bytes.slice(), 'monochrome', { dpi: settings.dpi, contrast: settings.contrast });
+      } else if (operation === 'both') {
+        out = await runBoth(bytes.slice(), { dpi: settings.dpi, contrast: settings.contrast },
+          { color: over.color ?? '#ffffff', opacity: over.opacity ?? 0.5 });
+      } else if (operation === 'margin') {
+        out = await runMargin(bytes.slice(), { scale: over.scale ?? 0.8, position: over.position ?? 'center' });
+      } else if (operation === 'optimize') {
+        const r = await runOptimizeLossless(bytes.slice());
+        out = r.bytes;
+        return { ran: true, code: 'SUCCEEDED', changed: r.changed, before, after: await structureOf(out) };
+      } else if (operation === 'normalize-size') {
+        out = (await normalizePageSize(fileOf(name, bytes.slice()), { target: over.target ?? 'A1' })).data;
+      } else if (operation === 'title-block-update') {
+        out = (await updateTitleBlocks(fileOf(name, bytes.slice()), {
+          rules: over.rules ?? [{ rect: { x: 0.1, y: 0.1, width: 0.3, height: 0.05 }, text: 'M5P-TB' }],
+          templateOrientation: over.orientation ?? 'portrait',
+        })).data;
+      }
+    } catch (error) {
+      return {
+        ran: false,
+        code: error instanceof ProcessorError ? error.code : 'THREW',
+        reason: String(error?.message ?? error),
+        before,
+        after: null,
+      };
+    }
+    return { ran: true, code: 'SUCCEEDED', before, after: await structureOf(out) };
+  },
+
+  /** The adopted H8 model, and what it refuses. */
+  budget() {
+    const A4 = [595.28, 841.89];
+    const A1 = [1683.78, 2383.94];
+    const gray = (w, h, dpi) => pageCost(w, h, dpi, 'DeviceGray', 'flate');
+    const perPreset = {};
+    for (const memory of MEMORY_PRESETS) {
+      const search = (lo, hi, ok) => {
+        while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (ok(mid)) lo = mid; else hi = mid; }
+        return [lo, hi];
+      };
+      const pagesAt = (n, dpi) => {
+        const costs = Array.from({ length: n }, () => gray(...A4, dpi));
+        const f = fileCost(costs);
+        return f.peakBytes <= memory && f.outputBytes <= MAX_OUTPUT_BYTES;
+      };
+      const [p300] = search(0, 4000, (n) => n === 0 || pagesAt(n, 300));
+      const [p150] = search(0, 4000, (n) => n === 0 || pagesAt(n, 150));
+      perPreset[memory] = { pages300: p300, pages150: p150 };
+    }
+    return {
+      constants: { MAX_RASTER_PIXELS, MAX_OUTPUT_BYTES, MEMORY_PRESETS: [...MEMORY_PRESETS], PAKO_STATE_BYTES, literalsPerBlock: PAKO.literalsPerBlock },
+      a4At300: gray(...A4, 300),
+      a4At150: gray(...A4, 150),
+      a1At600: gray(...A1, 600),
+      deflateBound: { n: 16384, bound: deflateUpperBound(16384), previousDivisorBound: 16384 + 5 * Math.ceil(16384 / 16384) + 6 },
+      perPreset,
+    };
+  },
+
+  /** B2: the manifest names every input, and the ceiling covers the job. */
+  async batch(names, operation, over = {}) {
+    const results = [];
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const facts = await readSourceFacts(bytes.slice());
+      let plan = planOperation(facts, operation, settingsFor(operation, over));
+      if (over.confirm) plan = withConfirmation(plan, true);
+      if (plan.status !== PLAN_STATUS.READY) {
+        results.push({ name: `${name}.pdf`, status: FILE_RESULT.FAILED, code: plan.code, reason: plan.reason, bytes: null, outputName: null });
+        continue;
+      }
+      const out = operation === 'layer'
+        ? await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 })
+        : (await runOptimizeLossless(bytes.slice())).bytes;
+      results.push({ name: `${name}.pdf`, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED', reason: '完了しました。', bytes: out, outputName: `${name}_out.pdf` });
+    }
+    const manifest = buildManifest('gate', results);
+    const ceilings = defaultCeilings(over.memoryBudgetBytes ?? DEFAULT_MEMORY_BUDGET);
+    const publication = planBatchPublication(results, manifest, ceilings);
+    let archiveBytes = null;
+    let status = null;
+    if (publication.ok) {
+      const published = await publishBatch('gate', results, ceilings, () => true);
+      archiveBytes = published.archive ? published.archive.size : null;
+      status = published.status;
+    }
+    return {
+      manifest,
+      manifestBytes: manifestBytes(manifest).length,
+      publication: publication.ok ? { ok: true, peakBytes: publication.cost.peakBytes, archiveBytes: publication.cost.archiveBytes } : publication,
+      archiveBytes,
+      status,
+      results: results.map((r) => ({ name: r.name, status: r.status, code: r.code })),
+    };
+  },
+
+  /** Filename bytes, not characters. */
+  zipNameAccounting() {
+    const ascii = 'drawing_overlay.pdf';
+    const japanese = '図面_不透明レイヤ.pdf';
+    return {
+      asciiChars: ascii.length,
+      asciiBytes: entryNameBytes(ascii),
+      japaneseChars: japanese.length,
+      japaneseBytes: entryNameBytes(japanese),
+      cost: batchCost([{ name: japanese, bytes: 1000 }], 200),
+    };
+  },
+
+  /**
+   * RF-O5. Build real archives and compare them with the model.
+   *
+   * The model may over-price — a conservative bound is the point — but it must
+   * never under-price, because a batch the model called safe and JSZip made
+   * larger is exactly the failure the ceiling exists to prevent.
+   */
+  async zipModelVersusActual() {
+    const long = `${'図'.repeat(70)}.pdf`; // 70 chars, 3 bytes each, inside 255
+    const cases = [
+      { label: 'ascii', names: ['drawing_a.pdf', 'drawing_b.pdf'] },
+      { label: 'japanese', names: ['図面_A.pdf', '図面_B.pdf'] },
+      { label: 'japanese near the limit', names: [long] },
+      { label: 'mixed', names: ['plan.pdf', '図面_不透明レイヤ.pdf', '詳細図.pdf'] },
+    ];
+    const payload = new Uint8Array(4096).fill(0x41);
+    const rows = [];
+    for (const c of cases) {
+      const zip = new JSZip();
+      for (const name of c.names) zip.file(name, payload);
+      const manifest = new TextEncoder().encode('{"m5p":"manifest"}\n');
+      zip.file(MANIFEST_NAME, manifest);
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const modelled = batchCost(
+        c.names.map((name) => ({ name, bytes: payload.length })),
+        manifest.length,
+      );
+      rows.push({
+        label: c.label,
+        names: c.names.map((n) => ({ name: n, bytes: entryNameBytes(n), unicodePath: needsUnicodePath(n) })),
+        actualBytes: blob.size,
+        modelledBytes: modelled.archiveBytes,
+        overPricedBy: modelled.archiveBytes - blob.size,
+        unicodeExtraPerEntry: c.names.map((n) => unicodePathExtraBytes(n)),
+      });
+    }
+    return rows;
+  },
+
+  /**
+   * RF-O2. What the metadata looks like on both sides of an operation.
+   *
+   * Read structurally rather than through pdf-lib's getters: the getters know
+   * about a handful of standard keys, and the whole point is the ones they do
+   * not know about. The XMP is reported with its filter and its bytes so a
+   * round trip can be compared without decoding anything.
+   */
+  async metadataRoundTrip(name, operation, over = {}) {
+    const describe = async (bytes) => {
+      const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+      const out = { info: [], xmp: null };
+      const infoRef = doc.context.trailerInfo?.Info;
+      const info = infoRef ? doc.context.lookup(infoRef) : null;
+      if (info instanceof PDFDict) {
+        for (const [key, raw] of info.entries()) {
+          // An indirect value has to be resolved to be compared: reading the
+          // reference itself compares object numbers, which differ between any
+          // two documents and would call a lost value preserved.
+          let value = raw;
+          let indirect = false;
+          if (raw instanceof PDFRef) {
+            indirect = true;
+            try { value = doc.context.lookup(raw); } catch { value = undefined; }
+          }
+          out.info.push({
+            key: key.asString(),
+            indirect,
+            resolved: value !== undefined,
+            value: value?.decodeText ? value.decodeText() : String(value ?? ''),
+          });
+        }
+      }
+      const stream = doc.catalog.lookup(PDFName.of('Metadata'));
+      if (stream instanceof PDFRawStream) {
+        const contents = stream.getContents();
+        let decoded = null;
+        try {
+          decoded = new TextDecoder('utf-8').decode(decodePDFRawStream(stream).decode());
+        } catch (e) { decoded = `DECODE FAILED: ${String(e?.message ?? e)}`; }
+        out.xmp = {
+          filter: nameOf(stream.dict.get(PDFName.of('Filter'))),
+          storedBytes: contents.length,
+          startsWithXpacket: decoded !== null && decoded.trimStart().startsWith('<?xpacket'),
+          hasTitleMarker: decoded !== null && /M5P-XMP-(PLAIN|FLATE)/.test(decoded),
+          hasCustomMarker: decoded !== null && decoded.includes('M5P-XMP-CUSTOM'),
+        };
+      }
+      return out;
+    };
+
+    const bytes = await bytesOf(name);
+    const before = await describe(bytes.slice());
+    const r = await this.run(name, operation, over);
+    if (!r.ran) return { ran: false, code: r.code, reason: r.reason, before, after: null };
+
+    // `run` does not hand the bytes back, so the operation is repeated here to
+    // get them. Same inputs, same settings, same code path.
+    const settings = settingsFor(operation, over);
+    let out;
+    if (operation === 'monochrome') {
+      out = await runFlatten(bytes.slice(), 'monochrome', { dpi: settings.dpi, contrast: settings.contrast });
+    } else if (operation === 'both') {
+      out = await runBoth(bytes.slice(), { dpi: settings.dpi, contrast: settings.contrast },
+        { color: '#ffffff', opacity: 0.5 });
+    } else if (operation === 'layer') {
+      out = await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 });
+    } else if (operation === 'margin') {
+      out = await runMargin(bytes.slice(), { scale: 0.8, position: 'center' });
+    } else {
+      out = (await runOptimizeLossless(bytes.slice())).bytes;
+    }
+    return { ran: true, before, after: await describe(out) };
+  },
+
+  /**
+   * RF-O4. Where a B2 batch of one-page A4 @150 files stops being affordable,
+   * derived from the production model rather than quoted from the research.
+   */
+  b2Boundaries(colourSpace) {
+    const A4 = [595.28, 841.89];
+    const filter = colourSpace === 'DeviceGray' ? 'flate' : 'none';
+    const page = pageCost(...A4, 150, colourSpace, filter);
+    const file = fileCost([page]);
+    const out = {};
+    for (const memory of MEMORY_PRESETS) {
+      const ceilings = defaultCeilings(memory);
+      const fits = (n) => {
+        const names = Array.from({ length: n }, (_, i) => `file-${i + 1}.pdf`);
+        const job = planWholeJob(
+          Array.from({ length: n }, () => file.peakBytes),
+          Array.from({ length: n }, () => file.outputBytes),
+          ceilings,
+        );
+        if (!job.ok) return { ok: false, why: 'OVER_MEMORY_BUDGET', peak: job.peakBytes };
+        const cost = batchCost(
+          names.map((name) => ({ name, bytes: file.outputBytes })),
+          manifestUpperBound(n),
+        );
+        if (cost.archiveBytes > ceilings.maxOutputBytes) {
+          return { ok: false, why: 'OVER_OUTPUT_BUDGET', peak: job.peakBytes };
+        }
+        return { ok: true, peak: job.peakBytes };
+      };
+      let lo = 0;
+      let hi = 4000;
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (mid === 0 || fits(mid).ok) lo = mid; else hi = mid;
+      }
+      out[memory] = {
+        justUnder: lo, firstOver: hi, binding: fits(hi).why,
+        peakAtJustUnder: lo > 0 ? fits(lo).peak : 0,
+      };
+    }
+    return { perPageBytes: file.outputBytes, perPagePeak: file.peakBytes, presets: out };
+  },
+
+  /** RF-O3. The ceiling applied to bytes that exist, not to an estimate. */
+  actualOutputGuard() {
+    const ceilings = defaultCeilings();
+    const limit = ceilings.maxOutputBytes;
+    return {
+      limit,
+      justUnder: checkActualOutput(limit, ceilings),
+      first: checkActualOutput(limit + 1, ceilings),
+    };
+  },
+
+  /** RF-O4. The job refused before the first raster, and at each boundary. */
+  wholeJobPreflight(files, perFilePeakBytes, perFileOutputBytes, memoryBudgetBytes) {
+    const ceilings = defaultCeilings(memoryBudgetBytes ?? DEFAULT_MEMORY_BUDGET);
+    const names = Array.from({ length: files }, (_, i) => `file-${i + 1}.pdf`);
+    const peaks = Array.from({ length: files }, () => perFilePeakBytes);
+    const outputs = Array.from({ length: files }, () => perFileOutputBytes);
+    const whole = planWholeJob(peaks, outputs, ceilings);
+    const retained = names.slice(0, files - 1).map((name, i) => ({
+      name, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED', reason: 'ok',
+      bytes: new Uint8Array(outputs[i]), outputName: name,
+    }));
+    return { whole, atLastBoundary: canStartNextFile(retained, perFilePeakBytes, ceilings) };
+  },
+
+  /**
+   * RF-P3B. The invariant the pre-run preflight has to satisfy.
+   *
+   * A batch that passes the preflight and is then refused at publication has
+   * been refused too late: every file was produced first. So the number
+   * computed before the run must be an upper bound on the one computed from the
+   * finished artifacts, and this holds the two against each other for a real
+   * batch rather than for an argument about them.
+   */
+  async jobBoundVersusPublication(names, operation, over = {}) {
+    const ceilings = defaultCeilings(over.memoryBudgetBytes ?? DEFAULT_MEMORY_BUDGET);
+    const plans = [];
+    const results = [];
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const facts = await readSourceFacts(bytes.slice());
+      let plan = planOperation(facts, operation, settingsFor(operation, over));
+      if (over.confirm) plan = withConfirmation(plan, true);
+      if (plan.status !== PLAN_STATUS.READY) continue;
+      plans.push(plan);
+      const out = operation === 'layer'
+        ? await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 })
+        : await runFlatten(bytes.slice(), 'monochrome',
+          { dpi: settingsFor(operation, over).dpi, contrast: 1.0 });
+      results.push({
+        name: `${name}.pdf`, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED',
+        reason: '完了しました。', bytes: out,
+        // The longest suffix any tool appends, so the comparison is not made
+        // easy by a short name.
+        outputName: `${name}_overlay&mono.pdf`,
+      });
+    }
+    const initial = planWholeJob(
+      plans.map((p) => p.filePeakBytes),
+      plans.map((p) => p.fileBytesEstimate),
+      ceilings,
+    );
+    const manifest = buildManifest('半透明レイヤ追加', results);
+    const exact = planBatchPublication(results, manifest, ceilings);
+    const exactPeak = exact.ok ? exact.cost.peakBytes : null;
+    return {
+      files: results.length,
+      initialOk: initial.ok,
+      initialPeak: initial.peakBytes,
+      exactPeak,
+      holds: exactPeak !== null && initial.peakBytes >= exactPeak,
+      estimatedOutputs: plans.map((p) => p.fileBytesEstimate),
+      actualOutputs: results.map((r) => r.bytes.length),
+      outputsWithinEstimate: results.every((r, i) => r.bytes.length <= plans[i].fileBytesEstimate),
+      manifestActual: manifestBytes(manifest).length,
+      manifestBound: manifestUpperBound(results.length),
+    };
+  },
+
+  /**
+   * RF-P3A. The ceiling applied to the archive that exists.
+   *
+   * The boundary is taken from the archive JSZip really produced, not from the
+   * model — at `size` it publishes, at `size - 1` nothing comes back. Which of
+   * the two guards fires is reported rather than assumed: the model is exact
+   * for the STORE path (measured head-room zero), so it refuses first, and the
+   * check on the Blob is what remains if that ever stops being true.
+   */
+  async actualArchiveGuard() {
+    const bytes = await bytesOf('vector-a4');
+    const out = await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 });
+    const results = ['a', 'b'].map((k) => ({
+      name: `${k}.pdf`, status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED',
+      reason: 'ok', bytes: out, outputName: `${k}_out.pdf`,
+    }));
+    const base = defaultCeilings();
+    const published = await publishBatch('gate', results, base, () => true);
+    const size = published.archive.size;
+
+    const at = await publishBatch('gate', results, { ...base, maxOutputBytes: size }, () => true);
+    let refusal = null;
+    try {
+      await publishBatch('gate', results, { ...base, maxOutputBytes: size - 1 }, () => true);
+    } catch (error) {
+      refusal = {
+        code: error?.code ?? 'THREW',
+        // The two guards say different things, on purpose.
+        firedOn: String(error?.message ?? '').startsWith('作成したZIP') ? 'the archive' : 'the model',
+      };
+    }
+    const modelled = planBatchPublication(results, buildManifest('gate', results), base);
+    return {
+      size,
+      modelledBytes: modelled.ok ? modelled.cost.archiveBytes : null,
+      publishedAtSize: at.archive !== null,
+      refusal,
+    };
+  },
+
+  /** Ownership: a superseded run must publish nothing. */
+  ownership() {
+    const owner = new RunOwnership();
+    const snapshot = { operation: 'monochrome', fileIds: ['a'], dpi: 300, contrast: 1, memoryBudgetBytes: DEFAULT_MEMORY_BUDGET };
+    const token = owner.begin(snapshot);
+    const before = token.isCurrent();
+    owner.supersede();
+    const afterSupersede = token.isCurrent();
+    let threw = null;
+    try { token.assertCurrent(); } catch (e) { threw = e.code ?? 'THREW'; }
+
+    const t2 = owner.begin(snapshot);
+    const changed = { ...snapshot, dpi: 150 };
+    const t3 = owner.begin(changed);
+    return {
+      before,
+      afterSupersede,
+      assertCode: threw,
+      earlierTokenAfterNewRun: t2.isCurrent(),
+      newTokenCurrent: t3.isCurrent(),
+      keysDiffer: snapshotKey(snapshot) !== snapshotKey(changed),
+    };
+  },
+
+  /** A superseded batch must not produce an archive. */
+  async supersededBatchPublishesNothing() {
+    const bytes = await bytesOf('vector-a4');
+    const out = await runLayer(bytes.slice(), { color: '#ffffff', opacity: 0.5 });
+    const results = [
+      { name: 'a.pdf', status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED', reason: 'ok', bytes: out, outputName: 'a_out.pdf' },
+      { name: 'b.pdf', status: FILE_RESULT.SUCCEEDED, code: 'SUCCEEDED', reason: 'ok', bytes: out, outputName: 'b_out.pdf' },
+    ];
+    const published = await publishBatch('gate', results, defaultCeilings(), () => false);
+    return { status: published.status, archive: published.archive === null, cancelled: published.status === BATCH_RESULT.CANCELLED };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__processorReady = true;
+</script>
