@@ -1099,6 +1099,156 @@ await orderCase('ocg-order-malformed', 'an /Order holding a number, which is non
     (doc, g) => ({ Order: [g.a, PDFNumber.of(42), g.c], ON: [g.a, g.b, g.c] }));
 
 // ---------------------------------------------------------------------------
+// Optional content attached where the reader was not looking
+//
+// A contract that says "anything outside the handled shapes is refused" is only
+// true if the unhandled shapes can be found. These four attach optional content
+// in places the first envelope never inspected.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 alternate optional-content configurations');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCCONFIGS-1');
+    const a = ocg(doc, 'M6-OCG-CFG');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a],
+        D: { Order: [a], ON: [a] },
+        // A second, named configuration. This reader rebuilds one default
+        // configuration and has never been shown to rebuild an alternate.
+        Configs: [{ Name: PDFString.of('M6-ALT-CONFIG'), Order: [a], OFF: [a] }],
+    }));
+    await write('ocg-configs', doc, '/OCProperties /Configs carrying an alternate configuration');
+}
+{
+    const { doc, font } = await newDoc('M6 annotation belonging to a layer');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-ANNOTOC-1');
+    const a = ocg(doc, 'M6-OCG-ANNOT');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Square', Rect: [120, 400, 300, 520], C: [0, 0, 1], F: 4,
+        OC: a,
+    }]);
+    await write('annot-oc', doc, 'an annotation whose /OC puts it in an optional-content group');
+}
+{
+    const { doc, font } = await newDoc('M6 XObject belonging to a layer');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4);
+    mark(page, font, SHEET.A4, 'M6-PAGE-XOBJOC-1');
+    const a = ocg(doc, 'M6-OCG-XOBJ');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    const form = doc.context.stream(
+        Buffer.from('0 0 1 RG 2 w 2 2 60 30 re S', 'utf8'),
+        { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 34], OC: a },
+    );
+    const name = page.node.newXObject('M6Layered', doc.context.register(form));
+    page.pushOperators(
+        pushGraphicsState(),
+        concatTransformationMatrix(1, 0, 0, 1, 120, 600),
+        drawObject(name.asString().replace(/^\//, '')),
+        popGraphicsState(),
+    );
+    await write('xobject-oc', doc, 'a form XObject whose /OC puts it in an optional-content group');
+}
+{
+    const { doc, font } = await newDoc('M6 malformed optional content');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCBAD-1');
+    const a = ocg(doc, 'M6-OCG-BAD');
+    setProperties(doc, page, [['M6A', a]]);
+    // /OCGs is a dictionary and /D is a number: a structure that cannot be
+    // walked, which is not the same as a document with no optional content.
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: { Broken: PDFNumber.of(1) },
+        D: PDFNumber.of(7),
+    }));
+    await write('malformed-ocproperties', doc, '/OCGs is a dictionary and /D is a number');
+}
+
+// ---------------------------------------------------------------------------
+// /Order label positions this research has not shown it can reproduce
+// ---------------------------------------------------------------------------
+await orderCase('ocg-order-invalid-top-label', 'a text label at the top level of /Order',
+    (doc, g) => ({ Order: [PDFString.of('M6-BAD-LABEL'), g.a, g.b, g.c], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-invalid-mid-label', 'a text label part-way through a nested array',
+    (doc, g) => ({
+        Order: [g.a, [g.b, PDFString.of('M6-BAD-LABEL'), g.c]],
+        ON: [g.a, g.b, g.c],
+    }));
+
+{
+    // /Order naming a group that no kept page references. The contract says
+    // this is a refusal rather than a silent omission; without a fixture that
+    // was a sentence rather than a finding.
+    const { doc, font } = await newDoc('M6 order naming an unused group');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-ORDUNUSED-${i}`));
+    const kept = ocg(doc, 'M6-ORD-KEPT');
+    const elsewhere = ocg(doc, 'M6-ORD-ELSEWHERE');
+    setProperties(doc, pages[0], [['M6K', kept]]);
+    setProperties(doc, pages[1], [['M6E', elsewhere]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [kept, elsewhere], D: { Order: [kept, elsewhere], ON: [kept, elsewhere] },
+    }));
+    await write('ocg-order-unused-group', doc, 'page 2 holds a group that /Order names; extracting page 1 leaves it unmappable');
+}
+
+// ---------------------------------------------------------------------------
+// JavaScript held as indirect objects
+//
+// Deleting the key that points at an action removes the reference. Whether it
+// removes the object is a different question, and the one M6 has already been
+// bitten by once with orphaned pages.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript on /A');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSINDA-1');
+    const action = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-A'));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0], A: action,
+    }]);
+    await write('js-indirect-a', doc, 'an annotation /A pointing at an indirect JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript on /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSINDAA-1');
+    const action = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-AA'));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 400, 330], F: 4,
+        AA: { E: action },
+    }]);
+    await write('js-indirect-aa', doc, 'an annotation /AA entry pointing at an indirect JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript behind /Next');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSINDNEXT-${i}`));
+    const action = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-NEXT'));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: { Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')], Next: action },
+    }]);
+    await write('js-indirect-next', doc, 'a /Next pointing at an indirect JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript two /Next links down');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSINDNEST-${i}`));
+    const deep = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-NESTED'));
+    const middle = doc.context.register(doc.context.obj({
+        Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')], Next: deep,
+    }));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: { Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')], Next: middle },
+    }]);
+    await write('js-indirect-nested', doc, 'indirect JavaScript reached through two indirect /Next links');
+}
+
+// ---------------------------------------------------------------------------
 // /Next, in every shape the specification allows
 // ---------------------------------------------------------------------------
 {

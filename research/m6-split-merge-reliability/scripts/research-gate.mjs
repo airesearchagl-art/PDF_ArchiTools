@@ -1059,6 +1059,110 @@ try {
         'the scanner decides an array by the key holding it: a destination under /OpenAction, /Dest '
         + 'or /D, a list of actions under /Next; a document it cannot finish is UNSCANNABLE_ACTIONS');
 
+    // ---- 15. RF-A: the optional-content detection envelope ------------------
+    //
+    // "Anything outside the handled shapes is refused" is only true if the
+    // unhandled shapes can be found. Optional content attaches itself in more
+    // places than a catalog /OCProperties and a page's /Properties, and none of
+    // these four was previously *seen* — which is the difference between a
+    // narrow envelope and an envelope with holes in it.
+    console.log('\n=== 15. optional-content detection envelope (RF-A) ===');
+    evidence.ocEnvelope = {};
+
+    const envelopeCases = [
+        ['ocg-configs', 'A1 — /OCProperties /Configs, an alternate configuration'],
+        ['annot-oc', 'A2 — an annotation whose /OC puts it in a group'],
+        ['xobject-oc', 'A3 — a form XObject whose /OC puts it in a group'],
+        ['malformed-ocproperties', 'A4 — /OCGs is a dictionary and /D is a number'],
+    ];
+    for (const [fixture, label] of envelopeCases) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.ocEnvelope[fixture] = { label, status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${label}: detected and refused`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
+            (r.unsupported ?? []).join(', '));
+    }
+    humanOpen('M6-H9b optional content envelope (RF-A)',
+        'alternate configurations, annotation /OC and XObject /OC are detected and refused rather '
+        + 'than carried on a guess; an unreadable /OCProperties is refused rather than treated as absent');
+
+    // ---- 16. RF-C: /Order label position ------------------------------------
+    console.log('\n=== 16. /Order label position (RF-C) ===');
+    evidence.orderLabels = {};
+    for (const [fixture, label] of [
+        ['ocg-order-invalid-top-label', 'a text label at the top level of /Order'],
+        ['ocg-order-invalid-mid-label', 'a text label part-way through a nested array'],
+        ['ocg-order-unused-group', '/Order naming a group no kept page uses'],
+    ]) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.orderLabels[fixture] = { label, status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${label}: refused, not carried on the strength of being a string`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
+            (r.unsupported ?? []).join(', '));
+    }
+    const stillLabelled = await extractWithOptionalContent(bytesOf('ocg-order-labeled-nested'), [0]);
+    const stillLabelledSame = stillLabelled.status === 'READY'
+        ? await compareOptionalContent(bytesOf('ocg-order-labeled-nested'), [0], stillLabelled.bytes)
+        : null;
+    evidence.orderLabels.supported = {
+        status: stillLabelled.status, order: stillLabelledSame?.order.output ?? null,
+    };
+    assert_('a label opening a nested array is still carried, structure and all',
+        stillLabelled.status === 'READY' && stillLabelledSame?.order.equal === true
+        && JSON.stringify(stillLabelledSame.order.output).includes('label:M6-ORDER-LABEL'),
+        JSON.stringify(stillLabelledSame?.order.output));
+
+    // ---- 17. RF-B: JavaScript in the object table ---------------------------
+    //
+    // Removing a reference is not removing an object. An action held as an
+    // indirect object stays registered after the key pointing at it is deleted,
+    // so a reachability scan reports zero while the bytes still carry the
+    // script — the same remanence class as the orphaned pages this research
+    // found in `copyPages`.
+    console.log('\n=== 17. JavaScript in the object table (RF-B) ===');
+    evidence.artifactWideJs = {};
+
+    const indirectCases = [
+        ['js-indirect-a', 'annotation /A to an indirect action'],
+        ['js-indirect-aa', 'annotation /AA to an indirect action'],
+        ['js-indirect-next', '/Next to an indirect action'],
+        ['js-indirect-nested', 'two indirect /Next links down'],
+        ['js-action-shared', 'one indirect action referenced twice'],
+        ['js-next-array', '/Next array holding an action'],
+        ['js-annot-a', 'a direct action on /A, for contrast'],
+    ];
+    for (const [fixture, label] of indirectCases) {
+        const r = await extractSanitized(bytesOf(fixture), [0]);
+        evidence.artifactWideJs[fixture] = {
+            label,
+            reachableInSource: r.beforeCount,
+            objectTableInSource: r.beforeArtifactCount,
+            objectTableAfterCopy: r.copiedArtifactCount,
+            removedReferences: r.removed,
+            removedObjects: r.removedObjects,
+            reachableAfterReadback: r.remainingAfterReadback,
+            artifactWideAfterReadback: r.remainingArtifactWide,
+        };
+        measure(`${label}`,
+            `source table ${r.beforeArtifactCount}, after copy ${r.copiedArtifactCount}, `
+            + `removed ${r.removedObjects} object(s), artifact-wide after readback ${r.remainingArtifactWide}`);
+        probe(`${label}: nothing remains, reachable or in the object table`,
+            r.status === 'READY' && r.remainingAfterReadback === 0 && r.remainingArtifactWide === 0,
+            `reachable ${r.remainingAfterReadback}, object table ${r.remainingArtifactWide}`);
+    }
+
+    const carriedIntoArtifact = Object.values(evidence.artifactWideJs)
+        .filter((s) => s.objectTableAfterCopy > 0).length;
+    const artifactWideTotal = Object.values(evidence.artifactWideJs)
+        .reduce((n, s) => n + (s.artifactWideAfterReadback ?? 0), 0);
+    measure('how many cases put a JavaScript action into the artifact at all',
+        `${carriedIntoArtifact} of ${indirectCases.length} — the rest never reached the copy`);
+    probe('artifact-wide JavaScript action object count is zero across every case',
+        artifactWideTotal === 0, `${artifactWideTotal} object(s) remaining`);
+    humanOpen('M6-H9c JavaScript (RF-B)',
+        'the contract is both counts at zero — what a reader can reach, and what the object table '
+        + 'holds; a sanitizer that only detaches references satisfies the first and not the second');
+
     fs.writeFileSync(
         path.join(RESEARCH, 'evidence.json'),
         `${JSON.stringify(evidence, null, 2)}\n`,

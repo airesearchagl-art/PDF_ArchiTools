@@ -147,6 +147,38 @@ has never been wrong has usually never been checked.
     a long `try` block makes every new `const` a collision risk, had not been
     applied.
 
+    A parse failure also made the whole-repo lint count one extra finding for a
+    single run, and that was briefly read as new production debt. It was not:
+    the per-file breakdown was 23 errors and 2 warnings throughout. A gate that
+    cannot be parsed is not evidence about anything, including lint.
+14. **"No reachable JavaScript" was a true sentence about a file that still
+    carried the script.** Deleting the key that points at an action detaches it;
+    it does not delete the object. pdf-lib writes everything registered in the
+    context, reachable or not — the same mechanism that leaves orphaned pages
+    behind after a `copyPages` — so an action held as an indirect object stayed
+    in the artifact while the reachability scan reported zero.
+
+    Measured: **five of seven** JavaScript cases put an action into the
+    artifact's object table at all (`/A`, `/AA`, `/Next`, a doubly-nested
+    `/Next`, and a shared indirect action, each with 1 object after the copy).
+    The other two hold their action as a direct dictionary inside the
+    annotation, so it never becomes a separate object. Every JavaScript action
+    dictionary is now scrubbed of its entries and deleted from the table, and
+    the artifact-wide count after reopening is 0 in all seven. Both counts are
+    reported, because only one of them was ever the whole answer.
+15. **The optional-content envelope had holes in the places it never looked.**
+    "Anything outside the handled shapes is refused" was not true while
+    `/OCProperties /Configs`, an annotation's `/OC`, an XObject's `/OC` and an
+    unreadable `/OCProperties` were all invisible to the reader — a document
+    carrying any of them would have been carried as though it held none. Each
+    now has a fixture and a refusal. Note what this is *not*: support was not
+    widened. The refusals became real.
+16. **A text label was accepted anywhere a string appeared.** `/Order` may title
+    a section with a label, and the only position this research has shown it can
+    reproduce is the first element of a nested array. A string at the top level,
+    or part-way through a nested array, was being carried on the strength of
+    being a string. Both are refused now, and the supported shape still passes.
+
 ## A note on how each JavaScript site reached zero
 
 The sanitized outputs contain no JavaScript, measured by reopening them. But

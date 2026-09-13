@@ -237,6 +237,41 @@ key. An `/OCMD` decides visibility from a set of groups and optionally a nested
 boolean expression; carrying part of that evaluation would silently change what
 the reader sees.
 
+### The envelope is a detector, not a hope
+
+A contract that refuses "anything outside the handled shapes" is only true if
+the unhandled shapes can be **found**. Optional content attaches itself in more
+places than a catalog `/OCProperties` and a page's `/Properties`, and none of
+these was previously inspected at all:
+
+| shape | result |
+| --- | --- |
+| `ocg-configs` — `/OCProperties /Configs`, an alternate configuration | **refused** — one configuration is rebuilt; a second has never been shown to be |
+| `annot-oc` — an annotation whose `/OC` puts it in a group | **refused** |
+| `xobject-oc` — a form XObject whose `/OC` puts it in a group | **refused** |
+| `malformed-ocproperties` — `/OCGs` a dictionary, `/D` a number | **refused** — unreadable is not the same as absent |
+
+Attachments are detected whether or not the catalog declares optional content:
+an annotation carrying `/OC` in a document with no `/OCProperties` is itself a
+structure this reader does not understand.
+
+### `/Order` labels have a position
+
+A text label titles a section of the layer panel, and the only position this
+research has shown it can be reproduced in is **the first element of a nested
+array**.
+
+| shape | result |
+| --- | --- |
+| `[A, ["LABEL", B, C]]` | **carried**, structure and label intact |
+| `["BAD-LABEL", A, B, C]` — top level | **refused** |
+| `[A, [B, "BAD-LABEL", C]]` — part-way through | **refused** |
+| `/Order` naming a group no kept page uses | **refused** |
+
+The last row had been a sentence in this document with no fixture behind it.
+It has one now — `ocg-order-unused-group`, where page 2 holds a group `/Order`
+names and extracting page 1 leaves it unmappable.
+
 ## JavaScript — sanitized, and proven by reopening the file
 
 `prototype/javascript-scan.mjs`. The contract is *no JavaScript action survives
@@ -274,6 +309,39 @@ The shared-action row counts two because the references live on two different
 annotations; removing the action means removing both, and the readback confirms
 it. The cycle is refused rather than passed, which is the point of bounding the
 walk at all.
+
+### Removing a reference is not removing an object
+
+Deleting the key that points at an action detaches it. Whether it removes the
+action from the file is a different question — and the one this research has
+already been bitten by once, with pages `copyPages` copied and never inserted
+into `/Pages`.
+
+An action held as an **indirect object** stays registered in the document's
+object table after the key pointing at it is deleted, and pdf-lib writes
+everything registered, reachable or not. So a sanitized artifact is measured
+twice: what a reader can reach, and what the object table holds.
+
+| case | in the object table after the copy | after sanitizing |
+| --- | --- | --- |
+| annotation `/A` → indirect action | **1** | 0 |
+| annotation `/AA` → indirect action | **1** | 0 |
+| `/Next` → indirect action | **1** | 0 |
+| two indirect `/Next` links down | **1** | 0 |
+| one indirect action referenced twice | **1** | 0 |
+| `/Next` array holding a direct action | 0 | 0 |
+| a direct action on `/A` | 0 | 0 |
+
+**Five of the seven put a JavaScript action into the artifact at all.** The
+other two hold their actions as direct dictionaries inside the annotation, so
+they never become separate objects. Every JavaScript action dictionary in the
+table is scrubbed of its entries and then deleted, and the artifact-wide count
+after reopening is **0 in all seven**.
+
+The contract is therefore both counts at zero. A sanitizer that only detaches
+references satisfies the first and not the second, and "no reachable
+JavaScript" would have been a true sentence about a file that still carried the
+script.
 
 Two of the seven reach zero because `copyPages` never copies catalog-level
 structure, not because the sanitizer removed anything. The mechanism is recorded

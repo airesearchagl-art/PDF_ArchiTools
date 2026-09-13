@@ -7,26 +7,29 @@
  * document no longer has and a viewer shows its own default instead of the
  * author's. That is a visibility change, not a harmless omission.
  *
- * **The mapping is structural, and that is a correction.** An earlier version
- * paired source groups to output groups by position, with the source cursor
- * reset on every output page — so with one kept page it worked and with two it
- * silently mismatched ON against OFF. Groups are now matched through the thing
- * that actually identifies them across the copy:
+ * **The mapping is structural.** Groups are matched through the thing that
+ * actually identifies them across a copy:
  *
  *     selected source page + /Properties key + source OCG ref
  *         ->  output page   + same key       + output OCG ref
  *
- * The envelope is deliberately narrow, and the narrowness is the contract:
+ * An earlier version paired them by position with the source cursor reset on
+ * every output page, so one kept page worked and two could swap ON for OFF.
  *
- *   carried   page /Properties entries resolving to plain /OCG dictionaries,
- *             with a /D whose keys are handled *and reproduced*
- *   refused   /OCMD in any form, a /VE visibility expression, a /D key outside
- *             the handled set, or a /BaseState this reader does not reproduce
+ * **The envelope is a detector, not a hope.** A contract that says "anything
+ * outside the handled shapes is refused" is only true if the unhandled shapes
+ * can be found. Optional content can attach itself in more places than a
+ * catalog `/OCProperties` and a page's `/Properties`:
  *
- * Refusing `/OCMD` is not a gap to be apologised for. An `/OCMD` decides
- * visibility from a set of groups and optionally from a nested boolean
- * expression; carrying a subset of that evaluation silently changes what the
- * reader sees.
+ *   /OCProperties /Configs   alternate configurations this reader cannot rebuild
+ *   annotation /OC           an annotation that belongs to a group
+ *   XObject /OC              a form or image that belongs to a group
+ *   unreadable /OCProperties a structure that cannot be walked at all
+ *
+ * None of those is carried, and none of them was previously *seen* — which is
+ * the difference between a narrow envelope and an envelope with holes in it.
+ * The point of this round is not to widen support. It is to make the refusals
+ * real.
  */
 import { PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFString } from 'pdf-lib';
 
@@ -46,6 +49,9 @@ export const HANDLED_D_KEYS = ['Order', 'ON', 'OFF', 'Name', 'BaseState'];
 /** The only `/BaseState` this reader reproduces. Others are refused. */
 export const SUPPORTED_BASE_STATE = '/ON';
 
+/** How deep a nested `/Order` will be followed before it is unreadable. */
+export const MAX_ORDER_DEPTH = 32;
+
 const refsOf = (arr) => {
     const out = [];
     if (!(arr instanceof PDFArray)) return out;
@@ -56,17 +62,19 @@ const refsOf = (arr) => {
     return out;
 };
 
-/** How deep a nested `/Order` will be followed before it is unreadable. */
-export const MAX_ORDER_DEPTH = 32;
-
 /**
- * `/Order` as a comparable shape: group names where it names groups, quoted
- * labels where it carries text, nested arrays where it nests.
+ * `/Order` as a comparable shape, with the label rule applied.
  *
- * Names rather than references, because references cannot survive a copy and a
- * comparison made of them would only ever agree with itself.
+ * A text label titles a section of the layer panel, and the only position this
+ * research has shown it can be reproduced in is **the first element of a nested
+ * array**. A string at the top level, or part-way through a nested array, means
+ * something this prototype has not established, so it is recorded as
+ * unsupported rather than carried on the strength of being a string.
+ *
+ * `labelAllowed` is true only for index 0 of a nested array — never for the
+ * outermost array, whose first element is not a section title.
  */
-function orderShapeOf(doc, node, nameOfGroup, depth, unsupported) {
+function orderShapeOf(doc, node, nameOfGroup, depth, unsupported, labelAllowed = false) {
     if (depth > MAX_ORDER_DEPTH) {
         unsupported.push(`/D /Order nested deeper than ${MAX_ORDER_DEPTH}`);
         return '(too deep)';
@@ -75,7 +83,9 @@ function orderShapeOf(doc, node, nameOfGroup, depth, unsupported) {
     if (value instanceof PDFArray) {
         const shape = [];
         for (let i = 0; i < value.size(); i += 1) {
-            shape.push(orderShapeOf(doc, value.get(i), nameOfGroup, depth + 1, unsupported));
+            // Only a nested array may open with a label; the outermost one is
+            // the order itself, not a titled section.
+            shape.push(orderShapeOf(doc, value.get(i), nameOfGroup, depth + 1, unsupported, depth > 0 && i === 0));
         }
         return shape;
     }
@@ -88,18 +98,68 @@ function orderShapeOf(doc, node, nameOfGroup, depth, unsupported) {
         return nameOfGroup(node);
     }
     const label = textOf(value);
-    if (label !== null) return `label:${label}`;
+    if (label !== null) {
+        if (!labelAllowed) {
+            unsupported.push(
+                depth === 0
+                    ? '/D /Order holds a text label at the top level'
+                    : '/D /Order holds a text label away from the start of its group',
+            );
+            return `(unsupported label:${label})`;
+        }
+        return `label:${label}`;
+    }
     unsupported.push('/D /Order holds an entry that is neither a group, an array nor a label');
     return '(unsupported entry)';
+}
+
+/**
+ * Every place optional content can attach itself that this reader does not
+ * carry. Found on the **kept pages only**, because a group on a page nobody
+ * asked for is not this extract's problem.
+ */
+function detectUnhandledAttachments(doc, selection, unsupported) {
+    const pages = doc.getPages();
+    const wanted = selection === null ? pages.map((_, i) => i) : selection;
+
+    for (const sourceIndex of wanted) {
+        const page = pages[sourceIndex];
+        if (!page) continue;
+
+        // A2 — an annotation that belongs to an optional-content group.
+        const annots = page.node.lookup(PDFName.of('Annots'));
+        if (annots instanceof PDFArray) {
+            for (let i = 0; i < annots.size(); i += 1) {
+                const annot = look(doc, annots.get(i));
+                if (annot instanceof PDFDict && annot.get(PDFName.of('OC')) !== undefined) {
+                    unsupported.push(`page ${sourceIndex} annotation /OC`);
+                }
+            }
+        }
+
+        // A3 — a form or image XObject that belongs to a group.
+        const resources = page.node.lookup(PDFName.of('Resources'));
+        const xobjects = resources instanceof PDFDict
+            ? resources.lookup(PDFName.of('XObject'))
+            : undefined;
+        if (xobjects instanceof PDFDict) {
+            for (const [key, raw] of xobjects.entries()) {
+                const xobject = look(doc, raw);
+                const dict = xobject instanceof PDFDict ? xobject : xobject?.dict;
+                if (dict instanceof PDFDict && dict.get(PDFName.of('OC')) !== undefined) {
+                    unsupported.push(`page ${sourceIndex} XObject ${key.asString()} /OC`);
+                }
+            }
+        }
+    }
 }
 
 /**
  * What a document's optional content is, in terms that survive a copy.
  *
  * Refs differ between documents, so everything a comparison needs is also
- * reported by **name**: the group's own `/Name`, and which names are on and
- * off. `pageProperties` keeps the `(page, key)` pairs that make the mapping
- * structural rather than positional.
+ * reported by **name**. `pageProperties` keeps the `(page, key)` pairs that
+ * make the mapping structural rather than positional.
  */
 export function describeOptionalContent(doc, selection = null) {
     const out = {
@@ -111,11 +171,34 @@ export function describeOptionalContent(doc, selection = null) {
         baseState: null,
         orderPresent: false,
         orderShape: null,
+        configs: 0,
         pageProperties: [],
         unsupported: [],
     };
-    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
-    if (!(oc instanceof PDFDict)) return out;
+
+    let oc;
+    try {
+        oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    } catch (error) {
+        // A4 — a structure that cannot even be looked up is not "absent".
+        out.present = true;
+        out.unsupported.push(`/OCProperties could not be read: ${String(error?.message ?? error)}`);
+        return out;
+    }
+
+    // Attachments are detected whether or not the catalog declares optional
+    // content: an annotation or XObject carrying /OC in a document with no
+    // /OCProperties is itself a structure this reader does not understand.
+    detectUnhandledAttachments(doc, selection, out.unsupported);
+
+    if (!(oc instanceof PDFDict)) {
+        if (doc.catalog.get(PDFName.of('OCProperties')) !== undefined) {
+            out.present = true;
+            out.unsupported.push('/OCProperties is not a dictionary');
+        }
+        if (out.unsupported.length > 0) out.present = true;
+        return out;
+    }
     out.present = true;
 
     const nameOfGroup = (ref) => {
@@ -123,11 +206,31 @@ export function describeOptionalContent(doc, selection = null) {
         return g instanceof PDFDict ? textOf(look(doc, g.get(PDFName.of('Name')))) : null;
     };
 
-    for (const ref of refsOf(oc.lookup(PDFName.of('OCGs')))) {
+    // A4 — /OCGs must be an array of groups, or the structure is unreadable.
+    const groups = oc.lookup(PDFName.of('OCGs'));
+    if (oc.get(PDFName.of('OCGs')) !== undefined && !(groups instanceof PDFArray)) {
+        out.unsupported.push('/OCProperties /OCGs is not an array');
+    }
+    for (const ref of refsOf(groups)) {
         out.groups.push({ ref, name: nameOfGroup(ref) });
     }
 
+    // A1 — alternate configurations. This reader rebuilds one default
+    // configuration; it has never been shown to rebuild a second.
+    const configs = oc.lookup(PDFName.of('Configs'));
+    if (oc.get(PDFName.of('Configs')) !== undefined) {
+        out.configs = configs instanceof PDFArray ? configs.size() : -1;
+        out.unsupported.push(
+            configs instanceof PDFArray
+                ? `/OCProperties /Configs with ${configs.size()} alternate configuration(s)`
+                : '/OCProperties /Configs is not an array',
+        );
+    }
+
     const d = oc.lookup(PDFName.of('D'));
+    if (oc.get(PDFName.of('D')) !== undefined && !(d instanceof PDFDict)) {
+        out.unsupported.push('/OCProperties /D is not a dictionary');
+    }
     if (d instanceof PDFDict) {
         for (const [key] of d.entries()) {
             const k = key.asString().replace(/^\//, '');
@@ -144,19 +247,17 @@ export function describeOptionalContent(doc, selection = null) {
             }
         }
 
-        // `/Order` is not necessarily a flat list of groups. It may nest, it may
-        // carry a text label as the first element of a nested array to title a
-        // section, it may be empty, and it may be absent — and each of those is
-        // a different statement about how a viewer draws its layer panel.
-        //
-        // The first version of this reader collected only the refs it found at
-        // any depth and rewrote a flat array, so a nested or labelled order was
-        // silently flattened, an empty one was filled in, and an absent one was
-        // invented. The comparison never noticed because it compared the *set*
-        // of groups. It compares the shape now.
+        // `/Order` nests, titles sections with labels, may be empty and may be
+        // absent — each a different statement about how the layer panel is
+        // drawn. It is read as a shape, and the label rule is applied here.
         out.orderPresent = d.get(PDFName.of('Order')) !== undefined;
         if (out.orderPresent) {
-            out.orderShape = orderShapeOf(doc, d.lookup(PDFName.of('Order')), nameOfGroup, 0, out.unsupported);
+            const order = d.lookup(PDFName.of('Order'));
+            if (!(order instanceof PDFArray)) {
+                out.unsupported.push('/D /Order is not an array');
+            } else {
+                out.orderShape = orderShapeOf(doc, order, nameOfGroup, 0, out.unsupported, false);
+            }
         }
     }
 
@@ -241,11 +342,6 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
     }
 
     // ---- the structural mapping --------------------------------------------
-    //
-    // For every (output page, /Properties key) the source also had, take the
-    // output's own reference. Positions are never used: a page whose keys were
-    // written in a different order, or a group used on two pages, resolves
-    // through the key it is actually stored under.
     const outPages = out.getPages();
     const sourceRefToOutputRef = new Map();
     const outputRefByTag = new Map();
@@ -264,8 +360,6 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
         outputRefByTag.set(raw.tag, raw);
     }
 
-    // The group list, deduplicated: the source's own `/OCGs` order where it can
-    // be mapped, then anything else the kept pages reference.
     const ordered = [];
     const pushOnce = (ref) => {
         if (!ref) return;
@@ -282,19 +376,19 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
     for (const ref of outputRefByTag.values()) pushOnce(ref);
 
     /**
-     * `/Order`, mapped recursively rather than flattened.
-     *
-     * Nesting is reproduced as nesting, a label is reproduced as the same
-     * label, and a reference this extract cannot map — a group no kept page
-     * uses — is a refusal rather than a silent omission, because dropping an
-     * entry changes the structure the panel is drawn from.
+     * `/Order`, mapped recursively rather than flattened, with the same label
+     * rule the reader applied: a label is reproducible only where it opens a
+     * nested array, and a reference to a group no kept page uses is a refusal
+     * rather than a silent omission.
      */
-    const mapOrder = (node, depth) => {
+    const mapOrder = (node, depth, labelAllowed) => {
         if (depth > MAX_ORDER_DEPTH) throw new Error('/D /Order nested too deep to reproduce');
         const value = look(doc, node);
         if (value instanceof PDFArray) {
             const mapped = [];
-            for (let i = 0; i < value.size(); i += 1) mapped.push(mapOrder(value.get(i), depth + 1));
+            for (let i = 0; i < value.size(); i += 1) {
+                mapped.push(mapOrder(value.get(i), depth + 1, depth > 0 && i === 0));
+            }
             return mapped;
         }
         if (node instanceof PDFRef) {
@@ -303,7 +397,10 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
             return target;
         }
         const label = textOf(value);
-        if (label !== null) return PDFString.of(label);
+        if (label !== null) {
+            if (!labelAllowed) throw new Error('/D /Order holds a text label in a position this reader cannot reproduce');
+            return PDFString.of(label);
+        }
         throw new Error('/D /Order holds an entry that cannot be reproduced');
     };
 
@@ -325,7 +422,7 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
         // empty, is a change to what a viewer shows.
         if (source.orderPresent && sourceD instanceof PDFDict) {
             try {
-                d.Order = mapOrder(sourceD.get(PDFName.of('Order')), 0);
+                d.Order = mapOrder(sourceD.get(PDFName.of('Order')), 0, false);
             } catch (error) {
                 return {
                     status: 'REFUSED',
@@ -337,7 +434,6 @@ export async function extractWithOptionalContent(sourceBytes, selection) {
         }
         if (on.length > 0) d.ON = on;
         if (off.length > 0) d.OFF = off;
-        // The /D semantics, reproduced rather than merely tolerated.
         if (source.dName !== null && source.dName !== undefined) d.Name = PDFString.of(source.dName);
         if (source.baseState === SUPPORTED_BASE_STATE) d.BaseState = PDFName.of('ON');
         out.catalog.set(PDFName.of('OCProperties'), out.context.obj({ OCGs: ordered, D: d }));

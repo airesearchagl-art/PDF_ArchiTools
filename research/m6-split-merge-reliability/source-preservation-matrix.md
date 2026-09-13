@@ -144,6 +144,12 @@ group count, group names, `ON`, `OFF`, `/D /Name`, `/BaseState` and page
 | `/D /Order`, empty | dropped | **stays empty**, not filled in |
 | `/D /Order`, absent | dropped | **stays absent**, not invented |
 | `/OCMD`, `/VE`, `/BaseState /OFF`, malformed `/Order` | dropped, semantics changed silently | **`UNSUPPORTED_OPTIONAL_CONTENT`** |
+| `/OCProperties /Configs` | dropped | **refused** — one configuration is rebuilt, a second is not |
+| annotation `/OC` | dropped, the annotation keeps rendering | **refused** |
+| XObject `/OC` | dropped, the form keeps rendering | **refused** |
+| unreadable `/OCProperties` | treated as absent | **refused** — unreadable is not absent |
+| `/Order` label at the top level or mid-array | dropped or flattened | **refused** — only a label opening a nested array is reproducible |
+| `/Order` naming a group no kept page uses | dropped silently | **refused** |
 
 JavaScript is found by a bounded scanner whose treatment of an array depends on
 the key holding it — a destination under `/OpenAction`, `/Dest` or `/D`, a list
@@ -158,6 +164,12 @@ of actions under `/Next`.
 | JavaScript two `/Next` links down | survives | **0 remaining** |
 | one action referenced from two annotations | survives | **0 remaining** — 2 sites, 2 removed |
 | a cyclic action graph | survives | **`UNSCANNABLE_ACTIONS`**, refused rather than passed |
+| an **indirect** action reached from `/A`, `/AA` or `/Next` | survives; and detaching the key leaves the object in the table | **0 reachable and 0 in the object table**, measured separately |
+
+Five of seven JavaScript cases put an action into the artifact's object table at
+all — the other two hold it as a direct dictionary inside the annotation, so it
+never becomes a separate object. "No reachable JavaScript" was a true sentence
+about a file that still carried the script; both counts are now measured.
 
 ---
 
