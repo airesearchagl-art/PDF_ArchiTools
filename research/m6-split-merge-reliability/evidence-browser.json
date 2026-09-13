@@ -1,0 +1,123 @@
+{
+  "preview": {
+    "pages-10": {
+      "name": "pages-10",
+      "pages": 10,
+      "scale": 1.5,
+      "elapsedMs": 252,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 45028160,
+      "retainedDataUrlChars": 433460,
+      "retainedDataUrlBytes": 866920,
+      "heapBefore": 8401334,
+      "heapAfter": 8468602,
+      "heapDelta": 67268,
+      "retainedCount": 10
+    },
+    "pages-50": {
+      "name": "pages-50",
+      "pages": 50,
+      "scale": 1.5,
+      "elapsedMs": 891,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 225140800,
+      "retainedDataUrlChars": 2202588,
+      "retainedDataUrlBytes": 4405176,
+      "heapBefore": 8526469,
+      "heapAfter": 10485196,
+      "heapDelta": 1958727,
+      "retainedCount": 50
+    },
+    "pages-100": {
+      "name": "pages-100",
+      "pages": 100,
+      "scale": 1.5,
+      "elapsedMs": 1728,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 450281600,
+      "retainedDataUrlChars": 4388036,
+      "retainedDataUrlBytes": 8776072,
+      "heapBefore": 10593763,
+      "heapAfter": 13061032,
+      "heapDelta": 2467269,
+      "retainedCount": 100
+    },
+    "pages-200": {
+      "name": "pages-200",
+      "pages": 200,
+      "scale": 1.5,
+      "elapsedMs": 3393,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 900563200,
+      "retainedDataUrlChars": 8861592,
+      "retainedDataUrlBytes": 17723184,
+      "heapBefore": 13271787,
+      "heapAfter": 18196274,
+      "heapDelta": 4924487,
+      "retainedCount": 200
+    },
+    "pages-10-a1": {
+      "name": "pages-10-a1",
+      "pages": 10,
+      "scale": 1.5,
+      "elapsedMs": 594,
+      "peakCanvasRgbaBytes": 36107500,
+      "totalCanvasRgbaBytes": 361075000,
+      "retainedDataUrlChars": 2694984,
+      "retainedDataUrlBytes": 5389968,
+      "heapBefore": 18215307,
+      "heapAfter": 12084521,
+      "heapDelta": -6130786,
+      "retainedCount": 10
+    }
+  },
+  "strategies": {
+    "name": "pages-100",
+    "pages": 100,
+    "p1AllDataUrls": {
+      "retainedBytes": 8776072,
+      "peakCanvasRgbaBytes": 4502816,
+      "elapsedMs": 1727
+    },
+    "p2LazyWindow": {
+      "window": 12,
+      "retainedBytes": 1042896,
+      "canvasRgbaBytes": 54033792
+    },
+    "p3BlobUrls": {
+      "window": 12,
+      "blobBytes": 390876,
+      "retainedJsHeapBytes": 0
+    }
+  },
+  "lifetime": {
+    "objectUrls": {
+      "runs": 5,
+      "created": 5,
+      "revoked": 0,
+      "leaked": 5
+    },
+    "pdfjs": {
+      "stillUsableWithoutDestroy": true,
+      "usableAfterDestroy": false
+    }
+  },
+  "ownership": {
+    "finishOrder": [
+      "second",
+      "first"
+    ],
+    "first": {
+      "tag": "first",
+      "pages": 100
+    },
+    "second": {
+      "tag": "second",
+      "pages": 10
+    },
+    "lastWriterWins": "first"
+  },
+  "network": {
+    "externalRequests": []
+  }
+}

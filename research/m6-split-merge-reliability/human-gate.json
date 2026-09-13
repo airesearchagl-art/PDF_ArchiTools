@@ -1,0 +1,170 @@
+{
+  "gate": "M6 Split / Merge Reliability Architecture",
+  "status": "OPEN — no decision below has been adopted by this research",
+  "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+  "evidence": [
+    "evidence.json",
+    "evidence-browser.json",
+    "baseline.md",
+    "source-preservation-matrix.md",
+    "structure-policy.md",
+    "preview-memory.md",
+    "budget.md"
+  ],
+  "decisions": [
+    {
+      "id": "M6-H1",
+      "question": "Applied signature policy for Extract",
+      "candidates": [
+        "A — hard refuse any source carrying an applied signature",
+        "B — permit with an explicit confirmation that the derived PDF is unsigned"
+      ],
+      "measured": "A signed source produces a 1,242 B ordinary-looking file with no AcroForm and no warning of any kind.",
+      "recommended": "B",
+      "why": "An Extract artifact is openly a new derived document, and taking two pages from a signed set to share is legitimate. The confirmation must say the result is not signed, per-run, with no 'always allow'.",
+      "defer": []
+    },
+    {
+      "id": "M6-H2",
+      "question": "Applied signature policy for Merge",
+      "candidates": [
+        "A — refuse any source carrying an applied signature",
+        "B — permit with explicit confirmation"
+      ],
+      "measured": "Merging a signed source produced a 5-page ordinary file with no mention of the signature.",
+      "recommended": "A",
+      "why": "A merge mixes a signed document into other content, so the combined artifact carries its appearance without its guarantee. The asymmetry with M6-H1 is deliberate.",
+      "defer": []
+    },
+    {
+      "id": "M6-H3",
+      "question": "AcroForm and widget preservation",
+      "candidates": [
+        "reconstruct the field tree for kept pages",
+        "typed refusal when a form is present",
+        "explicitly unsupported, named as a loss"
+      ],
+      "measured": "Extract of both pages of a two-field form: AcroForm absent, 2 widgets left on the pages belonging to no field. Merge of two sources sharing a field name: same shape, 2 orphan widgets.",
+      "recommended": "reconstruct for Extract where every widget of a field is on a kept page; typed refusal where a field straddles kept and dropped pages; rename-on-collision for Merge",
+      "why": "A widget that renders and is bound to nothing is the worst of the three: it looks like a form and is not one. Whatever is chosen must forbid that state.",
+      "defer": ["calculation and field-order relationships were not researched"]
+    },
+    {
+      "id": "M6-H4",
+      "question": "XFA",
+      "candidates": ["refuse where the operation would drop it", "declare unsupported and name the loss"],
+      "measured": "XFA present in the source is absent from the output, unreported, for both operations.",
+      "recommended": "refuse, following M5's adopted refuse-if-dropped",
+      "why": "Consistency across tools matters more than a marginal capability, and M5 already owns the contract.",
+      "defer": []
+    },
+    {
+      "id": "M6-H5",
+      "question": "Internal destinations pointing at pages excluded from an Extract",
+      "candidates": [
+        "E1 — refuse the selected set, naming the pages that would break",
+        "E2 — keep the set, remove the broken link, report it",
+        "E3 — drop the link silently (not recommended)"
+      ],
+      "measured": "Today is none of these: the link is kept AND the excluded page is copied into the file as an orphan. Extracting page 1 of a 4-page document produced 1 page in the tree and 2 page objects outside it.",
+      "recommended": "E2 as the default, E1 available as a stricter setting",
+      "why": "The current behaviour is worse than E3: it ships content the user did not select. Whatever is chosen, the contract must forbid any page outside the selection from appearing in the output at all.",
+      "defer": []
+    },
+    {
+      "id": "M6-H6",
+      "question": "Outlines, named destinations and page labels",
+      "candidates": ["reconstruct for kept pages", "declare dropped and name the loss"],
+      "measured": "All three are dropped by both operations, even when every page is extracted: 2 named destinations to 0, 4 outline items to 0, 2 label ranges to 0.",
+      "recommended": "reconstruct — entries whose target is kept are reconstructable from the selection, and page labels are arithmetic on /Nums",
+      "why": "These are the navigation a drawing set is used through; losing them silently is the difference between a document and a stack of pages.",
+      "defer": ["outline hierarchies deeper than one level were not measured"]
+    },
+    {
+      "id": "M6-H7",
+      "question": "Extract metadata",
+      "candidates": ["carry the source's metadata under M5 H12", "neutral derived metadata"],
+      "measured": "Output carries only pdf-lib's /Producer /ModDate /Creator /CreationDate; /Title /Author /Subject /Keywords /Company /M6Custom /M6Indirect and the XMP packet are all lost.",
+      "recommended": "carry it, under M5's H12 contract",
+      "why": "Extract has exactly one source, so there is no ambiguity, and M5 already owns a tested carry-or-refuse implementation.",
+      "defer": []
+    },
+    {
+      "id": "M6-H8",
+      "question": "Merge metadata",
+      "candidates": [
+        "M1 — first source's metadata",
+        "M2 — neutral newly-derived metadata",
+        "M3 — the user chooses a source",
+        "M4 — synthesized provenance naming the sources"
+      ],
+      "measured": "Output carries pdf-lib's four keys — M2 by accident, and without saying so.",
+      "recommended": "M4, with M1 available",
+      "why": "A merged document is a new document and its honest metadata says so. M1 fits the common 'append appendices to this drawing' shape and should be offered rather than assumed.",
+      "defer": []
+    },
+    {
+      "id": "M6-H9",
+      "question": "Attachments, /OCProperties, /StructTreeRoot, document JavaScript, /OpenAction",
+      "candidates": ["preserve", "typed refusal", "explicitly unsupported and named as a loss"],
+      "measured": "All dropped by both operations. pdf-lib implements none of them; /StructParents survives on the page, pointing at a structure tree that is not there.",
+      "recommended": "explicitly unsupported and named as a loss, with a typed refusal where the source depends on them",
+      "why": "Preserving them means implementing them from scratch against no library support. Saying so is honest; dropping them quietly is what happens now.",
+      "defer": ["whether a tagged-PDF workflow exists among this product's users"]
+    },
+    {
+      "id": "M6-H10",
+      "question": "Merge intake — all-or-nothing or explicit partial",
+      "candidates": ["all-or-nothing", "explicit partial with every omission named"],
+      "measured": "Today a non-PDF is skipped by a bare continue and a failed load is caught and logged to the console; the file never appears in the list. broken-pagetree and malformed-acroform both LOAD cleanly, so intake cannot be 'whatever the loader accepts'.",
+      "recommended": "explicit partial, with a per-input typed result and every omission named in the UI",
+      "why": "Matches M5's adopted B2 batch shape. The page tree must be walked during intake, because two hostile fixtures load without complaint.",
+      "defer": []
+    },
+    {
+      "id": "M6-H11",
+      "question": "Memory and output ceilings",
+      "candidates": [
+        "reuse M5's 512 MiB / 1 GiB / 2 GiB presets and MAX_OUTPUT_BYTES 268435456",
+        "derive M6-specific ceilings",
+        "adopt the output ceiling now and defer the memory budget to a sub-spike"
+      ],
+      "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is UNKNOWN and is a function of document structure, not byte length. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B. No such check exists today.",
+      "recommended": "adopt an actual-artifact output ceiling now, sharing M5's constant; do NOT adopt a memory preset until an Object-Graph Memory Sub-Spike closes the UNKNOWN",
+      "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
+      "defer": ["M6 Object-Graph Memory Sub-Spike — scope stated in budget.md"]
+    },
+    {
+      "id": "M6-H12",
+      "question": "Thumbnail strategy",
+      "candidates": [
+        "P1 — every page as a Data URL (current)",
+        "P2 — windowed rendering",
+        "P3 — bounded Blob URLs",
+        "P4 — regenerated cache"
+      ],
+      "measured": "P1 retains 88,616 B per A4 page and 538,997 B per A1 sheet (6.2x), 16.9 MiB for 200 A4 pages, 1,727 ms before anything is shown for 100 pages, with no ceiling anywhere. P2 at a 12-page window retains 1.0 MiB against P1's 8.4 MiB on the same source; P3 holds 0 B in the JS heap.",
+      "recommended": "P2 with P3's Blob URLs for the retained window, owned by the run",
+      "why": "The problem with P1 is not speed but that it has no bound: the cost is set by whatever document the user opens.",
+      "defer": ["P4 was not separately measured"]
+    },
+    {
+      "id": "M6-H13",
+      "question": "Ownership and cancellation",
+      "candidates": ["generalize M5's RunOwnership", "a Split/Merge-specific contract"],
+      "measured": "Two previews started together finish in the order second then first, so the slower first source overwrites the faster second one. There is no run token in the component. 5 exports created 5 object URLs and revoked 0. A PDF.js document opened for a preview is never destroyed.",
+      "recommended": "generalize M5's RunOwnership, and extend it with preview-cache and object-URL cleanup on supersede",
+      "why": "The invariant is identical — a superseded run leaves nothing behind — and two incompatible definitions of ownership across tools would be worse than one shared primitive. What M6 adds is that a superseded run must also release retained thumbnails and revoke URLs.",
+      "defer": []
+    },
+    {
+      "id": "M6-H14",
+      "question": "Output naming",
+      "candidates": ["keep extracted_<source>.pdf and merged_document.pdf", "derive a self-describing name"],
+      "measured": "Every merge is named merged_document.pdf, so a second merge overwrites the first in the download folder; an extract says nothing about which pages it contains.",
+      "recommended": "self-describing and deterministic: <source>_p1,3,5-8.pdf for Extract, merged_<n>files_<firstSource>.pdf for Merge",
+      "why": "A download folder is shared state the product writes into; a fixed filename silently destroys the previous result.",
+      "defer": ["length limits for very large selections"]
+    }
+  ]
+}

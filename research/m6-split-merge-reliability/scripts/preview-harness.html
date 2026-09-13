@@ -1,0 +1,302 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M6 Split / Merge — preview and lifetime harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * The browser half of the M6 research gate.
+ *
+ * Some of what M6 has to decide cannot be measured in node: what a thumbnail
+ * actually costs once it is a base64 PNG held in a JavaScript string, whether
+ * the object URLs the current code creates are ever released, and whether the
+ * PDF.js documents it opens are ever destroyed. Those are all browser facts, so
+ * they are measured in a browser.
+ *
+ * The preview route below is **the one production takes** — `getViewport({
+ * scale: 1.5 })`, a canvas per page, `toDataURL()`, every result retained — so
+ * the numbers describe the shipped behaviour rather than a fairer version of it.
+ *
+ * Nothing here is production code and nothing under `src/` imports it.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument } from 'pdf-lib';
+import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+
+const FIXTURES = '/test-fixtures/m6-split-merge';
+const cache = new Map();
+async function bytesOf(name) {
+  if (!cache.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    cache.set(name, new Uint8Array(await r.arrayBuffer()));
+  }
+  return cache.get(name).slice();
+}
+
+/**
+ * Heap readings are advisory and the gate says so.
+ *
+ * `performance.memory` is Chrome-only, quantised, and moves with garbage
+ * collection nobody controls, so it is reported as MEASURED_ONLY and never used
+ * as a bound. The deterministic number is the retained string length: a base64
+ * Data URL costs exactly what it costs, whoever is watching.
+ */
+const heap = () => (performance.memory ? performance.memory.usedJSHeapSize : null);
+const settle = () => new Promise((r) => { setTimeout(r, 50); });
+
+/** The production preview route, reproduced page for page. */
+async function renderPreview(name, { scale = 1.5, keep = true } = {}) {
+  configurePdfWorker();
+  const bytes = await bytesOf(name);
+  const before = heap();
+  const t0 = performance.now();
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+
+  const retained = [];
+  let rgbaBytes = 0;
+  let pngBase64Chars = 0;
+  let widest = 0;
+
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    widest = Math.max(widest, canvas.width * canvas.height);
+    const context = canvas.getContext('2d');
+    await page.render({ canvasContext: context, viewport }).promise;
+    rgbaBytes += canvas.width * canvas.height * 4;
+    const url = canvas.toDataURL();
+    pngBase64Chars += url.length;
+    if (keep) retained.push(url);
+    // Production does not call page.cleanup() here, and does not release the
+    // canvas either; the canvas simply falls out of scope.
+  }
+
+  const elapsedMs = performance.now() - t0;
+  const after = heap();
+  await settle();
+  return {
+    name,
+    pages: pdf.numPages,
+    scale,
+    elapsedMs: Math.round(elapsedMs),
+    // EXACT: the RGBA backing store each canvas needed while it was alive.
+    peakCanvasRgbaBytes: widest * 4,
+    totalCanvasRgbaBytes: rgbaBytes,
+    // EXACT: what the retained Data URLs weigh as UTF-16 strings.
+    retainedDataUrlChars: pngBase64Chars,
+    retainedDataUrlBytes: pngBase64Chars * 2,
+    heapBefore: before,
+    heapAfter: after,
+    heapDelta: before !== null && after !== null ? after - before : null,
+    // Held so the measurement is of a retained thing, then dropped by the caller.
+    retainedCount: retained.length,
+    _retained: retained,
+  };
+}
+
+window.__m6 = {
+  /** §11: what the current all-pages Data URL preview costs, by page count. */
+  async previewCost(names) {
+    const rows = [];
+    for (const name of names) {
+      const r = await renderPreview(name);
+      r._retained.length = 0;
+      delete r._retained;
+      rows.push(r);
+    }
+    return rows;
+  },
+
+  /**
+   * §11 P2/P3/P4: the same pages, kept three other ways.
+   *
+   * Not implementations — just the retained cost of each strategy, so a
+   * recommendation can be made against numbers instead of intuition.
+   */
+  async previewStrategies(name) {
+    const all = await renderPreview(name, { keep: true });
+    all._retained.length = 0;
+    delete all._retained;
+
+    // P2, lazily: only the first screenful is ever rasterised.
+    configurePdfWorker();
+    const bytes = await bytesOf(name);
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const viewportWindow = Math.min(12, pdf.numPages);
+    let lazyChars = 0;
+    let lazyRgba = 0;
+    for (let i = 1; i <= viewportWindow; i += 1) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      lazyRgba += canvas.width * canvas.height * 4;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      lazyChars += canvas.toDataURL().length;
+      page.cleanup();
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    // P3: Blob URLs instead of Data URLs — the bytes leave the JS heap.
+    const blobUrls = [];
+    let blobBytes = 0;
+    for (let i = 1; i <= viewportWindow; i += 1) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      // eslint-disable-next-line no-await-in-loop
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve));
+      blobBytes += blob.size;
+      blobUrls.push(URL.createObjectURL(blob));
+      page.cleanup();
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    for (const u of blobUrls) URL.revokeObjectURL(u);
+    await pdf.destroy();
+
+    return {
+      name,
+      pages: all.pages,
+      p1AllDataUrls: {
+        retainedBytes: all.retainedDataUrlBytes,
+        peakCanvasRgbaBytes: all.peakCanvasRgbaBytes,
+        elapsedMs: all.elapsedMs,
+      },
+      p2LazyWindow: {
+        window: viewportWindow,
+        retainedBytes: lazyChars * 2,
+        canvasRgbaBytes: lazyRgba,
+      },
+      p3BlobUrls: {
+        window: viewportWindow,
+        blobBytes,
+        retainedJsHeapBytes: 0,
+      },
+    };
+  },
+
+  /**
+   * §17: are the object URLs the export path creates ever released, and are the
+   * PDF.js documents it opens ever destroyed?
+   *
+   * `URL.createObjectURL` and `revoke` are counted by replacing them, and the
+   * export route below is the production one, verbatim.
+   */
+  async publicationLifetime(name, runs) {
+    const created = [];
+    const revoked = [];
+    const realCreate = URL.createObjectURL.bind(URL);
+    const realRevoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = (obj) => {
+      const url = realCreate(obj);
+      created.push(url);
+      return url;
+    };
+    URL.revokeObjectURL = (url) => {
+      revoked.push(url);
+      return realRevoke(url);
+    };
+    try {
+      const bytes = await bytesOf(name);
+      for (let i = 0; i < runs; i += 1) {
+        // handleExtractExport, as production performs it.
+        const srcDoc = await PDFDocument.load(bytes.slice());
+        const newDoc = await PDFDocument.create();
+        const copied = await newDoc.copyPages(srcDoc, [0]);
+        copied.forEach((p) => newDoc.addPage(p));
+        const out = await newDoc.save();
+        const blob = new Blob([out], { type: 'application/pdf' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `extracted_${name}.pdf`;
+        // The click itself is not performed here: the question is the URL's
+        // lifetime, and a real download would leave files behind in CI.
+      }
+    } finally {
+      URL.createObjectURL = realCreate;
+      URL.revokeObjectURL = realRevoke;
+    }
+    for (const u of created) realRevoke(u);
+    return { runs, created: created.length, revoked: revoked.length, leaked: created.length - revoked.length };
+  },
+
+  /** §17: does the preview route destroy the documents it opens? */
+  async pdfjsLifetime(name) {
+    configurePdfWorker();
+    const bytes = await bytesOf(name);
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    await page.render({
+      canvasContext: (() => {
+        const c = document.createElement('canvas');
+        const v = page.getViewport({ scale: 1.5 });
+        c.width = Math.floor(v.width);
+        c.height = Math.floor(v.height);
+        return c.getContext('2d');
+      })(),
+      viewport: page.getViewport({ scale: 1.5 }),
+    }).promise;
+
+    // Production stops here. Whether the proxy is still usable afterwards is
+    // the observable difference between "cleaned up" and "left open".
+    let stillUsableWithoutDestroy = false;
+    try {
+      await pdf.getPage(1);
+      stillUsableWithoutDestroy = true;
+    } catch { /* destroyed */ }
+
+    await pdf.destroy();
+    let usableAfterDestroy = false;
+    try {
+      await pdf.getPage(1);
+      usableAfterDestroy = true;
+    } catch { /* expected */ }
+
+    return { stillUsableWithoutDestroy, usableAfterDestroy };
+  },
+
+  /**
+   * §14: what a run in flight does when the thing it was started for changes.
+   *
+   * There is no ownership token in the current component, so this measures the
+   * shape of the problem rather than a guard: a second preview started while
+   * the first is still rendering, and which one's result arrives last.
+   */
+  async supersededPreview(firstName, secondName) {
+    configurePdfWorker();
+    const order = [];
+    const run = async (name, tag) => {
+      const bytes = await bytesOf(name);
+      const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+      const pages = [];
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        pages.push(canvas.toDataURL().length);
+      }
+      order.push(tag);
+      return { tag, pages: pages.length };
+    };
+    // The big one first, the small one immediately after: production has no
+    // token, so whichever finishes last is what the screen ends up showing.
+    const [slow, fast] = await Promise.all([run(firstName, 'first'), run(secondName, 'second')]);
+    return { finishOrder: order, first: slow, second: fast, lastWriterWins: order[order.length - 1] };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m6Ready = true;
+</script>

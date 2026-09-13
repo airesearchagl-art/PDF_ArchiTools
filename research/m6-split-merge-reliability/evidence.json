@@ -1,0 +1,635 @@
+{
+  "provenance": {
+    "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
+    "testedResearchHead": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "workingTreeDirty": true,
+    "coreCiRunsThisGate": false,
+    "dependencies": {
+      "pdf-lib": "1.17.1",
+      "pdfjs-dist": "5.4.449"
+    },
+    "ranAt": "2026-09-13T02:43:29.943Z"
+  },
+  "legacy": {},
+  "extractMatrix": {
+    "all": {
+      "requested": 4,
+      "pagesInTree": 4,
+      "orphanPageObjects": 2,
+      "links": 4,
+      "danglingDests": 2,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytes": 2529
+    },
+    "one": {
+      "requested": 1,
+      "pagesInTree": 1,
+      "orphanPageObjects": 2,
+      "links": 4,
+      "danglingDests": 2,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytes": 2097
+    },
+    "firstAndLast": {
+      "requested": 2,
+      "pagesInTree": 2,
+      "orphanPageObjects": 2,
+      "links": 4,
+      "danglingDests": 2,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytes": 2114
+    },
+    "middle": {
+      "requested": 2,
+      "pagesInTree": 2,
+      "orphanPageObjects": 0,
+      "links": 0,
+      "danglingDests": 0,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytes": 1464
+    },
+    "geometry": {
+      "rotate-90": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "rotate-270": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 270,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 270,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "crop-offset": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            50,
+            70,
+            505.28,
+            711.89
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            50,
+            70,
+            505.28,
+            711.89
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "mediabox-offset": {
+        "before": {
+          "index": 0,
+          "media": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "crop": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "crop": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "user-unit": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 0,
+          "userUnit": 2.5,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 0,
+          "userUnit": 2.5,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "inherited-page-attrs": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            20,
+            30,
+            555.28,
+            781.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            20,
+            30,
+            555.28,
+            781.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      }
+    },
+    "form": {
+      "before": {
+        "present": true,
+        "xfa": false,
+        "sigFlags": null,
+        "needAppearances": true,
+        "fields": [
+          {
+            "name": "m6.onPage1",
+            "ft": "/Tx",
+            "value": "M6-FIELD-ONE",
+            "signed": false,
+            "da": "/Helv 12 Tf 0 g",
+            "widgetPages": [
+              0
+            ]
+          },
+          {
+            "name": "m6.onPage2",
+            "ft": "/Tx",
+            "value": "M6-FIELD-TWO",
+            "signed": false,
+            "da": "/Helv 12 Tf 0 g",
+            "widgetPages": [
+              1
+            ]
+          }
+        ],
+        "orphanWidgets": [],
+        "fieldsReadable": true
+      },
+      "afterAll": {
+        "present": false,
+        "xfa": false,
+        "sigFlags": null,
+        "needAppearances": false,
+        "fields": [],
+        "orphanWidgets": [
+          {
+            "pageIndex": 0,
+            "ref": "5 0 R",
+            "fieldName": "m6.onPage1",
+            "value": "M6-FIELD-ONE",
+            "hasParent": false
+          },
+          {
+            "pageIndex": 1,
+            "ref": "8 0 R",
+            "fieldName": "m6.onPage2",
+            "value": "M6-FIELD-TWO",
+            "hasParent": false
+          }
+        ],
+        "fieldsReadable": true
+      },
+      "afterOne": {
+        "present": false,
+        "xfa": false,
+        "sigFlags": null,
+        "needAppearances": false,
+        "fields": [],
+        "orphanWidgets": [
+          {
+            "pageIndex": 0,
+            "ref": "5 0 R",
+            "fieldName": "m6.onPage1",
+            "value": "M6-FIELD-ONE",
+            "hasParent": false
+          }
+        ],
+        "fieldsReadable": true
+      }
+    },
+    "fieldAcrossPages": {
+      "present": false,
+      "xfa": false,
+      "sigFlags": null,
+      "needAppearances": false,
+      "fields": [],
+      "orphanWidgets": [
+        {
+          "pageIndex": 0,
+          "ref": "5 0 R",
+          "fieldName": null,
+          "value": null,
+          "hasParent": true
+        }
+      ],
+      "fieldsReadable": true
+    },
+    "signature": {
+      "beforeSigned": true,
+      "afterHasForm": false,
+      "producedBytes": 1242
+    },
+    "xfa": {
+      "before": true,
+      "after": false
+    },
+    "ocproperties": {
+      "had": true,
+      "kept": false
+    },
+    "structtree": {
+      "had": true,
+      "kept": false
+    },
+    "attachment-and-js": {
+      "had": true,
+      "kept": false
+    },
+    "danglingSource": [
+      "dangling"
+    ],
+    "metadata:meta-rich": {
+      "beforeKeys": [
+        "/Title",
+        "/Author",
+        "/Subject",
+        "/Creator",
+        "/CreationDate",
+        "/ModDate",
+        "/Keywords",
+        "/Company",
+        "/M6Custom",
+        "/M6Indirect"
+      ],
+      "afterKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "beforeXmp": "",
+      "afterXmp": null
+    },
+    "metadata:meta-xmp-flate": {
+      "beforeKeys": [
+        "/Title",
+        "/Author",
+        "/Subject",
+        "/Creator",
+        "/CreationDate",
+        "/ModDate"
+      ],
+      "afterKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "beforeXmp": "/FlateDecode",
+      "afterXmp": null
+    }
+  },
+  "mergeMatrix": {
+    "A+B": {
+      "pages": 5,
+      "sizes": [
+        "595x842",
+        "595x842",
+        "595x842",
+        "842x1191",
+        "842x1191"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "bytes": 2672
+    },
+    "B+A": {
+      "pages": 5,
+      "sizes": [
+        "842x1191",
+        "842x1191",
+        "595x842",
+        "595x842",
+        "595x842"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "bytes": 2669
+    },
+    "A+A": {
+      "pages": 6,
+      "sizes": [
+        "595x842",
+        "595x842",
+        "595x842",
+        "595x842",
+        "595x842",
+        "595x842"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "bytes": 3023
+    },
+    "A+B+C": {
+      "pages": 7,
+      "sizes": [
+        "595x842",
+        "595x842",
+        "595x842",
+        "842x1191",
+        "842x1191",
+        "595x842",
+        "595x842"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        270,
+        0
+      ],
+      "bytes": 3462
+    },
+    "signed": {
+      "pages": 5,
+      "bytes": 2833,
+      "form": false
+    }
+  },
+  "collisions": {
+    "sourceFields": [
+      "shared.field"
+    ],
+    "mergedForm": false,
+    "mergedFields": [],
+    "orphanWidgets": 2,
+    "namedDests": 0,
+    "outlines": 0,
+    "pageLabels": 0,
+    "infoKeys": [
+      "/Producer",
+      "/ModDate",
+      "/Creator",
+      "/CreationDate"
+    ]
+  },
+  "intake": {
+    "invalid": {
+      "outcome": "UNREADABLE",
+      "detail": "Failed to parse PDF document (line:2 col:0 offset=17): No PDF header found"
+    },
+    "encrypted": {
+      "outcome": "ENCRYPTED",
+      "detail": "Input document to `PDFDocument.load` is encrypted. You can use `PDFDocument.load(..., { ig"
+    },
+    "broken-pagetree": {
+      "outcome": "loaded",
+      "detail": "1 pages"
+    },
+    "malformed-acroform": {
+      "outcome": "loaded",
+      "detail": "1 pages"
+    }
+  },
+  "budget": {
+    "mergedBytes": 3462,
+    "sourceBytes": [
+      2546,
+      1958,
+      1941
+    ],
+    "sumOfSources": 6445,
+    "growth": -2983
+  }
+}
