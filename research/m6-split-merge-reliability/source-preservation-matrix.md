@@ -122,12 +122,37 @@ detected during planning rather than discovered in the artifact.
 
 ### With the optional-content and JavaScript prototypes
 
+Optional content is matched **structurally** — `(selected source page,
+/Properties key)` to `(output page, same key)`, output refs deduplicated — and
+every carried case is compared with its source *after reopening the artifact* on
+group count, group names, `ON`, `OFF`, `/D /Name`, `/BaseState` and page
+`/Properties` resolution.
+
 | | today | prototyped |
 | --- | --- | --- |
-| `/OCProperties`, one group | dropped, page reference left dangling | **carried** — 1 group, 1 on, catalog entry present again |
-| `/OCProperties`, two groups with on/off | dropped | **carried** — 2 groups, 1 on, 1 off |
-| `/OCMD`, `/VE` | dropped, semantics changed silently | **`UNSUPPORTED_OPTIONAL_CONTENT`** |
-| JavaScript, seven sites | survives wherever it travels with a page | **0 remaining after readback, all seven** |
+| one group, one page | dropped, page reference left dangling | **carried** — 1 group, 1 on |
+| two groups, one page | dropped | **carried** — 2 groups, 1 on, 1 off |
+| two pages, opposite states | dropped | **carried** — `on [M6-OCG-A]`, `off [M6-OCG-B]`, all seven comparisons equal |
+| one group referenced from two pages | dropped | **carried** — 1 group, not duplicated |
+| two pages keying the same groups in opposite order | dropped | **carried** — 2 groups, order-independent |
+| three groups over three pages, one shared | dropped | **carried** — 3 groups, 2 on, 1 off |
+| `/D /Name` | dropped | **reproduced** |
+| `/BaseState /ON` | dropped | **reproduced** |
+| `/OCMD`, `/VE`, `/BaseState /OFF` | dropped, semantics changed silently | **`UNSUPPORTED_OPTIONAL_CONTENT`** |
+
+JavaScript is found by a bounded scanner whose treatment of an array depends on
+the key holding it — a destination under `/OpenAction`, `/Dest` or `/D`, a list
+of actions under `/Next`.
+
+| | today | prototyped |
+| --- | --- | --- |
+| seven action sites | survives wherever it travels with a page | **0 remaining after readback, all seven** |
+| `/Next` as a dictionary | survives | **0 remaining** |
+| `/Next` as an array | survives, and was **invisible to the first scanner** | **0 remaining** |
+| `/Next` array with a benign action first | survives | **0 remaining**, the benign action untouched |
+| JavaScript two `/Next` links down | survives | **0 remaining** |
+| one action referenced from two annotations | survives | **0 remaining** — 2 sites, 2 removed |
+| a cyclic action graph | survives | **`UNSCANNABLE_ACTIONS`**, refused rather than passed |
 
 ---
 

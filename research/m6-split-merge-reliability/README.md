@@ -102,8 +102,8 @@ while the product is wrong, and each row says which.
 Latest run:
 
 ```text
-research gate   ASSERT 37  PROBE 37  MEASURE 40  BASELINE-FAIL 18  HUMAN-OPEN 20   92/92
-browser gate    ASSERT  3  PROBE  1  MEASURE 12  BASELINE-FAIL  5  HUMAN-OPEN  3     9/9
+research gate   ASSERT 48  PROBE 48  MEASURE 46  BASELINE-FAIL 18  HUMAN-OPEN 22  114/114
+browser gate    ASSERT  3  PROBE  1  MEASURE 12  BASELINE-FAIL  5  HUMAN-OPEN  3      9/9
 external HTTP(S) during document work: 0
 ```
 

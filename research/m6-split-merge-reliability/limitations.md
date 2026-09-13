@@ -108,6 +108,28 @@ has never been wrong has usually never been checked.
    holds them and the key it sits under, and the scan reports `visits`
    alongside `count`: 1 action from 2 visits.
 
+   Note what this does *not* dedupe, on purpose: `js-action-shared` puts one
+   JavaScript action behind two annotations' `/A`, and that counts as two,
+   because there are two references and both have to be removed. One action
+   reached twice through the same holder is one; one action held by two
+   different dictionaries is two.
+10. **The optional-content carry paired groups by position, and reset its source
+    cursor on every output page.** With one kept page it worked; with two it
+    silently matched page 2's first group against page 1's first source entry,
+    so `ON` and `OFF` could change places. The corpus at the time had only
+    single-page optional-content fixtures, which is why nothing said so. The
+    mapping is structural now — `(page, /Properties key)` on both sides, with
+    the output refs deduplicated — and six multi-page fixtures compare the whole
+    configuration after reopening the artifact, not just its presence.
+11. **The action scanner treated every array as a destination.** `/Next` may be
+    an action dictionary *or an array of them*, and the scanner stopped at the
+    first array it met — so JavaScript inside a `/Next` array was never visited
+    and the document passed its own check. An array's meaning now comes from the
+    key holding it: a destination under `/OpenAction`, `/Dest` or `/D`, a list
+    of actions under `/Next`. The five `/Next` fixtures exist because "seven
+    sites were clean" had been measured only against the shape that happened to
+    be written first.
+
 ## A note on how each JavaScript site reached zero
 
 The sanitized outputs contain no JavaScript, measured by reopening them. But

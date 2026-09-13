@@ -952,6 +952,182 @@ const jsAction = (doc, marker) => doc.context.obj({
 }
 
 // ---------------------------------------------------------------------------
+// Optional content across more than one page
+//
+// The first carry prototype paired source groups to output groups by position
+// and reset its cursor on every output page, so one kept page worked and two
+// silently swapped ON for OFF. These make the mapping answer for itself.
+// ---------------------------------------------------------------------------
+
+/** A registered /OCG with a name a comparison can match across a copy. */
+const ocg = (doc, label) => doc.context.register(doc.context.obj({
+    Type: 'OCG', Name: PDFString.of(label),
+}));
+
+/** Put /Resources /Properties on a page, in the order the keys are given. */
+const setProperties = (doc, page, entries) => {
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (!(resources instanceof PDFDict)) return;
+    const props = doc.context.obj({});
+    for (const [key, ref] of entries) props.set(PDFName.of(key), ref);
+    resources.set(PDFName.of('Properties'), props);
+};
+
+{
+    const { doc, font } = await newDoc('M6 OCG two pages, opposite states');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGOPP-${i}`));
+    const a = ocg(doc, 'M6-OCG-A');
+    const b = ocg(doc, 'M6-OCG-B');
+    setProperties(doc, pages[0], [['M6A', a]]);
+    setProperties(doc, pages[1], [['M6B', b]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b], D: { Order: [a, b], ON: [a], OFF: [b] },
+    }));
+    await write('ocg-two-pages-opposite', doc, 'OCG-A on page 1 is ON, OCG-B on page 2 is OFF');
+}
+{
+    const { doc, font } = await newDoc('M6 one OCG on two pages');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGSHARED-${i}`));
+    const shared = ocg(doc, 'M6-OCG-SHARED');
+    setProperties(doc, pages[0], [['M6S', shared]]);
+    setProperties(doc, pages[1], [['M6S', shared]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [shared], D: { Order: [shared], ON: [shared] },
+    }));
+    await write('ocg-shared-across-pages', doc, 'the same group referenced from both pages');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG properties in different orders');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGORDER-${i}`));
+    const a = ocg(doc, 'M6-OCG-ORD-A');
+    const b = ocg(doc, 'M6-OCG-ORD-B');
+    setProperties(doc, pages[0], [['M6A', a], ['M6B', b]]);
+    setProperties(doc, pages[1], [['M6B', b], ['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b], D: { Order: [a, b], ON: [a], OFF: [b] },
+    }));
+    await write('ocg-reordered-properties', doc, 'the two pages list the same groups in opposite key order');
+}
+{
+    const { doc, font } = await newDoc('M6 several OCGs over several pages');
+    const pages = [1, 2, 3].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGMANY-${i}`));
+    const a = ocg(doc, 'M6-OCG-M1');
+    const b = ocg(doc, 'M6-OCG-M2');
+    const c = ocg(doc, 'M6-OCG-M3');
+    setProperties(doc, pages[0], [['M6A', a]]);
+    setProperties(doc, pages[1], [['M6B', b], ['M6C', c]]);
+    setProperties(doc, pages[2], [['M6C', c]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b, c], D: { Order: [a, b, c], ON: [a, c], OFF: [b] },
+    }));
+    await write('ocg-many-pages', doc, 'three groups spread over three pages, one of them shared');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG configuration with a name');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGDNAME-1');
+    const a = ocg(doc, 'M6-OCG-NAMED');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a], Name: PDFString.of('M6-CONFIG-NAME') },
+    }));
+    await write('ocg-d-name', doc, 'the default configuration carries a /Name');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG base state ON');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGBASE-1');
+    const a = ocg(doc, 'M6-OCG-BASE');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a], BaseState: PDFName.of('ON') },
+    }));
+    await write('ocg-basestate-on', doc, 'a /D carrying the supported /BaseState /ON');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG base state OFF');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGBASEOFF-1');
+    const a = ocg(doc, 'M6-OCG-BASEOFF');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], OFF: [a], BaseState: PDFName.of('OFF') },
+    }));
+    await write('ocg-basestate-off', doc, 'a /D carrying an unsupported /BaseState /OFF');
+}
+
+// ---------------------------------------------------------------------------
+// /Next, in every shape the specification allows
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 /Next as an array');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXTARR-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: [{ Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT-ARRAY */') }],
+        },
+    }]);
+    await write('js-next-array', doc, '/Next is an array holding one JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 /Next array with a benign action first');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXTMIX-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: [
+                { Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')] },
+                { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT-MIXED */') },
+            ],
+        },
+    }]);
+    await write('js-next-array-mixed', doc, '/Next is an array whose second element is JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 nested /Next');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXTNEST-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: {
+                Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+                Next: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT-NESTED */') },
+            },
+        },
+    }]);
+    await write('js-next-nested', doc, 'JavaScript two /Next links down the chain');
+}
+{
+    const { doc, font } = await newDoc('M6 shared action reference');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSSHARED-1');
+    const shared = doc.context.register(doc.context.obj({
+        Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-SHARED */'),
+    }));
+    addAnnots(doc, page, [
+        { Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0], A: shared },
+        { Type: 'Annot', Subtype: 'Link', Rect: [100, 660, 320, 680], Border: [0, 0, 0], A: shared },
+    ]);
+    await write('js-action-shared', doc, 'one JavaScript action referenced from two annotations');
+}
+{
+    const { doc, font } = await newDoc('M6 cyclic action graph');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSCYCLE-1');
+    const first = doc.context.obj({ Type: 'Action', S: 'GoTo', D: [page.ref, PDFName.of('Fit')] });
+    const firstRef = doc.context.register(first);
+    const second = doc.context.obj({
+        Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-CYCLE */'),
+    });
+    const secondRef = doc.context.register(second);
+    first.set(PDFName.of('Next'), secondRef);
+    second.set(PDFName.of('Next'), firstRef);
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0], A: firstRef,
+    }]);
+    await write('js-action-cycle', doc, 'two actions chained into each other through /Next');
+}
+
+// ---------------------------------------------------------------------------
 // Invalid and hostile
 // ---------------------------------------------------------------------------
 writeRaw('invalid', Buffer.from('not a pdf at all\n', 'utf8'), 'not a PDF');

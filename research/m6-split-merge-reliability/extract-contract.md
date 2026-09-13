@@ -187,19 +187,42 @@ AcroForm entirely and defers to a Form Reconstruction Sub-Spike, is M6-H3.
 page keeps the `/Properties` naming the group, so the artifact's marked content
 references a configuration the document no longer has.
 
+Groups are matched **structurally**, never by position:
+
+```text
+selected source page + /Properties key + source OCG ref
+    ->  output page  + same key        + output OCG ref
+```
+
+with the resulting output refs deduplicated. An earlier version paired them by
+position and reset its source cursor on every output page, so one kept page
+worked and two silently swapped `ON` for `OFF`.
+
 | case | result |
 | --- | --- |
-| `ocproperties` (one group) | carried — **1 group, 1 on**, `/OCProperties` present again in the artifact |
-| `ocg-multiple` (two groups) | carried — **2 groups, 1 on, 1 off** |
+| `ocproperties` (one group, one page) | carried — 1 group, 1 on |
+| `ocg-multiple` (two groups, one page) | carried — 2 groups, 1 on, 1 off |
+| `ocg-two-pages-opposite` | carried — **2 groups, `on [M6-OCG-A]`, `off [M6-OCG-B]`** |
+| `ocg-shared-across-pages` | carried — 1 group, referenced from both pages |
+| `ocg-reordered-properties` | carried — 2 groups, keys written in opposite order on each page |
+| `ocg-many-pages` | carried — 3 groups over 3 pages, 2 on, 1 off |
+| `ocg-d-name` | carried — `/D /Name` reproduced |
+| `ocg-basestate-on` | carried — `/BaseState /ON` reproduced |
 | `ocmd` | `UNSUPPORTED_OPTIONAL_CONTENT` |
 | `ocmd-nested` (a `/VE` expression) | `UNSUPPORTED_OPTIONAL_CONTENT` |
+| `ocg-basestate-off` | `UNSUPPORTED_OPTIONAL_CONTENT` |
+
+Every carried case is compared with its source **after reopening the artifact**,
+on group count, group names, `ON`, `OFF`, `/D /Name`, `/BaseState` and page
+`/Properties` resolution — all equal in all six.
 
 Carried: page `/Properties` entries resolving to plain `/OCG` dictionaries, with
-a `/D` whose keys stay within `Order`, `ON`, `OFF`, `Name`, `BaseState`.
-Refused: `/OCMD` in any form, a `/VE` visibility expression, `BaseState /OFF`,
-or any other `/D` key. An `/OCMD` decides visibility from a set of groups and
-optionally a nested boolean expression; carrying part of that evaluation would
-silently change what the reader sees.
+a `/D` whose keys stay within `Order`, `ON`, `OFF`, `Name`, `BaseState` — and
+which are **reproduced**, not merely tolerated. Refused: `/OCMD` in any form, a
+`/VE` visibility expression, a `/BaseState` other than `/ON`, or any other `/D`
+key. An `/OCMD` decides visibility from a set of groups and optionally a nested
+boolean expression; carrying part of that evaluation would silently change what
+the reader sees.
 
 ## JavaScript — sanitized, and proven by reopening the file
 
@@ -212,10 +235,32 @@ Scanner scope: catalog `/OpenAction`, catalog `/AA`, catalog
 action found. Bounded at depth 32 with a per-chain cycle set; a document the
 scanner cannot finish inspecting is `UNSCANNABLE_ACTIONS`, not a quiet pass.
 
+**An array means different things in different places, and only the key holding
+it says which**: a destination under `/OpenAction`, `/Dest` or `/D`; a list of
+actions under `/Next`, every element of which is walked. An earlier version
+treated every array as a destination and stopped, so JavaScript inside a
+`/Next` array was never visited and the document passed.
+
 Seven fixtures, one per site. Each is found in the source and **absent from the
 sanitized output, measured by reopening it — 0 remaining across all seven.**
 A document with no JavaScript scans 0 and completes, and an action reachable by
-two routes is counted once (1 action from 2 visits).
+two routes through the same holder is counted once (1 action from 2 visits).
+
+Then every `/Next` shape the specification allows:
+
+| shape | found | after readback |
+| --- | --- | --- |
+| `/Next` as a dictionary | 1 | **0** |
+| `/Next` as an array | 1 | **0** |
+| `/Next` array whose second element is JavaScript | 1 | **0** |
+| JavaScript two `/Next` links down | 1 | **0** |
+| one action referenced from two annotations | 2 sites, 2 removed | **0** |
+| a cyclic action graph | — | **`UNSCANNABLE_ACTIONS`** |
+
+The shared-action row counts two because the references live on two different
+annotations; removing the action means removing both, and the readback confirms
+it. The cycle is refused rather than passed, which is the point of bounding the
+walk at all.
 
 Two of the seven reach zero because `copyPages` never copies catalog-level
 structure, not because the sanitizer removed anything. The mechanism is recorded

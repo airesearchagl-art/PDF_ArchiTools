@@ -34,7 +34,9 @@ import { planExtract, extractE1, extractE2 } from '../prototype/extract-destinat
 import {
     readForm, planFormForExtract, extractWithForm, mergeWithForms, SUPPORTED_FIELD_TYPES,
 } from '../prototype/form-subset.mjs';
-import { extractWithOptionalContent } from '../prototype/optional-content.mjs';
+import {
+    extractWithOptionalContent, compareOptionalContent, describeOptionalContent,
+} from '../prototype/optional-content.mjs';
 import { scanJavaScript, extractSanitized, MAX_ACTION_DEPTH } from '../prototype/javascript-scan.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -883,6 +885,128 @@ try {
     humanOpen('M6-H9c JavaScript (revised)',
         'a bounded recursive scanner over the action-bearing structures M6 supports, with an '
         + 'unscannable document refused rather than passed');
+
+    // ---- 13. RF-U1: optional content across more than one page --------------
+    //
+    // The first carry prototype paired groups by position and reset its source
+    // cursor on every output page, so one kept page worked and two silently
+    // swapped ON for OFF. The mapping is structural now — (page, /Properties
+    // key) on both sides — and each row below is a document that would have
+    // caught the old one.
+    console.log('\n=== 13. multi-page optional content (RF-U1) ===');
+    evidence.optionalContentMultiPage = {};
+
+    const ocCarry = [
+        ['ocg-two-pages-opposite', [0, 1], 'A ON on page 1, B OFF on page 2'],
+        ['ocg-shared-across-pages', [0, 1], 'one group referenced from both pages'],
+        ['ocg-reordered-properties', [0, 1], 'the same groups keyed in opposite order'],
+        ['ocg-many-pages', [0, 1, 2], 'three groups over three pages, one shared'],
+        ['ocg-d-name', [0], '/D /Name'],
+        ['ocg-basestate-on', [0], 'supported /BaseState /ON'],
+    ];
+    for (const [fixture, keep, label] of ocCarry) {
+        const src = bytesOf(fixture);
+        const r = await extractWithOptionalContent(src, keep);
+        const same = r.status === 'READY'
+            ? await compareOptionalContent(src, keep, r.bytes)
+            : null;
+        const fields = same
+            ? ['groupCount', 'groupNames', 'on', 'off', 'dName', 'baseState', 'pageProperties']
+            : [];
+        const allEqual = fields.every((f) => same[f].equal === true);
+        evidence.optionalContentMultiPage[fixture] = {
+            label, status: r.status, carried: r.carried ?? null, comparison: same,
+        };
+        measure(`${label}`,
+            r.status === 'READY'
+                ? `carried ${r.carried}, on ${r.on}, off ${r.off}, mapped ${r.mapped}`
+                : `${r.code}`);
+        assert_(`${label}: the carried configuration matches the source on readback`,
+            r.status === 'READY' && allEqual,
+            same
+                ? fields.filter((f) => !same[f].equal).map((f) => `${f} differs`).join(', ') || 'all equal'
+                : String(r.code));
+    }
+
+    // The positional bug, reproduced against the corrected mapping: ON and OFF
+    // must not have changed places.
+    const opposite = evidence.optionalContentMultiPage['ocg-two-pages-opposite'].comparison;
+    probe('a two-page document does not swap ON for OFF',
+        opposite?.on.equal === true && opposite?.off.equal === true
+        && JSON.stringify(opposite.on.output) !== JSON.stringify(opposite.off.output),
+        `on ${JSON.stringify(opposite?.on.output)}, off ${JSON.stringify(opposite?.off.output)}`);
+
+    for (const [fixture, why] of [
+        ['ocmd', '/OCMD'],
+        ['ocmd-nested', '/OCMD with a /VE expression'],
+        ['ocg-basestate-off', '/D /BaseState /OFF, which this reader does not reproduce'],
+    ]) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.optionalContentMultiPage[fixture] = { status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${why} is refused rather than carried with its semantics guessed`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
+            (r.unsupported ?? []).join(', '));
+    }
+    humanOpen('M6-H9b optional content (final)',
+        'direct /OCG across any number of pages: carry, proven by readback equality of group count, '
+        + 'names, ON, OFF, /D /Name, /BaseState and page /Properties; /OCMD, /VE and an unsupported '
+        + '/BaseState: typed refusal');
+
+    // ---- 14. RF-U2: /Next in every shape the specification allows -----------
+    console.log('\n=== 14. /Next shapes (RF-U2) ===');
+    evidence.nextShapes = {};
+
+    const nextCases = [
+        ['js-next-chain', '/Next as a dictionary'],
+        ['js-next-array', '/Next as an array'],
+        ['js-next-array-mixed', '/Next array whose second element is JavaScript'],
+        ['js-next-nested', 'JavaScript two /Next links down'],
+        ['js-action-shared', 'one action referenced from two annotations'],
+    ];
+    for (const [fixture, label] of nextCases) {
+        const src = bytesOf(fixture);
+        const doc = await PDFDocument.load(src, { updateMetadata: false });
+        const before = scanJavaScript(doc);
+        const sanitized = await extractSanitized(src, [0]);
+        evidence.nextShapes[fixture] = {
+            label,
+            foundInSource: before.count,
+            scanComplete: before.complete,
+            status: sanitized.status,
+            removed: sanitized.removed ?? null,
+            remainingAfterReadback: sanitized.remainingAfterReadback ?? null,
+            readbackComplete: sanitized.readbackComplete ?? null,
+        };
+        assert_(`${label}: the scanner finds it and completes`,
+            before.count > 0 && before.complete === true, `${before.count} action(s)`);
+        probe(`${label}: nothing survives, measured by reopening the artifact`,
+            sanitized.status === 'READY' && sanitized.remainingAfterReadback === 0
+            && sanitized.readbackComplete === true,
+            `removed ${sanitized.removed}, remaining ${sanitized.remainingAfterReadback}`);
+    }
+
+    const cycleDoc = await PDFDocument.load(bytesOf('js-action-cycle'), { updateMetadata: false });
+    const cycleScan = scanJavaScript(cycleDoc);
+    const cycleSanitized = await extractSanitized(bytesOf('js-action-cycle'), [0]);
+    evidence.nextShapes['js-action-cycle'] = {
+        label: 'a cyclic action graph',
+        scanComplete: cycleScan.complete,
+        incomplete: cycleScan.incomplete,
+        status: cycleSanitized.status,
+        code: cycleSanitized.code ?? null,
+    };
+    probe('a cyclic action graph is refused, not silently passed',
+        cycleScan.complete === false && cycleSanitized.status === 'REFUSED'
+        && cycleSanitized.code === 'UNSCANNABLE_ACTIONS',
+        (cycleScan.incomplete ?? []).join(', '));
+
+    const nextRemaining = Object.values(evidence.nextShapes)
+        .reduce((n, s) => n + (s.remainingAfterReadback ?? 0), 0);
+    probe('across every /Next shape, the sanitized JavaScript count is zero',
+        nextRemaining === 0, `${nextRemaining} remaining`);
+    humanOpen('M6-H9c JavaScript (final)',
+        'the scanner decides an array by the key holding it: a destination under /OpenAction, /Dest '
+        + 'or /D, a list of actions under /Next; a document it cannot finish is UNSCANNABLE_ACTIONS');
 
     fs.writeFileSync(
         path.join(RESEARCH, 'evidence.json'),

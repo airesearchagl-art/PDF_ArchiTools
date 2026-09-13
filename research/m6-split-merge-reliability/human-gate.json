@@ -149,21 +149,28 @@
         "refuse every document carrying optional content",
         "drop and confirm the visibility change"
       ],
-      "measured": "Today's drop is not clean: before {ocProperties: true, pageOptionalContentProperties: true}, after {false, true} — the page's marked content still names a group the document no longer configures, so a viewer shows its own default rather than the author's. A carry prototype now exists and is proven by readback: `ocproperties` carries 1 group (1 on, 0 off) and `ocg-multiple` carries 2 (1 on, 1 off), with /OCProperties present again in the artifact and the page /Properties still resolving. `ocmd` and `ocmd-nested` are refused with UNSUPPORTED_OPTIONAL_CONTENT.",
+      "measured": "Today's drop is not clean: before {ocProperties: true, pageOptionalContentProperties: true}, after {false, true} — the page's marked content still names a group the document no longer configures, so a viewer shows its own default rather than the author's. Six documents now carry and match their source after the artifact is reopened, on group count, group names, ON, OFF, /D /Name, /BaseState and page /Properties resolution, all equal in every one: ocproperties (1 carried, 1 on), ocg-multiple (2 carried, 1 on, 1 off), ocg-two-pages-opposite (2 carried, on [M6-OCG-A], off [M6-OCG-B]), ocg-shared-across-pages (1 carried, referenced from both pages), ocg-reordered-properties (2 carried, keys written in opposite order on each page), ocg-many-pages (3 carried over 3 pages, 2 on, 1 off, one group shared), ocg-d-name (/D /Name reproduced) and ocg-basestate-on (/BaseState /ON reproduced). The two-page opposite-state pairing is the one an earlier positional mapping could invert. Refused with UNSUPPORTED_OPTIONAL_CONTENT: ocmd, ocmd-nested, ocg-basestate-off.",
       "envelope": {
-        "carried": "page /Resources /Properties entries resolving to plain /OCG dictionaries, with a /D whose keys are within Order, ON, OFF, Name, BaseState",
-        "refused": "/OCMD in any form, a /VE visibility expression, /D BaseState /OFF, any other /D key, and any /Properties entry that is neither /OCG nor /OCMD"
+        "carried": "page /Resources /Properties entries resolving to plain /OCG dictionaries, with a /D whose keys are within Order, ON, OFF, Name, BaseState — and which are reproduced in the artifact, not merely accepted at the door",
+        "refused": "/OCMD in any form, a /VE visibility expression, a /BaseState other than /ON, any other /D key, and any /Properties entry that is neither /OCG nor /OCMD"
       },
+      "mapping": "structural: (selected source page + /Properties key + source OCG ref) to (output page + same key + output OCG ref), with the resulting output refs deduplicated. Positions are never used, so a page whose keys are written in a different order, or a group referenced from two pages, still resolves. An earlier version paired by position and reset its source cursor on every output page: one kept page worked, two could swap ON for OFF.",
+      "provenOnReadback": ["group count", "group names", "ON", "OFF", "/D /Name", "/BaseState", "page /Properties resolution"],
       "detector": "catalog /OCProperties present, or any page /Resources /Properties entry resolving to an /OCG or /OCMD",
       "recommended": "carry within the envelope above; typed refusal outside it",
       "why": "Carrying is proven for the direct-/OCG case and the refusal is proven for /OCMD, so neither half is asserted. An /OCMD decides visibility from a set of groups and optionally a nested boolean expression; carrying a subset of that evaluation would silently change what the reader sees, which is the failure this decision exists to prevent.",
-      "defer": ["/OCMD and /VE visibility expressions — refused for now, not designed"]
+      "defer": [
+        "/OCMD, with or without a /VE visibility expression — refused for now, not designed",
+        "/BaseState /OFF and /Unchanged",
+        "usage application dictionaries, /RBGroups and /Locked, which fall outside the handled /D keys"
+      ]
     },
     {
       "id": "M6-H9c",
       "question": "Document JavaScript and /OpenAction",
       "candidates": ["refuse any JavaScript-bearing source", "sanitize: remove and prove by readback", "carry"],
-      "measured": "Seven sites, each with its own fixture, each found by the scanner in the source and absent from the sanitized output measured by reopening it: /Names /JavaScript, /OpenAction as a JavaScript action, annotation /A, annotation /AA, page /AA, field /AA, and JavaScript behind a /Next. Total remaining after readback across all seven: 0. A document with no JavaScript scans 0 and completes. An action reachable by two routes is counted once — 1 action from 2 visits.",
+      "measured": "Seven sites, each with its own fixture, each found by the scanner in the source and absent from the sanitized output measured by reopening it: /Names /JavaScript, /OpenAction as a JavaScript action, annotation /A, annotation /AA, page /AA, field /AA, and JavaScript behind a /Next. Total remaining after readback across all seven: 0. A document with no JavaScript scans 0 and completes. An action reachable by two routes through the same holder is counted once — 1 action from 2 visits. Five /Next shapes then measured separately, all reaching 0 remaining: a dictionary, an array, an array whose second element is JavaScript, JavaScript two links down a nested chain, and one action referenced from two annotations (2 sites, 2 removed — different holders, so two references rather than one). A cyclic action graph is refused with UNSCANNABLE_ACTIONS rather than passed.",
+      "arrayRule": "an array's meaning is decided by the key holding it: a destination under /OpenAction, /Dest or /D; a list of actions under /Next, every element of which is walked. An earlier version treated every array as a destination and stopped, so JavaScript inside a /Next array was never visited and the document passed.",
       "scannerScope": [
         "catalog /OpenAction",
         "catalog /AA",

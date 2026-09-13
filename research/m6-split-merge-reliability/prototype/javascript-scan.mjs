@@ -44,22 +44,67 @@ class Unscannable extends Error {}
  * held under, so a sanitizer can take it out at the right level: an `/A` is
  * removed from its annotation, a `/Next` is spliced out of its parent action.
  */
-function walkAction(doc, holder, key, found, depth, seen) {
-    const raw = holder.get(PDFName.of(key));
-    if (raw === undefined) return;
+/**
+ * Keys whose value may legitimately be a **destination** rather than an action.
+ *
+ * This distinction is the whole of RF-U2. `/Next` is defined as an action
+ * dictionary *or an array of them*, and an earlier version of this scanner
+ * treated every array it met as a destination and stopped — so a JavaScript
+ * action sitting inside a `/Next` array was never visited, and the document
+ * passed. An array means different things in different places, and only the
+ * key it is stored under says which.
+ */
+const DESTINATION_KEYS = new Set(['OpenAction', 'Dest', 'D']);
+
+/** One action, or one array of them, plus whatever is chained behind it. */
+function walkActionValue(doc, raw, ownerFor, found, depth, seen) {
     if (depth > MAX_ACTION_DEPTH) throw new Unscannable(`action chain deeper than ${MAX_ACTION_DEPTH}`);
     if (raw instanceof PDFRef) {
         if (seen.has(raw.tag)) throw new Unscannable('cyclic action chain');
         seen.add(raw.tag);
     }
     const action = look(doc, raw);
-    // A destination array is a legitimate value here and is not an action.
-    if (action instanceof PDFArray) return;
-    if (!(action instanceof PDFDict)) throw new Unscannable(`${key} is neither an action nor a destination`);
-
+    if (!(action instanceof PDFDict)) {
+        throw new Unscannable('an action position holds neither an action nor a destination');
+    }
     const s = nameOf(action.get(PDFName.of('S')));
-    if (s === '/JavaScript') found.push({ holder, key, kind: 'JavaScript' });
+    if (s === '/JavaScript') found.push({ ...ownerFor, kind: 'JavaScript' });
     walkAction(doc, action, 'Next', found, depth + 1, seen);
+}
+
+function walkAction(doc, holder, key, found, depth, seen) {
+    const raw = holder.get(PDFName.of(key));
+    if (raw === undefined) return;
+    if (depth > MAX_ACTION_DEPTH) throw new Unscannable(`action chain deeper than ${MAX_ACTION_DEPTH}`);
+
+    const resolved = look(doc, raw);
+
+    if (resolved instanceof PDFArray) {
+        // A destination array is a legitimate value for these keys and is not
+        // an action. Anywhere else, an array is a list of actions and every
+        // element has to be walked.
+        if (DESTINATION_KEYS.has(key)) return;
+        for (let i = 0; i < resolved.size(); i += 1) {
+            walkActionValue(
+                doc, resolved.get(i),
+                { holder: resolved, key: i, inArray: true },
+                found, depth + 1, new Set(seen),
+            );
+        }
+        return;
+    }
+
+    if (raw instanceof PDFRef) {
+        if (seen.has(raw.tag)) throw new Unscannable('cyclic action chain');
+        seen.add(raw.tag);
+    }
+    if (!(resolved instanceof PDFDict)) {
+        throw new Unscannable(`${key} is neither an action nor a destination`);
+    }
+
+    const s = nameOf(resolved.get(PDFName.of('S')));
+    if (s === '/JavaScript') found.push({ holder, key, kind: 'JavaScript' });
+    walkAction(doc, resolved, 'Next', found, depth + 1, seen);
 }
 
 /** Every entry of an additional-actions dictionary. */
@@ -212,6 +257,11 @@ export function sanitizeJavaScript(doc) {
         };
     }
     let removed = 0;
+
+    // Array elements are taken out by index, and in descending order, because
+    // removing element 0 first would shift every later index out from under
+    // the removals still to come.
+    const arrayRemovals = new Map();
     for (const item of scan.found) {
         if (item.inNameTree) {
             const index = Number(item.key);
@@ -219,8 +269,19 @@ export function sanitizeJavaScript(doc) {
             removed += 1;
             continue;
         }
+        if (item.inArray) {
+            if (!arrayRemovals.has(item.holder)) arrayRemovals.set(item.holder, []);
+            arrayRemovals.get(item.holder).push(item.key);
+            continue;
+        }
         item.holder.delete(PDFName.of(item.key));
         removed += 1;
+    }
+    for (const [array, indices] of arrayRemovals) {
+        for (const index of [...new Set(indices)].sort((a, b) => b - a)) {
+            array.remove(index);
+            removed += 1;
+        }
     }
     // The name tree itself is removed once it holds nothing worth keeping.
     const names = doc.catalog.lookup(PDFName.of('Names'));
