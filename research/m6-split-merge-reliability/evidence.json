@@ -1,0 +1,1213 @@
+{
+  "provenance": {
+    "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
+    "testedResearchHead": "25ab6db58e267c166ef9b1ceee603c0487f4acd9",
+    "workingTreeDirty": true,
+    "researchTreeDirty": true,
+    "researchPackageDirtyBeforeRun": false,
+    "untrackedOutsideResearch": [
+      "public/tessdata/eng.traineddata",
+      "public/tessdata/jpn.traineddata",
+      "public/tesseract/tesseract-core-lstm.wasm.js",
+      "public/tesseract/tesseract-core-relaxedsimd-lstm.wasm.js",
+      "public/tesseract/tesseract-core-simd-lstm.wasm.js",
+      "public/tesseract/worker.min.js",
+      "spike/assets/MPLUS1p-Regular.ttf",
+      "spike/assets/OFL.txt",
+      "spike/fixtures/scanned-en.pdf",
+      "spike/fixtures/scanned-ja-en.pdf",
+      "spike/fixtures/scanned-ja.pdf",
+      "spike/fixtures/scanned-multipage.pdf",
+      "spike/fixtures/text-native-ja-en.pdf",
+      "spike/out/font-subset-false.pdf",
+      "spike/out/font-subset-true.pdf",
+      "spike/out/out-scanned-en.pdf",
+      "spike/out/out-scanned-ja-en.pdf",
+      "spike/out/out-scanned-ja.pdf",
+      "spike/out/out-scanned-multipage.pdf",
+      "spike/out/out-text-native-ja-en.pdf"
+    ],
+    "coreCiRunsThisGate": false,
+    "dependencies": {
+      "pdf-lib": "1.17.1",
+      "pdfjs-dist": "5.4.449"
+    },
+    "ranAt": "2026-09-13T03:32:06.667Z"
+  },
+  "legacy": {},
+  "extractMatrix": {
+    "all": {
+      "requested": 4,
+      "pagesInTree": 4,
+      "orphanPageObjects": 2,
+      "links": 4,
+      "danglingDests": 2,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytesMeasuredOnly": 2529
+    },
+    "one": {
+      "requested": 1,
+      "pagesInTree": 1,
+      "orphanPageObjects": 2,
+      "links": 4,
+      "danglingDests": 2,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytesMeasuredOnly": 2097
+    },
+    "firstAndLast": {
+      "requested": 2,
+      "pagesInTree": 2,
+      "orphanPageObjects": 2,
+      "links": 4,
+      "danglingDests": 2,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytesMeasuredOnly": 2114
+    },
+    "middle": {
+      "requested": 2,
+      "pagesInTree": 2,
+      "orphanPageObjects": 0,
+      "links": 0,
+      "danglingDests": 0,
+      "inDocumentDests": 0,
+      "namedDests": 0,
+      "outlines": 0,
+      "pageLabels": 0,
+      "openAction": null,
+      "catalogKeys": [
+        "/Type",
+        "/Pages"
+      ],
+      "infoKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "bytesMeasuredOnly": 1463
+    },
+    "geometry": {
+      "rotate-90": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "rotate-270": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 270,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 270,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "crop-offset": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            50,
+            70,
+            505.28,
+            711.89
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            50,
+            70,
+            505.28,
+            711.89
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "mediabox-offset": {
+        "before": {
+          "index": 0,
+          "media": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "crop": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "crop": [
+            200,
+            300,
+            595.28,
+            841.8899999999999
+          ],
+          "rotate": 0,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "user-unit": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 0,
+          "userUnit": 2.5,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "rotate": 0,
+          "userUnit": 2.5,
+          "structParents": null,
+          "hasResources": true
+        }
+      },
+      "inherited-page-attrs": {
+        "before": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            20,
+            30,
+            555.28,
+            781.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        },
+        "after": {
+          "index": 0,
+          "media": [
+            0,
+            0,
+            595.28,
+            841.89
+          ],
+          "crop": [
+            20,
+            30,
+            555.28,
+            781.89
+          ],
+          "rotate": 90,
+          "userUnit": null,
+          "structParents": null,
+          "hasResources": true
+        }
+      }
+    },
+    "form": {
+      "before": {
+        "present": true,
+        "xfa": false,
+        "sigFlags": null,
+        "needAppearances": true,
+        "fields": [
+          {
+            "name": "m6.onPage1",
+            "ft": "/Tx",
+            "value": "M6-FIELD-ONE",
+            "signed": false,
+            "da": "/Helv 12 Tf 0 g",
+            "widgetPages": [
+              0
+            ]
+          },
+          {
+            "name": "m6.onPage2",
+            "ft": "/Tx",
+            "value": "M6-FIELD-TWO",
+            "signed": false,
+            "da": "/Helv 12 Tf 0 g",
+            "widgetPages": [
+              1
+            ]
+          }
+        ],
+        "orphanWidgets": [],
+        "fieldsReadable": true
+      },
+      "afterAll": {
+        "present": false,
+        "xfa": false,
+        "sigFlags": null,
+        "needAppearances": false,
+        "fields": [],
+        "orphanWidgets": [
+          {
+            "pageIndex": 0,
+            "ref": "5 0 R",
+            "fieldName": "m6.onPage1",
+            "value": "M6-FIELD-ONE",
+            "ft": "/Tx",
+            "hasParent": false,
+            "hasAppearance": false
+          },
+          {
+            "pageIndex": 1,
+            "ref": "8 0 R",
+            "fieldName": "m6.onPage2",
+            "value": "M6-FIELD-TWO",
+            "ft": "/Tx",
+            "hasParent": false,
+            "hasAppearance": false
+          }
+        ],
+        "fieldsReadable": true
+      },
+      "afterOne": {
+        "present": false,
+        "xfa": false,
+        "sigFlags": null,
+        "needAppearances": false,
+        "fields": [],
+        "orphanWidgets": [
+          {
+            "pageIndex": 0,
+            "ref": "5 0 R",
+            "fieldName": "m6.onPage1",
+            "value": "M6-FIELD-ONE",
+            "ft": "/Tx",
+            "hasParent": false,
+            "hasAppearance": false
+          }
+        ],
+        "fieldsReadable": true
+      }
+    },
+    "fieldAcrossPages": {
+      "present": false,
+      "xfa": false,
+      "sigFlags": null,
+      "needAppearances": false,
+      "fields": [],
+      "orphanWidgets": [
+        {
+          "pageIndex": 0,
+          "ref": "5 0 R",
+          "fieldName": null,
+          "value": null,
+          "ft": "",
+          "hasParent": true,
+          "hasAppearance": false
+        }
+      ],
+      "fieldsReadable": true
+    },
+    "signature": {
+      "beforeSigned": true,
+      "afterHasForm": false,
+      "bytesMeasuredOnly": 1560
+    },
+    "xfa": {
+      "before": true,
+      "after": false
+    },
+    "ocproperties": {
+      "had": true,
+      "kept": false
+    },
+    "structtree": {
+      "had": true,
+      "kept": false
+    },
+    "attachment-and-js": {
+      "had": true,
+      "kept": false
+    },
+    "danglingSource": [
+      "dangling"
+    ],
+    "metadata:meta-rich": {
+      "beforeKeys": [
+        "/Title",
+        "/Author",
+        "/Subject",
+        "/Creator",
+        "/CreationDate",
+        "/ModDate",
+        "/Keywords",
+        "/Company",
+        "/M6Custom",
+        "/M6Indirect"
+      ],
+      "afterKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "beforeXmp": "",
+      "afterXmp": null
+    },
+    "metadata:meta-xmp-flate": {
+      "beforeKeys": [
+        "/Title",
+        "/Author",
+        "/Subject",
+        "/Creator",
+        "/CreationDate",
+        "/ModDate"
+      ],
+      "afterKeys": [
+        "/Producer",
+        "/ModDate",
+        "/Creator",
+        "/CreationDate"
+      ],
+      "beforeXmp": "/FlateDecode",
+      "afterXmp": null
+    }
+  },
+  "mergeMatrix": {
+    "A+B": {
+      "pages": 5,
+      "sizes": [
+        "595x842",
+        "595x842",
+        "595x842",
+        "842x1191",
+        "842x1191"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "bytesMeasuredOnly": 2672
+    },
+    "B+A": {
+      "pages": 5,
+      "sizes": [
+        "842x1191",
+        "842x1191",
+        "595x842",
+        "595x842",
+        "595x842"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "bytesMeasuredOnly": 2669
+    },
+    "A+A": {
+      "pages": 6,
+      "sizes": [
+        "595x842",
+        "595x842",
+        "595x842",
+        "595x842",
+        "595x842",
+        "595x842"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "bytesMeasuredOnly": 3023
+    },
+    "A+B+C": {
+      "pages": 7,
+      "sizes": [
+        "595x842",
+        "595x842",
+        "595x842",
+        "842x1191",
+        "842x1191",
+        "595x842",
+        "595x842"
+      ],
+      "rotations": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        270,
+        0
+      ],
+      "bytesMeasuredOnly": 3462
+    },
+    "signed": {
+      "pages": 5,
+      "form": false,
+      "bytesMeasuredOnly": 3150
+    }
+  },
+  "collisions": {
+    "sourceFields": [
+      "shared.field"
+    ],
+    "mergedForm": false,
+    "mergedFields": [],
+    "orphanWidgets": 2,
+    "namedDests": 0,
+    "outlines": 0,
+    "pageLabels": 0,
+    "infoKeys": [
+      "/Producer",
+      "/ModDate",
+      "/Creator",
+      "/CreationDate"
+    ]
+  },
+  "intake": {
+    "invalid": {
+      "outcome": "UNREADABLE",
+      "detail": "Failed to parse PDF document (line:2 col:0 offset=17): No PDF header found"
+    },
+    "encrypted": {
+      "outcome": "ENCRYPTED",
+      "detail": "Input document to `PDFDocument.load` is encrypted. You can use `PDFDocument.load(..., { ig"
+    },
+    "broken-pagetree": {
+      "outcome": "loaded",
+      "detail": "1 pages"
+    },
+    "malformed-acroform": {
+      "outcome": "loaded",
+      "detail": "1 pages"
+    }
+  },
+  "budget": {
+    "mergedBytesMeasuredOnly": 3462,
+    "sourceBytes": [
+      2546,
+      1958,
+      1941
+    ],
+    "sumOfSources": 6445,
+    "growthMeasuredOnly": -2983
+  },
+  "destinations": {
+    "dest-direct-2p[0,1]": {
+      "label": "selected → selected, /Dest",
+      "legacy": {
+        "pagesInTree": 2,
+        "orphanPages": 1,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 1,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 1
+      },
+      "e2": {
+        "pagesInTree": 2,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 1,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 1,
+        "losses": [],
+        "bytesMeasuredOnly": 1762
+      }
+    },
+    "dest-direct-2p[0]": {
+      "label": "selected → excluded, /Dest",
+      "legacy": {
+        "pagesInTree": 1,
+        "orphanPages": 1,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 1,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 1
+      },
+      "e2": {
+        "pagesInTree": 1,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 0,
+        "losses": [
+          {
+            "kind": "internal-link",
+            "from": 0,
+            "target": 1,
+            "why": "target page not selected"
+          }
+        ],
+        "bytesMeasuredOnly": 1107
+      }
+    },
+    "dest-goto-2p[0,1]": {
+      "label": "selected → selected, /A /GoTo /D",
+      "legacy": {
+        "pagesInTree": 2,
+        "orphanPages": 1,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 1,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 1
+      },
+      "e2": {
+        "pagesInTree": 2,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 1,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 1,
+        "losses": [],
+        "bytesMeasuredOnly": 1795
+      }
+    },
+    "dest-goto-2p[0]": {
+      "label": "selected → excluded, /A /GoTo /D",
+      "legacy": {
+        "pagesInTree": 1,
+        "orphanPages": 1,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 1,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 1
+      },
+      "e2": {
+        "pagesInTree": 1,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 1
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 0,
+        "losses": [
+          {
+            "kind": "internal-link",
+            "from": 0,
+            "target": 1,
+            "why": "target page not selected"
+          }
+        ],
+        "bytesMeasuredOnly": 1141
+      }
+    },
+    "dest-named-2p[0,1]": {
+      "label": "named destination, both pages kept",
+      "legacy": {
+        "pagesInTree": 2,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 2,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0
+      },
+      "e2": {
+        "pagesInTree": 2,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 4,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 2,
+        "losses": [],
+        "bytesMeasuredOnly": 2111
+      }
+    },
+    "dest-named-2p[0]": {
+      "label": "named destination → excluded page",
+      "legacy": {
+        "pagesInTree": 1,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 2,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0
+      },
+      "e2": {
+        "pagesInTree": 1,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 2,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 1
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 1,
+        "losses": [
+          {
+            "kind": "named-destination-link",
+            "from": 0,
+            "name": "M6-DEST-P2",
+            "why": "target page not selected"
+          },
+          {
+            "kind": "named-destination",
+            "name": "M6-DEST-P2",
+            "why": "target page not selected"
+          }
+        ],
+        "bytesMeasuredOnly": 1418
+      }
+    },
+    "dest-cyclic-2p[0]": {
+      "label": "cyclic destinations, one page kept",
+      "legacy": {
+        "pagesInTree": 1,
+        "orphanPages": 2,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 1,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 1
+      },
+      "e2": {
+        "pagesInTree": 1,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 0,
+        "losses": [
+          {
+            "kind": "internal-link",
+            "from": 0,
+            "target": 1,
+            "why": "target page not selected"
+          }
+        ],
+        "bytesMeasuredOnly": 1103
+      }
+    },
+    "dest-shared-target-3p[0,1]": {
+      "label": "shared target, target excluded",
+      "legacy": {
+        "pagesInTree": 2,
+        "orphanPages": 1,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 2,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 2
+      },
+      "e2": {
+        "pagesInTree": 2,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 0,
+        "losses": [
+          {
+            "kind": "internal-link",
+            "from": 0,
+            "target": 2,
+            "why": "target page not selected"
+          },
+          {
+            "kind": "internal-link",
+            "from": 1,
+            "target": 2,
+            "why": "target page not selected"
+          }
+        ],
+        "bytesMeasuredOnly": 1850
+      }
+    },
+    "dest-shared-target-3p[0,1,2]": {
+      "label": "shared target, target kept",
+      "legacy": {
+        "pagesInTree": 3,
+        "orphanPages": 1,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 2,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 2
+      },
+      "e2": {
+        "pagesInTree": 3,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 2,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 2,
+        "losses": [],
+        "bytesMeasuredOnly": 2520
+      }
+    },
+    "page-refs-beyond-annots[0]": {
+      "label": "page reference outside /Annots (/B bead)",
+      "legacy": {
+        "pagesInTree": 1,
+        "orphanPages": 2,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0
+      },
+      "e2": {
+        "pagesInTree": 1,
+        "orphanPages": 0,
+        "targets": {
+          "inDocument": 0,
+          "orphanTarget": 0,
+          "dangling": 0,
+          "named": 0,
+          "pageNumber": 0,
+          "unknown": 0
+        },
+        "orphanTargetDests": 0,
+        "rebuilt": 0,
+        "losses": [
+          {
+            "kind": "page-reference",
+            "from": 0,
+            "key": "/B",
+            "why": "not reconstructable from a subset"
+          }
+        ],
+        "bytesMeasuredOnly": 980
+      }
+    },
+    "e1": {
+      "refused": "REFUSED",
+      "allowed": "READY"
+    }
+  },
+  "forms": {
+    "supportedTypes": [
+      "/Tx",
+      "/Btn",
+      "/Ch",
+      "/Sig"
+    ],
+    "form2p": {
+      "fields": [
+        {
+          "name": "m6.onPage1",
+          "ft": "/Tx",
+          "pages": [
+            0
+          ]
+        },
+        {
+          "name": "m6.onPage2",
+          "ft": "/Tx",
+          "pages": [
+            1
+          ]
+        }
+      ],
+      "outsideSubset": []
+    },
+    "extractBothPages": {
+      "status": "READY",
+      "rebuiltFields": 2,
+      "acroForm": true,
+      "orphanWidgets": 0,
+      "fields": [
+        {
+          "name": "m6.onPage1",
+          "value": "M6-FIELD-ONE"
+        },
+        {
+          "name": "m6.onPage2",
+          "value": "M6-FIELD-TWO"
+        }
+      ]
+    },
+    "straddling": {
+      "status": "REFUSED",
+      "code": "FIELD_SPANS_SELECTION"
+    },
+    "mergeCollision": {
+      "renameStatus": "READY",
+      "collisions": [
+        "shared.field"
+      ],
+      "renamed": [
+        {
+          "from": "shared.field",
+          "to": "source1.shared.field",
+          "source": 1
+        },
+        {
+          "from": "shared.field",
+          "to": "source2.shared.field",
+          "source": 2
+        }
+      ],
+      "refuseStatus": "REFUSED",
+      "refuseCode": "DUPLICATE_FIELD_NAMES",
+      "afterRename": {
+        "acroForm": true,
+        "fields": [
+          {
+            "name": "source1.shared.field",
+            "value": "M6-PAGE-COLLIDE-A-VALUE"
+          },
+          {
+            "name": "source2.shared.field",
+            "value": "M6-PAGE-COLLIDE-B-VALUE"
+          }
+        ],
+        "orphanWidgets": 0
+      }
+    }
+  },
+  "signature": {
+    "before": {
+      "acroFormPresent": true,
+      "signatureFields": 1,
+      "appliedValues": 1,
+      "orphanWidgets": 0,
+      "orphanWidgetsWithAppearance": 0,
+      "sigFlags": 3
+    },
+    "afterLegacyExtract": {
+      "acroFormPresent": false,
+      "signatureFields": 0,
+      "appliedValues": 0,
+      "orphanWidgets": 1,
+      "orphanWidgetsWithAppearance": 1,
+      "sigFlags": null
+    },
+    "widgetsOnPage": 1,
+    "orphanWidgetDetail": [
+      {
+        "pageIndex": 0,
+        "ref": "5 0 R",
+        "fieldName": "m6.sig",
+        "value": "<<\n/Type /Sig\n/Filter /Adobe.PPKLite\n/SubFilter /adbe.pkcs7.detached\n/ByteRange [ 0 0 0 0 ]\n/Contents <9c48054c50cf3d6c9c0f52b06c80335e79a1e120233bd6fea03ce6635a10cc2b>\n/M (D:20260101000000Z)\n>>",
+        "ft": "/Sig",
+        "hasParent": false,
+        "hasAppearance": true
+      }
+    ]
+  },
+  "catalogStructures": {
+    "structtree": {
+      "before": {
+        "structTreeRoot": true,
+        "markInfo": true,
+        "pageStructParents": true,
+        "ocProperties": false,
+        "pageOptionalContentProperties": false,
+        "openAction": false
+      },
+      "after": {
+        "structTreeRoot": false,
+        "markInfo": false,
+        "pageStructParents": true,
+        "ocProperties": false,
+        "pageOptionalContentProperties": false,
+        "openAction": false
+      }
+    },
+    "ocproperties": {
+      "before": {
+        "structTreeRoot": false,
+        "markInfo": false,
+        "pageStructParents": false,
+        "ocProperties": true,
+        "pageOptionalContentProperties": true,
+        "openAction": false
+      },
+      "after": {
+        "structTreeRoot": false,
+        "markInfo": false,
+        "pageStructParents": false,
+        "ocProperties": false,
+        "pageOptionalContentProperties": true,
+        "openAction": false
+      }
+    },
+    "nav-4p": {
+      "before": {
+        "structTreeRoot": false,
+        "markInfo": false,
+        "pageStructParents": false,
+        "ocProperties": false,
+        "pageOptionalContentProperties": false,
+        "openAction": true
+      },
+      "after": {
+        "structTreeRoot": false,
+        "markInfo": false,
+        "pageStructParents": false,
+        "ocProperties": false,
+        "pageOptionalContentProperties": false,
+        "openAction": false
+      }
+    }
+  }
+}

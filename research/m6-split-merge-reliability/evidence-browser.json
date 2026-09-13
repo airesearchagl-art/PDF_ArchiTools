@@ -1,0 +1,176 @@
+{
+  "provenance": {
+    "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
+    "testedResearchHead": "25ab6db58e267c166ef9b1ceee603c0487f4acd9",
+    "workingTreeDirty": true,
+    "researchTreeDirty": true,
+    "researchPackageDirtyBeforeRun": false,
+    "untrackedOutsideResearch": [
+      "public/tessdata/eng.traineddata",
+      "public/tessdata/jpn.traineddata",
+      "public/tesseract/tesseract-core-lstm.wasm.js",
+      "public/tesseract/tesseract-core-relaxedsimd-lstm.wasm.js",
+      "public/tesseract/tesseract-core-simd-lstm.wasm.js",
+      "public/tesseract/worker.min.js",
+      "spike/assets/MPLUS1p-Regular.ttf",
+      "spike/assets/OFL.txt",
+      "spike/fixtures/scanned-en.pdf",
+      "spike/fixtures/scanned-ja-en.pdf",
+      "spike/fixtures/scanned-ja.pdf",
+      "spike/fixtures/scanned-multipage.pdf",
+      "spike/fixtures/text-native-ja-en.pdf",
+      "spike/out/font-subset-false.pdf",
+      "spike/out/font-subset-true.pdf",
+      "spike/out/out-scanned-en.pdf",
+      "spike/out/out-scanned-ja-en.pdf",
+      "spike/out/out-scanned-ja.pdf",
+      "spike/out/out-scanned-multipage.pdf",
+      "spike/out/out-text-native-ja-en.pdf"
+    ],
+    "coreCiRunsThisGate": false,
+    "dependencies": {
+      "pdf-lib": "1.17.1",
+      "pdfjs-dist": "5.4.449"
+    },
+    "ranAt": "2026-09-13T03:32:28.593Z"
+  },
+  "preview": {
+    "pages-10": {
+      "name": "pages-10",
+      "pages": 10,
+      "scale": 1.5,
+      "elapsedMs": 246,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 45028160,
+      "retainedDataUrlChars": 433460,
+      "retainedDataUrlBytes": 866920,
+      "heapBefore": 8449602,
+      "heapAfter": 8510146,
+      "heapDelta": 60544,
+      "retainedCount": 10
+    },
+    "pages-50": {
+      "name": "pages-50",
+      "pages": 50,
+      "scale": 1.5,
+      "elapsedMs": 891,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 225140800,
+      "retainedDataUrlChars": 2202588,
+      "retainedDataUrlBytes": 4405176,
+      "heapBefore": 8568013,
+      "heapAfter": 10526732,
+      "heapDelta": 1958719,
+      "retainedCount": 50
+    },
+    "pages-100": {
+      "name": "pages-100",
+      "pages": 100,
+      "scale": 1.5,
+      "elapsedMs": 1718,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 450281600,
+      "retainedDataUrlChars": 4388036,
+      "retainedDataUrlBytes": 8776072,
+      "heapBefore": 10635299,
+      "heapAfter": 13102344,
+      "heapDelta": 2467045,
+      "retainedCount": 100
+    },
+    "pages-200": {
+      "name": "pages-200",
+      "pages": 200,
+      "scale": 1.5,
+      "elapsedMs": 3387,
+      "peakCanvasRgbaBytes": 4502816,
+      "totalCanvasRgbaBytes": 900563200,
+      "retainedDataUrlChars": 8861592,
+      "retainedDataUrlBytes": 17723184,
+      "heapBefore": 13313099,
+      "heapAfter": 18238530,
+      "heapDelta": 4925431,
+      "retainedCount": 200
+    },
+    "pages-10-a1": {
+      "name": "pages-10-a1",
+      "pages": 10,
+      "scale": 1.5,
+      "elapsedMs": 589,
+      "peakCanvasRgbaBytes": 36107500,
+      "totalCanvasRgbaBytes": 361075000,
+      "retainedDataUrlChars": 2694984,
+      "retainedDataUrlBytes": 5389968,
+      "heapBefore": 18257567,
+      "heapAfter": 12132245,
+      "heapDelta": -6125322,
+      "retainedCount": 10
+    }
+  },
+  "strategies": {
+    "name": "pages-100",
+    "pages": 100,
+    "p1AllDataUrls": {
+      "retainedBytes": 8776072,
+      "peakCanvasRgbaBytes": 4502816,
+      "elapsedMs": 1717
+    },
+    "p2LazyWindow": {
+      "window": 12,
+      "retainedBytes": 1042896,
+      "canvasRgbaBytes": 54033792
+    },
+    "p3BlobUrls": {
+      "window": 12,
+      "blobBytes": 390876,
+      "retainedJsHeapBytes": 0
+    }
+  },
+  "lifetime": {
+    "objectUrls": {
+      "runs": 5,
+      "created": 5,
+      "revoked": 0,
+      "leaked": 5
+    },
+    "pdfjs": {
+      "stillUsableWithoutDestroy": true,
+      "usableAfterDestroy": false
+    }
+  },
+  "ownership": {
+    "finishOrder": [
+      "second",
+      "first"
+    ],
+    "first": {
+      "tag": "first",
+      "pages": 100
+    },
+    "second": {
+      "tag": "second",
+      "pages": 10
+    },
+    "lastWriterWins": "first"
+  },
+  "network": {
+    "externalRequests": []
+  },
+  "signatureAppearance": {
+    "rect": [
+      380,
+      80,
+      560,
+      140
+    ],
+    "source": {
+      "nonWhitePixels": 4325,
+      "sampled": 24300
+    },
+    "extracted": {
+      "nonWhitePixels": 4325,
+      "sampled": 24300
+    },
+    "extractedBytesMeasuredOnly": 1559
+  }
+}
