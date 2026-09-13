@@ -74,6 +74,17 @@ has never been wrong has usually never been checked.
    (`// ---- 9. ownership`) that does not exist in this file. The edit was
    rejected rather than applied, which is the good failure; the bad version of
    the same mistake would have been an anchor that matched something else.
+7. **A volatile number was stored in the box reserved for stable ones.** Running
+   the research gate twice from one committed source reported that structural
+   classifications were *not* identical. The whole difference was two artifact
+   byte counts, each off by one: `extractMatrix.middle` 1,464 → 1,463 and
+   `mergeMatrix['B+A']` 2,669 → 2,668. The legacy routes are reproduced with
+   pdf-lib's defaults, so `updateMetadata: true` writes a fresh `/ModDate` on
+   every run and the serialised offsets move a digit with it. Nothing
+   structural moved. The counts are now recorded as `bytesMeasuredOnly`, which
+   is what they always were; had they been named that from the start, the
+   stability check would have been answerable on the first attempt instead of
+   looking like non-determinism in the measurements.
 
 ## Not attempted
 

@@ -60,6 +60,23 @@ const measure = (name, detail = '') => say('MEASURE', name, null, detail);
 const baselineFail = (name, reproduced, detail = '') => say('BASELINE-FAIL', name, !!reproduced, detail);
 const humanOpen = (name, detail = '') => say('HUMAN-OPEN', name, null, detail);
 
+/**
+ * Artifact byte counts are MEASURED_ONLY, and the field name says so.
+ *
+ * The legacy routes are reproduced with pdf-lib's defaults, which means
+ * `updateMetadata: true` — so every run writes a fresh `/ModDate` into the
+ * output. Two runs of the same extract differed by one byte
+ * (`extractMatrix.middle` 1,464 → 1,463), and a merge by one
+ * (`mergeMatrix['B+A']` 2,669 → 2,668). Nothing structural moved; a timestamp
+ * did, and the serialised offsets moved a digit with it.
+ *
+ * Recording these under a name that announces their basis keeps them useful for
+ * scale while keeping them out of any claim that structural classifications are
+ * stable across runs — which they are, and which was briefly obscured by
+ * carrying a volatile number in the same box as them.
+ */
+const measuredOnly = (bytes) => ({ bytesMeasuredOnly: bytes });
+
 const evidence = {
     provenance: {},
     legacy: {},
@@ -222,7 +239,7 @@ try {
             openAction: after.openAction?.target ?? null,
             catalogKeys: after.catalogKeys,
             infoKeys: after.metadata.info.map((e) => e.key),
-            bytes: out.length,
+            ...measuredOnly(out.length),
         };
         measure(`extract ${name}`,
             `${indices.length} requested → ${after.pageCount} in tree, ${orphans} orphan page object(s), `
@@ -286,7 +303,7 @@ try {
     evidence.extractMatrix.signature = {
         beforeSigned: signedBefore.form.fields.some((f) => f.signed),
         afterHasForm: signedAfter.form.present,
-        producedBytes: signedOut.length,
+        ...measuredOnly(signedOut.length),
     };
     baselineFail('Extract turns a signed source into an ordinary-looking file, and says nothing',
         signedBefore.form.fields.some((f) => f.signed) && signedOut.length > 0,
@@ -343,7 +360,7 @@ try {
             pages: after.pageCount,
             sizes: after.pages.map((p) => `${Math.round(p.media[2])}x${Math.round(p.media[3])}`),
             rotations: after.pages.map((p) => p.rotate),
-            bytes: out.length,
+            ...measuredOnly(out.length),
         };
         measure(`merge ${name}`,
             `${after.pageCount} pages, sizes ${evidence.mergeMatrix[name].sizes.join(' ')}, `
@@ -387,8 +404,9 @@ try {
     const mergedSigned = await legacyMerge([bytesOf('source-a'), bytesOf('sig-applied')]);
     const mergedSignedAfter = await structureOf(mergedSigned);
     evidence.mergeMatrix.signed = {
-        pages: mergedSignedAfter.pageCount, bytes: mergedSigned.length,
+        pages: mergedSignedAfter.pageCount,
         form: mergedSignedAfter.form.present,
+        ...measuredOnly(mergedSigned.length),
     };
     baselineFail('merging a signed document produces an ordinary file with no mention of the signature',
         mergedSigned.length > 0 && mergedSignedAfter.form.present === false,
@@ -426,10 +444,10 @@ try {
     console.log('\n=== 5. output size and budget terms ===');
     const big = await legacyMerge([a, b, c]);
     evidence.budget = {
-        mergedBytes: big.length,
+        mergedBytesMeasuredOnly: big.length,
         sourceBytes: [a.length, b.length, c.length],
         sumOfSources: a.length + b.length + c.length,
-        growth: big.length - (a.length + b.length + c.length),
+        growthMeasuredOnly: big.length - (a.length + b.length + c.length),
     };
     measure('merge output vs the sum of its sources',
         `${fmt(evidence.budget.sumOfSources)} B in → ${fmt(evidence.budget.mergedBytes)} B out`);
@@ -539,6 +557,7 @@ try {
                 losses: e2.losses,
             },
         };
+        evidence.destinations[key].e2.bytesMeasuredOnly = e2.bytes.length;
 
         measure(`${c.label} — today`,
             `${legacy.pageCount} page(s) in tree, ${legacyOrphans.count} orphan, `
