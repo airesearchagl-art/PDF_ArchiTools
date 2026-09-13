@@ -1,0 +1,3343 @@
+{
+ "ranAt": "2026-09-12T09:23:29.076Z",
+ "ranBy": "M5 raster encoder / memory sub-spike gate (local run on the spike branch)",
+ "productionBase": "78b5bd5ee676ee72621bccf9524225cd4ce8482a",
+ "testedResearchHead": "54374aa64e23b542d1f1955298c66c5d4d2d9c32",
+ "researchBranchAtRun": "research/m5-raster-encoder-memory-spike",
+ "workingTreeDirty": false,
+ "dirtinessScope": "research/m5-raster-encoder-memory, untracked files included",
+ "dirtyPaths": [],
+ "coreCiRunsThisGate": false,
+ "sections": {
+  "corpus": {
+   "vector-a4": {
+    "bytes": 1214,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "text-a4": {
+    "bytes": 1306,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "drawing-a4": {
+    "bytes": 1776,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "hatch-a4": {
+    "bytes": 6275,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "fine-line-a4": {
+    "bytes": 6537998,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "grey-scan-a4": {
+    "bytes": 1979104,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "colour-scan-a4": {
+    "bytes": 1619592,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "photo-a4": {
+    "bytes": 5425311,
+    "pages": 1,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "four-pages": {
+    "bytes": 3312,
+    "pages": 4,
+    "widthPt": 595.28,
+    "heightPt": 841.89
+   },
+   "vector-a3": {
+    "bytes": 1202,
+    "pages": 1,
+    "widthPt": 841.89,
+    "heightPt": 1190.55
+   }
+  },
+  "pngContract": [
+   {
+    "w": 64,
+    "h": 64,
+    "production": 16516,
+    "model": 16516,
+    "actual": 16516,
+    "agree": true,
+    "bytesPerPixel": 4.0322265625
+   },
+   {
+    "w": 1240,
+    "h": 1754,
+    "production": 8702418,
+    "model": 8702418,
+    "actual": 8702418,
+    "agree": true,
+    "bytesPerPixel": 4.001185309155111
+   },
+   {
+    "w": 2480,
+    "h": 3508,
+    "production": 34805987,
+    "model": 34805987,
+    "actual": 34805987,
+    "agree": true,
+    "bytesPerPixel": 4.000761738146909
+   }
+  ],
+  "productionBaseline": {
+   "150": {
+    "drawing-a4": {
+     "sourceBytes": 1776,
+     "monochromeBytes": 53576,
+     "monochromeMs": 84.3999999910593,
+     "optimizeBytes": 53864,
+     "optimizeMs": 66.6000000089407
+    },
+    "hatch-a4": {
+     "sourceBytes": 6275,
+     "monochromeBytes": 329544,
+     "monochromeMs": 79,
+     "optimizeBytes": 329544,
+     "optimizeMs": 56.19999998807907
+    },
+    "fine-line-a4": {
+     "sourceBytes": 6537998,
+     "monochromeBytes": 374985,
+     "monochromeMs": 253.1000000089407,
+     "optimizeBytes": 374985,
+     "optimizeMs": 174.3999999910593
+    },
+    "grey-scan-a4": {
+     "sourceBytes": 1979104,
+     "monochromeBytes": 328192,
+     "monochromeMs": 121.20000000298023,
+     "optimizeBytes": 328192,
+     "optimizeMs": 94.09999999403954
+    },
+    "colour-scan-a4": {
+     "sourceBytes": 1619592,
+     "monochromeBytes": 124786,
+     "monochromeMs": 111.40000000596046,
+     "optimizeBytes": 132198,
+     "optimizeMs": 84
+    },
+    "photo-a4": {
+     "sourceBytes": 5425311,
+     "monochromeBytes": 65896,
+     "monochromeMs": 129.30000001192093,
+     "optimizeBytes": 81524,
+     "optimizeMs": 118.79999999701977
+    }
+   },
+   "300": {
+    "drawing-a4": {
+     "sourceBytes": 1776,
+     "monochromeBytes": 139657,
+     "monochromeMs": 139.59999999403954,
+     "optimizeBytes": 140185,
+     "optimizeMs": 94.5
+    },
+    "hatch-a4": {
+     "sourceBytes": 6275,
+     "monochromeBytes": 1192095,
+     "monochromeMs": 143,
+     "optimizeBytes": 1192095,
+     "optimizeMs": 114.70000000298023
+    },
+    "fine-line-a4": {
+     "sourceBytes": 6537998,
+     "monochromeBytes": 1449990,
+     "monochromeMs": 385.1000000089407,
+     "optimizeBytes": 1449990,
+     "optimizeMs": 245.5
+    },
+    "grey-scan-a4": {
+     "sourceBytes": 1979104,
+     "monochromeBytes": 1237588,
+     "monochromeMs": 232.20000000298023,
+     "optimizeBytes": 1237588,
+     "optimizeMs": 165.29999999701977
+    },
+    "colour-scan-a4": {
+     "sourceBytes": 1619592,
+     "monochromeBytes": 706164,
+     "monochromeMs": 212,
+     "optimizeBytes": 720530,
+     "optimizeMs": 163.40000000596046
+    },
+    "photo-a4": {
+     "sourceBytes": 5425311,
+     "monochromeBytes": 400037,
+     "monochromeMs": 222,
+     "optimizeBytes": 435239,
+     "optimizeMs": 176.09999999403954
+    }
+   }
+  },
+  "orderings": {
+   "canvas-held": {
+    "width": 2480,
+    "height": 3507,
+    "pixels": 8697360,
+    "convertLiveBytes": 95670960,
+    "convertLiveBytesPerPixel": 11,
+    "canvasReleasedBeforeConvert": false,
+    "sampleBytes": 26092080,
+    "storedBytes": 26092080,
+    "outputBytes": 26093018
+   },
+   "canvas-released": {
+    "width": 2480,
+    "height": 3507,
+    "pixels": 8697360,
+    "convertLiveBytes": 60881520,
+    "convertLiveBytesPerPixel": 7,
+    "canvasReleasedBeforeConvert": true,
+    "sampleBytes": 26092080,
+    "storedBytes": 26092080,
+    "outputBytes": 26093018
+   }
+  },
+  "streams": [
+   {
+    "colourSpace": "DeviceGray",
+    "content": "uniform",
+    "filter": "none",
+    "sampleBytes": 2174960,
+    "storedBytes": 2174960,
+    "sameArray": true,
+    "modelBound": 2174960,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceGray",
+    "content": "uniform",
+    "filter": "flate",
+    "sampleBytes": 2174960,
+    "storedBytes": 2130,
+    "sameArray": false,
+    "modelBound": 2175631,
+    "ratio": 0.0009793283554640085
+   },
+   {
+    "colourSpace": "DeviceGray",
+    "content": "noise",
+    "filter": "none",
+    "sampleBytes": 2174960,
+    "storedBytes": 2174960,
+    "sameArray": true,
+    "modelBound": 2174960,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceGray",
+    "content": "noise",
+    "filter": "flate",
+    "sampleBytes": 2174960,
+    "storedBytes": 2175631,
+    "sameArray": false,
+    "modelBound": 2175631,
+    "ratio": 1.0003085114208996
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "uniform",
+    "filter": "none",
+    "sampleBytes": 6524880,
+    "storedBytes": 6524880,
+    "sameArray": true,
+    "modelBound": 6524880,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "uniform",
+    "filter": "flate",
+    "sampleBytes": 6524880,
+    "storedBytes": 6358,
+    "sameArray": false,
+    "modelBound": 6526881,
+    "ratio": 0.0009744240507105112
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "noise",
+    "filter": "none",
+    "sampleBytes": 6524880,
+    "storedBytes": 6524880,
+    "sameArray": true,
+    "modelBound": 6524880,
+    "ratio": 1
+   },
+   {
+    "colourSpace": "DeviceRGB",
+    "content": "noise",
+    "filter": "flate",
+    "sampleBytes": 6524880,
+    "storedBytes": 6526881,
+    "sameArray": false,
+    "modelBound": 6526881,
+    "ratio": 1.0003066723066172
+   }
+  ],
+  "blockBound": [
+   {
+    "n": 16382,
+    "content": "noise",
+    "storedBytes": 16393
+   },
+   {
+    "n": 16382,
+    "content": "uniform",
+    "storedBytes": 39
+   },
+   {
+    "n": 16383,
+    "content": "noise",
+    "storedBytes": 16394
+   },
+   {
+    "n": 16383,
+    "content": "uniform",
+    "storedBytes": 39
+   },
+   {
+    "n": 16384,
+    "content": "noise",
+    "storedBytes": 16395
+   },
+   {
+    "n": 16384,
+    "content": "uniform",
+    "storedBytes": 39
+   },
+   {
+    "n": 32766,
+    "content": "noise",
+    "storedBytes": 32782
+   },
+   {
+    "n": 32766,
+    "content": "uniform",
+    "storedBytes": 54
+   },
+   {
+    "n": 32767,
+    "content": "noise",
+    "storedBytes": 32783
+   },
+   {
+    "n": 32767,
+    "content": "uniform",
+    "storedBytes": 54
+   },
+   {
+    "n": 32768,
+    "content": "noise",
+    "storedBytes": 32784
+   },
+   {
+    "n": 32768,
+    "content": "uniform",
+    "storedBytes": 52
+   }
+  ],
+  "sizes": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "outputBytes": 53576,
+     "bytesPerPixel": 0.02464714866680161,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 52624,
+       "dataUrlChars": 70191,
+       "dataUrlExact": true,
+       "sizeExact": null
+      }
+     ],
+     "elapsedMs": 31.899999991059303,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 19145,
+     "bytesPerPixel": 0.008807482104410872,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 8697457,
+       "sizeExact": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 188.09999999403954,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 2173720,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 26.900000005960464,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 9658,
+     "bytesPerPixel": 0.004443074545019598,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 8710,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 41.79999999701977,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 6521160,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 20.599999994039536,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 19188,
+     "bytesPerPixel": 0.00882726386103086,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 18239,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 58.79999999701977,
+     "allExact": true
+    }
+   },
+   "fine-line-a4": {
+    "E1-jpeg": {
+     "outputBytes": 374985,
+     "bytesPerPixel": 0.1725084187475848,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 374026,
+       "dataUrlChars": 498727,
+       "dataUrlExact": true,
+       "sizeExact": null
+      }
+     ],
+     "elapsedMs": 125.79999999701977,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 1475283,
+     "bytesPerPixel": 0.6786904477117568,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 8697457,
+       "sizeExact": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 689.3999999910593,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 2173720,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 132.20000000298023,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 860658,
+     "bytesPerPixel": 0.3959378392801281,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 859703,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 536.9000000059605,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 6521160,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 132.29999999701977,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 1475277,
+     "bytesPerPixel": 0.678687687466647,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 1474320,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 565.0999999940395,
+     "allExact": true
+    }
+   },
+   "grey-scan-a4": {
+    "E1-jpeg": {
+     "outputBytes": 328192,
+     "bytesPerPixel": 0.15098172717737335,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 327236,
+       "dataUrlChars": 436339,
+       "dataUrlExact": true,
+       "sizeExact": null
+      }
+     ],
+     "elapsedMs": 87.70000000298023,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 1977680,
+     "bytesPerPixel": 0.9098135914469205,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 8697457,
+       "sizeExact": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 552.5,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 2173720,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 56.79999999701977,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 1196168,
+     "bytesPerPixel": 0.5502861454097124,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 1195211,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 171.59999999403954,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 6521160,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 48.20000000298023,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 1977675,
+     "bytesPerPixel": 0.9098112912426624,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 1976719,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 491.20000000298023,
+     "allExact": true
+    }
+   },
+   "photo-a4": {
+    "E1-jpeg": {
+     "outputBytes": 65904,
+     "bytesPerPixel": 0.030318532285666968,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 64952,
+       "dataUrlChars": 86627,
+       "dataUrlExact": true,
+       "sizeExact": null
+      }
+     ],
+     "elapsedMs": 78.1000000089407,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 1606899,
+     "bytesPerPixel": 0.7392391844395783,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 8697457,
+       "sizeExact": true,
+       "scratchBytes": 4961
+      }
+     ],
+     "elapsedMs": 588.7000000029802,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 2174657,
+     "bytesPerPixel": 1.0004310582779752,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 2173720,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 60,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 1340756,
+     "bytesPerPixel": 0.6168025320648474,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 1339799,
+       "sampleBytes": 2173720,
+       "convertLiveBytes": 10868600,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 165.09999999403954,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 6522096,
+     "bytesPerPixel": 3.0004305982371235,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 6521160,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 54.20000000298023,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 5421965,
+     "bytesPerPixel": 2.4943253960951735,
+     "pages": [
+      {
+       "width": 1240,
+       "height": 1753,
+       "storedBytes": 5421008,
+       "sampleBytes": 6521160,
+       "convertLiveBytes": 15216040,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 324.40000000596046,
+     "allExact": true
+    }
+   }
+  },
+  "sizes300": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "outputBytes": 139657,
+     "bytesPerPixel": 0.0160574013263795,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 138699,
+       "dataUrlChars": 184955,
+       "dataUrlExact": true,
+       "sizeExact": null
+      }
+     ],
+     "elapsedMs": 99.70000000298023,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 58554,
+     "bytesPerPixel": 0.006732387759044124,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 34796061,
+       "sizeExact": true,
+       "scratchBytes": 9921
+      }
+     ],
+     "elapsedMs": 604.4000000059605,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 8698298,
+     "bytesPerPixel": 1.000107848818492,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 8697360,
+       "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 65.40000000596046,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 31930,
+     "bytesPerPixel": 0.003671228970630168,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 30980,
+       "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 146.5,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 26093018,
+     "bytesPerPixel": 3.0001078488184922,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 26092080,
+       "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 73.09999999403954,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 58631,
+     "bytesPerPixel": 0.00674124102026362,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 57683,
+       "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 194.90000000596046,
+     "allExact": true
+    }
+   },
+   "grey-scan-a4": {
+    "E1-jpeg": {
+     "outputBytes": 1237588,
+     "bytesPerPixel": 0.14229467332615875,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 1236628,
+       "dataUrlChars": 1648863,
+       "dataUrlExact": true,
+       "sizeExact": null
+      }
+     ],
+     "elapsedMs": 217.8999999910593,
+     "allExact": true
+    },
+    "E2-png-embed": {
+     "outputBytes": 3153084,
+     "bytesPerPixel": 0.3625334584287646,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 34796061,
+       "sizeExact": true,
+       "scratchBytes": 9921
+      }
+     ],
+     "elapsedMs": 1273.7000000029802,
+     "allExact": true
+    },
+    "E3-gray-raw": {
+     "outputBytes": 8698298,
+     "bytesPerPixel": 1.000107848818492,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 8697360,
+       "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 103.29999999701977,
+     "allExact": true
+    },
+    "E3-gray-flate": {
+     "outputBytes": 1436056,
+     "bytesPerPixel": 0.16511401160812017,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 1435098,
+       "sampleBytes": 8697360,
+       "convertLiveBytes": 43486800,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 491.79999999701977,
+     "allExact": true
+    },
+    "E3-rgb-raw": {
+     "outputBytes": 26093018,
+     "bytesPerPixel": 3.0001078488184922,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 26092080,
+       "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": true,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 122.29999999701977,
+     "allExact": true
+    },
+    "E3-rgb-flate": {
+     "outputBytes": 3153078,
+     "bytesPerPixel": 0.362532768564254,
+     "pages": [
+      {
+       "width": 2480,
+       "height": 3507,
+       "storedBytes": 3152121,
+       "sampleBytes": 26092080,
+       "convertLiveBytes": 60881520,
+       "canvasReleasedBeforeConvert": true,
+       "sameArray": false,
+       "sizeExact": true
+      }
+     ],
+     "elapsedMs": 877.9000000059605,
+     "allExact": true
+    }
+   }
+  },
+  "quality": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.8394827041147402,
+     "spurious": 0.005468752586628096,
+     "psnr": 22.91636153336089,
+     "outputBytes": 53576,
+     "sizeRatio": 30.166666666666668
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919476604496992,
+     "outputBytes": 19145,
+     "sizeRatio": 10.779842342342342
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919635550085115,
+     "outputBytes": 2174657,
+     "sizeRatio": 1224.4690315315315
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919635550085115,
+     "outputBytes": 9658,
+     "sizeRatio": 5.438063063063063
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.8391707292723914,
+     "spurious": 0.0054624855562687095,
+     "psnr": 22.919476815064918,
+     "outputBytes": 19188,
+     "sizeRatio": 10.804054054054054
+    }
+   },
+   "hatch-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.47327329699554993,
+     "spurious": 0.06925335343530999,
+     "psnr": 13.590674874887487,
+     "outputBytes": 329544,
+     "sizeRatio": 52.516972111553784
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.585403977843086,
+     "outputBytes": 26330,
+     "sizeRatio": 4.19601593625498
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.583694869301159,
+     "outputBytes": 2174657,
+     "sizeRatio": 346.5588844621514
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.583694869301159,
+     "outputBytes": 11781,
+     "sizeRatio": 1.8774501992031873
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.4763014456118177,
+     "spurious": 0.0694077250742102,
+     "psnr": 13.585403977843086,
+     "outputBytes": 26325,
+     "sizeRatio": 4.195219123505976
+    }
+   },
+   "fine-line-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.08806080535232742,
+     "spurious": 0.005812234913734383,
+     "psnr": 15.894959532865546,
+     "outputBytes": 374985,
+     "sizeRatio": 0.05735471317060666
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91059866401566,
+     "outputBytes": 1475283,
+     "sizeRatio": 0.22564751472851474
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91056885029735,
+     "outputBytes": 2174657,
+     "sizeRatio": 0.33261818067243215
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91056885029735,
+     "outputBytes": 860658,
+     "sizeRatio": 0.13163937951648197
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.03519291817902534,
+     "spurious": 0.0012207667180314668,
+     "psnr": 15.91059866401566,
+     "outputBytes": 1475277,
+     "sizeRatio": 0.22564659701639553
+    }
+   },
+   "grey-scan-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.54387293050457,
+     "outputBytes": 328192,
+     "sizeRatio": 0.1658285769722056
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.531191480490847,
+     "outputBytes": 1977680,
+     "sizeRatio": 0.9992804824809611
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.5303598698639,
+     "outputBytes": 2174657,
+     "sizeRatio": 1.098808854916164
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.5303598698639,
+     "outputBytes": 1196168,
+     "sizeRatio": 0.6043987582259447
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.9009737307609648,
+     "spurious": 0.009017132551848512,
+     "psnr": 20.531191480490847,
+     "outputBytes": 1977675,
+     "sizeRatio": 0.9992779560851779
+    }
+   },
+   "colour-scan-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.56637592747049,
+     "outputBytes": 124786,
+     "sizeRatio": 0.07704779969276213
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.60693086041396,
+     "outputBytes": 1678383,
+     "sizeRatio": 1.0362998829334795
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.593065879718665,
+     "outputBytes": 2174657,
+     "sizeRatio": 1.342719030471872
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.593065879718665,
+     "outputBytes": 1195087,
+     "sizeRatio": 0.7378938646276346
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.9998099040015208,
+     "spurious": 0.0005702879954376961,
+     "psnr": 37.76153004639708,
+     "outputBytes": 1618380,
+     "sizeRatio": 0.9992516633818888
+    }
+   },
+   "photo-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.9950778384478781,
+     "spurious": 0.011603974083856059,
+     "psnr": 43.48181201921684,
+     "outputBytes": 65904,
+     "sizeRatio": 0.012147506382583413
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.99641636101107,
+     "spurious": 0.011122689006272697,
+     "psnr": 43.598973280299475,
+     "outputBytes": 1606899,
+     "sizeRatio": 0.2961856011572424
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.9973968101173386,
+     "spurious": 0.016669589798613403,
+     "psnr": 43.840263525074135,
+     "outputBytes": 2174657,
+     "sizeRatio": 0.40083545440989465
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.9973968101173386,
+     "spurious": 0.016669589798613403,
+     "psnr": 43.840263525074135,
+     "outputBytes": 1340756,
+     "sizeRatio": 0.24712979587713957
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.9951579174480939,
+     "spurious": 0.005943586992406735,
+     "psnr": 44.210327768350794,
+     "outputBytes": 5421965,
+     "sizeRatio": 0.9993832611623555
+    }
+   }
+  },
+  "quality300": {
+   "drawing-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.8965366632834728,
+     "spurious": 0.0014723973968884313,
+     "psnr": 28.416015184139294,
+     "outputBytes": 139657,
+     "sizeRatio": 78.6356981981982
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014716879217534064,
+     "psnr": 28.394617124482142,
+     "outputBytes": 58553,
+     "sizeRatio": 32.969031531531535
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014718061676092437,
+     "psnr": 28.39071264753642,
+     "outputBytes": 8698298,
+     "sizeRatio": 4897.690315315315
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014718061676092437,
+     "psnr": 28.39071264753642,
+     "outputBytes": 31930,
+     "sizeRatio": 17.978603603603602
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.8965907389228133,
+     "spurious": 0.0014716879217534064,
+     "psnr": 28.39465544555121,
+     "outputBytes": 58631,
+     "sizeRatio": 33.012950450450454
+    }
+   },
+   "fine-line-a4": {
+    "E1-jpeg": {
+     "comparable": true,
+     "inkKept": 0.7634303139258366,
+     "spurious": 0.011547210709712185,
+     "psnr": 19.499946314518482,
+     "outputBytes": 1449990,
+     "sizeRatio": 0.22177889928996614
+    },
+    "E2-png-embed": {
+     "comparable": true,
+     "inkKept": 0.7640083288768532,
+     "spurious": 0.011564890695907265,
+     "psnr": 19.528751006871094,
+     "outputBytes": 6535794,
+     "sizeRatio": 0.9996628937482086
+    },
+    "E3-gray-raw": {
+     "comparable": true,
+     "inkKept": 0.7645453821384277,
+     "spurious": 0.011596738890217579,
+     "psnr": 19.530247870545537,
+     "outputBytes": 8698298,
+     "sizeRatio": 1.3304222485231718
+    },
+    "E3-gray-flate": {
+     "comparable": true,
+     "inkKept": 0.7645453821384277,
+     "spurious": 0.011596738890217579,
+     "psnr": 19.530247870545537,
+     "outputBytes": 3923729,
+     "sizeRatio": 0.6001422759688823
+    },
+    "E3-rgb-flate": {
+     "comparable": true,
+     "inkKept": 0.7640083288768532,
+     "spurious": 0.011564890695907265,
+     "psnr": 19.528751006871094,
+     "outputBytes": 6535789,
+     "sizeRatio": 0.9996621289881092
+    }
+   }
+  },
+  "terms": {
+   "E1-jpeg-hard": {
+    "peakBytes": 579824023,
+    "peakStep": "embed",
+    "encodedBytes": 173947200,
+    "bytesPerPixelEncoded": 20,
+    "bytesPerPixelPeak": 66.66666931114729,
+    "admissible": false,
+    "unknown": [
+     "the browser JPEG encoder's working memory"
+    ],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "JPEG bytes",
+      "bytes": 173947200,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "ITU-T T.81 entropy coding + byte stuffing"
+     },
+     {
+      "name": "data URL string",
+      "bytes": 231929623,
+      "basis": "EXACT",
+      "source": "4*ceil(J/3) + 23, one byte per character"
+     },
+     {
+      "name": "embedJpg decoded bytes",
+      "bytes": 173947200,
+      "basis": "EXACT",
+      "source": "pdf-lib decodes the base64 back to a Uint8Array"
+     },
+     {
+      "name": "JpegEmbedder retains imageData until save",
+      "bytes": 173947200,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "JpegEmbedder.js:30"
+     },
+     {
+      "name": "the browser JPEG encoder's working memory",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "canvas.toDataURL is not owned; nothing here bounds its scratch"
+     }
+    ]
+   },
+   "E1-jpeg-planning": {
+    "peakBytes": 89872743,
+    "peakStep": "encode",
+    "encodedBytes": 8697360,
+    "bytesPerPixelEncoded": 1,
+    "bytesPerPixelPeak": 10.333335977813958,
+    "admissible": false,
+    "unknown": [
+     "the browser JPEG encoder's working memory"
+    ],
+    "measuredOnly": [
+     "JPEG bytes"
+    ],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "JPEG bytes",
+      "bytes": 8697360,
+      "basis": "MEASURED_ONLY",
+      "source": "M5 measured worst case, evidence only"
+     },
+     {
+      "name": "data URL string",
+      "bytes": 11596503,
+      "basis": "EXACT",
+      "source": "4*ceil(J/3) + 23, one byte per character"
+     },
+     {
+      "name": "embedJpg decoded bytes",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "pdf-lib decodes the base64 back to a Uint8Array"
+     },
+     {
+      "name": "JpegEmbedder retains imageData until save",
+      "bytes": 8697360,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "JpegEmbedder.js:30"
+     },
+     {
+      "name": "the browser JPEG encoder's working memory",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "canvas.toDataURL is not owned; nothing here bounds its scratch"
+     }
+    ]
+   },
+   "E2-png-embed": {
+    "peakBytes": 139174509,
+    "peakStep": "decode",
+    "encodedBytes": 34796061,
+    "bytesPerPixelEncoded": 4.0007612654874585,
+    "bytesPerPixelPeak": 16.001925756781368,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "owned stored PNG",
+      "bytes": 34796061,
+      "basis": "EXACT",
+      "source": "pngStoredSize; encodePngStored asserts it"
+     },
+     {
+      "name": "PNG encoder scratch (one row, in place)",
+      "bytes": 9921,
+      "basis": "EXACT",
+      "source": "encoderScratchBytes"
+     },
+     {
+      "name": "UPNG copy of the PNG",
+      "bytes": 34796061,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "UPNG.js:211 new Uint8Array(buff)"
+     },
+     {
+      "name": "inflated IDAT raster",
+      "bytes": 34792947,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "UPNG decode; stored blocks inflate to the raster"
+     },
+     {
+      "name": "UPNG RGBA frame",
+      "bytes": 34789440,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "UPNG.js:48 new Uint8Array(area*4)"
+     },
+     {
+      "name": "pdf-lib's copy of the frame",
+      "bytes": 34789440,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "png.js:48 new Uint8Array(frames[0])"
+     },
+     {
+      "name": "rgbChannel",
+      "bytes": 26092080,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "png.js:21 splitAlphaChannel"
+     },
+     {
+      "name": "alphaChannel",
+      "bytes": 8697360,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "png.js:22; dropped when fully opaque"
+     },
+     {
+      "name": "pako per-call state (10 arrays)",
+      "bytes": 267160,
+      "basis": "EXACT",
+      "source": "pako 1.0.11 deflate.js:1195-1221, 1376-1389"
+     },
+     {
+      "name": "output chunks, each pinning a full 16 KiB buffer",
+      "bytes": 26116096,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "lib/deflate.js:243 + common.js:34-38, subarray not copy"
+     },
+     {
+      "name": "flattenChunks result, allocated while the chunks are live",
+      "bytes": 26100051,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "common.js:54-72"
+     }
+    ]
+   },
+   "E3-gray-raw": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 8697360,
+    "bytesPerPixelEncoded": 1,
+    "bytesPerPixelPeak": 8,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceGray samples",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "width * height * 1, converted from the readback"
+     },
+     {
+      "name": "stream bytes, retained until save",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "context.stream keeps the array as given: arrays.js:9-11, PDFRawStream.js:10"
+     }
+    ]
+   },
+   "E3-gray-flate": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 8700021,
+    "bytesPerPixelEncoded": 1.0003059549104556,
+    "bytesPerPixelPeak": 8,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceGray samples",
+      "bytes": 8697360,
+      "basis": "EXACT",
+      "source": "width * height * 1, converted from the readback"
+     },
+     {
+      "name": "pako per-call state (10 arrays)",
+      "bytes": 267160,
+      "basis": "EXACT",
+      "source": "pako 1.0.11 deflate.js:1195-1221, 1376-1389"
+     },
+     {
+      "name": "output chunks, each pinning a full 16 KiB buffer",
+      "bytes": 8716288,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "lib/deflate.js:243 + common.js:34-38, subarray not copy"
+     },
+     {
+      "name": "flattenChunks result, allocated while the chunks are live",
+      "bytes": 8700021,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "common.js:54-72"
+     },
+     {
+      "name": "the readback, still reachable while deflate runs",
+      "bytes": 34789440,
+      "basis": "CONSERVATIVE_BOUND",
+      "source": "the prototype holds the ImageData across the flateStream call"
+     }
+    ]
+   },
+   "E3-rgb-raw": {
+    "peakBytes": 69578880,
+    "peakStep": "readback",
+    "encodedBytes": 26092080,
+    "bytesPerPixelEncoded": 3,
+    "bytesPerPixelPeak": 8,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceRGB samples",
+      "bytes": 26092080,
+      "basis": "EXACT",
+      "source": "width * height * 3, converted from the readback"
+     },
+     {
+      "name": "stream bytes, retained until save",
+      "bytes": 26092080,
+      "basis": "EXACT",
+      "source": "context.stream keeps the array as given: arrays.js:9-11, PDFRawStream.js:10"
+     }
+    ]
+   },
+   "E3-rgb-flate": {
+    "peakBytes": 113364827,
+    "peakStep": "deflate",
+    "encodedBytes": 26100051,
+    "bytesPerPixelEncoded": 3.0009164850023455,
+    "bytesPerPixelPeak": 13.03439514979258,
+    "admissible": true,
+    "unknown": [],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "DeviceRGB samples",
+      "bytes": 26092080,
+      "basis": "EXACT",
+      "source": "width * height * 3, converted from the readback"
+     },
+     {
+      "name": "pako per-call state (10 arrays)",
+      "bytes": 267160,
+      "basis": "EXACT",
+      "source": "pako 1.0.11 deflate.js:1195-1221, 1376-1389"
+     },
+     {
+      "name": "output chunks, each pinning a full 16 KiB buffer",
+      "bytes": 26116096,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "lib/deflate.js:243 + common.js:34-38, subarray not copy"
+     },
+     {
+      "name": "flattenChunks result, allocated while the chunks are live",
+      "bytes": 26100051,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "common.js:54-72"
+     },
+     {
+      "name": "the readback, still reachable while deflate runs",
+      "bytes": 34789440,
+      "basis": "CONSERVATIVE_BOUND",
+      "source": "the prototype holds the ImageData across the flateStream call"
+     }
+    ]
+   },
+   "E4-jspdf-hard": {
+    "peakBytes": 1565524800,
+    "peakStep": "convert",
+    "encodedBytes": 173947200,
+    "bytesPerPixelEncoded": 20,
+    "bytesPerPixelPeak": 180,
+    "admissible": false,
+    "unknown": [
+     "bitcode + category lookup arrays",
+     "byteout, one JS array element per output byte",
+     "reachable only through an unexported internal"
+    ],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "rawImageData the encoder reads",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "the RGBA readback, handed in as {data, width, height}"
+     },
+     {
+      "name": "bitcode + category lookup arrays",
+      "bytes": 1048560,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15525-15526 new Array(65535) x2 — ordinary JS arrays"
+     },
+     {
+      "name": "byteout, one JS array element per output byte",
+      "bytes": 1391577600,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15529, 15651 — engine-dependent storage and growth"
+     },
+     {
+      "name": "new Uint8Array(byteout)",
+      "bytes": 173947200,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "jspdf.es.js:16016"
+     },
+     {
+      "name": "reachable only through an unexported internal",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:24183 exports; call sites 16067 / 16354 / 20194 are GIF, BMP and WEBP"
+     }
+    ]
+   },
+   "E4-jspdf-planning": {
+    "peakBytes": 105416880,
+    "peakStep": "encode",
+    "encodedBytes": 8697360,
+    "bytesPerPixelEncoded": 1,
+    "bytesPerPixelPeak": 12.120560721874224,
+    "admissible": false,
+    "unknown": [
+     "bitcode + category lookup arrays",
+     "byteout, one JS array element per output byte",
+     "reachable only through an unexported internal"
+    ],
+    "measuredOnly": [],
+    "terms": [
+     {
+      "name": "canvas (PDF.js render target)",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "canvas.width * height * RGBA"
+     },
+     {
+      "name": "getImageData readback",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "ImageData.data"
+     },
+     {
+      "name": "rawImageData the encoder reads",
+      "bytes": 34789440,
+      "basis": "EXACT",
+      "source": "the RGBA readback, handed in as {data, width, height}"
+     },
+     {
+      "name": "bitcode + category lookup arrays",
+      "bytes": 1048560,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15525-15526 new Array(65535) x2 — ordinary JS arrays"
+     },
+     {
+      "name": "byteout, one JS array element per output byte",
+      "bytes": 69578880,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:15529, 15651 — engine-dependent storage and growth"
+     },
+     {
+      "name": "new Uint8Array(byteout)",
+      "bytes": 8697360,
+      "basis": "SOURCE_DERIVED_BOUND",
+      "source": "jspdf.es.js:16016"
+     },
+     {
+      "name": "reachable only through an unexported internal",
+      "bytes": 0,
+      "basis": "UNKNOWN",
+      "source": "jspdf.es.js:24183 exports; call sites 16067 / 16354 / 20194 are GIF, BMP and WEBP"
+     }
+    ]
+   }
+  },
+  "jspdf": {
+   "exported": [
+    "AcroForm",
+    "AcroFormAppearance",
+    "AcroFormButton",
+    "AcroFormCheckBox",
+    "AcroFormChoiceField",
+    "AcroFormComboBox",
+    "AcroFormEditBox",
+    "AcroFormListBox",
+    "AcroFormPasswordField",
+    "AcroFormPushButton",
+    "AcroFormRadioButton",
+    "AcroFormTextField",
+    "GState",
+    "ShadingPattern",
+    "TilingPattern",
+    "default",
+    "jsPDF"
+   ],
+   "jpegEncoderExported": false,
+   "jpegEncoderOnApi": false,
+   "jpegEncoderOnInstance": false,
+   "processorsReachingIt": [
+    "processGIF89A",
+    "processBMP",
+    "processWEBP"
+   ],
+   "processRGBA": true,
+   "addImageAcceptsRawPixels": true
+  },
+  "zip": {
+   "files": 3,
+   "key": "E3-gray-flate",
+   "dpi": 150,
+   "sourceBytesTotal": 28974,
+   "archiveBytes": 29556,
+   "archiveOverPerFile": 194,
+   "perFileBytes": [
+    9658,
+    9658,
+    9658
+   ]
+  },
+  "boundaries": {
+   "E1-jpeg-hard": {
+    "512": {
+     "pages300": 0,
+     "firstOver300": 1,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 1,
+     "firstOver300": 2,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 1,
+     "firstOver300": 2,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E1-jpeg-planning": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E2-png-embed": {
+    "512": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-gray-raw": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-gray-flate": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-rgb-raw": {
+    "512": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-rgb-flate": {
+    "512": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 10,
+     "firstOver300": 11,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 41,
+     "firstOver150": 42,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-hard": {
+    "512": {
+     "pages300": 0,
+     "firstOver300": 1,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 3,
+     "firstOver150": 4,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 0,
+     "firstOver300": 1,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 1,
+     "firstOver300": 2,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 6,
+     "firstOver150": 7,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-planning": {
+    "512": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_MEMORY_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    },
+    "2048": {
+     "pages300": 30,
+     "firstOver300": 31,
+     "reason300": "OVER_OUTPUT_BUDGET",
+     "pages150": 123,
+     "firstOver150": 124,
+     "reason150": "OVER_OUTPUT_BUDGET"
+    }
+   }
+  },
+  "batches": {
+   "E1-jpeg-hard": {
+    "512": {
+     "files": 3,
+     "firstOver": 4,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E1-jpeg-planning": {
+    "512": {
+     "files": 61,
+     "firstOver": 62,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E2-png-embed": {
+    "512": {
+     "files": 20,
+     "firstOver": 21,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-gray-raw": {
+    "512": {
+     "files": 61,
+     "firstOver": 62,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-gray-flate": {
+    "512": {
+     "files": 61,
+     "firstOver": 62,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-rgb-raw": {
+    "512": {
+     "files": 20,
+     "firstOver": 21,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E3-rgb-flate": {
+    "512": {
+     "files": 20,
+     "firstOver": 21,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 41,
+     "firstOver": 42,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-hard": {
+    "512": {
+     "files": 3,
+     "firstOver": 4,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 6,
+     "firstOver": 7,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   },
+   "E4-jspdf-planning": {
+    "512": {
+     "files": 61,
+     "firstOver": 62,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "1024": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_MEMORY_BUDGET"
+    },
+    "2048": {
+     "files": 123,
+     "firstOver": 124,
+     "reason": "OVER_OUTPUT_BUDGET"
+    }
+   }
+  },
+  "canvasProbes": [
+   {
+    "label": "A4@300",
+    "width": 2480,
+    "height": 3508,
+    "pixels": 8699840,
+    "allocates": true
+   },
+   {
+    "label": "A1@300",
+    "width": 7016,
+    "height": 9933,
+    "pixels": 69689928,
+    "allocates": true
+   },
+   {
+    "label": "A1@600",
+    "width": 14031,
+    "height": 19866,
+    "pixels": 278739846,
+    "allocates": false
+   }
+  ]
+ },
+ "summary": {
+  "assertions": 16,
+  "assertionsFailed": 0,
+  "probes": 14,
+  "probesFailed": 0,
+  "measurements": 139,
+  "baselineFails": 1,
+  "humanOpen": 2,
+  "external": 0,
+  "pageErrors": 0
+ },
+ "lines": [
+  {
+   "kind": "MEASURE",
+   "name": "corpus(vector-a4)",
+   "ok": null,
+   "detail": "1,214 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(text-a4)",
+   "ok": null,
+   "detail": "1,306 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(drawing-a4)",
+   "ok": null,
+   "detail": "1,776 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(hatch-a4)",
+   "ok": null,
+   "detail": "6,275 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(fine-line-a4)",
+   "ok": null,
+   "detail": "6,537,998 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(grey-scan-a4)",
+   "ok": null,
+   "detail": "1,979,104 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(colour-scan-a4)",
+   "ok": null,
+   "detail": "1,619,592 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(photo-a4)",
+   "ok": null,
+   "detail": "5,425,311 B, 1 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(four-pages)",
+   "ok": null,
+   "detail": "3,312 B, 4 page(s), 595x842 pt"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "corpus(vector-a3)",
+   "ok": null,
+   "detail": "1,202 B, 1 page(s), 842x1191 pt"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the corpus covers every content class the contract names",
+   "ok": true,
+   "detail": "10 fixtures: vector, text, drawing with dimension strings, hatching, 1 px linework, grey scan, colour scan, photographic, multi-page, A3"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pngStoredSize(64x64)",
+   "ok": null,
+   "detail": "16,516 B actual, 4.032 B/px"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pngStoredSize(1240x1754)",
+   "ok": null,
+   "detail": "8,702,418 B actual, 4.001 B/px"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pngStoredSize(2480x3508)",
+   "ok": null,
+   "detail": "34,805,987 B actual, 4.001 B/px"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the model, production and the encoder agree on the exact encoded size",
+   "ok": true,
+   "detail": "model = production = bytes written, for every case"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome drawing-a4 @150/@300",
+   "ok": null,
+   "detail": "53,576 B / 139,657 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome hatch-a4 @150/@300",
+   "ok": null,
+   "detail": "329,544 B / 1,192,095 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome fine-line-a4 @150/@300",
+   "ok": null,
+   "detail": "374,985 B / 1,449,990 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome grey-scan-a4 @150/@300",
+   "ok": null,
+   "detail": "328,192 B / 1,237,588 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome colour-scan-a4 @150/@300",
+   "ok": null,
+   "detail": "124,786 B / 706,164 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "production monochrome photo-a4 @150/@300",
+   "ok": null,
+   "detail": "65,896 B / 400,037 B"
+  },
+  {
+   "kind": "BASELINE-FAIL",
+   "name": "the production encoding path cannot carry a hard memory contract",
+   "ok": false,
+   "detail": "its model still contains an UNKNOWN term: the browser JPEG encoder's working memory",
+   "rootCause": "canvas.toDataURL(\"image/jpeg\", 0.8) is the browser's encoder: neither its output size nor its working memory follows from anything this architecture owns",
+   "architecture": "replace the encoding step with an owned one (E3) whose stream size is the sample count"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "conversion live set, canvas-held",
+   "ok": null,
+   "detail": "91.2 MiB = 11.0 B/px (canvas released first: false)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "conversion live set, canvas-released",
+   "ok": null,
+   "detail": "58.1 MiB = 7.0 B/px (canvas released first: true)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the released ordering really does drop the canvas before converting",
+   "ok": true,
+   "detail": "measured on the prototype, not assumed"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the model matches the code, in both orderings",
+   "ok": true,
+   "detail": "held 95,670,960 B, released 60,881,520 B — both predicted exactly"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the first round's model fails against the ordering the first round's code performed",
+   "ok": true,
+   "detail": "holding the canvas costs 11.0 B/px at conversion, not the 8 B/px the readback alone suggests"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "what the restructuring is worth, A4 @300 DeviceRGB",
+   "ok": null,
+   "detail": "91.2 MiB held vs 66.4 MiB released"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray uniform none",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,174,960 B (x1.000), bound 2,174,960 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray uniform flate",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,130 B (x0.001), bound 2,175,631 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray noise none",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,174,960 B (x1.000), bound 2,174,960 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceGray noise flate",
+   "ok": null,
+   "detail": "samples 2,174,960 B, stored 2,175,631 B (x1.000), bound 2,175,631 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB uniform none",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,524,880 B (x1.000), bound 6,524,880 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB uniform flate",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,358 B (x0.001), bound 6,526,881 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB noise none",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,524,880 B (x1.000), bound 6,524,880 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "DeviceRGB noise flate",
+   "ok": null,
+   "detail": "samples 6,524,880 B, stored 6,526,881 B (x1.000), bound 6,526,881 B"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "a raw stream is the samples, and pdf-lib keeps the very array it was handed",
+   "ok": true,
+   "detail": "context.stream: typedArrayFor returns a Uint8Array unchanged (arrays.js:9-11), PDFRawStream assigns it (PDFRawStream.js:10)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every deflated stream is under the pako-derived bound",
+   "ok": true,
+   "detail": "bound = n + 5*ceil(n/16,384) + 6, from pako 1.0.11's own block lifecycle"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the measurement is of the compressed stream, not of the samples: a substitution would be caught",
+   "ok": true,
+   "detail": "noise deflates to x1.000 and uniform to x0.0010 — a check that read samples.length would report the same number for both"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and incompressible content stays inside the bound rather than merely inside the samples",
+   "ok": true,
+   "detail": "noise expands to 2,175,631 B from 2,174,960 B, under 2,175,631 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: window",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1376, Buf8(w_size * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: head",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1377, Buf16(hash_size)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: prev",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1378, Buf16(w_size)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: pending_buf",
+   "ok": null,
+   "detail": "65,536 B — deflate.js:1385-1389, Buf8(lit_bufsize * 4)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: dyn_ltree",
+   "ok": null,
+   "detail": "2,292 B — deflate.js:1195, Buf16(HEAP_SIZE * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: dyn_dtree",
+   "ok": null,
+   "detail": "244 B — deflate.js:1196, Buf16((2*D_CODES+1) * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: bl_tree",
+   "ok": null,
+   "detail": "156 B — deflate.js:1197, Buf16((2*BL_CODES+1) * 2)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: bl_count",
+   "ok": null,
+   "detail": "32 B — deflate.js:1207, Buf16(MAX_BITS + 1)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: heap",
+   "ok": null,
+   "detail": "1,146 B — deflate.js:1211, Buf16(2*L_CODES + 1)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state: depth",
+   "ok": null,
+   "detail": "1,146 B — deflate.js:1220, Buf16(2*L_CODES + 1)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "pako per-call state, in total",
+   "ok": null,
+   "detail": "267,160 B across 10 arrays"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,382 B of noise",
+   "ok": null,
+   "detail": "stored 16,393 B; bound 16,393 B; previous bound 16,393 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,382 B of uniform",
+   "ok": null,
+   "detail": "stored 39 B; bound 16,393 B; previous bound 16,393 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,383 B of noise",
+   "ok": null,
+   "detail": "stored 16,394 B; bound 16,394 B; previous bound 16,394 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,383 B of uniform",
+   "ok": null,
+   "detail": "stored 39 B; bound 16,394 B; previous bound 16,394 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,384 B of noise",
+   "ok": null,
+   "detail": "stored 16,395 B; bound 16,400 B; previous bound 16,395 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 16,384 B of uniform",
+   "ok": null,
+   "detail": "stored 39 B; bound 16,400 B; previous bound 16,395 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,766 B of noise",
+   "ok": null,
+   "detail": "stored 32,782 B; bound 32,782 B; previous bound 32,782 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,766 B of uniform",
+   "ok": null,
+   "detail": "stored 54 B; bound 32,782 B; previous bound 32,782 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,767 B of noise",
+   "ok": null,
+   "detail": "stored 32,783 B; bound 32,788 B; previous bound 32,783 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,767 B of uniform",
+   "ok": null,
+   "detail": "stored 54 B; bound 32,788 B; previous bound 32,783 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,768 B of noise",
+   "ok": null,
+   "detail": "stored 32,784 B; bound 32,789 B; previous bound 32,784 B"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "deflate 32,768 B of uniform",
+   "ok": null,
+   "detail": "stored 52 B; bound 32,789 B; previous bound 32,784 B"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every probed size stays inside the corrected bound",
+   "ok": true,
+   "detail": "bound = n + 5*ceil(n/16383) + 6, from _tr_tally returning at last_lit === lit_bufsize - 1 (trees.js:1211)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the divisor had to be lit_bufsize - 1, and the two bounds differ where it matters",
+   "ok": true,
+   "detail": "no probed case exceeded the previous bound, but it is arithmetically too small at these sizes (e.g. 16,384 B: 16,400 vs 16,395), so the corrected divisor is adopted on the derivation rather than on a lucky fixture"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, drawing-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.1 MiB, E2-png-embed 0.0 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 0.0 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, fine-line-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.4 MiB, E2-png-embed 1.4 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 0.8 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, grey-scan-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.3 MiB, E2-png-embed 1.9 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 1.1 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 1.9 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @150, photo-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.1 MiB, E2-png-embed 1.5 MiB, E3-gray-raw 2.1 MiB, E3-gray-flate 1.3 MiB, E3-rgb-raw 6.2 MiB, E3-rgb-flate 5.2 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @300, drawing-a4",
+   "ok": null,
+   "detail": "E1-jpeg 0.1 MiB, E2-png-embed 0.1 MiB, E3-gray-raw 8.3 MiB, E3-gray-flate 0.0 MiB, E3-rgb-raw 24.9 MiB, E3-rgb-flate 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "output size @300, grey-scan-a4",
+   "ok": null,
+   "detail": "E1-jpeg 1.2 MiB, E2-png-embed 3.0 MiB, E3-gray-raw 8.3 MiB, E3-gray-flate 1.4 MiB, E3-rgb-raw 24.9 MiB, E3-rgb-flate 3.0 MiB"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every owned candidate wrote exactly what its contract predicts",
+   "ok": true,
+   "detail": "raw streams are the sample count; the stored PNG is pngStoredSize, to the byte"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 83.9%, spurious 0.5%, PSNR 22.9 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 47.3%, spurious 6.9%, PSNR 13.6 dB, 0.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality hatch-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 47.6%, spurious 6.9%, PSNR 13.6 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 8.8%, spurious 0.6%, PSNR 15.9 dB, 0.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 0.8 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 3.5%, spurious 0.1%, PSNR 15.9 dB, 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 0.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 1.9 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 1.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality grey-scan-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 90.1%, spurious 0.9%, PSNR 20.5 dB, 1.9 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 1.6 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.6 dB, 1.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality colour-scan-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 100.0%, spurious 0.1%, PSNR 37.8 dB, 1.5 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 99.5%, spurious 1.2%, PSNR 43.5 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 99.6%, spurious 1.1%, PSNR 43.6 dB, 1.5 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 99.7%, spurious 1.7%, PSNR 43.8 dB, 2.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 99.7%, spurious 1.7%, PSNR 43.8 dB, 1.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality photo-a4 @150 (judged at 300), E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 99.5%, spurious 0.6%, PSNR 44.2 dB, 5.2 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 8.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.0 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality drawing-a4 @300, E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 89.7%, spurious 0.1%, PSNR 28.4 dB, 0.1 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E1-jpeg",
+   "ok": null,
+   "detail": "ink kept 76.3%, spurious 1.2%, PSNR 19.5 dB, 1.4 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E2-png-embed",
+   "ok": null,
+   "detail": "ink kept 76.4%, spurious 1.2%, PSNR 19.5 dB, 6.2 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E3-gray-raw",
+   "ok": null,
+   "detail": "ink kept 76.5%, spurious 1.2%, PSNR 19.5 dB, 8.3 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E3-gray-flate",
+   "ok": null,
+   "detail": "ink kept 76.5%, spurious 1.2%, PSNR 19.5 dB, 3.7 MiB"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "quality fine-line-a4 @300, E3-rgb-flate",
+   "ok": null,
+   "detail": "ink kept 76.4%, spurious 1.2%, PSNR 19.5 dB, 6.2 MiB"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the quality measure can see loss and its absence",
+   "ok": true,
+   "detail": "at the scan's own resolution the lossless owned path scores strictly better than the lossy production one"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and what destroys linework is the resolution, not the encoder",
+   "ok": true,
+   "detail": "the same lossless path keeps 3.5% at 150 dpi and 76.5% at 300 dpi"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E1-jpeg-hard",
+   "ok": null,
+   "detail": "peak 553.0 MiB at \"embed\" (66.7 B/px), stream 20.000 B/px, admissible: false (the browser JPEG encoder's working memory)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E1-jpeg-planning",
+   "ok": null,
+   "detail": "peak 85.7 MiB at \"encode\" (10.3 B/px), stream 1.000 B/px, admissible: false (the browser JPEG encoder's working memory; JPEG bytes)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E2-png-embed",
+   "ok": null,
+   "detail": "peak 132.7 MiB at \"decode\" (16.0 B/px), stream 4.001 B/px, admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-gray-raw",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\" (8.0 B/px), stream 1.000 B/px, admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-gray-flate",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\" (8.0 B/px), stream 1.000 B/px, admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-rgb-raw",
+   "ok": null,
+   "detail": "peak 66.4 MiB at \"readback\" (8.0 B/px), stream 3.000 B/px, admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E3-rgb-flate",
+   "ok": null,
+   "detail": "peak 108.1 MiB at \"deflate\" (13.0 B/px), stream 3.001 B/px, admissible: true"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E4-jspdf-hard",
+   "ok": null,
+   "detail": "peak 1493.0 MiB at \"convert\" (180.0 B/px), stream 20.000 B/px, admissible: false (bitcode + category lookup arrays; byteout, one JS array element per output byte; reachable only through an unexported internal)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 @300, E4-jspdf-planning",
+   "ok": null,
+   "detail": "peak 100.5 MiB at \"encode\" (12.1 B/px), stream 1.000 B/px, admissible: false (bitcode + category lookup arrays; byteout, one JS array element per output byte; reachable only through an unexported internal)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "an unknown encoder scratch prevents a hard contract, whatever the numbers look like",
+   "ok": true,
+   "detail": "both JPEG models are refused: one carries an UNKNOWN term, the other that and a MEASURED_ONLY size"
+  },
+  {
+   "kind": "PROBE",
+   "name": "a measured compression ratio cannot masquerade as a hard bound",
+   "ok": true,
+   "detail": "the planning model is cheaper on the same page and is classified MEASURED_ONLY, so it cannot be adopted as a bound"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "every owned candidate's model is free of unknowns, deflate included",
+   "ok": true,
+   "detail": "exact or source-derived, every term — the pako state and its chunk pinning included"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "what jsPDF exports",
+   "ok": null,
+   "detail": "AcroForm, AcroFormAppearance, AcroFormButton, AcroFormCheckBox, AcroFormChoiceField, AcroFormComboBox, AcroFormEditBox, AcroFormListBox, AcroFormPasswordField, AcroFormPushButton, AcroFormRadioButton, AcroFormTextField, GState, ShadingPattern, TilingPattern, default, jsPDF"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "where its JPEGEncoder is reachable from",
+   "ok": null,
+   "detail": "exported: false; on jsPDF.API: false; on an instance: false; plugins that call it: processGIF89A, processBMP, processWEBP (each takes an encoded image file)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the encoder exists in the bundle but no supported path reaches it with raw pixels",
+   "ok": true,
+   "detail": "jspdf.es.js:15515 defines it; :24183 does not export it; processGIF89A/processBMP/processWEBP call it with decoded image files; processRGBA, the one that takes canvas pixels, does not (20241-20272)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "and its output representation cannot be bounded either",
+   "ok": true,
+   "detail": "byteout is an ordinary JS array pushed one byte at a time (15529, 15651) before new Uint8Array(byteout) (16016)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "E4 verdict",
+   "ok": null,
+   "detail": "the encoder exists and is real; it is inadmissible for a hard H8 contract on two independent grounds — no stable public API reaches it, and its working memory is the engine's, not ours"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "a real B2 archive",
+   "ok": null,
+   "detail": "3 files, sources 28,974 B, archive 29,556 B (+194 B per file of records)"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "STORE means the archive is the sources plus records, which is what the model assumes",
+   "ok": true,
+   "detail": "JSZip generateInternalStream defaults to compression STORE (object.js:321)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the simplified batch model claims READY where the source-derived one refuses",
+   "ok": true,
+   "detail": "10 one-page A4 @300 files, the most the simplified model accepts — simplified: READY at 497.7 MiB; full: REFUSED OVER_MEMORY_BUDGET at 995.4 MiB (sources + accumulated chunks + the concat result)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: output PDFs held as ZIP sources",
+   "ok": null,
+   "detail": "248.8 MiB — EXACT (B2 holds every success until the archive)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: ZipFileWorker.contentBuffer, one file's chunks",
+   "ok": null,
+   "detail": "24.9 MiB — CONSERVATIVE_BOUND (ZipFileWorker.js:337-339, 365-366 with streamFiles false)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: StreamHelper dataArray, every emitted chunk",
+   "ok": null,
+   "detail": "248.9 MiB — SOURCE_DERIVED_BOUND (StreamHelper.js:79-104; cleared only in the end handler)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: concat result, allocated while dataArray is live",
+   "ok": null,
+   "detail": "248.9 MiB — SOURCE_DERIVED_BOUND (StreamHelper.js:46-62)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: arraybuffer view for the Blob",
+   "ok": null,
+   "detail": "0.0 MiB — EXACT (utils.js:273-275 returns input.buffer, no copy)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 term: Blob copy, built before dataArray is cleared",
+   "ok": null,
+   "detail": "248.9 MiB — CONSERVATIVE_BOUND (the browser's own copy of the archive)"
+  },
+  {
+   "kind": "PROBE",
+   "name": "the previous batch model claims READY where the overlapping one refuses",
+   "ok": true,
+   "detail": "6 one-page A4 @300 files, the most the previous model accepts — previous: READY at 447.9 MiB (sources + 2 x archive); corrected: REFUSED OVER_MEMORY_BUDGET at 597.3 MiB (sources + chunks + concat + Blob copy, all live at the handoff)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E1-jpeg-hard",
+   "ok": null,
+   "detail": "@300: 0 (1 refused, OVER_MEMORY_BUDGET); @150: 6 (7 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E1-jpeg-hard",
+   "ok": null,
+   "detail": "512 MiB: 3 (4 refused, OVER_MEMORY_BUDGET); 1 GiB: 6; 2 GiB: 6"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E1-jpeg-planning",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E1-jpeg-planning",
+   "ok": null,
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E2-png-embed",
+   "ok": null,
+   "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E2-png-embed",
+   "ok": null,
+   "detail": "512 MiB: 20 (21 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-gray-raw",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-gray-raw",
+   "ok": null,
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-gray-flate",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-gray-flate",
+   "ok": null,
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-rgb-raw",
+   "ok": null,
+   "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-rgb-raw",
+   "ok": null,
+   "detail": "512 MiB: 20 (21 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E3-rgb-flate",
+   "ok": null,
+   "detail": "@300: 10 (11 refused, OVER_MEMORY_BUDGET); @150: 41 (42 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E3-rgb-flate",
+   "ok": null,
+   "detail": "512 MiB: 20 (21 refused, OVER_MEMORY_BUDGET); 1 GiB: 41; 2 GiB: 41"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E4-jspdf-hard",
+   "ok": null,
+   "detail": "@300: 0 (1 refused, OVER_MEMORY_BUDGET); @150: 3 (4 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E4-jspdf-hard",
+   "ok": null,
+   "detail": "512 MiB: 3 (4 refused, OVER_MEMORY_BUDGET); 1 GiB: 6; 2 GiB: 6"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "A4 pages inside 512 MiB, E4-jspdf-planning",
+   "ok": null,
+   "detail": "@300: 30 (31 refused, OVER_MEMORY_BUDGET); @150: 123 (124 refused, OVER_MEMORY_BUDGET)"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "B2 one-page A4 @150 files, E4-jspdf-planning",
+   "ok": null,
+   "detail": "512 MiB: 61 (62 refused, OVER_MEMORY_BUDGET); 1 GiB: 123; 2 GiB: 123"
+  },
+  {
+   "kind": "PROBE",
+   "name": "raster first-over: the pixel ceiling refuses, and no memory preset buys past it",
+   "ok": true,
+   "detail": "A1 @600 is refused OVER_RASTER_LIMIT at 512 MiB, 1 GiB, 2 GiB and with memory unbounded"
+  },
+  {
+   "kind": "PROBE",
+   "name": "output first-over: the output ceiling refuses on its own, with memory unbounded",
+   "ok": true,
+   "detail": "the first page count over 256 MiB of output is refused OVER_OUTPUT_BUDGET, not by memory"
+  },
+  {
+   "kind": "PROBE",
+   "name": "memory first-over: the memory ceiling refuses with the other two unbounded",
+   "ok": true,
+   "detail": "isolated, the memory ceiling is the one that fires"
+  },
+  {
+   "kind": "PROBE",
+   "name": "an explicit preset moves nothing but memory",
+   "ok": true,
+   "detail": "A0 @300 stays refused by the raster ceiling at the largest preset"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "canvas A4@300 (9 Mpx)",
+   "ok": null,
+   "detail": "allocates"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "canvas A1@300 (70 Mpx)",
+   "ok": null,
+   "detail": "allocates"
+  },
+  {
+   "kind": "MEASURE",
+   "name": "canvas A1@600 (279 Mpx)",
+   "ok": null,
+   "detail": "does not allocate"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the raster ceiling stays below what this machine refuses",
+   "ok": true,
+   "detail": "134.2 Mpx policy, 279 Mpx refused by the browser"
+  },
+  {
+   "kind": "HUMAN-OPEN",
+   "name": "H8 Raster encoder and operation memory: which encoding path, and which memory contract?",
+   "ok": null,
+   "detail": "recommendation: H8-A for Monochrome, H8-B for Optimize — an owned image XObject, written by pdf-lib itself, with the canvas released before the samples are allocated. One A4 page at 300 dpi peaks at 66.4 MiB (8.0 B/px) at \"readback\", every term EXACT or source-derived. Inside 512 MiB: DeviceGray raw 30 pages @300 and 123 @150, DeviceGray FlateDecode 30/123, DeviceRGB 10/41; against 30/123 that the unadoptable estimate promised and 0/6 that the only fail-closed JPEG term allowed."
+  },
+  {
+   "kind": "HUMAN-OPEN",
+   "name": "H8-file-size Is a larger PDF acceptable as the price of an exact memory contract?",
+   "ok": null,
+   "detail": "recommendation: measured at 150 dpi on the grey scan: production JPEG 0.3 MiB, owned DeviceGray FlateDecode 1.1 MiB, owned DeviceGray raw 2.1 MiB. FlateDecode keeps the guarantee — its whole lifetime is now source-derived — and most of the size; raw keeps the size exact before the page is rendered."
+  },
+  {
+   "kind": "ASSERT",
+   "name": "no measurement left the machine",
+   "ok": true,
+   "detail": "0 external requests"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "no page error during the run",
+   "ok": true,
+   "detail": "none"
+  },
+  {
+   "kind": "ASSERT",
+   "name": "the evidence is bound to committed source: the research tree is clean, untracked files included",
+   "ok": true,
+   "detail": "tested head 54374aa64e23b542d1f1955298c66c5d4d2d9c32"
+  }
+ ]
+}

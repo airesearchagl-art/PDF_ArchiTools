@@ -1,0 +1,444 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M5 raster encoder / memory — research harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** flattening path unchanged (E1) and the candidate
+ * encoding paths over the same rendered pages, and measures the things the
+ * model claims rather than assuming them: the live set at conversion time, the
+ * bytes actually stored in the PDF object, what jsPDF's bundled encoder is
+ * reachable from, and what a real JSZip archive costs.
+ *
+ * Not part of the app; nothing here is imported by `src/`. The owned PNG
+ * encoder is imported from production as it stands, reused and never modified.
+ */
+import { processMonochrome, processOptimize } from '/src/utils/pdf-processor.ts';
+import { pngStoredSize as productionPngStoredSize, encodePngStored, encoderScratchBytes } from '/src/utils/comparator/png.ts';
+import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+import { PDFDocument } from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
+import * as jspdfNamespace from 'jspdf';
+import JSZip from 'jszip';
+import {
+  encodeOwnedPage, drawFullPageImage, releaseCanvas, ORDERING,
+} from '/research/m5-raster-encoder-memory/prototype/image-xobject.mjs';
+import {
+  CANDIDATES, pagePlan, filePlan, batchPlan, naiveBatchPlan, preflight, admissibleForHardContract,
+  pngStoredSize, deflateUpperBound, pakoDeflateTerms, jpegDataUrlChars, rawSampleBytes,
+  CEILINGS, BASIS, PAKO, PAKO_STATE_BYTES, JPEG_FORMAT_UPPER_BOUND,
+} from '/research/m5-raster-encoder-memory/prototype/encoders.mjs';
+
+const FIXTURES = '/test-fixtures/m5-encoder';
+const cache = new Map();
+async function bytesOf(name) {
+  if (!cache.has(name)) {
+    const r = await fetch(`${FIXTURES}/${name}.pdf`);
+    cache.set(name, new Uint8Array(await r.arrayBuffer()));
+  }
+  return cache.get(name).slice();
+}
+const fileOf = (name, bytes) => new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
+
+configurePdfWorker();
+
+/** PDF.js transfers what it is given, so every open takes its own copy. */
+const openDoc = async (bytes) => pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+
+async function renderPage(pdf, index, dpi) {
+  const page = await pdf.getPage(index);
+  const viewport = page.getViewport({ scale: dpi / 72 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  page.cleanup();
+  return { canvas, ctx, width: canvas.width, height: canvas.height, viewport };
+}
+
+function luminance(rgba) {
+  const out = new Uint8Array(rgba.length / 4);
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 1) {
+    out[j] = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+  }
+  return out;
+}
+
+function compare(ref, out) {
+  if (ref.length !== out.length) return { comparable: false };
+  let kept = 0; let ink = 0; let spurious = 0; let light = 0; let se = 0;
+  for (let i = 0; i < ref.length; i += 1) {
+    const d = ref[i] - out[i];
+    se += d * d;
+    if (ref[i] < 128) { ink += 1; if (out[i] < 128) kept += 1; } else { light += 1; if (out[i] < 128) spurious += 1; }
+  }
+  const mse = se / ref.length;
+  return {
+    comparable: true,
+    inkKept: ink ? kept / ink : null,
+    spurious: light ? spurious / light : null,
+    psnr: mse === 0 ? Infinity : 10 * Math.log10((255 * 255) / mse),
+  };
+}
+
+async function luminanceAt(bytes, index, dpi) {
+  const pdf = await openDoc(bytes);
+  const { ctx, width, height } = await renderPage(pdf, index, dpi);
+  const lum = luminance(ctx.getImageData(0, 0, width, height).data);
+  await pdf.destroy();
+  return { lum, width, height };
+}
+
+// ---------------------------------------------------------------------------
+// Candidate runners
+// ---------------------------------------------------------------------------
+
+async function runE1(bytes, dpi, { grey }) {
+  const pdf = await openDoc(bytes);
+  const out = await PDFDocument.create();
+  const pages = [];
+  const t0 = performance.now();
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const { canvas, ctx, width, height, viewport } = await renderPage(pdf, i, dpi);
+    if (grey) {
+      const img = ctx.getImageData(0, 0, width, height);
+      const d = img.data;
+      for (let j = 0; j < d.length; j += 4) {
+        const g = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+        d[j] = g; d[j + 1] = g; d[j + 2] = g;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    const url = canvas.toDataURL('image/jpeg', 0.8);
+    const jpegBytes = Math.floor((url.length - 23) * 3 / 4)
+      - (url.endsWith('==') ? 2 : (url.endsWith('=') ? 1 : 0));
+    const embedded = await out.embedJpg(url);
+    const page = out.addPage([viewport.width * (72 / dpi), viewport.height * (72 / dpi)]);
+    page.drawImage(embedded, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+    pages.push({
+      width, height, storedBytes: jpegBytes, dataUrlChars: url.length,
+      dataUrlExact: url.length === jpegDataUrlChars(jpegBytes), sizeExact: null,
+    });
+    releaseCanvas(canvas);
+  }
+  const saved = await out.save();
+  await pdf.destroy();
+  return { bytes: saved, pages, elapsedMs: performance.now() - t0 };
+}
+
+async function runE2(bytes, dpi, { grey }) {
+  const pdf = await openDoc(bytes);
+  const out = await PDFDocument.create();
+  const pages = [];
+  const t0 = performance.now();
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const { canvas, ctx, width, height, viewport } = await renderPage(pdf, i, dpi);
+    const img = ctx.getImageData(0, 0, width, height);
+    const d = img.data;
+    for (let j = 0; j < d.length; j += 4) {
+      if (grey) {
+        const g = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+        d[j] = g; d[j + 1] = g; d[j + 2] = g;
+      }
+      d[j + 3] = 255;
+    }
+    releaseCanvas(canvas);
+    const png = encodePngStored(d, width, height);
+    const embedded = await out.embedPng(png);
+    const page = out.addPage([viewport.width * (72 / dpi), viewport.height * (72 / dpi)]);
+    page.drawImage(embedded, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+    pages.push({
+      width, height, storedBytes: png.length,
+      sizeExact: png.length === productionPngStoredSize(width, height)
+        && productionPngStoredSize(width, height) === pngStoredSize(width, height),
+      scratchBytes: encoderScratchBytes(width),
+    });
+  }
+  const saved = await out.save();
+  await pdf.destroy();
+  return { bytes: saved, pages, elapsedMs: performance.now() - t0 };
+}
+
+async function runE3(bytes, dpi, { colourSpace, filter, contrast = 1, ordering = ORDERING.RELEASED }) {
+  const pdf = await openDoc(bytes);
+  const out = await PDFDocument.create();
+  const pages = [];
+  const t0 = performance.now();
+  for (let i = 1; i <= pdf.numPages; i += 1) {
+    const { canvas, ctx, width, height, viewport } = await renderPage(pdf, i, dpi);
+    const page = out.addPage([viewport.width * (72 / dpi), viewport.height * (72 / dpi)]);
+    const r = encodeOwnedPage(out, page, ctx, { width, height, colourSpace, filter, contrast, ordering });
+    const components = colourSpace === 'DeviceGray' ? 1 : 3;
+    pages.push({
+      width, height,
+      storedBytes: r.storedBytes,
+      sampleBytes: r.sampleBytes,
+      convertLiveBytes: r.convertLiveBytes,
+      canvasReleasedBeforeConvert: r.canvasReleasedBeforeConvert,
+      sameArray: r.sameArray,
+      sizeExact: filter === 'none'
+        ? r.storedBytes === rawSampleBytes(width, height, components)
+        : r.storedBytes <= deflateUpperBound(rawSampleBytes(width, height, components)),
+    });
+    if (ordering === ORDERING.HELD) releaseCanvas(canvas);
+  }
+  const saved = await out.save();
+  await pdf.destroy();
+  return { bytes: saved, pages, elapsedMs: performance.now() - t0 };
+}
+
+const RUNNERS = {
+  'E1-jpeg': (b, dpi) => runE1(b, dpi, { grey: true }),
+  'E2-png-embed': (b, dpi) => runE2(b, dpi, { grey: true }),
+  'E3-gray-raw': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceGray', filter: 'none' }),
+  'E3-gray-flate': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceGray', filter: 'flate' }),
+  'E3-rgb-raw': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceRGB', filter: 'none' }),
+  'E3-rgb-flate': (b, dpi) => runE3(b, dpi, { colourSpace: 'DeviceRGB', filter: 'flate' }),
+};
+
+/** Deterministic incompressible bytes: xorshift32's high byte. */
+function noiseSamples(n, seed = 0x9E3779B9) {
+  const out = new Uint8Array(n);
+  let s = seed >>> 0;
+  for (let i = 0; i < n; i += 1) {
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5; s >>>= 0;
+    out[i] = (s >>> 24) & 0xFF;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+
+window.__m5e = {
+  async corpus(names) {
+    const out = {};
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const pdf = await openDoc(bytes);
+      const page = await pdf.getPage(1);
+      const [, , w, h] = page.view;
+      out[name] = { bytes: bytes.length, pages: pdf.numPages, widthPt: w, heightPt: h };
+      await pdf.destroy();
+    }
+    return out;
+  },
+
+  async pngContract(cases) {
+    const rows = [];
+    for (const [w, h] of cases) {
+      const pixels = new Uint8ClampedArray(w * h * 4).fill(255);
+      const encoded = encodePngStored(pixels, w, h);
+      rows.push({
+        w, h,
+        production: productionPngStoredSize(w, h),
+        model: pngStoredSize(w, h),
+        actual: encoded.length,
+        agree: productionPngStoredSize(w, h) === pngStoredSize(w, h) && encoded.length === pngStoredSize(w, h),
+        bytesPerPixel: encoded.length / (w * h),
+      });
+    }
+    return rows;
+  },
+
+  async productionBaseline(names, dpi) {
+    const out = {};
+    for (const name of names) {
+      const bytes = await bytesOf(name);
+      const t0 = performance.now();
+      const mono = await processMonochrome(fileOf(name, bytes), { dpi, contrast: 1.0 });
+      const tMono = performance.now() - t0;
+      const t1 = performance.now();
+      const opt = await processOptimize(fileOf(name, bytes), { dpi });
+      out[name] = {
+        sourceBytes: bytes.length,
+        monochromeBytes: mono.length, monochromeMs: tMono,
+        optimizeBytes: opt.length, optimizeMs: performance.now() - t1,
+      };
+    }
+    return out;
+  },
+
+  async candidates(name, dpi, keys) {
+    const bytes = await bytesOf(name);
+    const out = {};
+    for (const key of keys) {
+      const r = await RUNNERS[key](bytes.slice(), dpi);
+      const pixels = r.pages.reduce((n, p) => n + p.width * p.height, 0);
+      out[key] = {
+        outputBytes: r.bytes.length,
+        bytesPerPixel: r.bytes.length / pixels,
+        pages: r.pages,
+        elapsedMs: r.elapsedMs,
+        allExact: r.pages.every((p) => p.sizeExact !== false && p.dataUrlExact !== false),
+      };
+    }
+    return out;
+  },
+
+  /**
+   * RF-M1A. The same page, both orderings, with the live set at conversion
+   * measured rather than assumed.
+   */
+  async orderings(name, dpi, colourSpace, filter) {
+    const bytes = await bytesOf(name);
+    const out = {};
+    for (const ordering of [ORDERING.HELD, ORDERING.RELEASED]) {
+      const r = await runE3(bytes.slice(), dpi, { colourSpace, filter, ordering });
+      const p = r.pages[0];
+      out[ordering] = {
+        width: p.width, height: p.height,
+        pixels: p.width * p.height,
+        convertLiveBytes: p.convertLiveBytes,
+        convertLiveBytesPerPixel: p.convertLiveBytes / (p.width * p.height),
+        canvasReleasedBeforeConvert: p.canvasReleasedBeforeConvert,
+        sampleBytes: p.sampleBytes,
+        storedBytes: p.storedBytes,
+        outputBytes: r.bytes.length,
+      };
+    }
+    return out;
+  },
+
+  /**
+   * RF-M1E. What the PDF object actually carries, read from the object itself,
+   * over content the deflater cannot help and content it can.
+   */
+  async streamSizes(width, height) {
+    const rows = [];
+    for (const colourSpace of ['DeviceGray', 'DeviceRGB']) {
+      const components = colourSpace === 'DeviceGray' ? 1 : 3;
+      const n = width * height * components;
+      for (const [content, make] of [
+        ['uniform', () => new Uint8Array(n).fill(255)],
+        ['noise', () => noiseSamples(n)],
+      ]) {
+        for (const filter of ['none', 'flate']) {
+          const doc = await PDFDocument.create();
+          const page = doc.addPage([width, height]);
+          const samples = make();
+          const drawn = drawFullPageImage(doc, page, { samples, width, height, colourSpace, filter });
+          rows.push({
+            colourSpace, content, filter,
+            sampleBytes: samples.length,
+            storedBytes: drawn.storedBytes,
+            sameArray: drawn.sameArray,
+            modelBound: filter === 'flate' ? deflateUpperBound(samples.length) : samples.length,
+            ratio: drawn.storedBytes / samples.length,
+          });
+        }
+      }
+    }
+    return rows;
+  },
+
+  /**
+   * RF-N1-A. Deflate buffers of exact lengths through the same pdf-lib path an
+   * image stream uses, and report what the object carries. Used to probe the
+   * block-count bound at and around the literal-buffer boundary, where an
+   * off-by-one in the divisor would show.
+   */
+  async deflateSizes(lengths) {
+    const rows = [];
+    for (const n of lengths) {
+      for (const [content, make] of [['noise', () => noiseSamples(n)], ['uniform', () => new Uint8Array(n).fill(255)]]) {
+        const doc = await PDFDocument.create();
+        const bytes = make();
+        const stream = doc.context.flateStream(bytes, {});
+        doc.context.register(stream);
+        rows.push({ n, content, storedBytes: stream.getContentsSize() });
+      }
+    }
+    return rows;
+  },
+
+  /**
+   * RF-M2. What jsPDF 3.0.4 actually exposes, checked at runtime rather than
+   * inferred from a package name.
+   */
+  jspdfEncoder() {
+    const exported = Object.keys(jspdfNamespace).sort();
+    const jsPDF = jspdfNamespace.jsPDF ?? jspdfNamespace.default;
+    const api = jsPDF ? jsPDF.API : {};
+    const doc = jsPDF ? new jsPDF() : null;
+    return {
+      exported,
+      jpegEncoderExported: exported.includes('JPEGEncoder'),
+      jpegEncoderOnApi: typeof api.JPEGEncoder !== 'undefined',
+      jpegEncoderOnInstance: doc ? typeof doc.JPEGEncoder !== 'undefined' : null,
+      // The plugins that do reach it, each of which takes an encoded image file.
+      processorsReachingIt: ['processGIF89A', 'processBMP', 'processWEBP'].filter((f) => typeof api[f] === 'function'),
+      // The one that takes canvas pixels, and does not reach it.
+      processRGBA: typeof api.processRGBA === 'function',
+      addImageAcceptsRawPixels: doc ? typeof doc.addImage === 'function' : null,
+    };
+  },
+
+  /**
+   * RF-M3. A real B2 archive: N outputs from one candidate, stored (not
+   * deflated) into one ZIP, measured against the model.
+   */
+  async zipBatch(name, dpi, key, files) {
+    const bytes = await bytesOf(name);
+    const outputs = [];
+    for (let i = 0; i < files; i += 1) {
+      const r = await RUNNERS[key](bytes.slice(), dpi);
+      outputs.push(r.bytes);
+    }
+    const zip = new JSZip();
+    outputs.forEach((b, i) => zip.file(`file-${i + 1}.pdf`, b));
+    zip.file('manifest.json', JSON.stringify({ files: outputs.map((b, i) => ({ name: `file-${i + 1}.pdf`, bytes: b.length })) }, null, 1));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const sources = outputs.reduce((n, b) => n + b.length, 0);
+    return {
+      files, key, dpi,
+      sourceBytesTotal: sources,
+      archiveBytes: blob.size,
+      archiveOverPerFile: (blob.size - sources) / files,
+      perFileBytes: outputs.map((b) => b.length),
+    };
+  },
+
+  async quality(name, dpi, keys, refDpi = 300) {
+    const bytes = await bytesOf(name);
+    const ref = await luminanceAt(bytes, 1, refDpi);
+    const out = {};
+    for (const key of keys) {
+      const r = await RUNNERS[key](bytes.slice(), dpi);
+      const got = await luminanceAt(r.bytes, 1, refDpi);
+      out[key] = { ...compare(ref.lum, got.lum), outputBytes: r.bytes.length, sizeRatio: r.bytes.length / bytes.length };
+    }
+    return out;
+  },
+
+  canvasProbe(width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let allocates = false;
+    try {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 2, 2);
+      allocates = ctx.getImageData(0, 0, 1, 1).data[3] === 255;
+    } catch { allocates = false; }
+    releaseCanvas(canvas);
+    return { width, height, pixels: width * height, allocates };
+  },
+
+  model() {
+    return {
+      candidates: Object.fromEntries(Object.entries(CANDIDATES).map(([k, v]) => [k, { id: v.id, label: v.label, owned: v.owned }])),
+      ceilings: CEILINGS,
+      basis: BASIS,
+      pako: { ...PAKO, stateBytes: PAKO_STATE_BYTES },
+      jpegFormatUpperBound: JPEG_FORMAT_UPPER_BOUND,
+    };
+  },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m5eReady = true;
+</script>
