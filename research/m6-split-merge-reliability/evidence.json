@@ -2,7 +2,7 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "25ab6db58e267c166ef9b1ceee603c0487f4acd9",
+    "testedResearchHead": "945fa14efbd12e653b1df5d458a968dca77aeab9",
     "workingTreeDirty": true,
     "researchTreeDirty": true,
     "researchPackageDirtyBeforeRun": false,
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-13T03:32:06.667Z"
+    "ranAt": "2026-09-13T07:57:19.003Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -127,7 +127,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 1463
+      "bytesMeasuredOnly": 1464
     },
     "geometry": {
       "rotate-90": {
@@ -472,7 +472,7 @@
     "signature": {
       "beforeSigned": true,
       "afterHasForm": false,
-      "bytesMeasuredOnly": 1560
+      "bytesMeasuredOnly": 1559
     },
     "xfa": {
       "before": true,
@@ -569,7 +569,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 2669
+      "bytesMeasuredOnly": 2668
     },
     "A+A": {
       "pages": 6,
@@ -1045,10 +1045,7 @@
   },
   "forms": {
     "supportedTypes": [
-      "/Tx",
-      "/Btn",
-      "/Ch",
-      "/Sig"
+      "/Tx"
     ],
     "form2p": {
       "fields": [
@@ -1208,6 +1205,180 @@
         "pageOptionalContentProperties": false,
         "openAction": false
       }
+    }
+  },
+  "formSubset": {
+    "supportedTypes": [
+      "/Tx"
+    ],
+    "cases": {
+      "form-tx-plain": {
+        "status": "READY",
+        "acroForm": true,
+        "fields": [
+          {
+            "name": "m6.text",
+            "ft": "/Tx",
+            "value": "M6-TX-VALUE"
+          }
+        ],
+        "orphanWidgets": 0
+      },
+      "form-tx-ff": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "/Ff is read and never restored"
+      },
+      "form-tx-dv": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "/DV is not restored"
+      },
+      "form-dr": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "the /DA names a font from AcroForm /DR, which is not carried"
+      },
+      "form-separate-widget": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "a separate widget dictionary keeps the field entries elsewhere"
+      },
+      "form-hierarchical": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "/FT and /V are inherited rather than carried"
+      },
+      "form-checkbox": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "/Btn — /AS and /AP consistency is unproven"
+      },
+      "form-radio": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "/Btn group — kids hold their own appearance states"
+      },
+      "form-choice": {
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_FORM",
+        "why": "/Ch — /Opt is not restored"
+      }
+    }
+  },
+  "optionalContent": {
+    "ocproperties": {
+      "status": "READY",
+      "carried": 1,
+      "on": 1,
+      "off": 0,
+      "ocPropertiesAfter": true,
+      "pagePropertiesAfter": true
+    },
+    "ocg-multiple": {
+      "status": "READY",
+      "carried": 2,
+      "on": 1,
+      "off": 1,
+      "ocPropertiesAfter": true,
+      "pagePropertiesAfter": true
+    },
+    "ocmd": {
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /OCMD"
+      ]
+    },
+    "ocmd-nested": {
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /OCMD with a /VE visibility expression"
+      ]
+    }
+  },
+  "javascript": {
+    "sites": {
+      "attachment-and-js": {
+        "site": "/Names /JavaScript",
+        "foundInSource": 1,
+        "scanVisits": 1,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 0,
+        "remainingAfterReadback": 0,
+        "mechanism": "never copied into the artifact"
+      },
+      "js-openaction": {
+        "site": "/OpenAction is a JavaScript action",
+        "foundInSource": 1,
+        "scanVisits": 1,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 0,
+        "remainingAfterReadback": 0,
+        "mechanism": "never copied into the artifact"
+      },
+      "js-annot-a": {
+        "site": "annotation /A",
+        "foundInSource": 1,
+        "scanVisits": 1,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 1,
+        "remainingAfterReadback": 0,
+        "mechanism": "removed by the sanitizer"
+      },
+      "js-annot-aa": {
+        "site": "annotation /AA",
+        "foundInSource": 1,
+        "scanVisits": 1,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 1,
+        "remainingAfterReadback": 0,
+        "mechanism": "removed by the sanitizer"
+      },
+      "js-page-aa": {
+        "site": "page /AA",
+        "foundInSource": 1,
+        "scanVisits": 1,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 1,
+        "remainingAfterReadback": 0,
+        "mechanism": "removed by the sanitizer"
+      },
+      "js-field-aa": {
+        "site": "field /AA",
+        "foundInSource": 1,
+        "scanVisits": 2,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 1,
+        "remainingAfterReadback": 0,
+        "mechanism": "removed by the sanitizer"
+      },
+      "js-next-chain": {
+        "site": "JavaScript behind a /Next",
+        "foundInSource": 1,
+        "scanVisits": 1,
+        "scanComplete": true,
+        "status": "READY",
+        "removed": 1,
+        "remainingAfterReadback": 0,
+        "mechanism": "removed by the sanitizer"
+      }
+    },
+    "maxDepth": 32,
+    "negativeControl": {
+      "count": 0,
+      "complete": true
+    },
+    "dedupe": {
+      "count": 1,
+      "visits": 2
     }
   }
 }
