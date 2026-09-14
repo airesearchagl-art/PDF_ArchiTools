@@ -178,7 +178,7 @@ try {
         ]).length > 0,
         // The one a reviewer actually needs: is the *source* that produced
         // these numbers committed? Measured before anything is written, and
-        // excluding the two files this run is about to write — otherwise a gate
+        // excluding the evidence files the gates write — otherwise a gate
         // can never report a clean package, because writing its own evidence is
         // what makes the tree dirty.
         researchPackageDirtyBeforeRun: git([
@@ -186,6 +186,7 @@ try {
             'research/m6-split-merge-reliability',
             ':!research/m6-split-merge-reliability/evidence.json',
             ':!research/m6-split-merge-reliability/evidence-browser.json',
+            ':!research/m6-split-merge-reliability/evidence-object-graph-memory.json',
         ]).length > 0,
         untrackedOutsideResearch: git(['status', '--porcelain=v1', '--untracked-files=all'])
             .split('\n')

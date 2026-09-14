@@ -503,6 +503,31 @@ as unsigned. M6 must not re-derive this distinction differently from M5 H7.
 | attachments | remove with explicit confirmation — M6-H9d |
 | metadata | carry it, under M5's H12 contract — M6-H7 |
 
+## Memory (M6-H11, after B2)
+
+A one-page selection is not a small copy: page 1 of `mem-i-linked-heavy-pages`
+reaches nine unselected pages and 4,901,945 B of stream bytes through its links.
+`selectedPages × constant` is therefore not a memory model, and this contract
+does not use one.
+
+What B2 makes available, once the source is loaded and before anything is
+copied, is an exact count of what the copy will create — objects, copier
+entries, duplicated stream bytes, the largest stream and unselected pages
+reached ([`object-graph-memory.md`](object-graph-memory.md)). Recommended, not
+adopted:
+
+- check structural caps on those counts before `copyPages`, and refuse with a
+  typed reason when one is exceeded — the values are product choices, not
+  memory figures;
+- strip destinations (E2) before counting, so the count is of what will
+  actually be copied;
+- release the source before `save`, which takes its stream bytes out of the
+  save peak;
+- keep the adopted actual-output ceiling.
+
+None of that bounds the load of the source, which pdf-lib performs eagerly and
+without a cap. That is proposed blocker B3.
+
 ## Ownership, publication and naming
 
 - **Ownership (M6-H13):** a preview or export is owned by a run token; changing

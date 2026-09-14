@@ -28,6 +28,11 @@ than its evidence.
   written; the other two were not tried at all. None of the three is in the
   gate. This bullet also listed a soft mask's `/G` as unwalked, with
   `ocg-extgstate-smask` extracting READY, until B1 closed it — see item 18.
+- **Object-graph memory in a browser.** B2 measured heap, RSS and array buffers
+  in one Node (V8) process. No browser engine, heap limit or collector was
+  measured for the object graph, and none of those Node numbers is claimed to
+  transfer. Real drawings were not used either; the synthetic shapes isolate one
+  term at a time.
 
 ## Measured in a way that has a caveat
 
@@ -48,6 +53,14 @@ than its evidence.
   they reference. The disclosure argument in
   [`extract-contract.md`](extract-contract.md) rests on their presence, not
   their size.
+- **B2's memory readings are phase samples after a forced collection.** They
+  see what is still held at each boundary, not what was allocated and dropped
+  inside a phase. Peak RSS is recorded beside them for that reason, and it is a
+  process-wide high-water mark, not attributable to one allocation.
+- **The heap held after release is not explained.** B1 left +13.1 MiB once
+  every document was released. pdf-lib's module-level PDFRef and PDFName pools
+  are a mechanism that fits; no heap snapshot was taken, so it is not the
+  measured cause.
 
 ## Instrument defects found during this research
 
@@ -229,6 +242,23 @@ has never been wrong has usually never been checked.
     sharing the visited set and the depth bound: those six are refused on the
     soft-mask path, the shared `/G` reports its group once, and `smask-clean`
     and `smask-none` still carry with 0 findings. Support was not widened.
+19. **The first lifetime probe asked before it collected.** B2's phase script
+    dereferenced its WeakRefs while building the object it then handed to the
+    sampler, so every "collectable?" was answered before any collection had
+    run, and every source read as retained. A merge's array buffers falling by
+    1.2 MiB after release contradicted it. The WeakRefs are now dereferenced
+    only after two full collections and a job boundary, and every source reads
+    as collectable. No evidence was committed with the defect.
+20. **Phase boundaries could not see a load-time spike.** A 33,149 B document
+    whose object stream inflates to 33,554,457 B showed `heapUsed` +0.1 MiB at
+    every boundary, because the decode buffer is dropped before the first
+    sample. Peak RSS was added to every sample, and shows +80.3 MiB during that
+    load.
+21. **A retention row named a cause its numbers did not support.** It
+    attributed the heap held after release to the PDFName pool. B1, with
+    repeated names, held +13.1 MiB; J, with 20,000 distinct names, held
+    +14.2 MiB — the names account for about 1 MiB of it. The row now reports
+    both numbers and says the cause is not measured.
 
 ## A note on how each JavaScript site reached zero
 

@@ -83,6 +83,45 @@ It would have to answer, from pinned source rather than from measurement:
 Until that exists, any memory preset offered for Split/Merge would be a number
 with an UNKNOWN inside it, which is the thing M5 RF-L2 forbade.
 
+### After B2 — what the Object-Graph Memory Sub-Spike found
+
+Everything above in this section, and both lifetime tables, were written before
+B2 and are left as they were: at adoption the parsed document, the copied graph
+and the target document were UNKNOWN, and no memory preset was adoptable. B2
+took that UNKNOWN apart ([`object-graph-memory.md`](object-graph-memory.md)). It
+did **not** turn it into a preset.
+
+| term | before B2 | after B2 |
+| --- | --- | --- |
+| source bytes | EXACT | EXACT — and droppable once loaded: parsed streams are copies, not views (`core/parser/ByteStream.js:51-53`) |
+| **load of the source** | inside "parsed source document" | **UNKNOWN, and not boundable with pdf-lib 1.17.1** — every object parsed eagerly, every object and xref stream inflated with no cap; 33,149 B decoded to 33,554,457 B |
+| parsed source: object count and raw stream bytes | UNKNOWN | EXACT after load |
+| parsed source: heap bytes | UNKNOWN | UNKNOWN — an engine property; MEASURED_ONLY +12.7 MiB for 20,006 small objects in one Node process |
+| copied graph: objects, copier entries, duplicated stream bytes | UNKNOWN | EXACT **before the copy** — counted by a walk that equalled the real copy in 15 shapes |
+| copied graph: heap bytes | UNKNOWN | UNKNOWN |
+| Merge target growth per source | UNKNOWN | EXACT before that source is copied |
+| save buffer | SOURCE_DERIVED_BOUND given the target | EXACT before allocation for the plain writer; known only after compression for object streams |
+| heap still held after release | not listed | UNKNOWN — MEASURED_ONLY +13.1 MiB after B1 was released; the PDFRef and PDFName pools fit, the cause is not measured |
+
+The four questions the required sub-spike listed, answered:
+
+1. **Per-object cost** — counts are EXACT; heap bytes per object are an engine
+   property and stay UNKNOWN.
+2. **What `PDFObjectCopier` retains** — one map per `copyPages` call, dropped
+   when it returns; source, destination and map are alive together during the
+   copy, and afterwards nothing in the destination holds the source.
+3. **Bounding a page's graph before copying** — yes, exactly, once the source is
+   loaded; page count does not bound it, and neither does file size.
+4. **Bounding `save()`'s buffer without serialising** — for the plain writer,
+   exactly; for object streams, not before compressing.
+
+**Classification: PARTIALLY BOUNDABLE.** A hard budget still cannot be adopted:
+it would contain the load and the per-object heap, both UNKNOWN. So the
+conclusion above stands, and M5's presets stay DO NOT ADOPT. What changed is
+that the copy and the plain save can now be counted before they happen, which
+makes structural caps possible — and that the one term no cap after load can
+reach has a name: the load boundary, proposed as blocker B3.
+
 ---
 
 ## What *can* be closed today: the output ceiling

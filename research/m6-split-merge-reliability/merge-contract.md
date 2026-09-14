@@ -184,6 +184,24 @@ carries the signed document's appearance without its guarantee. Refusing is the
 answer that cannot be misread, and the empty `/Sig` case remains permitted
 because an unsigned signature field is a form control.
 
+## Memory (M6-H11, after B2)
+
+Merge is already sequential — load one source, copy its pages, move on — and B2
+measured that as the shape to keep ([`object-graph-memory.md`](object-graph-memory.md)):
+
+- each source became collectable once released, and nothing in the output
+  points back at it;
+- the output grew by exactly what each source's pre-copy count said — 20,012
+  objects and 1,260,544 B across three sources, 2,103 objects and 583,090 B
+  across two — so a cumulative cap can be checked before the copy that would
+  exceed it.
+
+Recommended, not adopted: one source loaded at a time and released before the
+next; no preloading of every source; the output's cumulative object and stream
+byte totals checked from each source's count before that source is copied; the
+adopted actual-output ceiling unchanged. Each source's load stays unbounded
+until the load boundary, proposed blocker B3, is closed.
+
 ## Ownership, publication and naming
 
 - **Ownership (M6-H13):** adding, removing or reordering a source, switching

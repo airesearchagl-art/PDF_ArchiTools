@@ -62,13 +62,16 @@ copying as document splitting and merging, and reports success.
 | [`extract-contract.md`](extract-contract.md) | proposed Extract contract, including the E1/E2/E3 destination policies |
 | [`merge-contract.md`](merge-contract.md) | proposed Merge contract, including intake semantics and collisions |
 | [`preview-memory.md`](preview-memory.md) | what the thumbnail preview costs, by page count and sheet size, and the alternatives priced |
-| [`budget.md`](budget.md) | memory lifetimes with basis classifications, and why a hard memory budget cannot be closed today |
+| [`budget.md`](budget.md) | memory lifetimes with basis classifications, why a hard memory budget could not be closed at adoption, and what B2 changed |
+| [`object-graph-memory.md`](object-graph-memory.md) | B2, the Object-Graph Memory Sub-Spike: which memory terms of a Split or Merge can be known before the work, from pdf-lib's source and a real copy — PARTIALLY BOUNDABLE |
 | [`limitations.md`](limitations.md) | what was not measured, caveats on what was, and the instrument defects found on the way |
 | [`human-gate.json`](human-gate.json) | M6-H1 … M6-H14, each with candidates, measured consequences, a recommendation and what stays DEFER |
 | `prototype/extract-destinations.mjs` | E1 and E2, prototyped far enough to prove the orphan-page invariant is reachable |
 | `prototype/form-subset.mjs` | the supported form subset, its detector, Extract reconstruction and Merge collision handling |
+| `prototype/object-graph-memory.mjs` | the walk that counts what `copyPages` will copy, and the plain writer's output length before it allocates |
 | `evidence.json` | structural measurements, written by the research gate |
 | `evidence-browser.json` | preview and lifetime measurements, written by the browser gate |
+| `evidence-object-graph-memory.json` | object-graph structure and phase memory, written by the object-graph memory gate |
 
 Facts are kept apart from opinions on purpose. `baseline.md`,
 `source-preservation-matrix.md` and `structure-policy.md` contain only observed
@@ -81,10 +84,13 @@ files and `human-gate.json` contain recommendations, and say so.
 node research/m6-split-merge-reliability/scripts/make-m6-fixtures.mjs
 node research/m6-split-merge-reliability/scripts/research-gate.mjs     # node, structural
 node research/m6-split-merge-reliability/scripts/browser-gate.mjs      # browser, memory and lifetime
+node research/m6-split-merge-reliability/scripts/make-m6-memory-fixtures.mjs
+node research/m6-split-merge-reliability/scripts/object-graph-memory-gate.mjs   # node, object-graph memory (B2)
 ```
 
-Fixtures are written to `test-fixtures/m6-split-merge/`, which is already
-ignored, so running the gates leaves the working tree clean.
+Fixtures are written to `test-fixtures/m6-split-merge/` and
+`test-fixtures/m6-object-graph-memory/`, both already ignored, so running the
+gates leaves the working tree clean.
 
 Row kinds, as the brief defines them:
 
@@ -104,6 +110,7 @@ Latest run:
 ```text
 research gate   ASSERT 59  PROBE 82  MEASURE 60  BASELINE-FAIL 18  HUMAN-OPEN 25  159/159
 browser gate    ASSERT  3  PROBE  1  MEASURE 12  BASELINE-FAIL  5  HUMAN-OPEN  3      9/9
+memory gate     ASSERT 25  PROBE  4  MEASURE 21  BASELINE-FAIL  2  HUMAN-OPEN  1    31/31
 external HTTP(S) during document work: 0
 ```
 
@@ -117,3 +124,7 @@ recommendation, including the two that say "do not adopt yet" — the memory
 budget, which contains an UNKNOWN that would have to be closed by an
 Object-Graph Memory Sub-Spike before any preset could honestly be offered, and
 the uncommon catalog structures, which pdf-lib does not implement at all.
+
+B2 has since run that Sub-Spike. It classified the memory model PARTIALLY
+BOUNDABLE, kept every preset DO NOT ADOPT, and proposed the load boundary it
+could not close as blocker B3 — see [`object-graph-memory.md`](object-graph-memory.md).

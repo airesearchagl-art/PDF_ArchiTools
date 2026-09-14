@@ -1,6 +1,6 @@
 {
   "gate": "M6 Split / Merge Reliability Architecture",
-  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; implementation remains blocked by B2",
+  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; B2 closed on 2026-09-15 as PARTIALLY BOUNDABLE; implementation remains blocked by B3, the load boundary B2 proposed",
   "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
   "revision": "answers Required Fix A/B/C/D — the optional-content detection envelope, artifact-wide JavaScript remnants, /Order label position, and decision-record consistency. Builds on RF-M6-R1…R6, RF-S1/S2, RF-U1/U2 and RF-V1.",
   "adoption": {
@@ -33,10 +33,22 @@
       {
         "id": "B2",
         "decision": "M6-H11",
-        "state": "OPEN",
+        "state": "CLOSED",
+        "closedOn": "2026-09-15",
+        "closedWith": "the Object-Graph Memory Sub-Spike (object-graph-memory.md): memory model PARTIALLY BOUNDABLE. Every term a copy and a plain save create is countable before it exists once the source is loaded; the load itself is not boundable with pdf-lib 1.17.1; heap bytes per object stay UNKNOWN; no memory preset is adoptable, M5's included",
+        "closureEvidence": "object-graph memory gate: the walker equalled the real copy in 15 shapes; merge growth equalled the per-source plans in 2 merges; plain-writer output length predicted exactly in 3 cases; probes that page count, file size and packing do not bound the graph, and that input bytes do not bound load-time decode (mem-k-objstm-inflation, 1,012x). The tested source head is the commit that carries this record and the evidence-only head the one after it",
         "blocker": "M6 Object-Graph Memory Sub-Spike — the dominant memory term is UNKNOWN",
         "closure": "answer the four questions in budget.md from pinned source",
         "forbidden": "any M6 memory preset before it closes, M5's 512 MiB / 1 GiB / 2 GiB included"
+      },
+      {
+        "id": "B3",
+        "decision": "M6-H11",
+        "state": "OPEN",
+        "proposedBy": "B2 on 2026-09-15 — pending Human confirmation",
+        "blocker": "pdf-lib 1.17.1 parses every object and inflates every object stream and cross-reference stream at load, with no cap and no hook to stop it, and no term available before load bounds what that allocates (mem-k-objstm-inflation: 33,149 B in, 33,554,457 B decoded; peak RSS +80.3 MiB during that load, MEASURED_ONLY)",
+        "closure": "a Load Boundary Sub-Spike that refuses such a document before pdf-lib's parse can allocate without limit, proven at least against mem-k-objstm-inflation",
+        "forbidden": "starting M6 implementation, or treating an input-byte limit as a bound on load-time memory"
       }
     ],
     "implementationStarted": false,
@@ -278,7 +290,36 @@
       "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is a function of document structure rather than byte length, and is UNKNOWN. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B, at a boundary taken from a real artifact. No such check exists today.",
       "recommended": "adopt an actual-artifact output ceiling now, sharing M5's constant; do NOT adopt a memory preset until an Object-Graph Memory Sub-Spike closes the UNKNOWN",
       "adopted": "adopt an actual-artifact output ceiling; memory presets NOT ADOPTABLE; the Object-Graph Memory Sub-Spike is mandatory before implementation (B2)",
-      "implementationBlocker": "B2 — the M6 Object-Graph Memory Sub-Spike (scope stated in budget.md) must close the UNKNOWN before implementation; no memory preset, M5's included, may be adopted before it does",
+      "implementationBlocker": "B2 — CLOSED on 2026-09-15 as PARTIALLY BOUNDABLE. The Object-Graph Memory Sub-Spike found the copy and the plain save countable before they happen, the load not boundable with pdf-lib 1.17.1, and no memory preset adoptable; the load boundary it could not close is proposed as B3.",
+      "objectGraphMemoryConclusion": {
+        "outputCeiling": "ADOPTED / unchanged",
+        "memoryModel": "PARTIALLY BOUNDABLE",
+        "hardStructuralTerms": [
+          "input bytes — before load",
+          "objects the copy registers, copier map entries, raw stream bytes the copy duplicates, the largest stream, unselected pages reached — after load, before copy (EXACT; equal to the real copy in 15 shapes)",
+          "Merge output growth per source — before that source is copied (EXACT; equal in 2 merges)",
+          "plain-writer output length — before its buffer is allocated (EXACT; equal in 3 cases)"
+        ],
+        "unknownTerms": [
+          "the load: every object parsed eagerly, every object and xref stream inflated with no cap; input bytes do not bound it",
+          "heap bytes per object, per map entry, per copier entry — an engine property",
+          "heap still held after every document is released (MEASURED_ONLY +13.1 MiB for B1); the PDFRef and PDFName pools fit, the cause is not measured",
+          "object-stream output length before compression, and any upper bound on it",
+          "browser heap limits, collector timing and array-buffer accounting"
+        ],
+        "safeProductionRecommendation": [
+          "no memory preset",
+          "structural caps on the EXACT terms, checked after load and before copy, with a typed refusal — values are product choices, not memory figures",
+          "Merge one source at a time, releasing each, no preloading, with the cumulative output growth checked from each source's plan before its copy",
+          "release the source before save",
+          "keep the adopted actual-output ceiling",
+          "close the load boundary before implementation"
+        ],
+        "requiredFollowOn": "Load Boundary Sub-Spike — proposed implementation blocker B3",
+        "m5Presets": "DO NOT ADOPT",
+        "basis": "object-graph-memory.md; evidence-object-graph-memory.json",
+        "historicalNote": "At adoption this decision's memory model was UNKNOWN and every preset NOT ADOPTABLE. B2 replaced the UNKNOWN with this conclusion; it did not make any preset adoptable."
+      },
       "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
       "defer": ["whether the adopted output ceiling shares M5's MAX_OUTPUT_BYTES 268435456 or takes an independently gated M6 value — the research recommends sharing"]
     },
