@@ -2,9 +2,9 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "3560ec652416bdf5ae5d2a7d02c7cb4d542694c9",
+    "testedResearchHead": "e2ba4b20ac4dbacffb37cbe230859ba9e2cb18c3",
     "workingTreeDirty": true,
-    "researchTreeDirty": true,
+    "researchTreeDirty": false,
     "researchPackageDirtyBeforeRun": false,
     "untrackedOutsideResearch": [
       "public/tessdata/eng.traineddata",
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-13T11:27:30.551Z"
+    "ranAt": "2026-09-14T14:34:24.113Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -104,7 +104,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 2113
+      "bytesMeasuredOnly": 2114
     },
     "middle": {
       "requested": 2,
@@ -127,7 +127,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 1464
+      "bytesMeasuredOnly": 1463
     },
     "geometry": {
       "rotate-90": {
@@ -472,7 +472,7 @@
     "signature": {
       "beforeSigned": true,
       "afterHasForm": false,
-      "bytesMeasuredOnly": 1558
+      "bytesMeasuredOnly": 1559
     },
     "xfa": {
       "before": true,
@@ -551,7 +551,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 2673
+      "bytesMeasuredOnly": 2672
     },
     "B+A": {
       "pages": 5,
@@ -589,7 +589,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 3023
+      "bytesMeasuredOnly": 3022
     },
     "A+B+C": {
       "pages": 7,
@@ -616,7 +616,7 @@
     "signed": {
       "pages": 5,
       "form": false,
-      "bytesMeasuredOnly": 3150
+      "bytesMeasuredOnly": 3152
     }
   },
   "collisions": {
@@ -2316,7 +2316,7 @@
       "status": "REFUSED",
       "code": "UNSUPPORTED_OPTIONAL_CONTENT",
       "unsupported": [
-        "page 0 annotation /OC"
+        "page 0 annotation 0 /OC"
       ]
     },
     "xobject-oc": {
@@ -2324,7 +2324,7 @@
       "status": "REFUSED",
       "code": "UNSUPPORTED_OPTIONAL_CONTENT",
       "unsupported": [
-        "page 0 XObject /M6Layered-9742682568 /OC"
+        "page 0 /XObject /M6Layered-9742682568 /OC"
       ]
     },
     "malformed-ocproperties": {
@@ -2444,6 +2444,127 @@
       "removedObjects": 0,
       "reachableAfterReadback": 0,
       "artifactWideAfterReadback": 0
+    }
+  },
+  "ocRequired": {
+    "ocg-missing-ocgs": {
+      "label": "/OCProperties with no /OCGs",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/OCProperties has no /OCGs, which the specification requires"
+      ]
+    },
+    "ocg-missing-d": {
+      "label": "/OCProperties with no /D",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/OCProperties has no /D, which the specification requires"
+      ]
+    },
+    "ocg-dangling-ocgs-ref": {
+      "label": "/OCGs holding a reference to an object that is not there",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "/OCProperties /OCGs[1] points at 9997 0 R, which is not in the document"
+      ]
+    }
+  },
+  "ocResourceGraph": {
+    "maxResourceDepth": 24,
+    "walked": [
+      "Properties",
+      "XObject",
+      "Pattern",
+      "Font"
+    ],
+    "notWalked": [
+      "ExtGState",
+      "Shading",
+      "ColorSpace"
+    ],
+    "cases": {
+      "ocg-nested-form-xobject": {
+        "label": "a form XObject two levels down carrying /OC",
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+        "unsupported": [
+          "page 0 /XObject /M6Outer /XObject /M6Inner /OC"
+        ]
+      },
+      "ocg-form-properties": {
+        "label": "a form XObject's own /Resources /Properties",
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+        "unsupported": [
+          "page 0 /XObject /M6Form /Properties /M6L names an optional-content group below the page's own resources"
+        ]
+      },
+      "ocg-annotation-appearance-properties": {
+        "label": "an appearance stream's own /Resources /Properties",
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+        "unsupported": [
+          "page 0 annotation 0 /AP /N /Properties /M6L names an optional-content group below the page's own resources"
+        ]
+      },
+      "ocg-pattern-properties": {
+        "label": "a tiling pattern's own /Resources /Properties",
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+        "unsupported": [
+          "page 0 /Pattern /M6P /Properties /M6L names an optional-content group below the page's own resources"
+        ]
+      },
+      "ocg-type3-properties": {
+        "label": "a Type 3 font's /Resources /Properties",
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+        "unsupported": [
+          "page 0 /Font /M6T3 /Properties /M6L names an optional-content group below the page's own resources"
+        ]
+      },
+      "resource-depth-exceeded": {
+        "label": "a resource graph deeper than the walker follows",
+        "status": "REFUSED",
+        "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+        "unsupported": [
+          "page 0 /XObject /M6Deep /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /Resources nested deeper than 24"
+        ]
+      }
+    },
+    "cycle": {
+      "findings": [
+        "page 0 /XObject /M6Cycle /XObject /M6Second /Properties /M6L names an optional-content group below the page's own resources"
+      ],
+      "behindCycleReported": 1,
+      "depthBoundReached": 0,
+      "extract": "REFUSED"
+    },
+    "extGStateSoftMask": {
+      "status": "READY",
+      "unsupported": []
+    },
+    "supportedStillCarried": {
+      "carried": [
+        "ocproperties",
+        "ocg-multiple",
+        "ocg-two-pages-opposite",
+        "ocg-shared-across-pages",
+        "ocg-reordered-properties",
+        "ocg-many-pages",
+        "ocg-d-name",
+        "ocg-basestate-on",
+        "ocg-order-flat",
+        "ocg-order-empty",
+        "ocg-order-absent",
+        "ocg-order-nested",
+        "ocg-order-labeled-nested",
+        "ocg-order-unused-group"
+      ],
+      "refused": []
     }
   }
 }
