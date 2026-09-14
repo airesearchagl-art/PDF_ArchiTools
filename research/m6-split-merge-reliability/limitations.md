@@ -20,6 +20,16 @@ than its evidence.
   was measured only as present-or-absent, not for validity.
 - **Encryption beyond refusal.** The encrypted fixture proves the loader refuses
   it; nothing about decryption or permissions was researched.
+- **Optional content behind a soft mask, and three walked paths with no
+  fixture.** The resource-graph walker does not open `/ExtGState`, and a soft
+  mask's `/G` is a form XObject with resources of its own.
+  `ocg-extgstate-smask` puts a group there and extracts **READY**. That is the
+  measured edge of the walked scope, not a clean result. Separately, three paths
+  the walker does follow are in no fixture: `/AP` state dictionaries, image
+  XObjects below the page, and `/CharProcs` streams carrying their own
+  `/Resources`. The last was tried once on a throwaway document while the walker
+  was written; the other two were not tried at all. None of the three is in the
+  gate.
 
 ## Measured in a way that has a caveat
 
@@ -178,6 +188,31 @@ has never been wrong has usually never been checked.
     reproduce is the first element of a nested array. A string at the top level,
     or part-way through a nested array, was being carried on the strength of
     being a string. Both are refused now, and the supported shape still passes.
+17. **The detector scanned a page's resources and called that the document.**
+    Every attachment check stopped at the page's own `/Resources`. A group named
+    from a form XObject's resources, an annotation's appearance stream, a tiling
+    pattern or a Type 3 font was invisible, and so was an `/OC` on a form two
+    levels down — and invisible was read as none. Measured against the previous
+    prototype, extracting page 1, all seven of `ocg-nested-form-xobject`,
+    `ocg-form-properties`, `ocg-annotation-appearance-properties`,
+    `ocg-pattern-properties`, `ocg-type3-properties`, `resource-cycle` and
+    `resource-depth-exceeded` came back **READY**. Five of them with **0 groups
+    carried**: no optional-content configuration was written at all, for a
+    document whose page reaches a group.
+
+    Two quieter versions of the same inference sat in the catalog read, and all
+    three of their fixtures were READY too, each with 1 group carried. `/OCGs`
+    and `/D` were refused only when present with the wrong type, so a missing
+    one was read as an empty default (`ocg-missing-ocgs`, `ocg-missing-d`). And
+    the lookup helper answered `undefined` only when a lookup threw: a reference
+    to an object that was never written looks up to `undefined` without
+    throwing, and the helper handed back the reference itself, which reads as a
+    value (`ocg-dangling-ocgs-ref`).
+
+    All ten are refused now. The walker that replaced the scan has a visited
+    set, a depth bound of 24 and a stated edge: it does not open `/ExtGState`,
+    and a group behind a soft mask extracts READY before and after (see *Not
+    measured*). Support was not widened.
 
 ## A note on how each JavaScript site reached zero
 

@@ -255,6 +255,81 @@ Attachments are detected whether or not the catalog declares optional content:
 an annotation carrying `/OC` in a document with no `/OCProperties` is itself a
 structure this reader does not understand.
 
+### Required keys fail closed
+
+`/OCGs` and `/D` are both required. A reader that refuses only a key of the
+wrong *type* reads a missing one as an empty default — the same "unreadable
+means absent" inference the envelope exists to forbid.
+
+| shape | result |
+| --- | --- |
+| `ocg-missing-ocgs` — `/OCProperties` with a `/D` and no `/OCGs` | **refused** — `has no /OCGs` |
+| `ocg-missing-d` — `/OCProperties` with `/OCGs` and no `/D` | **refused** — `has no /D` |
+| `ocg-dangling-ocgs-ref` — an `/OCGs` entry pointing at an object that is not there | **refused** — `points at 9997 0 R, which is not in the document` |
+
+A reference that resolves to nothing is not a value. Each gate row checks that
+the refusal names its own cause, so a document refused for some other reason
+does not pass for one of these.
+
+### The resource graph, not the page dictionary
+
+A page's resources are a graph. A form XObject, an annotation's appearance
+stream, a tiling pattern and a Type 3 font each draw with a content stream whose
+resources are **their own**, so marked content in any of them can name a group
+from a scope a page-level scan never opens. "Not in the page's resources" was
+being read as "not in the document".
+
+The detector walks every kept page:
+
+| from | follows | refuses |
+| --- | --- | --- |
+| page `/Annots` | each annotation, then each `/AP` stream — per state where `/AP` holds a state dictionary | an annotation's `/OC`; an appearance stream's `/OC` |
+| `/XObject` | each form or image; a form's own `/Resources`, recursively | an XObject's `/OC`, at any depth reached |
+| `/Pattern` | a tiling pattern's own `/Resources` | nothing on the pattern itself — it is a scope, not an attachment point |
+| `/Font` | a Type 3 font's `/Resources`, and any `/Resources` on a `/CharProcs` stream | likewise — a scope, not an attachment point |
+| `/Properties` | — | **every entry below the page's own resources**, named by type |
+
+Only the page's own `/Properties` is rebuilt, so a group named from any deeper
+scope is refused — even one the page also names, because the rebuilt `/OCGs` is
+assembled from page-level pairs and cannot account for it.
+
+| shape | result |
+| --- | --- |
+| `ocg-nested-form-xobject` — a form two levels down carrying `/OC` | **refused** — `/XObject /M6Outer /XObject /M6Inner /OC` |
+| `ocg-form-properties` — a form's own `/Resources /Properties` | **refused** |
+| `ocg-annotation-appearance-properties` — an appearance stream's own `/Resources /Properties` | **refused** |
+| `ocg-pattern-properties` — a tiling pattern's own `/Resources /Properties` | **refused** |
+| `ocg-type3-properties` — a Type 3 font's `/Resources /Properties` | **refused** |
+| `resource-cycle` — two forms whose resources reach each other, a group behind the cycle | **refused** — the walk terminates, the group is reported once, the depth bound is never reached |
+| `resource-depth-exceeded` — thirty nested forms, otherwise a supported document | **refused** — `nested deeper than 24` |
+
+The walk is bounded, and giving up is not seeing:
+
+- a **visited set** keyed on indirect references ends a cycle and counts a
+  shared object once;
+- a **depth bound** of 24 resource scopes, beyond which the document is refused
+  rather than reported as clean;
+- a reference that **cannot be resolved**, and a structure of the **wrong
+  type**, are each a refusal.
+
+The fourteen previously supported fixtures still read as carryable with the
+walker in place.
+
+Exercised by a fixture: nested forms, a form's `/Properties`, an `/AP /N`
+stream, a tiling pattern, a Type 3 font's `/Resources`, a cycle, the depth
+bound. Followed by the walker but **exercised by no fixture**: `/AP` state
+dictionaries, image XObjects below the page, and `/CharProcs` streams carrying
+their own `/Resources`.
+
+**What the walker does not open, and why.** This is a statement about scope,
+not about safety.
+
+| key | why it is not walked |
+| --- | --- |
+| `/ColorSpace` | holds no content stream, so opens no resource scope and carries no `/OC` |
+| `/Shading` | likewise — no content stream, no resource scope, no `/OC` |
+| `/ExtGState` | not an attachment point, **but** a soft mask's `/G` is a form XObject with resources of its own, so a group *can* sit behind one. `ocg-extgstate-smask` extracts **READY** with a group behind its soft mask. That path is outside the walked scope: unmeasured, not clean — M6-H9b |
+
 ### `/Order` labels have a position
 
 A text label titles a section of the layer panel, and the only position this

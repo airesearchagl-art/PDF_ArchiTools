@@ -35,7 +35,8 @@ import {
     readForm, planFormForExtract, extractWithForm, mergeWithForms, SUPPORTED_FIELD_TYPES,
 } from '../prototype/form-subset.mjs';
 import {
-    extractWithOptionalContent, compareOptionalContent, describeOptionalContent,
+    extractWithOptionalContent, compareOptionalContent, describeOptionalContent, planOptionalContent,
+    MAX_RESOURCE_DEPTH, RESOURCE_KEYS_WALKED, RESOURCE_KEYS_NOT_WALKED,
 } from '../prototype/optional-content.mjs';
 import { scanJavaScript, extractSanitized, MAX_ACTION_DEPTH } from '../prototype/javascript-scan.mjs';
 
@@ -1162,6 +1163,121 @@ try {
     humanOpen('M6-H9c JavaScript (RF-B)',
         'the contract is both counts at zero — what a reader can reach, and what the object table '
         + 'holds; a sanitizer that only detaches references satisfies the first and not the second');
+
+    // ---- 18. RF-E: required keys and unreadable references ------------------
+    //
+    // /OCGs and /D are both required. A reader that refuses only a key of the
+    // wrong *type* reads a missing one as an empty default, and a reference that
+    // resolves to nothing reads as a value. Each is "unreadable means absent",
+    // and each row checks the refusal names its cause, so a refusal for some
+    // other reason does not pass for this one.
+    console.log('\n=== 18. required keys and unreadable references (RF-E) ===');
+    evidence.ocRequired = {};
+    for (const [fixture, label, cause] of [
+        ['ocg-missing-ocgs', '/OCProperties with no /OCGs', 'has no /OCGs'],
+        ['ocg-missing-d', '/OCProperties with no /D', 'has no /D'],
+        ['ocg-dangling-ocgs-ref', '/OCGs holding a reference to an object that is not there',
+            'which is not in the document'],
+    ]) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.ocRequired[fixture] = { label, status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${label}: refused for that cause, not read as an empty default`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT'
+            && (r.unsupported ?? []).some((u) => u.includes(cause)),
+            (r.unsupported ?? []).join(', '));
+    }
+
+    // ---- 19. RF-F: the resource graph below the page ------------------------
+    //
+    // A page's resources are a graph. A form XObject, an appearance stream, a
+    // tiling pattern and a Type 3 font each draw with a content stream whose
+    // resources are their own, so a group can be named from a scope a page-level
+    // scan never opens — and "not in the page's resources" was being read as
+    // "not in the document". Each probe checks the refusal carries the path it
+    // was found on, so a refusal reached some other way does not count.
+    console.log('\n=== 19. resource graph below the page (RF-F) ===');
+    evidence.ocResourceGraph = {
+        maxResourceDepth: MAX_RESOURCE_DEPTH,
+        walked: RESOURCE_KEYS_WALKED,
+        notWalked: RESOURCE_KEYS_NOT_WALKED,
+        cases: {},
+    };
+    for (const [fixture, label, found] of [
+        ['ocg-nested-form-xobject', 'a form XObject two levels down carrying /OC',
+            '/XObject /M6Outer /XObject /M6Inner /OC'],
+        ['ocg-form-properties', "a form XObject's own /Resources /Properties",
+            '/XObject /M6Form /Properties /M6L'],
+        ['ocg-annotation-appearance-properties', "an appearance stream's own /Resources /Properties",
+            'annotation 0 /AP /N /Properties /M6L'],
+        ['ocg-pattern-properties', "a tiling pattern's own /Resources /Properties",
+            '/Pattern /M6P /Properties /M6L'],
+        ['ocg-type3-properties', "a Type 3 font's /Resources /Properties",
+            '/Font /M6T3 /Properties /M6L'],
+        ['resource-depth-exceeded', 'a resource graph deeper than the walker follows',
+            `nested deeper than ${MAX_RESOURCE_DEPTH}`],
+    ]) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.ocResourceGraph.cases[fixture] = { label, status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${label}: found where it is and refused`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT'
+            && (r.unsupported ?? []).some((u) => u.includes(found)),
+            (r.unsupported ?? []).join(', '));
+    }
+
+    // A cycle. The call returning at all shows the walk terminated; the group
+    // behind the cycle being reported exactly once, with the depth bound never
+    // reached, shows it was the visited set that ended it — a depth bound alone
+    // would have gone round again and reported the same group on every lap.
+    const ocCycleDoc = await PDFDocument.load(bytesOf('resource-cycle'), { updateMetadata: false });
+    const ocCycleFindings = describeOptionalContent(ocCycleDoc, [0]).unsupported;
+    const ocBehindCycle = ocCycleFindings.filter((u) => u.includes('/XObject /M6Second /Properties /M6L')).length;
+    const ocCycleDepthHit = ocCycleFindings.filter((u) => u.includes('nested deeper than')).length;
+    const ocCycleExtract = await extractWithOptionalContent(bytesOf('resource-cycle'), [0]);
+    evidence.ocResourceGraph.cycle = {
+        findings: ocCycleFindings,
+        behindCycleReported: ocBehindCycle,
+        depthBoundReached: ocCycleDepthHit,
+        extract: ocCycleExtract.status,
+    };
+    assert_('a resource cycle terminates, ended by the visited set rather than the depth bound',
+        ocBehindCycle === 1 && ocCycleDepthHit === 0 && ocCycleFindings.length === 1,
+        `group behind the cycle reported ${ocBehindCycle} time(s), depth bound reached ${ocCycleDepthHit} time(s)`);
+    probe('the group behind the cycle is still found and refused',
+        ocCycleExtract.status === 'REFUSED' && ocCycleExtract.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
+        (ocCycleExtract.unsupported ?? []).join(', '));
+
+    // What the walker does not open. Measured, not claimed as clean.
+    const ocSoftMask = await extractWithOptionalContent(bytesOf('ocg-extgstate-smask'), [0]);
+    evidence.ocResourceGraph.extGStateSoftMask = {
+        status: ocSoftMask.status, unsupported: ocSoftMask.unsupported ?? [],
+    };
+    measure('a group behind /ExtGState /SMask /G, a path the walker does not open',
+        `extract ${ocSoftMask.status} — outside the walked scope, so this is unmeasured territory, not a clean result`);
+
+    // The walker runs on every describe; nothing it adds may refuse a document
+    // that was supported before it existed.
+    const ocSupported = [
+        'ocproperties', 'ocg-multiple', 'ocg-two-pages-opposite', 'ocg-shared-across-pages',
+        'ocg-reordered-properties', 'ocg-many-pages', 'ocg-d-name', 'ocg-basestate-on',
+        'ocg-order-flat', 'ocg-order-empty', 'ocg-order-absent', 'ocg-order-nested',
+        'ocg-order-labeled-nested', 'ocg-order-unused-group',
+    ];
+    const ocStillCarried = [];
+    const ocNowRefused = [];
+    for (const fixture of ocSupported) {
+        const doc = await PDFDocument.load(bytesOf(fixture), { updateMetadata: false });
+        const plan = planOptionalContent(describeOptionalContent(doc, [0]));
+        (plan.status === 'CARRY' ? ocStillCarried : ocNowRefused).push(fixture);
+    }
+    evidence.ocResourceGraph.supportedStillCarried = { carried: ocStillCarried, refused: ocNowRefused };
+    assert_('every previously supported optional-content fixture still reads as carryable',
+        ocNowRefused.length === 0,
+        `${ocStillCarried.length} of ${ocSupported.length}${ocNowRefused.length ? `; now refused: ${ocNowRefused.join(', ')}` : ''}`);
+
+    humanOpen('M6-H9b resource-graph envelope (RF-E, RF-F)',
+        'required keys fail closed and optional content below the page is refused wherever the walker '
+        + 'reaches; whether the unopened /ExtGState soft-mask path must be closed before adoption or '
+        + 'stated as a limit is a decision this research does not take');
 
     fs.writeFileSync(
         path.join(RESEARCH, 'evidence.json'),

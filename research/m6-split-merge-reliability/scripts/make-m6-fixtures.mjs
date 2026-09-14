@@ -1171,6 +1171,235 @@ await orderCase('ocg-order-malformed', 'an /Order holding a number, which is non
 }
 
 // ---------------------------------------------------------------------------
+// /OCProperties with a required key missing
+//
+// PDF 32000-1 makes /OCGs and /D required. A reader that only refuses a key of
+// the wrong *type* treats a missing one as an empty default, which is the same
+// "unreadable means absent" inference the malformed fixture exists to forbid.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 optional content without /OCGs');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-NOOCGS-1');
+    const a = ocg(doc, 'M6-OCG-NOOCGS');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        D: { Order: [a], ON: [a] },
+    }));
+    await write('ocg-missing-ocgs', doc, '/OCProperties with a /D but no /OCGs, which the specification requires');
+}
+{
+    const { doc, font } = await newDoc('M6 optional content without /D');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-NOD-1');
+    const a = ocg(doc, 'M6-OCG-NOD');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [a] }));
+    await write('ocg-missing-d', doc, '/OCProperties with /OCGs but no /D, which the specification requires');
+}
+{
+    const { doc, font } = await newDoc('M6 optional content with an unreadable group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-DANGLINGOCG-1');
+    const a = ocg(doc, 'M6-OCG-REAL');
+    setProperties(doc, page, [['M6A', a]]);
+    // The second entry points at an object that is not there. Reading it gives
+    // nothing, and nothing is not the same as "no group".
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, PDFRef.of(9997, 0)],
+        D: { Order: [a], ON: [a] },
+    }));
+    await write('ocg-dangling-ocgs-ref', doc, '/OCGs holding a reference to an object that does not exist');
+}
+
+// ---------------------------------------------------------------------------
+// Optional content below the page's own resource dictionary
+//
+// A Form XObject carries its own /Resources, and what it reaches from there is
+// invisible to a scan that stops at the page. "Not in the page resources"
+// therefore does not mean "not in the document".
+// ---------------------------------------------------------------------------
+
+/** A form XObject with its own dictionary entries. */
+const formXObject = (doc, ops, extra = {}) => doc.context.register(doc.context.stream(
+    Buffer.from(ops, 'utf8'),
+    { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64], ...extra },
+));
+
+/**
+ * Draw a registered XObject onto a page at a fixed spot, under a fixed name.
+ *
+ * Not `newXObject`, which appends a suffix from pdf-lib's per-document RNG. The
+ * suffix is stable only because that RNG happens to be seeded identically for
+ * every document, and a refusal string recorded as evidence should not rest on
+ * a library detail nobody promised.
+ */
+const placeXObject = (doc, page, label, ref, x, y) => {
+    page.node.setXObject(PDFName.of(label), ref);
+    page.pushOperators(
+        pushGraphicsState(),
+        concatTransformationMatrix(1, 0, 0, 1, x, y),
+        drawObject(label),
+        popGraphicsState(),
+    );
+};
+
+{
+    const { doc, font } = await newDoc('M6 nested form XObject carrying /OC');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCNESTED-1');
+    const a = ocg(doc, 'M6-OCG-NESTED');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // The inner form belongs to a layer; the outer one does not, and only the
+    // outer one is visible from the page.
+    const inner = formXObject(doc, '0 0 1 RG 1 w 2 2 24 24 re S', { OC: a });
+    const outer = formXObject(doc, 'q 1 0 0 1 0 0 cm /M6Inner Do Q', {
+        Resources: { XObject: { M6Inner: inner } },
+    });
+    placeXObject(doc, page, 'M6Outer', outer, 120, 600);
+    await write('ocg-nested-form-xobject', doc, 'a form XObject whose own /Resources reach a form carrying /OC');
+}
+{
+    const { doc, font } = await newDoc('M6 form XObject resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCFORMPROPS-1');
+    const a = ocg(doc, 'M6-OCG-FORMPROPS');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // The page's own resources name no group at all; the form's do.
+    const form = formXObject(doc, '/M6L /OC BDC 0 0 0 RG 2 2 24 24 re S EMC', {
+        Resources: { Properties: { M6L: a } },
+    });
+    placeXObject(doc, page, 'M6Form', form, 120, 600);
+    await write('ocg-form-properties', doc, "a form XObject whose own /Resources /Properties names an optional-content group");
+}
+{
+    const { doc, font } = await newDoc('M6 appearance stream resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCAPPEAR-1');
+    const a = ocg(doc, 'M6-OCG-APPEARANCE');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    const appearance = doc.context.register(doc.context.stream(
+        Buffer.from('/M6L /OC BDC 0.8 0.1 0.1 RG 2 w 2 2 60 30 re S EMC', 'utf8'),
+        {
+            Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 34],
+            Resources: { Properties: { M6L: a } },
+        },
+    ));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Square', Rect: [120, 400, 184, 434], F: 4,
+        AP: { N: appearance },
+    }]);
+    await write('ocg-annotation-appearance-properties', doc,
+        "an annotation appearance stream whose /Resources /Properties names a group");
+}
+{
+    const { doc, font } = await newDoc('M6 resource graph with a cycle');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-RESCYCLE-1');
+    const a = ocg(doc, 'M6-OCG-CYCLE');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // Two forms whose resources reach each other. A walker without a visited
+    // set never comes back; one with a visited set has to still find the /OC.
+    const first = doc.context.stream(Buffer.from('q /M6Second Do Q', 'utf8'), {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64],
+    });
+    const firstRef = doc.context.register(first);
+    const second = doc.context.stream(Buffer.from('q /M6First Do Q', 'utf8'), {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64],
+        Resources: { XObject: { M6First: firstRef }, Properties: { M6L: a } },
+    });
+    const secondRef = doc.context.register(second);
+    first.dict.set(PDFName.of('Resources'), doc.context.obj({ XObject: { M6Second: secondRef } }));
+    placeXObject(doc, page, 'M6Cycle', firstRef, 120, 600);
+    await write('resource-cycle', doc, 'two form XObjects whose resources reference each other, with a group behind the cycle');
+}
+{
+    const { doc, font } = await newDoc('M6 pattern resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCPATTERN-1');
+    const a = ocg(doc, 'M6-OCG-PATTERN');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // A tiling pattern paints with a content stream of its own, and that stream
+    // takes its resources from the pattern rather than from the page. The
+    // pattern is declared, not painted: reachability is what the walker reads.
+    const pattern = doc.context.register(doc.context.stream(
+        Buffer.from('/M6L /OC BDC 0 0 1 rg 0 0 8 8 re f EMC', 'utf8'),
+        {
+            Type: 'Pattern', PatternType: 1, PaintType: 1, TilingType: 1,
+            BBox: [0, 0, 8, 8], XStep: 8, YStep: 8,
+            Resources: { Properties: { M6L: a } },
+        },
+    ));
+    page.node.normalizedEntries().Resources.set(PDFName.of('Pattern'), doc.context.obj({ M6P: pattern }));
+    await write('ocg-pattern-properties', doc, 'a tiling pattern whose own /Resources /Properties names a group');
+}
+{
+    const { doc, font } = await newDoc('M6 Type 3 font resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCTYPE3-1');
+    const a = ocg(doc, 'M6-OCG-TYPE3');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // A Type 3 glyph is a content stream, and it draws with the font's resources.
+    const glyph = doc.context.register(doc.context.stream(
+        Buffer.from('8 0 0 0 8 8 d1 /M6L /OC BDC 0 0 8 8 re f EMC', 'utf8'),
+        {},
+    ));
+    const type3 = doc.context.register(doc.context.obj({
+        Type: 'Font', Subtype: 'Type3',
+        FontBBox: [0, 0, 8, 8], FontMatrix: [0.125, 0, 0, 0.125, 0, 0],
+        CharProcs: { M6g: glyph },
+        Encoding: { Type: 'Encoding', Differences: [65, 'M6g'] },
+        FirstChar: 65, LastChar: 65, Widths: [8],
+        Resources: { Properties: { M6L: a } },
+    }));
+    page.node.normalizedEntries().Font.set(PDFName.of('M6T3'), type3);
+    await write('ocg-type3-properties', doc, 'a Type 3 font whose /Resources /Properties names a group');
+}
+{
+    const { doc, font } = await newDoc('M6 resource graph deeper than the walker follows');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-RESDEPTH-1');
+    const a = ocg(doc, 'M6-OCG-DEPTH');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // Thirty forms, each drawing the next, none of them carrying anything. Apart
+    // from its depth this document is a supported one, so the depth is the only
+    // thing that can refuse it — and a walker that stops at its bound and
+    // reports what it saw would call it clean.
+    let next = formXObject(doc, '0 0 0 RG 1 1 2 2 re S');
+    for (let i = 0; i < 30; i += 1) {
+        next = formXObject(doc, 'q /M6N Do Q', { Resources: { XObject: { M6N: next } } });
+    }
+    placeXObject(doc, page, 'M6Deep', next, 120, 600);
+    await write('resource-depth-exceeded', doc, 'thirty nested form XObjects, beyond the depth the walker follows');
+}
+{
+    const { doc, font } = await newDoc('M6 soft mask resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCSMASK-1');
+    const a = ocg(doc, 'M6-OCG-SMASK');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // A soft mask's /G is a form XObject with resources of its own. The walker
+    // does not open /ExtGState, so this is where its scope ends. The fixture
+    // exists so that limit is measured rather than asserted.
+    const mask = formXObject(doc, '/M6L /OC BDC 1 g 0 0 64 64 re f EMC', {
+        Group: { S: 'Transparency', CS: 'DeviceGray' },
+        Resources: { Properties: { M6L: a } },
+    });
+    page.node.normalizedEntries().ExtGState.set(PDFName.of('M6GS'), doc.context.obj({
+        Type: 'ExtGState', SMask: { Type: 'Mask', S: 'Luminosity', G: mask },
+    }));
+    await write('ocg-extgstate-smask', doc, 'a soft mask behind /ExtGState whose form /Resources /Properties names a group');
+}
+
+// ---------------------------------------------------------------------------
 // /Order label positions this research has not shown it can reproduce
 // ---------------------------------------------------------------------------
 await orderCase('ocg-order-invalid-top-label', 'a text label at the top level of /Order',

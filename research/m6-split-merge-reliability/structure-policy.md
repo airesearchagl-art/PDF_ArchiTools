@@ -154,12 +154,52 @@ a merge**. This is worth stating because it is the collision people expect and
 it does not happen. What does not survive is the generation number: every copied
 object becomes generation 0.
 
+## Resource scopes, and where optional content can be named from
+
+`copyPages` copies what a page node reaches, and a page node reaches more than
+its own `/Resources`. For optional content, what matters is which reachable
+objects **open a resource scope of their own**: marked content names a group
+through the `/Properties` of whichever scope its content stream draws in, so a
+group can be named from well below the page.
+
+| resource | opens its own scope | an `/OC` attachment point | walked by the prototype | fixture |
+| --- | --- | --- | --- | --- |
+| page `/Resources` | the page's | — | yes — its `/Properties` is the carried set | `ocproperties` and the carried corpus |
+| form XObject | yes, `/Resources` | yes | yes, recursively | `xobject-oc`, `ocg-form-properties`, `ocg-nested-form-xobject`, `resource-cycle`, `resource-depth-exceeded` |
+| image XObject | no | yes | `/OC` checked | none below the page |
+| annotation | no | yes | `/OC` checked | `annot-oc` |
+| annotation `/AP` stream | yes, `/Resources` — it is a form XObject | yes | yes | `ocg-annotation-appearance-properties` (an `/N` stream; no state dictionary) |
+| tiling pattern | yes, `/Resources` | no | yes | `ocg-pattern-properties` |
+| shading pattern | no | no | reached; nothing to open | none |
+| Type 3 font | yes, `/Resources`, used by `/CharProcs` | no | yes, and a `/CharProcs` stream's own `/Resources` | `ocg-type3-properties` (font `/Resources` only) |
+| other font types | no | no | passed over | the corpus's Helvetica |
+| `/ExtGState` | not itself — **but `/SMask /G` is a form XObject with its own `/Resources`** | no | **no** | `ocg-extgstate-smask` — extracts READY with a group behind it |
+| `/ColorSpace` | no | no | no | none |
+| `/Shading` | no | no | no | none |
+
+Two pdf-lib behaviours shape how such a walk has to be written, both observed on
+this corpus:
+
+- **A dangling reference looks up to `undefined`, not to an error.**
+  `ocg-dangling-ocgs-ref` holds `9997 0 R`; `context.lookup` on it returns
+  `undefined` without throwing. A helper that falls back to the reference when
+  the lookup is `undefined` hands back something that reads as a value, which is
+  how a missing object passes for a present one.
+- **Generated resource names are stable by accident.** `PDFPageLeaf.newXObject`
+  goes through `PDFDict.uniqueKey` (`core/objects/PDFDict.js:77-85`) to
+  `PDFContext.addRandomSuffix` (`core/PDFContext.js:193-196`), which draws from
+  the context's own RNG. Every new document observed here received the same
+  suffix, and regenerating the corpus reproduced the same bytes — so names were
+  stable across runs, but because of how the library seeds its RNG, not because
+  anything promises it. The fixtures in this round use fixed names instead.
+
 ## The decisions this forces
 
 | observation | decision it forces |
 | --- | --- |
 | destinations drag pages in, unbounded | M6-H5: what happens to an internal link whose target is not in the selection |
 | no document-level structure is copied | M6-H3, M6-H4, M6-H6, M6-H9 |
+| optional content can be named from resource scopes below the page | M6-H9b: how far detection must reach, and whether the `/ExtGState` soft-mask path is closed or stated as a limit |
 | metadata defaults overwrite | M6-H7, M6-H8 |
 | `flush()` mutates the source | the plan/run split must not assume a source survives a copy unchanged |
 | `addDefaultPage` on empty save | an empty selection must be refused before `save()`, not after |

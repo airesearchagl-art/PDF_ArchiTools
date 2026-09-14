@@ -30,6 +30,15 @@
  * the difference between a narrow envelope and an envelope with holes in it.
  * The point of this round is not to widen support. It is to make the refusals
  * real.
+ *
+ * **A page's resources are a graph, not a dictionary.** The scan above once
+ * stopped at the page's own `/Resources`, so a form XObject that names a group
+ * from *its* resources, an appearance stream that does, or a form two levels
+ * down carrying `/OC` were all invisible — and invisible read as "none". The
+ * walker below follows every resource scope a content stream can open, with a
+ * visited set and a depth bound, and treats a reference it cannot resolve as a
+ * refusal rather than as absence. Only the page's own `/Properties` is rebuilt;
+ * one found in any deeper scope is refused.
  */
 import { PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFString } from 'pdf-lib';
 
@@ -42,6 +51,53 @@ const look = (doc, v) => {
         return undefined;
     }
 };
+
+/**
+ * Resolve a value, keeping "not there" apart from "not a reference".
+ *
+ * `look` above answers `undefined` only when a lookup *throws*. A reference to
+ * an object that was never written resolves to nothing, and `look` hands back
+ * the reference itself — which reads like a value, and is how a dangling entry
+ * would otherwise pass as present-and-fine.
+ */
+function resolve(doc, raw) {
+    if (!(raw instanceof PDFRef)) return { ok: true, value: raw };
+    let value;
+    try {
+        value = doc.context.lookup(raw);
+    } catch (error) {
+        return { ok: false, reason: `could not be read: ${String(error?.message ?? error)}` };
+    }
+    if (value === undefined) return { ok: false, reason: `points at ${raw.tag}, which is not in the document` };
+    return { ok: true, value };
+}
+
+/** The dictionary of a dictionary or of a stream, or `null`. */
+const dictOf = (value) => {
+    if (value instanceof PDFDict) return value;
+    return value?.dict instanceof PDFDict ? value.dict : null;
+};
+
+/** How deep the resource graph is followed before it is refused. */
+export const MAX_RESOURCE_DEPTH = 24;
+
+/**
+ * Resource keys the walker opens, because each can hold a content stream with
+ * a `/Resources` of its own — and so a `/Properties` of its own.
+ */
+export const RESOURCE_KEYS_WALKED = ['Properties', 'XObject', 'Pattern', 'Font'];
+
+/**
+ * Resource keys the walker does **not** open.
+ *
+ * This is a statement about scope, not about safety. `/ColorSpace` and
+ * `/Shading` hold no content stream, so they open no resource scope and carry
+ * no `/OC`. `/ExtGState` is not a direct attachment point either — but a soft
+ * mask's `/G` is a form XObject with resources of its own, so optional content
+ * *can* sit behind one, and this walker does not look. That path is recorded as
+ * unmeasured, not as clean.
+ */
+export const RESOURCE_KEYS_NOT_WALKED = ['ExtGState', 'Shading', 'ColorSpace'];
 
 /** The `/D` keys this reader both accepts **and reproduces**. */
 export const HANDLED_D_KEYS = ['Order', 'ON', 'OFF', 'Name', 'BaseState'];
@@ -115,8 +171,21 @@ function orderShapeOf(doc, node, nameOfGroup, depth, unsupported, labelAllowed =
 
 /**
  * Every place optional content can attach itself that this reader does not
- * carry. Found on the **kept pages only**, because a group on a page nobody
- * asked for is not this extract's problem.
+ * carry, found by walking the resource graph a kept page reaches.
+ *
+ * Found on the **kept pages only**, because a group on a page nobody asked for
+ * is not this extract's problem. From each page the walker follows:
+ *
+ *   page /Annots             each annotation's /OC, and its /AP streams
+ *   /XObject                 each form or image's /OC, and a form's /Resources
+ *   /Pattern                 a tiling pattern's /Resources
+ *   /Font                    a Type 3 font's /Resources, and any on /CharProcs
+ *   /Properties              below the page's own scope, every entry
+ *
+ * A visited set keyed on indirect references makes a cycle terminate and a
+ * shared object count once. A reference that cannot be resolved, a structure of
+ * the wrong type and a graph deeper than {@link MAX_RESOURCE_DEPTH} are each a
+ * refusal: giving up on a walk never turns into "no optional content".
  */
 function detectUnhandledAttachments(doc, selection, unsupported) {
     const pages = doc.getPages();
@@ -125,33 +194,197 @@ function detectUnhandledAttachments(doc, selection, unsupported) {
     for (const sourceIndex of wanted) {
         const page = pages[sourceIndex];
         if (!page) continue;
+        walkPageResourceGraph(doc, sourceIndex, page, unsupported);
+    }
+}
 
-        // A2 — an annotation that belongs to an optional-content group.
-        const annots = page.node.lookup(PDFName.of('Annots'));
-        if (annots instanceof PDFArray) {
-            for (let i = 0; i < annots.size(); i += 1) {
-                const annot = look(doc, annots.get(i));
-                if (annot instanceof PDFDict && annot.get(PDFName.of('OC')) !== undefined) {
-                    unsupported.push(`page ${sourceIndex} annotation /OC`);
-                }
+function walkPageResourceGraph(doc, sourceIndex, page, unsupported) {
+    const visited = new Set();
+    const refuse = (text) => unsupported.push(text);
+
+    /** True the first time a reference is reached; direct objects cannot cycle. */
+    const firstVisit = (raw) => {
+        if (!(raw instanceof PDFRef)) return true;
+        if (visited.has(raw.tag)) return false;
+        visited.add(raw.tag);
+        return true;
+    };
+
+    /** A named dictionary under `holder`, resolved; `null` when absent. */
+    const subDict = (holder, key, where) => {
+        const raw = holder.get(PDFName.of(key));
+        if (raw === undefined) return null;
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} /${key} ${r.reason}`);
+            return null;
+        }
+        if (!(r.value instanceof PDFDict)) {
+            refuse(`${where} /${key} is not a dictionary`);
+            return null;
+        }
+        return r.value;
+    };
+
+    /**
+     * One resource dictionary, and every scope that hangs off it. `depth` 0 is
+     * the page's own, whose `/Properties` the carry path reads and rebuilds.
+     */
+    const walkResources = (raw, where, depth) => {
+        if (raw === undefined) return;
+        if (depth > MAX_RESOURCE_DEPTH) {
+            refuse(`${where} /Resources nested deeper than ${MAX_RESOURCE_DEPTH}`);
+            return;
+        }
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} /Resources ${r.reason}`);
+            return;
+        }
+        const resources = r.value;
+        if (!(resources instanceof PDFDict)) {
+            refuse(`${where} /Resources is not a dictionary`);
+            return;
+        }
+
+        if (depth > 0) walkNestedProperties(resources, where);
+
+        const xobjects = subDict(resources, 'XObject', where);
+        if (xobjects) {
+            for (const [key, entry] of xobjects.entries()) {
+                walkStream(entry, `${where} /XObject ${key.asString()}`, depth, true);
             }
         }
 
-        // A3 — a form or image XObject that belongs to a group.
-        const resources = page.node.lookup(PDFName.of('Resources'));
-        const xobjects = resources instanceof PDFDict
-            ? resources.lookup(PDFName.of('XObject'))
-            : undefined;
-        if (xobjects instanceof PDFDict) {
-            for (const [key, raw] of xobjects.entries()) {
-                const xobject = look(doc, raw);
-                const dict = xobject instanceof PDFDict ? xobject : xobject?.dict;
-                if (dict instanceof PDFDict && dict.get(PDFName.of('OC')) !== undefined) {
-                    unsupported.push(`page ${sourceIndex} XObject ${key.asString()} /OC`);
+        const patterns = subDict(resources, 'Pattern', where);
+        if (patterns) {
+            for (const [key, entry] of patterns.entries()) {
+                // A shading pattern is a plain dictionary with no content
+                // stream; a tiling pattern is a stream with resources.
+                walkStream(entry, `${where} /Pattern ${key.asString()}`, depth, false);
+            }
+        }
+
+        const fonts = subDict(resources, 'Font', where);
+        if (fonts) {
+            for (const [key, entry] of fonts.entries()) {
+                walkType3(entry, `${where} /Font ${key.asString()}`, depth);
+            }
+        }
+    };
+
+    /**
+     * `/Properties` below the page's own resources. Nothing here is rebuilt, so
+     * every entry is refused — named, so the refusal says what it found. The
+     * same rule the page scope applies to a non-group entry applies here.
+     */
+    const walkNestedProperties = (resources, where) => {
+        const properties = subDict(resources, 'Properties', where);
+        if (!properties) return;
+        for (const [key, entry] of properties.entries()) {
+            const r = resolve(doc, entry);
+            if (!r.ok) {
+                refuse(`${where} /Properties ${key.asString()} ${r.reason}`);
+                continue;
+            }
+            const dict = dictOf(r.value);
+            const type = dict ? nameOf(dict.get(PDFName.of('Type'))) : '';
+            const what = type === '/OCG' ? 'an optional-content group'
+                : type === '/OCMD' ? 'an optional-content membership dictionary'
+                    : dict ? `a ${type || 'untyped'} dictionary` : 'a value that is not a dictionary';
+            refuse(`${where} /Properties ${key.asString()} names ${what} below the page's own resources`);
+        }
+    };
+
+    /**
+     * An XObject, pattern or appearance stream: its own `/OC` where that is an
+     * attachment point, then its own resource scope.
+     */
+    const walkStream = (raw, where, depth, ocApplies) => {
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} ${r.reason}`);
+            return;
+        }
+        if (!firstVisit(raw)) return;
+        const dict = dictOf(r.value);
+        if (!dict) {
+            refuse(`${where} is not a dictionary or stream`);
+            return;
+        }
+        if (ocApplies && dict.get(PDFName.of('OC')) !== undefined) refuse(`${where} /OC`);
+        walkResources(dict.get(PDFName.of('Resources')), where, depth + 1);
+    };
+
+    /**
+     * A Type 3 font draws its glyphs with content streams, and those streams
+     * take their resources from the font. Other font types hold no content
+     * stream and are passed over.
+     */
+    const walkType3 = (raw, where, depth) => {
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} ${r.reason}`);
+            return;
+        }
+        const font = dictOf(r.value);
+        if (!font || nameOf(font.get(PDFName.of('Subtype'))) !== '/Type3') return;
+        if (!firstVisit(raw)) return;
+        walkResources(font.get(PDFName.of('Resources')), where, depth + 1);
+        const procs = subDict(font, 'CharProcs', where);
+        if (procs) {
+            for (const [glyph, entry] of procs.entries()) {
+                walkStream(entry, `${where} /CharProcs ${glyph.asString()}`, depth + 1, false);
+            }
+        }
+    };
+
+    /** `/AP` holds a stream per state, or a dictionary of streams per state. */
+    const walkAppearance = (annot, where) => {
+        const ap = subDict(annot, 'AP', where);
+        if (!ap) return;
+        for (const [kind, entry] of ap.entries()) {
+            const apWhere = `${where} /AP ${kind.asString()}`;
+            const r = resolve(doc, entry);
+            if (!r.ok) {
+                refuse(`${apWhere} ${r.reason}`);
+                continue;
+            }
+            if (r.value instanceof PDFDict) {
+                for (const [state, stream] of r.value.entries()) {
+                    walkStream(stream, `${apWhere} ${state.asString()}`, 0, true);
                 }
+            } else {
+                walkStream(entry, apWhere, 0, true);
+            }
+        }
+    };
+
+    // A2 — an annotation that belongs to a group, and what its appearance holds.
+    const rawAnnots = page.node.get(PDFName.of('Annots'));
+    if (rawAnnots !== undefined) {
+        const r = resolve(doc, rawAnnots);
+        if (!r.ok) {
+            refuse(`page ${sourceIndex} /Annots ${r.reason}`);
+        } else if (!(r.value instanceof PDFArray)) {
+            refuse(`page ${sourceIndex} /Annots is not an array`);
+        } else {
+            for (let i = 0; i < r.value.size(); i += 1) {
+                const where = `page ${sourceIndex} annotation ${i}`;
+                const a = resolve(doc, r.value.get(i));
+                if (!a.ok) {
+                    refuse(`${where} ${a.reason}`);
+                    continue;
+                }
+                if (!(a.value instanceof PDFDict)) continue;
+                if (a.value.get(PDFName.of('OC')) !== undefined) refuse(`${where} /OC`);
+                walkAppearance(a.value, where);
             }
         }
     }
+
+    // A3 and below — the page's resources, and every scope beneath them.
+    walkResources(page.node.get(PDFName.of('Resources')), `page ${sourceIndex}`, 0);
 }
 
 /**
@@ -206,13 +439,37 @@ export function describeOptionalContent(doc, selection = null) {
         return g instanceof PDFDict ? textOf(look(doc, g.get(PDFName.of('Name')))) : null;
     };
 
-    // A4 — /OCGs must be an array of groups, or the structure is unreadable.
-    const groups = oc.lookup(PDFName.of('OCGs'));
-    if (oc.get(PDFName.of('OCGs')) !== undefined && !(groups instanceof PDFArray)) {
+    // A4 — /OCGs and /D are both required. Refusing only a key of the wrong
+    // *type* would read a missing one as an empty default, which is the same
+    // "unreadable means absent" inference this reader exists to forbid.
+    const rawGroups = oc.get(PDFName.of('OCGs'));
+    const groupsRead = rawGroups === undefined ? null : resolve(doc, rawGroups);
+    if (rawGroups === undefined) {
+        out.unsupported.push('/OCProperties has no /OCGs, which the specification requires');
+    } else if (!groupsRead.ok) {
+        out.unsupported.push(`/OCProperties /OCGs ${groupsRead.reason}`);
+    } else if (!(groupsRead.value instanceof PDFArray)) {
         out.unsupported.push('/OCProperties /OCGs is not an array');
-    }
-    for (const ref of refsOf(groups)) {
-        out.groups.push({ ref, name: nameOfGroup(ref) });
+    } else {
+        const groups = groupsRead.value;
+        for (let i = 0; i < groups.size(); i += 1) {
+            const raw = groups.get(i);
+            const r = resolve(doc, raw);
+            if (!r.ok) {
+                out.unsupported.push(`/OCProperties /OCGs[${i}] ${r.reason}`);
+                continue;
+            }
+            if (!(raw instanceof PDFRef)) {
+                out.unsupported.push(`/OCProperties /OCGs[${i}] is not a reference to a group`);
+                continue;
+            }
+            const type = r.value instanceof PDFDict ? nameOf(r.value.get(PDFName.of('Type'))) : '';
+            if (type !== '/OCG') {
+                out.unsupported.push(`/OCProperties /OCGs[${i}] is ${type || 'not a group'}`);
+                continue;
+            }
+            out.groups.push({ ref: raw, name: nameOfGroup(raw) });
+        }
     }
 
     // A1 — alternate configurations. This reader rebuilds one default
@@ -227,8 +484,14 @@ export function describeOptionalContent(doc, selection = null) {
         );
     }
 
-    const d = oc.lookup(PDFName.of('D'));
-    if (oc.get(PDFName.of('D')) !== undefined && !(d instanceof PDFDict)) {
+    const rawD = oc.get(PDFName.of('D'));
+    const dRead = rawD === undefined ? null : resolve(doc, rawD);
+    const d = dRead?.ok ? dRead.value : undefined;
+    if (rawD === undefined) {
+        out.unsupported.push('/OCProperties has no /D, which the specification requires');
+    } else if (!dRead.ok) {
+        out.unsupported.push(`/OCProperties /D ${dRead.reason}`);
+    } else if (!(d instanceof PDFDict)) {
         out.unsupported.push('/OCProperties /D is not a dictionary');
     }
     if (d instanceof PDFDict) {
