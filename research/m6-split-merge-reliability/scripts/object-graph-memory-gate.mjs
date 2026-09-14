@@ -15,11 +15,12 @@
  *   BASELINE-FAIL a defect in today's production behaviour, reproduced on purpose
  *   HUMAN-OPEN    a decision this research may not take
  *
- * Every verdict here rests on a structural number — an object count, a stream
- * byte total, an output length — that is EXACT and the same on every run. Heap,
- * RSS, array-buffer and collectability readings come from a child process run
- * with --expose-gc; they are MEASURED_ONLY, carry that in their names, and
- * decide nothing.
+ * Every verdict here rests on a structural number — an object count or a stream
+ * byte total, EXACT and the same on every run — or on two lengths compared
+ * inside one run. Output lengths themselves move between runs, because the
+ * production route writes the time into the file, so they are MEASURED_ONLY
+ * like heap, RSS, array-buffer and collectability readings from the child
+ * process run with --expose-gc: named so, and deciding nothing.
  *
  * Run:  node research/m6-split-merge-reliability/scripts/make-m6-memory-fixtures.mjs
  *       node research/m6-split-merge-reliability/scripts/object-graph-memory-gate.mjs
@@ -149,7 +150,7 @@ try {
         const added = { objects: copiedTo.objects - created.objects, streamBytes: copiedTo.streamBytes - created.streamBytes };
         const plan = run.result.plan;
         evidence.cases[id] = {
-            fixture, selectedPages: pages.length, plan, copyAdded: added, outputBytes: run.result.outputBytes,
+            fixture, selectedPages: pages.length, plan, copyAdded: added, outputBytesMeasuredOnly: run.result.outputBytesMeasuredOnly,
             phases: run.phases,
         };
         assert_(`${id}: the walker counts what copyPages registers`,
@@ -227,13 +228,18 @@ try {
         ['I-p1-plain', 'mem-i-linked-heavy-pages', [0]],
     ]) {
         const run = runCase({ op: 'extract', fixtures: [fixture], pages, useObjectStreams: false });
-        const predicted = run.ok ? run.result.predictedPlainBytes : null;
-        const actual = run.ok ? run.result.outputBytes : null;
-        evidence.structural.plainSavePrediction[id] = { predicted, actual, error: run.ok ? undefined : run.error };
+        const predicted = run.ok ? run.result.predictedPlainBytesMeasuredOnly : null;
+        const actual = run.ok ? run.result.outputBytesMeasuredOnly : null;
+        // The two lengths move together with the timestamp inside the file, so
+        // the equality is the structural fact and the lengths are MEASURED_ONLY.
+        evidence.structural.plainSavePrediction[id] = {
+            predictedEqualsActual: run.ok && predicted === actual,
+            predictedMeasuredOnly: predicted, actualMeasuredOnly: actual, error: run.ok ? undefined : run.error,
+        };
         assert_(`${id}: the plain writer's output length is known before its buffer is allocated`,
             run.ok && predicted === actual, run.ok ? `${fmt(predicted)} B predicted, ${fmt(actual)} B written` : run.error);
     }
-    const b1Packed = runs['B1-p1']?.result?.outputBytes;
+    const b1Packed = runs['B1-p1']?.result?.outputBytesMeasuredOnly;
     measure('the same B1 extract written with object streams, as production writes it',
         `${fmt(b1Packed)} B — known only after each chunk is deflated, so there is no equivalent number to ask for first`);
 
@@ -261,7 +267,7 @@ try {
         });
         evidence.cases[id] = {
             fixtures, perSource: run.result.perSource, planned, finalDestination,
-            outputBytes: run.result.outputBytes, released, phases: run.phases,
+            outputBytesMeasuredOnly: run.result.outputBytesMeasuredOnly, released, phases: run.phases,
         };
         assert_(`${id}: the output graph grows by exactly what each source's plan said, before that source is copied`,
             finalDestination.objects - base.objects === planned.objects
@@ -317,9 +323,9 @@ try {
         runs['K-p1']?.ok && k.decodedObjectStreamBytes >= 100 * k.bytes,
         `${fmt(k.bytes)} B in, ${fmt(k.decodedObjectStreamBytes)} B decoded during load; the route has no size or count check before or during load`);
     baselineFail('production copies and writes whatever one selected page reaches, without looking first',
-        iOne && iTen && iOne.pageLeavesReached > 0 && runs['I-p1'].result.outputBytes >= 5 * runs['I-p10'].result.outputBytes,
+        iOne && iTen && iOne.pageLeavesReached > 0 && runs['I-p1'].result.outputBytesMeasuredOnly >= 5 * runs['I-p10'].result.outputBytesMeasuredOnly,
         iOne ? `page 1 of I: ${iOne.pageLeavesReached} unselected pages and ${fmt(iOne.streamBytes)} B copied, `
-            + `${fmt(runs['I-p1'].result.outputBytes)} B written for a one-page extract` : '');
+            + `${fmt(runs['I-p1'].result.outputBytesMeasuredOnly)} B written for a one-page extract` : '');
 
     humanOpen('M6-H11 memory architecture (B2)',
         'which structural caps production enforces, how the unbounded load-time decode is closed, and whether a '

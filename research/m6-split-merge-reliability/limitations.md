@@ -259,6 +259,15 @@ has never been wrong has usually never been checked.
     repeated names, held +13.1 MiB; J, with 20,000 distinct names, held
     +14.2 MiB — the names account for about 1 MiB of it. The row now reports
     both numbers and says the cause is not measured.
+22. **The memory gate recorded output lengths as structural.** Two runs from
+    the same source disagreed on them — C's object-stream write by 4 bytes,
+    E's by 2 — because the production route loads and creates with
+    `updateMetadata` on and writes the time into the file. The research gate
+    had already learned this and names such lengths MeasuredOnly; the new gate
+    repeated the mistake. No verdict changed, since every row compares lengths
+    within one run. The lengths are now MeasuredOnly by name, the plain-save
+    prediction records its within-run equality as the structural fact, and the
+    evidence from the first tested source, `7ff2901`, was never committed.
 
 ## A note on how each JavaScript site reached zero
 

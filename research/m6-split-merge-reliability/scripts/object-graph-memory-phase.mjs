@@ -7,8 +7,12 @@
  *
  * Two kinds of number come out, and they are never mixed:
  *
- *   structural   object counts, stream byte totals, output length — EXACT, read
- *                off the documents themselves
+ *   structural   object counts and stream byte totals — EXACT, read off the
+ *                documents themselves
+ *   output       the saved length, and the plain writer's prediction of it —
+ *                MEASURED_ONLY by name: the production route loads and creates
+ *                with updateMetadata on, so the file carries the time it was
+ *                written, and its length can move by a few bytes between runs
  *   memory       process.memoryUsage() and peak RSS after a forced collection —
  *                MEASURED_ONLY, reported for scale and never used as a bound:
  *                when V8 collects, how it lays objects out and what a browser
@@ -106,12 +110,12 @@ async function extract(name, pages) {
     copied.forEach((page) => output.addPage(page));
     await record('4 after copyPages', { source: contextTotals(source), destination: contextTotals(output) });
 
-    const predictedPlainBytes = useObjectStreams ? null : await predictPlainSaveBytes(output);
-    await record('5 before save', { destination: contextTotals(output), predictedPlainBytes });
+    const predictedPlainBytesMeasuredOnly = useObjectStreams ? null : await predictPlainSaveBytes(output);
+    await record('5 before save', { destination: contextTotals(output), predictedPlainBytesMeasuredOnly });
 
     let bytes = await output.save({ useObjectStreams });
-    const outputBytes = bytes.length;
-    await record('6 immediately after save', { destination: contextTotals(output), outputBytes });
+    const outputBytesMeasuredOnly = bytes.length;
+    await record('6 immediately after save', { destination: contextTotals(output), outputBytesMeasuredOnly });
 
     source = null;
     await record('7a source released', await collectable({
@@ -123,7 +127,7 @@ async function extract(name, pages) {
     bytes = null;
     await record('7b everything released', {});
 
-    return { plan, outputBytes, predictedPlainBytes };
+    return { plan, outputBytesMeasuredOnly, predictedPlainBytesMeasuredOnly };
 }
 
 /**
@@ -163,15 +167,15 @@ async function merge(names) {
         });
         perSource.push({ name, plan });
     }
-    const predictedPlainBytes = useObjectStreams ? null : await predictPlainSaveBytes(output);
-    await record('5 before save', { destination: contextTotals(output), predictedPlainBytes });
+    const predictedPlainBytesMeasuredOnly = useObjectStreams ? null : await predictPlainSaveBytes(output);
+    await record('5 before save', { destination: contextTotals(output), predictedPlainBytesMeasuredOnly });
     let bytes = await output.save({ useObjectStreams });
-    const outputBytes = bytes.length;
-    await record('6 immediately after save', { destination: contextTotals(output), outputBytes });
+    const outputBytesMeasuredOnly = bytes.length;
+    await record('6 immediately after save', { destination: contextTotals(output), outputBytesMeasuredOnly });
     output = null;
     bytes = null;
     await record('7b everything released', {});
-    return { perSource, outputBytes, predictedPlainBytes };
+    return { perSource, outputBytesMeasuredOnly, predictedPlainBytesMeasuredOnly };
 }
 
 const result = args.op === 'merge'

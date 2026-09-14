@@ -286,9 +286,13 @@ not before compressing.**
 - **Plain writer.** `PDFWriter` computes the total size before it allocates.
   `predictPlainSaveBytes` asks that question on its own. Predicted equalled
   written in all three cases: B1 1,877,000 B, C 1,261,950 B, I page 1
-  4,909,178 B.
+  4,909,178 B, in one run. The equality within a run is the structural fact;
+  the lengths themselves are MEASURED_ONLY, because production's route writes
+  the time into the file, and an object-stream write of C moved by 4 bytes
+  between two runs.
 - **Object-stream writer.** `PDFStreamWriter` knows its size only after each
-  chunk of fifty objects has been deflated. B1 written that way is 336,399 B.
+  chunk of fifty objects has been deflated. B1 written that way was 336,399 B in
+  one run.
   There is no equivalent number to ask for first, and this research has not
   established an upper bound on it — see *UNKNOWN*.
 - **What is alive at the save peak (STRUCTURAL):** the destination graph, any
@@ -439,6 +443,8 @@ not a decision this research takes.
   process.
 - Nothing about real drawings beyond what the synthetic shapes isolate.
 - No upper bound on object-stream output, and no conservative bound of any kind.
+- No output length as a stable number. Production's route writes a timestamp into
+  every file, so every length is recorded as MEASURED_ONLY.
 - Seven of the fifteen walker comparisons are not tabled above; they are in
   `evidence-object-graph-memory.json` with the same equality.
 
