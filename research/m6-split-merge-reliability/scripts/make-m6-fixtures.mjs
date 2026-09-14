@@ -1,0 +1,1681 @@
+/**
+ * Synthetic documents for the M6 Split / Merge reliability research.
+ *
+ * None of these is a customer or project document; every byte is generated
+ * here. They exist to make one distinction measurable: **copying pages is not
+ * preserving a document.** A page renders identically whether or not the
+ * outline that pointed at it, the field its widget belonged to, the named
+ * destination that addressed it or the metadata that described it came with it.
+ *
+ * So each fixture carries markers a reader can find afterwards — a visible and
+ * extractable `M6-PAGE-<doc>-<n>` on every page, so page *order* can be
+ * measured exactly rather than eyeballed, plus whatever catalog-level structure
+ * the fixture is about.
+ *
+ * Output goes to `test-fixtures/m6-split-merge/`, which is already ignored, so
+ * running this leaves the working tree clean and the research evidence stays
+ * bound to committed source rather than to files nobody can regenerate.
+ *
+ * Run:  node research/m6-split-merge-reliability/scripts/make-m6-fixtures.mjs
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import {
+    PDFDocument, PDFName, PDFNumber, PDFString, PDFHexString, PDFArray, PDFDict, PDFRef,
+    StandardFonts, rgb, degrees,
+    pushGraphicsState, popGraphicsState, concatTransformationMatrix, drawObject,
+} from 'pdf-lib';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const OUT = path.join(ROOT, 'test-fixtures', 'm6-split-merge');
+fs.rmSync(OUT, { recursive: true, force: true });
+fs.mkdirSync(OUT, { recursive: true });
+
+const SHEET = {
+    A4: { w: 595.28, h: 841.89 },
+    A3: { w: 841.89, h: 1190.55 },
+    A1: { w: 1683.78, h: 2383.94 },
+};
+
+const FIXED_DATE = new Date(Date.UTC(2026, 0, 1));
+const written = [];
+
+async function newDoc(title) {
+    const doc = await PDFDocument.create({ updateMetadata: false });
+    doc.setTitle(title);
+    doc.setAuthor('M6 author');
+    doc.setSubject('M6 subject');
+    doc.setCreator('M6 creator');
+    doc.setCreationDate(FIXED_DATE);
+    doc.setModificationDate(FIXED_DATE);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    return { doc, font };
+}
+
+async function write(name, doc, note) {
+    const bytes = await doc.save({ useObjectStreams: false });
+    fs.writeFileSync(path.join(OUT, `${name}.pdf`), bytes);
+    written.push({ name, bytes: bytes.length, note });
+    return bytes;
+}
+
+const writeRaw = (name, buffer, note) => {
+    fs.writeFileSync(path.join(OUT, `${name}.pdf`), buffer);
+    written.push({ name, bytes: buffer.length, note });
+};
+
+/** Border, grid and a heavy line, so "the page still draws" is checkable. */
+function drawVector(page, size) {
+    const { w, h } = size;
+    const lw = w * 0.002;
+    page.drawRectangle({
+        x: w * 0.05, y: h * 0.05, width: w * 0.9, height: h * 0.9,
+        borderColor: rgb(0, 0, 0), borderWidth: lw * 2,
+    });
+    for (let i = 1; i < 5; i += 1) {
+        page.drawLine({
+            start: { x: w * 0.05, y: h * (0.2 + i * 0.12) },
+            end: { x: w * 0.95, y: h * (0.2 + i * 0.12) },
+            thickness: lw, color: rgb(0.1, 0.2, 0.85),
+        });
+    }
+    page.drawLine({
+        start: { x: w * 0.15, y: h * 0.35 }, end: { x: w * 0.85, y: h * 0.35 },
+        thickness: lw * 4, color: rgb(0.85, 0.1, 0.1),
+    });
+}
+
+/**
+ * The marker that makes page order a measurement rather than an impression.
+ * Extractable by a text reader and visible to a human looking at the output.
+ */
+const mark = (page, font, size, text) => page.drawText(text, {
+    x: size.w * 0.1, y: size.h * 0.12, size: Math.max(9, size.h * 0.02), font, color: rgb(0, 0, 0),
+});
+
+/** A page with its own identity. */
+function sheet(doc, font, size, marker) {
+    const page = doc.addPage([size.w, size.h]);
+    drawVector(page, size);
+    mark(page, font, size, marker);
+    return page;
+}
+
+function addAnnots(doc, page, dicts) {
+    const refs = dicts.map((d) => doc.context.register(doc.context.obj(d)));
+    const existing = page.node.lookup(PDFName.of('Annots'));
+    const arr = existing instanceof PDFArray ? existing : doc.context.obj([]);
+    for (const r of refs) arr.push(r);
+    page.node.set(PDFName.of('Annots'), arr);
+    return refs;
+}
+
+// ---------------------------------------------------------------------------
+// Content classes and geometry
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 text and vector');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-TEXT-1');
+    await write('text-vector', doc, 'native searchable text over vector geometry');
+}
+{
+    // A "scan": one full-page DeviceGray image XObject, no encoder involved.
+    const { doc, font } = await newDoc('M6 scanned');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    const w = 160;
+    const h = 220;
+    const samples = Buffer.alloc(w * h);
+    for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+            samples[y * w + x] = (x % 16 < 2 || y % 20 < 2) ? 0x20 : 0xe8;
+        }
+    }
+    const image = doc.context.stream(zlib.deflateSync(samples), {
+        Type: 'XObject',
+        Subtype: 'Image',
+        Width: w,
+        Height: h,
+        ColorSpace: 'DeviceGray',
+        BitsPerComponent: 8,
+        Filter: 'FlateDecode',
+    });
+    const name = page.node.newXObject('M6Scan', doc.context.register(image));
+    // Drawn through pdf-lib's own operator helpers so the page keeps a single
+    // content stream it manages, and the marker drawn afterwards lands on top
+    // of the image rather than underneath a stream appended behind it.
+    page.pushOperators(
+        pushGraphicsState(),
+        concatTransformationMatrix(SHEET.A4.w, 0, 0, SHEET.A4.h, 0, 0),
+        drawObject(name.asString().replace(/^\//, '')),
+        popGraphicsState(),
+    );
+    mark(page, font, SHEET.A4, 'M6-PAGE-SCAN-1');
+    await write('scanned-image', doc, 'a full-page DeviceGray image XObject');
+}
+{
+    const { doc, font } = await newDoc('M6 six pages');
+    for (let i = 1; i <= 6; i += 1) sheet(doc, font, SHEET.A4, `M6-PAGE-SIX-${i}`);
+    await write('mixed-6p', doc, 'six pages, each uniquely marked, for order and subset tests');
+}
+for (const angle of [0, 90, 180, 270]) {
+    const { doc, font } = await newDoc(`M6 rotate ${angle}`);
+    const page = sheet(doc, font, SHEET.A4, `M6-PAGE-ROT${angle}-1`);
+    page.setRotation(degrees(angle));
+    await write(`rotate-${angle}`, doc, `/Rotate ${angle}`);
+}
+{
+    const { doc, font } = await newDoc('M6 crop offset');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-CROP-1');
+    page.node.set(PDFName.of('CropBox'), doc.context.obj([50, 70, SHEET.A4.w - 40, SHEET.A4.h - 60]));
+    await write('crop-offset', doc, 'CropBox origin at (50,70), smaller than the MediaBox');
+}
+{
+    const { doc, font } = await newDoc('M6 mediabox offset');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-MBOFF-1');
+    page.node.set(PDFName.of('MediaBox'), doc.context.obj([200, 300, 200 + SHEET.A4.w, 300 + SHEET.A4.h]));
+    page.node.set(PDFName.of('CropBox'), doc.context.obj([200, 300, 200 + SHEET.A4.w, 300 + SHEET.A4.h]));
+    await write('mediabox-offset', doc, 'MediaBox origin at (200,300)');
+}
+{
+    const { doc, font } = await newDoc('M6 mixed sizes');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-SIZE-1');
+    sheet(doc, font, SHEET.A3, 'M6-PAGE-SIZE-2');
+    sheet(doc, font, SHEET.A1, 'M6-PAGE-SIZE-3');
+    await write('mixed-sizes', doc, 'A4, A3 and A1 in one document');
+}
+// Bulk documents for the preview-memory question. The current Extract renders
+// every page at scale 1.5 and keeps each one as a base64 PNG Data URL in React
+// state, so the cost is a function of page count and sheet size — and neither
+// can be measured against a six-page corpus.
+for (const n of [10, 50, 100, 200]) {
+    const { doc, font } = await newDoc(`M6 ${n} pages`);
+    for (let i = 1; i <= n; i += 1) {
+        const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+        page.drawRectangle({
+            x: SHEET.A4.w * 0.06, y: SHEET.A4.h * 0.06,
+            width: SHEET.A4.w * 0.88, height: SHEET.A4.h * 0.88,
+            borderColor: rgb(0, 0, 0), borderWidth: 1.2,
+        });
+        mark(page, font, SHEET.A4, `M6-PAGE-BULK${n}-${i}`);
+    }
+    await write(`pages-${n}`, doc, `${n} A4 pages, for preview-memory measurement`);
+}
+{
+    const { doc, font } = await newDoc('M6 ten A1 sheets');
+    for (let i = 1; i <= 10; i += 1) {
+        const page = doc.addPage([SHEET.A1.w, SHEET.A1.h]);
+        page.drawRectangle({
+            x: SHEET.A1.w * 0.06, y: SHEET.A1.h * 0.06,
+            width: SHEET.A1.w * 0.88, height: SHEET.A1.h * 0.88,
+            borderColor: rgb(0, 0, 0), borderWidth: 3,
+        });
+        mark(page, font, SHEET.A1, `M6-PAGE-A1BULK-${i}`);
+    }
+    await write('pages-10-a1', doc, 'ten A1 sheets, for the large-format preview cost');
+}
+
+{
+    // Inheritable geometry declared on the page tree rather than the leaf: a
+    // copied leaf whose /Parent is gone has to carry it, or lose it.
+    const { doc, font } = await newDoc('M6 inherited page attributes');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4);
+    mark(page, font, SHEET.A4, 'M6-PAGE-INHERIT-1');
+    const tree = doc.catalog.lookup(PDFName.of('Pages'));
+    if (tree instanceof PDFDict) {
+        tree.set(PDFName.of('Rotate'), PDFNumber.of(90));
+        tree.set(PDFName.of('CropBox'), doc.context.obj([20, 30, SHEET.A4.w - 20, SHEET.A4.h - 30]));
+    }
+    page.node.delete(PDFName.of('CropBox'));
+    await write('inherited-page-attrs', doc, '/Rotate and /CropBox on the page tree, not the leaf');
+}
+{
+    const { doc, font } = await newDoc('M6 user unit');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-UU-1');
+    page.node.set(PDFName.of('UserUnit'), PDFNumber.of(2.5));
+    await write('user-unit', doc, '/UserUnit 2.5');
+}
+
+// ---------------------------------------------------------------------------
+// Annotations and navigation
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 links');
+    const pages = [1, 2, 3, 4].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-LINK-${i}`));
+
+    addAnnots(doc, pages[0], [
+        {
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            A: { Type: 'Action', S: 'URI', URI: PDFString.of('https://example.invalid/m6') },
+        },
+        {
+            // Straight /Dest to a page that a 1-2 extract leaves behind.
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 660, 320, 680], Border: [0, 0, 0],
+            Dest: [pages[3].ref, PDFName.of('XYZ'), PDFNumber.of(80), PDFNumber.of(700), PDFNumber.of(0)],
+        },
+        {
+            // /GoTo action to a page a 1-2 extract keeps.
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 620, 320, 640], Border: [0, 0, 0],
+            A: {
+                Type: 'Action',
+                S: 'GoTo',
+                D: [pages[1].ref, PDFName.of('FitH'), PDFNumber.of(500)],
+            },
+        },
+        {
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 580, 320, 600], Border: [0, 0, 0],
+            A: { Type: 'Action', S: 'GoTo', D: PDFString.of('M6-NAMED-FAR') },
+        },
+        {
+            Type: 'Annot', Subtype: 'Square', Rect: [360, 560, 520, 700],
+            C: [0, 0, 1], F: 4, T: PDFString.of('M6-SQUARE'),
+        },
+    ]);
+
+    // Named destinations: one to a page an extract keeps, one to a page it drops.
+    const near = doc.context.obj([pages[1].ref, PDFName.of('Fit')]);
+    const far = doc.context.obj([pages[3].ref, PDFName.of('XYZ'), PDFNumber.of(10), PDFNumber.of(20), PDFNumber.of(0)]);
+    doc.catalog.set(PDFName.of('Names'), doc.context.register(doc.context.obj({
+        Dests: {
+            Names: [PDFString.of('M6-NAMED-NEAR'), near, PDFString.of('M6-NAMED-FAR'), far],
+        },
+    })));
+
+    // An outline pointing at each of the four pages.
+    const items = pages.map((p, i) => doc.context.register(doc.context.obj({
+        Title: PDFString.of(`M6 outline ${i + 1}`),
+        Dest: [p.ref, PDFName.of('XYZ'), PDFNumber.of(70), PDFNumber.of(600), PDFNumber.of(0)],
+    })));
+    for (let i = 0; i < items.length; i += 1) {
+        const item = doc.context.lookup(items[i]);
+        if (!(item instanceof PDFDict)) continue;
+        if (i > 0) item.set(PDFName.of('Prev'), items[i - 1]);
+        if (i < items.length - 1) item.set(PDFName.of('Next'), items[i + 1]);
+    }
+    doc.catalog.set(PDFName.of('Outlines'), doc.context.register(doc.context.obj({
+        Type: 'Outlines', First: items[0], Last: items[items.length - 1], Count: items.length,
+    })));
+
+    // Page labels: i, ii, then A-1, A-2.
+    doc.catalog.set(PDFName.of('PageLabels'), doc.context.register(doc.context.obj({
+        Nums: [
+            PDFNumber.of(0), { S: PDFName.of('r') },
+            PDFNumber.of(2), { S: PDFName.of('D'), St: PDFNumber.of(1), P: PDFString.of('A-') },
+        ],
+    })));
+
+    // An OpenAction onto page 3.
+    doc.catalog.set(PDFName.of('OpenAction'), doc.context.obj([
+        pages[2].ref, PDFName.of('XYZ'), PDFNumber.of(0), PDFNumber.of(0), PDFNumber.of(0),
+    ]));
+
+    await write('nav-4p', doc,
+        'four pages: URI link, /Dest to p4, /GoTo to p2, named-dest link, named dests, outlines, page labels, OpenAction');
+}
+{
+    // A destination that already points nowhere, before anything copies it.
+    const { doc, font } = await newDoc('M6 dangling destination');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-DANGLE-1');
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        Dest: [PDFRef.of(9999, 0), PDFName.of('Fit')],
+    }]);
+    await write('dangling-dest', doc, 'a link whose /Dest references an object that is not there');
+}
+
+// ---------------------------------------------------------------------------
+// Forms and signature states
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 form');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-FORM-${i}`));
+    const widgetOn = (page, name, value, y) => {
+        const ref = doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', FT: 'Tx',
+            T: PDFString.of(name), V: PDFString.of(value),
+            Rect: [120, y, 400, y + 30], F: 4,
+            DA: PDFString.of('/Helv 12 Tf 0 g'),
+        }));
+        const arr = doc.context.obj([]);
+        arr.push(ref);
+        page.node.set(PDFName.of('Annots'), arr);
+        return ref;
+    };
+    const a = widgetOn(pages[0], 'm6.onPage1', 'M6-FIELD-ONE', 300);
+    const b = widgetOn(pages[1], 'm6.onPage2', 'M6-FIELD-TWO', 300);
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [a, b], DA: PDFString.of('/Helv 12 Tf 0 g'), NeedAppearances: true,
+    })));
+    await write('form-2p', doc, 'one text field with a value on each of two pages');
+}
+{
+    // One field, two widgets, on two different pages: extracting one page takes
+    // half a field with it.
+    const { doc, font } = await newDoc('M6 split field');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-SPLITFIELD-${i}`));
+    const kids = pages.map((p, i) => {
+        const ref = doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [120, 300 + i * 40, 400, 330 + i * 40], F: 4,
+        }));
+        p.node.set(PDFName.of('Annots'), doc.context.obj([ref]));
+        return ref;
+    });
+    const field = doc.context.obj({
+        FT: 'Tx', T: PDFString.of('m6.shared'), V: PDFString.of('M6-SHARED-VALUE'),
+        Kids: kids, DA: PDFString.of('/Helv 12 Tf 0 g'),
+    });
+    const fieldRef = doc.context.register(field);
+    for (const kid of kids) {
+        const k = doc.context.lookup(kid);
+        if (k instanceof PDFDict) k.set(PDFName.of('Parent'), fieldRef);
+    }
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [fieldRef], DA: PDFString.of('/Helv 12 Tf 0 g'),
+    })));
+    await write('form-field-across-pages', doc, 'one field whose two widgets sit on different pages');
+}
+{
+    const { doc, font } = await newDoc('M6 empty signature');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-SIGEMPTY-1');
+    const widget = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFString.of('m6.blank'),
+        Rect: [380, 80, 560, 140], F: 4,
+    }));
+    page.node.set(PDFName.of('Annots'), doc.context.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [widget], SigFlags: 3,
+    })));
+    await write('sig-empty', doc, 'an empty /Sig field with /SigFlags 3');
+}
+{
+    // An applied signature whose /Contents really is a digest of the file, so a
+    // re-save can be shown to have invalidated it.
+    const { doc, font } = await newDoc('M6 applied signature');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-SIGNED-${i}`));
+    const sigRef = doc.context.register(doc.context.obj({
+        Type: 'Sig', Filter: 'Adobe.PPKLite', SubFilter: 'adbe.pkcs7.detached',
+        ByteRange: [0, 0, 0, 0], Contents: PDFHexString.of('00'.repeat(32)),
+        M: PDFString.of('D:20260101000000Z'),
+    }));
+    // The signature's **appearance**, which is a separate thing from the
+    // signature. Without an /AP there is no way to ask whether a derived
+    // document still shows a signature it no longer carries, and that is
+    // exactly the question the Human Gate needs answered.
+    const appearance = doc.context.stream(
+        Buffer.from(
+            '0.05 0.35 0.15 RG 2 w 4 4 172 52 re S '
+            + 'BT /Helv 12 Tf 14 22 Td 0.05 0.35 0.15 rg (M6-SIGNED-BY-APPEARANCE) Tj ET',
+            'utf8',
+        ),
+        {
+            Type: 'XObject',
+            Subtype: 'Form',
+            BBox: [0, 0, 180, 60],
+            Resources: { Font: { Helv: { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica' } } },
+        },
+    );
+    const widget = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFString.of('m6.sig'),
+        V: sigRef, Rect: [380, 80, 560, 140], F: 4,
+        AP: { N: doc.context.register(appearance) },
+    }));
+    pages[0].node.set(PDFName.of('Annots'), doc.context.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [widget], SigFlags: 3,
+    })));
+    const bytes = await doc.save({ useObjectStreams: false });
+    const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+    const patched = Buffer.from(bytes);
+    const at = patched.indexOf(Buffer.from('00'.repeat(32), 'ascii'));
+    if (at >= 0) patched.write(digest.slice(0, 64), at, 'ascii');
+    fs.writeFileSync(path.join(OUT, 'sig-applied.pdf'), patched);
+    written.push({ name: 'sig-applied', bytes: patched.length, note: 'an applied signature over two pages' });
+}
+{
+    const { doc, font } = await newDoc('M6 XFA');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-XFA-1');
+    const xfa = doc.context.stream(zlib.deflateSync(Buffer.from(
+        '<?xml version="1.0"?><xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/">M6</xdp:xdp>', 'utf8',
+    )), { Filter: 'FlateDecode' });
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [], XFA: doc.context.register(xfa),
+    })));
+    await write('xfa', doc, 'an AcroForm carrying /XFA');
+}
+{
+    const { doc, font } = await newDoc('M6 malformed AcroForm');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-BADFORM-1');
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: { Broken: PDFNumber.of(1) }, SigFlags: 3,
+    })));
+    await write('malformed-acroform', doc, '/Fields is a dictionary rather than an array');
+}
+
+// ---------------------------------------------------------------------------
+// Metadata
+// ---------------------------------------------------------------------------
+const XMP = (marker) => `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description dc:title="${marker}" xmlns:dc="http://purl.org/dc/elements/1.1/"/>
+</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`;
+
+{
+    const { doc, font } = await newDoc('M6 metadata');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-META-1');
+    doc.setKeywords(['M6-KEY-ONE', 'M6-KEY-TWO']);
+    const info = doc.context.lookup(doc.context.trailerInfo.Info);
+    if (info instanceof PDFDict) {
+        info.set(PDFName.of('Company'), PDFString.of('M6-COMPANY'));
+        info.set(PDFName.of('M6Custom'), PDFString.of('M6-CUSTOM-VALUE'));
+        info.set(PDFName.of('M6Indirect'), doc.context.register(PDFString.of('M6-INDIRECT-VALUE')));
+    }
+    doc.catalog.set(PDFName.of('Metadata'), doc.context.register(
+        doc.context.stream(Buffer.from(XMP('M6-XMP-PLAIN'), 'utf8'), { Type: 'Metadata', Subtype: 'XML' }),
+    ));
+    await write('meta-rich', doc, 'custom Info, an indirect Info value, /Keywords and an unfiltered XMP packet');
+}
+{
+    const { doc, font } = await newDoc('M6 compressed XMP');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-METAFLATE-1');
+    doc.catalog.set(PDFName.of('Metadata'), doc.context.register(doc.context.stream(
+        zlib.deflateSync(Buffer.from(XMP('M6-XMP-FLATE'), 'utf8')),
+        { Type: 'Metadata', Subtype: 'XML', Filter: 'FlateDecode' },
+    )));
+    await write('meta-xmp-flate', doc, 'an XMP packet stored with /Filter /FlateDecode');
+}
+
+// ---------------------------------------------------------------------------
+// Catalog-level structures that a page copy cannot carry on its own
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 optional content');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCG-1');
+    const ocg = doc.context.register(doc.context.obj({
+        Type: 'OCG', Name: PDFString.of('M6-LAYER'),
+    }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [ocg],
+        D: { Order: [ocg], ON: [ocg] },
+    }));
+    const props = doc.context.obj({ M6OC: ocg });
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) resources.set(PDFName.of('Properties'), props);
+    await write('ocproperties', doc, 'an optional-content group referenced from page resources');
+}
+{
+    const { doc, font } = await newDoc('M6 tagged');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-TAGGED-1');
+    const struct = doc.context.register(doc.context.obj({
+        Type: 'StructTreeRoot',
+        K: { Type: 'StructElem', S: PDFName.of('Document'), P: PDFString.of('M6-STRUCT') },
+        ParentTree: { Nums: [] },
+    }));
+    doc.catalog.set(PDFName.of('StructTreeRoot'), struct);
+    doc.catalog.set(PDFName.of('MarkInfo'), doc.context.obj({ Marked: true }));
+    page.node.set(PDFName.of('StructParents'), PDFNumber.of(0));
+    await write('structtree', doc, 'a /StructTreeRoot and a page claiming /StructParents');
+}
+{
+    const { doc, font } = await newDoc('M6 attachment');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-ATTACH-1');
+    const embedded = doc.context.register(doc.context.stream(
+        Buffer.from('M6-ATTACHED-PAYLOAD\n', 'utf8'),
+        { Type: 'EmbeddedFile', Subtype: PDFName.of('text/plain') },
+    ));
+    const filespec = doc.context.register(doc.context.obj({
+        Type: 'Filespec', F: PDFString.of('m6-note.txt'), UF: PDFString.of('m6-note.txt'),
+        EF: { F: embedded },
+    }));
+    doc.catalog.set(PDFName.of('Names'), doc.context.register(doc.context.obj({
+        EmbeddedFiles: { Names: [PDFString.of('m6-note.txt'), filespec] },
+        JavaScript: {
+            Names: [PDFString.of('M6-JS'), { S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6 */') }],
+        },
+    })));
+    await write('attachment-and-js', doc, 'an embedded file and a document-level JavaScript name tree');
+}
+
+// ---------------------------------------------------------------------------
+// Merge sources: ordering, repetition and collisions
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 source A');
+    for (let i = 1; i <= 3; i += 1) sheet(doc, font, SHEET.A4, `M6-PAGE-A-${i}`);
+    await write('source-a', doc, 'three pages marked A-1..A-3');
+}
+{
+    const { doc, font } = await newDoc('M6 source B');
+    for (let i = 1; i <= 2; i += 1) sheet(doc, font, SHEET.A3, `M6-PAGE-B-${i}`);
+    await write('source-b', doc, 'two A3 pages marked B-1..B-2');
+}
+{
+    const { doc, font } = await newDoc('M6 source C');
+    const p = sheet(doc, font, SHEET.A4, 'M6-PAGE-C-1');
+    p.setRotation(degrees(270));
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-C-2');
+    await write('source-c', doc, 'two pages, the first rotated 270');
+}
+
+/** Two documents that disagree about names the catalog treats as unique. */
+async function collisionSource(name, marker, { fieldName, destName, outlineTitle, label }) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const page = sheet(doc, font, SHEET.A4, marker);
+
+    const widget = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Tx',
+        T: PDFString.of(fieldName), V: PDFString.of(`${marker}-VALUE`),
+        Rect: [120, 300, 400, 330], F: 4, DA: PDFString.of('/Helv 12 Tf 0 g'),
+    }));
+    page.node.set(PDFName.of('Annots'), doc.context.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: [widget], DA: PDFString.of('/Helv 12 Tf 0 g'),
+    })));
+
+    doc.catalog.set(PDFName.of('Names'), doc.context.register(doc.context.obj({
+        Dests: { Names: [PDFString.of(destName), [page.ref, PDFName.of('Fit')]] },
+    })));
+
+    const item = doc.context.register(doc.context.obj({
+        Title: PDFString.of(outlineTitle),
+        Dest: [page.ref, PDFName.of('Fit')],
+    }));
+    doc.catalog.set(PDFName.of('Outlines'), doc.context.register(doc.context.obj({
+        Type: 'Outlines', First: item, Last: item, Count: 1,
+    })));
+
+    doc.catalog.set(PDFName.of('PageLabels'), doc.context.register(doc.context.obj({
+        Nums: [PDFNumber.of(0), { S: PDFName.of('D'), P: PDFString.of(label) }],
+    })));
+
+    await write(name, doc, `collision source: field ${fieldName}, dest ${destName}, label ${label}`);
+}
+
+await collisionSource('collide-a', 'M6-PAGE-COLLIDE-A', {
+    fieldName: 'shared.field', destName: 'M6-SHARED-DEST', outlineTitle: 'M6 shared outline', label: 'A-',
+});
+await collisionSource('collide-b', 'M6-PAGE-COLLIDE-B', {
+    fieldName: 'shared.field', destName: 'M6-SHARED-DEST', outlineTitle: 'M6 shared outline', label: 'B-',
+});
+
+// ---------------------------------------------------------------------------
+// Destinations, one shape per fixture
+//
+// `nav-4p` mixes every kind of internal navigation into one document, which is
+// useful for a survey and useless for a contract: when its extract reported
+// "4 links, 0 of them landing in the document", there was no way to say which
+// shape caused it. These separate the cases so each one answers for itself.
+// ---------------------------------------------------------------------------
+
+/** Two pages, page 1 linking to page 2 by whichever mechanism is asked for. */
+async function destinationPair(name, kind, note) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-${name.toUpperCase()}-${i}`));
+    const target = [pages[1].ref, PDFName.of('XYZ'), PDFNumber.of(70), PDFNumber.of(700), PDFNumber.of(0)];
+
+    if (kind === 'dest') {
+        addAnnots(doc, pages[0], [{
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            Dest: target,
+        }]);
+    } else if (kind === 'goto') {
+        addAnnots(doc, pages[0], [{
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            A: { Type: 'Action', S: 'GoTo', D: target },
+        }]);
+    } else if (kind === 'named') {
+        doc.catalog.set(PDFName.of('Names'), doc.context.register(doc.context.obj({
+            Dests: {
+                Names: [
+                    PDFString.of('M6-DEST-P1'), [pages[0].ref, PDFName.of('Fit')],
+                    PDFString.of('M6-DEST-P2'), target,
+                ],
+            },
+        })));
+        addAnnots(doc, pages[0], [
+            {
+                Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+                A: { Type: 'Action', S: 'GoTo', D: PDFString.of('M6-DEST-P1') },
+            },
+            {
+                Type: 'Annot', Subtype: 'Link', Rect: [100, 660, 320, 680], Border: [0, 0, 0],
+                A: { Type: 'Action', S: 'GoTo', D: PDFString.of('M6-DEST-P2') },
+            },
+        ]);
+    }
+    await write(name, doc, note);
+}
+
+await destinationPair('dest-direct-2p', 'dest', 'page 1 links to page 2 with a direct /Dest');
+await destinationPair('dest-goto-2p', 'goto', 'page 1 links to page 2 with /A /GoTo /D');
+await destinationPair('dest-named-2p', 'named', 'named destinations to page 1 (kept) and page 2 (droppable)');
+
+{
+    // Each page points at the other. A copier that follows destinations without
+    // a stopping rule has to be shown not to loop.
+    const { doc, font } = await newDoc('M6 cyclic destinations');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-CYCDEST-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        Dest: [pages[1].ref, PDFName.of('Fit')],
+    }]);
+    addAnnots(doc, pages[1], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        Dest: [pages[0].ref, PDFName.of('Fit')],
+    }]);
+    await write('dest-cyclic-2p', doc, 'page 1 and page 2 each hold a destination to the other');
+}
+{
+    // Two selected pages pointing at the same third page: if the copier
+    // duplicates per reference rather than per target, this is where it shows.
+    const { doc, font } = await newDoc('M6 shared destination target');
+    const pages = [1, 2, 3].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-SHAREDDEST-${i}`));
+    for (const from of [pages[0], pages[1]]) {
+        addAnnots(doc, from, [{
+            Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+            Dest: [pages[2].ref, PDFName.of('Fit')],
+        }]);
+    }
+    await write('dest-shared-target-3p', doc, 'pages 1 and 2 both address page 3');
+}
+{
+    // A page can reach another page without any annotation at all. Article
+    // threads do it through /B: a bead on page 1 chains to a bead whose /P is
+    // page 2. If a contract assumes /Annots is the only route, this is the
+    // fixture that disproves it.
+    const { doc, font } = await newDoc('M6 page references beyond /Annots');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-BEADS-${i}`));
+    const threadRef = PDFRef.of(doc.context.largestObjectNumber + 10, 0);
+    const bead1 = doc.context.obj({ T: threadRef, P: pages[0].ref, R: [50, 50, 300, 300] });
+    const bead2 = doc.context.obj({ T: threadRef, P: pages[1].ref, R: [50, 50, 300, 300] });
+    const bead1Ref = doc.context.register(bead1);
+    const bead2Ref = doc.context.register(bead2);
+    bead1.set(PDFName.of('N'), bead2Ref);
+    bead1.set(PDFName.of('V'), bead2Ref);
+    bead2.set(PDFName.of('N'), bead1Ref);
+    bead2.set(PDFName.of('V'), bead1Ref);
+    const thread = doc.context.obj({ F: bead1Ref, I: { Title: PDFString.of('M6-THREAD') } });
+    doc.context.assign(threadRef, thread);
+    pages[0].node.set(PDFName.of('B'), doc.context.obj([bead1Ref]));
+    pages[1].node.set(PDFName.of('B'), doc.context.obj([bead2Ref]));
+    doc.catalog.set(PDFName.of('Threads'), doc.context.obj([threadRef]));
+    await write('page-refs-beyond-annots', doc, 'an article thread whose beads chain page 1 to page 2');
+}
+
+// ---------------------------------------------------------------------------
+// Form shapes, one per fixture
+//
+// The previous round claimed /Tx /Btn /Ch /Sig as a supported subset while the
+// prototype only ever restored /T, /FT and /V. These exist so each claim has a
+// document behind it — and so the ones that are refused are refused against a
+// real example rather than against a category name.
+// ---------------------------------------------------------------------------
+
+/** One page, one AcroForm, whatever `build` puts in it. */
+async function formCase(name, note, build) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const page = sheet(doc, font, SHEET.A4, `M6-PAGE-${name.toUpperCase()}-1`);
+    const { fields, acroExtra = {}, annots } = build(doc, page, font);
+    page.node.set(PDFName.of('Annots'), doc.context.obj(annots ?? fields));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({
+        Fields: fields, DA: PDFString.of('/Helv 12 Tf 0 g'), ...acroExtra,
+    })));
+    await write(name, doc, note);
+}
+
+/** A merged field/widget: the one shape the prototype has actually proven. */
+const mergedText = (doc, extra = {}) => doc.context.register(doc.context.obj({
+    Type: 'Annot', Subtype: 'Widget', FT: 'Tx',
+    T: PDFString.of('m6.text'), V: PDFString.of('M6-TX-VALUE'),
+    Rect: [120, 300, 400, 330], F: 4, DA: PDFString.of('/Helv 12 Tf 0 g'),
+    ...extra,
+}));
+
+await formCase('form-tx-plain', 'a single merged text field, the proven shape',
+    (doc) => ({ fields: [mergedText(doc)] }));
+
+await formCase('form-tx-ff', 'a text field carrying /Ff (multiline)',
+    (doc) => ({ fields: [mergedText(doc, { Ff: 4096 })] }));
+
+await formCase('form-tx-dv', 'a text field carrying /DV',
+    (doc) => ({ fields: [mergedText(doc, { DV: PDFString.of('M6-TX-DEFAULT') })] }));
+
+await formCase('form-dr', 'a field whose /DA names a font that lives in AcroForm /DR',
+    (doc) => ({
+        fields: [mergedText(doc, { DA: PDFString.of('/M6Helv 12 Tf 0 g') })],
+        acroExtra: {
+            DR: {
+                Font: {
+                    M6Helv: { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica' },
+                },
+            },
+        },
+    }));
+
+await formCase('form-separate-widget', 'a field dictionary with a separate widget kid',
+    (doc) => {
+        const widget = doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 400, 330], F: 4,
+        }));
+        const field = doc.context.obj({
+            FT: 'Tx', T: PDFString.of('m6.separate'), V: PDFString.of('M6-SEPARATE-VALUE'),
+            DA: PDFString.of('/Helv 12 Tf 0 g'), Kids: [widget],
+        });
+        const fieldRef = doc.context.register(field);
+        const kid = doc.context.lookup(widget);
+        if (kid instanceof PDFDict) kid.set(PDFName.of('Parent'), fieldRef);
+        return { fields: [fieldRef], annots: [widget] };
+    });
+
+await formCase('form-hierarchical', 'a child field inheriting /FT and /V from its parent',
+    (doc) => {
+        const child = doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', T: PDFString.of('child'),
+            Rect: [120, 300, 400, 330], F: 4,
+        });
+        const childRef = doc.context.register(child);
+        const parent = doc.context.obj({
+            T: PDFString.of('m6.parent'), FT: 'Tx', V: PDFString.of('M6-INHERITED-VALUE'),
+            Kids: [childRef],
+        });
+        const parentRef = doc.context.register(parent);
+        child.set(PDFName.of('Parent'), parentRef);
+        return { fields: [parentRef], annots: [childRef] };
+    });
+
+/** An appearance state dictionary, so /AS has something to point at. */
+const stateAppearance = (doc, label) => doc.context.register(doc.context.stream(
+    Buffer.from(`0 0 0 RG 1 w 1 1 16 16 re S BT /Helv 9 Tf 3 5 Td (${label}) Tj ET`, 'utf8'),
+    {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 18, 18],
+        Resources: { Font: { Helv: { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica' } } },
+    },
+));
+
+await formCase('form-checkbox', 'a checkbox with /AS and an /AP appearance-state dictionary',
+    (doc) => ({
+        fields: [doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', FT: 'Btn',
+            T: PDFString.of('m6.check'), V: PDFName.of('Yes'), AS: PDFName.of('Yes'),
+            Rect: [120, 300, 138, 318], F: 4,
+            AP: { N: { Yes: stateAppearance(doc, 'Y'), Off: stateAppearance(doc, 'O') } },
+        }))],
+    }));
+
+await formCase('form-radio', 'a radio group whose two kids hold different appearance states',
+    (doc) => {
+        const kidA = doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 138, 318], F: 4,
+            AS: PDFName.of('A'),
+            AP: { N: { A: stateAppearance(doc, 'A'), Off: stateAppearance(doc, 'O') } },
+        });
+        const kidB = doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', Rect: [150, 300, 168, 318], F: 4,
+            AS: PDFName.of('Off'),
+            AP: { N: { B: stateAppearance(doc, 'B'), Off: stateAppearance(doc, 'O') } },
+        });
+        const kidARef = doc.context.register(kidA);
+        const kidBRef = doc.context.register(kidB);
+        const group = doc.context.obj({
+            FT: 'Btn', T: PDFString.of('m6.radio'), V: PDFName.of('A'),
+            Ff: 32768, Kids: [kidARef, kidBRef],
+        });
+        const groupRef = doc.context.register(group);
+        kidA.set(PDFName.of('Parent'), groupRef);
+        kidB.set(PDFName.of('Parent'), groupRef);
+        return { fields: [groupRef], annots: [kidARef, kidBRef] };
+    });
+
+await formCase('form-choice', 'a choice field with /Opt and a selected value',
+    (doc) => ({
+        fields: [doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', FT: 'Ch',
+            T: PDFString.of('m6.choice'), V: PDFString.of('beta'),
+            Opt: [PDFString.of('alpha'), PDFString.of('beta'), PDFString.of('gamma')],
+            Rect: [120, 300, 400, 330], F: 4, DA: PDFString.of('/Helv 12 Tf 0 g'),
+        }))],
+    }));
+
+// ---------------------------------------------------------------------------
+// Optional content, one visibility mechanism per fixture
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 two optional-content groups');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGMULTI-1');
+    const a = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-LAYER-A') }));
+    const b = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-LAYER-B') }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b], D: { Order: [a, b], ON: [a], OFF: [b] },
+    }));
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) {
+        resources.set(PDFName.of('Properties'), doc.context.obj({ M6A: a, M6B: b }));
+    }
+    await write('ocg-multiple', doc, 'two OCGs, one on and one off in the default configuration');
+}
+{
+    const { doc, font } = await newDoc('M6 OCMD');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCMD-1');
+    const ocg = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-LAYER-MD') }));
+    const ocmd = doc.context.register(doc.context.obj({ Type: 'OCMD', OCGs: [ocg], P: PDFName.of('AllOn') }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [ocg], D: { Order: [ocg], ON: [ocg] } }));
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) {
+        resources.set(PDFName.of('Properties'), doc.context.obj({ M6MD: ocmd }));
+    }
+    await write('ocmd', doc, 'page content governed by an /OCMD rather than a bare /OCG');
+}
+{
+    const { doc, font } = await newDoc('M6 OCMD visibility expression');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCMDVE-1');
+    const a = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-VE-A') }));
+    const b = doc.context.register(doc.context.obj({ Type: 'OCG', Name: PDFString.of('M6-VE-B') }));
+    const ocmd = doc.context.register(doc.context.obj({
+        Type: 'OCMD', OCGs: [a, b], VE: [PDFName.of('Not'), [PDFName.of('And'), a, b]],
+    }));
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [a, b], D: { Order: [a, b], ON: [a, b] } }));
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (resources instanceof PDFDict) {
+        resources.set(PDFName.of('Properties'), doc.context.obj({ M6VE: ocmd }));
+    }
+    await write('ocmd-nested', doc, 'an /OCMD carrying a nested /VE visibility expression');
+}
+
+// ---------------------------------------------------------------------------
+// JavaScript, one action site per fixture
+//
+// "The three sites we happened to look at were clean" is not a sanitization
+// contract. Each of these puts a JavaScript action somewhere a scanner has to
+// reach on purpose.
+// ---------------------------------------------------------------------------
+const jsAction = (doc, marker) => doc.context.obj({
+    Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of(`/* ${marker} */ app.alert(1);`),
+});
+
+{
+    const { doc, font } = await newDoc('M6 JavaScript in /OpenAction');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-JSOPEN-1');
+    doc.catalog.set(PDFName.of('OpenAction'), doc.context.register(jsAction(doc, 'M6-JS-OPENACTION')));
+    await write('js-openaction', doc, '/OpenAction is a JavaScript action rather than a destination');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on an annotation /A');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSANNOTA-1');
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-ANNOT-A */') },
+    }]);
+    await write('js-annot-a', doc, 'a link annotation whose /A is a JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on an annotation /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSANNOTAA-1');
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 400, 330], F: 4,
+        AA: { E: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-ANNOT-AA */') } },
+    }]);
+    await write('js-annot-aa', doc, 'an annotation additional-action dictionary holding JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on a page /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSPAGEAA-1');
+    page.node.set(PDFName.of('AA'), doc.context.obj({
+        O: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-PAGE-AA */') },
+    }));
+    await write('js-page-aa', doc, 'a page additional-action dictionary holding JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript on a field /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSFIELDAA-1');
+    const widget = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Widget', FT: 'Tx', T: PDFString.of('m6.js'),
+        V: PDFString.of('M6-JS-FIELD'), Rect: [120, 300, 400, 330], F: 4,
+        AA: { K: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-FIELD-AA */') } },
+    }));
+    page.node.set(PDFName.of('Annots'), doc.context.obj([widget]));
+    doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({ Fields: [widget] })));
+    await write('js-field-aa', doc, 'a form field whose additional actions hold JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 JavaScript through a /Next chain');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXT-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT */') },
+        },
+    }]);
+    await write('js-next-chain', doc, 'a GoTo action whose /Next is a JavaScript action');
+}
+
+// ---------------------------------------------------------------------------
+// Optional content across more than one page
+//
+// The first carry prototype paired source groups to output groups by position
+// and reset its cursor on every output page, so one kept page worked and two
+// silently swapped ON for OFF. These make the mapping answer for itself.
+// ---------------------------------------------------------------------------
+
+/** A registered /OCG with a name a comparison can match across a copy. */
+const ocg = (doc, label) => doc.context.register(doc.context.obj({
+    Type: 'OCG', Name: PDFString.of(label),
+}));
+
+/** Put /Resources /Properties on a page, in the order the keys are given. */
+const setProperties = (doc, page, entries) => {
+    const resources = page.node.lookup(PDFName.of('Resources'));
+    if (!(resources instanceof PDFDict)) return;
+    const props = doc.context.obj({});
+    for (const [key, ref] of entries) props.set(PDFName.of(key), ref);
+    resources.set(PDFName.of('Properties'), props);
+};
+
+{
+    const { doc, font } = await newDoc('M6 OCG two pages, opposite states');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGOPP-${i}`));
+    const a = ocg(doc, 'M6-OCG-A');
+    const b = ocg(doc, 'M6-OCG-B');
+    setProperties(doc, pages[0], [['M6A', a]]);
+    setProperties(doc, pages[1], [['M6B', b]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b], D: { Order: [a, b], ON: [a], OFF: [b] },
+    }));
+    await write('ocg-two-pages-opposite', doc, 'OCG-A on page 1 is ON, OCG-B on page 2 is OFF');
+}
+{
+    const { doc, font } = await newDoc('M6 one OCG on two pages');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGSHARED-${i}`));
+    const shared = ocg(doc, 'M6-OCG-SHARED');
+    setProperties(doc, pages[0], [['M6S', shared]]);
+    setProperties(doc, pages[1], [['M6S', shared]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [shared], D: { Order: [shared], ON: [shared] },
+    }));
+    await write('ocg-shared-across-pages', doc, 'the same group referenced from both pages');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG properties in different orders');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGORDER-${i}`));
+    const a = ocg(doc, 'M6-OCG-ORD-A');
+    const b = ocg(doc, 'M6-OCG-ORD-B');
+    setProperties(doc, pages[0], [['M6A', a], ['M6B', b]]);
+    setProperties(doc, pages[1], [['M6B', b], ['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b], D: { Order: [a, b], ON: [a], OFF: [b] },
+    }));
+    await write('ocg-reordered-properties', doc, 'the two pages list the same groups in opposite key order');
+}
+{
+    const { doc, font } = await newDoc('M6 several OCGs over several pages');
+    const pages = [1, 2, 3].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-OCGMANY-${i}`));
+    const a = ocg(doc, 'M6-OCG-M1');
+    const b = ocg(doc, 'M6-OCG-M2');
+    const c = ocg(doc, 'M6-OCG-M3');
+    setProperties(doc, pages[0], [['M6A', a]]);
+    setProperties(doc, pages[1], [['M6B', b], ['M6C', c]]);
+    setProperties(doc, pages[2], [['M6C', c]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b, c], D: { Order: [a, b, c], ON: [a, c], OFF: [b] },
+    }));
+    await write('ocg-many-pages', doc, 'three groups spread over three pages, one of them shared');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG configuration with a name');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGDNAME-1');
+    const a = ocg(doc, 'M6-OCG-NAMED');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a], Name: PDFString.of('M6-CONFIG-NAME') },
+    }));
+    await write('ocg-d-name', doc, 'the default configuration carries a /Name');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG base state ON');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGBASE-1');
+    const a = ocg(doc, 'M6-OCG-BASE');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a], BaseState: PDFName.of('ON') },
+    }));
+    await write('ocg-basestate-on', doc, 'a /D carrying the supported /BaseState /ON');
+}
+{
+    const { doc, font } = await newDoc('M6 OCG base state OFF');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCGBASEOFF-1');
+    const a = ocg(doc, 'M6-OCG-BASEOFF');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], OFF: [a], BaseState: PDFName.of('OFF') },
+    }));
+    await write('ocg-basestate-off', doc, 'a /D carrying an unsupported /BaseState /OFF');
+}
+
+// ---------------------------------------------------------------------------
+// /D /Order, in every shape that matters
+//
+// `/Order` is not necessarily a flat list of groups: it nests, it carries text
+// labels to title a section of the layer panel, it may be empty, and it may be
+// absent. Each is a different statement about how a viewer draws that panel,
+// and a carry that flattens them holds the same groups while showing something
+// else.
+// ---------------------------------------------------------------------------
+
+/** A one-page document whose /D is whatever the caller builds. */
+async function orderCase(name, note, build) {
+    const { doc, font } = await newDoc(`M6 ${name}`);
+    const page = sheet(doc, font, SHEET.A4, `M6-PAGE-${name.toUpperCase()}-1`);
+    const a = ocg(doc, 'M6-ORD-A');
+    const b = ocg(doc, 'M6-ORD-B');
+    const c = ocg(doc, 'M6-ORD-C');
+    setProperties(doc, page, [['M6A', a], ['M6B', b], ['M6C', c]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, b, c], D: build(doc, { a, b, c }),
+    }));
+    await write(name, doc, note);
+}
+
+await orderCase('ocg-order-flat', 'a flat /Order listing all three groups',
+    (doc, g) => ({ Order: [g.a, g.b, g.c], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-empty', 'an /Order that is present and empty',
+    (doc, g) => ({ Order: [], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-absent', 'no /Order at all',
+    (doc, g) => ({ ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-nested', 'a nested /Order: one group, then a group of two',
+    (doc, g) => ({ Order: [g.a, [g.b, g.c]], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-labeled-nested', 'a nested /Order whose inner array opens with a text label',
+    (doc, g) => ({
+        Order: [g.a, [PDFString.of('M6-ORDER-LABEL'), g.b, g.c]],
+        ON: [g.a, g.b, g.c],
+    }));
+
+await orderCase('ocg-order-malformed', 'an /Order holding a number, which is none of the allowed shapes',
+    (doc, g) => ({ Order: [g.a, PDFNumber.of(42), g.c], ON: [g.a, g.b, g.c] }));
+
+// ---------------------------------------------------------------------------
+// Optional content attached where the reader was not looking
+//
+// A contract that says "anything outside the handled shapes is refused" is only
+// true if the unhandled shapes can be found. These four attach optional content
+// in places the first envelope never inspected.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 alternate optional-content configurations');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCCONFIGS-1');
+    const a = ocg(doc, 'M6-OCG-CFG');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a],
+        D: { Order: [a], ON: [a] },
+        // A second, named configuration. This reader rebuilds one default
+        // configuration and has never been shown to rebuild an alternate.
+        Configs: [{ Name: PDFString.of('M6-ALT-CONFIG'), Order: [a], OFF: [a] }],
+    }));
+    await write('ocg-configs', doc, '/OCProperties /Configs carrying an alternate configuration');
+}
+{
+    const { doc, font } = await newDoc('M6 annotation belonging to a layer');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-ANNOTOC-1');
+    const a = ocg(doc, 'M6-OCG-ANNOT');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Square', Rect: [120, 400, 300, 520], C: [0, 0, 1], F: 4,
+        OC: a,
+    }]);
+    await write('annot-oc', doc, 'an annotation whose /OC puts it in an optional-content group');
+}
+{
+    const { doc, font } = await newDoc('M6 XObject belonging to a layer');
+    const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+    drawVector(page, SHEET.A4);
+    mark(page, font, SHEET.A4, 'M6-PAGE-XOBJOC-1');
+    const a = ocg(doc, 'M6-OCG-XOBJ');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    const form = doc.context.stream(
+        Buffer.from('0 0 1 RG 2 w 2 2 60 30 re S', 'utf8'),
+        { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 34], OC: a },
+    );
+    const name = page.node.newXObject('M6Layered', doc.context.register(form));
+    page.pushOperators(
+        pushGraphicsState(),
+        concatTransformationMatrix(1, 0, 0, 1, 120, 600),
+        drawObject(name.asString().replace(/^\//, '')),
+        popGraphicsState(),
+    );
+    await write('xobject-oc', doc, 'a form XObject whose /OC puts it in an optional-content group');
+}
+{
+    const { doc, font } = await newDoc('M6 malformed optional content');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCBAD-1');
+    const a = ocg(doc, 'M6-OCG-BAD');
+    setProperties(doc, page, [['M6A', a]]);
+    // /OCGs is a dictionary and /D is a number: a structure that cannot be
+    // walked, which is not the same as a document with no optional content.
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: { Broken: PDFNumber.of(1) },
+        D: PDFNumber.of(7),
+    }));
+    await write('malformed-ocproperties', doc, '/OCGs is a dictionary and /D is a number');
+}
+
+// ---------------------------------------------------------------------------
+// /OCProperties with a required key missing
+//
+// PDF 32000-1 makes /OCGs and /D required. A reader that only refuses a key of
+// the wrong *type* treats a missing one as an empty default, which is the same
+// "unreadable means absent" inference the malformed fixture exists to forbid.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 optional content without /OCGs');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-NOOCGS-1');
+    const a = ocg(doc, 'M6-OCG-NOOCGS');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        D: { Order: [a], ON: [a] },
+    }));
+    await write('ocg-missing-ocgs', doc, '/OCProperties with a /D but no /OCGs, which the specification requires');
+}
+{
+    const { doc, font } = await newDoc('M6 optional content without /D');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-NOD-1');
+    const a = ocg(doc, 'M6-OCG-NOD');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [a] }));
+    await write('ocg-missing-d', doc, '/OCProperties with /OCGs but no /D, which the specification requires');
+}
+{
+    const { doc, font } = await newDoc('M6 optional content with an unreadable group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-DANGLINGOCG-1');
+    const a = ocg(doc, 'M6-OCG-REAL');
+    setProperties(doc, page, [['M6A', a]]);
+    // The second entry points at an object that is not there. Reading it gives
+    // nothing, and nothing is not the same as "no group".
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a, PDFRef.of(9997, 0)],
+        D: { Order: [a], ON: [a] },
+    }));
+    await write('ocg-dangling-ocgs-ref', doc, '/OCGs holding a reference to an object that does not exist');
+}
+
+// ---------------------------------------------------------------------------
+// Optional content below the page's own resource dictionary
+//
+// A Form XObject carries its own /Resources, and what it reaches from there is
+// invisible to a scan that stops at the page. "Not in the page resources"
+// therefore does not mean "not in the document".
+// ---------------------------------------------------------------------------
+
+/** A form XObject with its own dictionary entries. */
+const formXObject = (doc, ops, extra = {}) => doc.context.register(doc.context.stream(
+    Buffer.from(ops, 'utf8'),
+    { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64], ...extra },
+));
+
+/**
+ * Draw a registered XObject onto a page at a fixed spot, under a fixed name.
+ *
+ * Not `newXObject`, which appends a suffix from pdf-lib's per-document RNG. The
+ * suffix is stable only because that RNG happens to be seeded identically for
+ * every document, and a refusal string recorded as evidence should not rest on
+ * a library detail nobody promised.
+ */
+const placeXObject = (doc, page, label, ref, x, y) => {
+    page.node.setXObject(PDFName.of(label), ref);
+    page.pushOperators(
+        pushGraphicsState(),
+        concatTransformationMatrix(1, 0, 0, 1, x, y),
+        drawObject(label),
+        popGraphicsState(),
+    );
+};
+
+{
+    const { doc, font } = await newDoc('M6 nested form XObject carrying /OC');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCNESTED-1');
+    const a = ocg(doc, 'M6-OCG-NESTED');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // The inner form belongs to a layer; the outer one does not, and only the
+    // outer one is visible from the page.
+    const inner = formXObject(doc, '0 0 1 RG 1 w 2 2 24 24 re S', { OC: a });
+    const outer = formXObject(doc, 'q 1 0 0 1 0 0 cm /M6Inner Do Q', {
+        Resources: { XObject: { M6Inner: inner } },
+    });
+    placeXObject(doc, page, 'M6Outer', outer, 120, 600);
+    await write('ocg-nested-form-xobject', doc, 'a form XObject whose own /Resources reach a form carrying /OC');
+}
+{
+    const { doc, font } = await newDoc('M6 form XObject resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCFORMPROPS-1');
+    const a = ocg(doc, 'M6-OCG-FORMPROPS');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // The page's own resources name no group at all; the form's do.
+    const form = formXObject(doc, '/M6L /OC BDC 0 0 0 RG 2 2 24 24 re S EMC', {
+        Resources: { Properties: { M6L: a } },
+    });
+    placeXObject(doc, page, 'M6Form', form, 120, 600);
+    await write('ocg-form-properties', doc, "a form XObject whose own /Resources /Properties names an optional-content group");
+}
+{
+    const { doc, font } = await newDoc('M6 appearance stream resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCAPPEAR-1');
+    const a = ocg(doc, 'M6-OCG-APPEARANCE');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    const appearance = doc.context.register(doc.context.stream(
+        Buffer.from('/M6L /OC BDC 0.8 0.1 0.1 RG 2 w 2 2 60 30 re S EMC', 'utf8'),
+        {
+            Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 34],
+            Resources: { Properties: { M6L: a } },
+        },
+    ));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Square', Rect: [120, 400, 184, 434], F: 4,
+        AP: { N: appearance },
+    }]);
+    await write('ocg-annotation-appearance-properties', doc,
+        "an annotation appearance stream whose /Resources /Properties names a group");
+}
+{
+    const { doc, font } = await newDoc('M6 resource graph with a cycle');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-RESCYCLE-1');
+    const a = ocg(doc, 'M6-OCG-CYCLE');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // Two forms whose resources reach each other. A walker without a visited
+    // set never comes back; one with a visited set has to still find the /OC.
+    const first = doc.context.stream(Buffer.from('q /M6Second Do Q', 'utf8'), {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64],
+    });
+    const firstRef = doc.context.register(first);
+    const second = doc.context.stream(Buffer.from('q /M6First Do Q', 'utf8'), {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64],
+        Resources: { XObject: { M6First: firstRef }, Properties: { M6L: a } },
+    });
+    const secondRef = doc.context.register(second);
+    first.dict.set(PDFName.of('Resources'), doc.context.obj({ XObject: { M6Second: secondRef } }));
+    placeXObject(doc, page, 'M6Cycle', firstRef, 120, 600);
+    await write('resource-cycle', doc, 'two form XObjects whose resources reference each other, with a group behind the cycle');
+}
+{
+    const { doc, font } = await newDoc('M6 pattern resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCPATTERN-1');
+    const a = ocg(doc, 'M6-OCG-PATTERN');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // A tiling pattern paints with a content stream of its own, and that stream
+    // takes its resources from the pattern rather than from the page. The
+    // pattern is declared, not painted: reachability is what the walker reads.
+    const pattern = doc.context.register(doc.context.stream(
+        Buffer.from('/M6L /OC BDC 0 0 1 rg 0 0 8 8 re f EMC', 'utf8'),
+        {
+            Type: 'Pattern', PatternType: 1, PaintType: 1, TilingType: 1,
+            BBox: [0, 0, 8, 8], XStep: 8, YStep: 8,
+            Resources: { Properties: { M6L: a } },
+        },
+    ));
+    page.node.normalizedEntries().Resources.set(PDFName.of('Pattern'), doc.context.obj({ M6P: pattern }));
+    await write('ocg-pattern-properties', doc, 'a tiling pattern whose own /Resources /Properties names a group');
+}
+{
+    const { doc, font } = await newDoc('M6 Type 3 font resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCTYPE3-1');
+    const a = ocg(doc, 'M6-OCG-TYPE3');
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // A Type 3 glyph is a content stream, and it draws with the font's resources.
+    const glyph = doc.context.register(doc.context.stream(
+        Buffer.from('8 0 0 0 8 8 d1 /M6L /OC BDC 0 0 8 8 re f EMC', 'utf8'),
+        {},
+    ));
+    const type3 = doc.context.register(doc.context.obj({
+        Type: 'Font', Subtype: 'Type3',
+        FontBBox: [0, 0, 8, 8], FontMatrix: [0.125, 0, 0, 0.125, 0, 0],
+        CharProcs: { M6g: glyph },
+        Encoding: { Type: 'Encoding', Differences: [65, 'M6g'] },
+        FirstChar: 65, LastChar: 65, Widths: [8],
+        Resources: { Properties: { M6L: a } },
+    }));
+    page.node.normalizedEntries().Font.set(PDFName.of('M6T3'), type3);
+    await write('ocg-type3-properties', doc, 'a Type 3 font whose /Resources /Properties names a group');
+}
+{
+    const { doc, font } = await newDoc('M6 resource graph deeper than the walker follows');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-RESDEPTH-1');
+    const a = ocg(doc, 'M6-OCG-DEPTH');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // Thirty forms, each drawing the next, none of them carrying anything. Apart
+    // from its depth this document is a supported one, so the depth is the only
+    // thing that can refuse it — and a walker that stops at its bound and
+    // reports what it saw would call it clean.
+    let next = formXObject(doc, '0 0 0 RG 1 1 2 2 re S');
+    for (let i = 0; i < 30; i += 1) {
+        next = formXObject(doc, 'q /M6N Do Q', { Resources: { XObject: { M6N: next } } });
+    }
+    placeXObject(doc, page, 'M6Deep', next, 120, 600);
+    await write('resource-depth-exceeded', doc, 'thirty nested form XObjects, beyond the depth the walker follows');
+}
+{
+    const { doc, font } = await newDoc('M6 soft mask resources naming a group');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-OCSMASK-1');
+    const a = ocg(doc, 'M6-OCG-SMASK');
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    // A soft mask's /G is a form XObject with resources of its own. Before B1
+    // the walker did not open /ExtGState, and this document extracted READY with
+    // a group behind the mask; it is the closure fixture for that blind path.
+    const mask = formXObject(doc, '/M6L /OC BDC 1 g 0 0 64 64 re f EMC', {
+        Group: { S: 'Transparency', CS: 'DeviceGray' },
+        Resources: { Properties: { M6L: a } },
+    });
+    page.node.normalizedEntries().ExtGState.set(PDFName.of('M6GS'), doc.context.obj({
+        Type: 'ExtGState', SMask: { Type: 'Mask', S: 'Luminosity', G: mask },
+    }));
+    await write('ocg-extgstate-smask', doc, 'a soft mask behind /ExtGState whose form /Resources /Properties names a group');
+}
+
+// ---------------------------------------------------------------------------
+// Soft masks around the B1 closure
+//
+// Every case is the same supported page — one group, named from the page's own
+// /Properties — so the graphics state is the only thing that can change the
+// verdict. Closing a blind path must not become refusing every soft mask, so
+// the clean shapes matter as much as the broken ones.
+// ---------------------------------------------------------------------------
+
+/** A supported one-group page whose /ExtGState entries come from `statesOf(doc, group)`. */
+async function softMaskCase(name, title, marker, note, statesOf) {
+    const { doc, font } = await newDoc(title);
+    const page = sheet(doc, font, SHEET.A4, marker);
+    const a = ocg(doc, `${marker}-GROUP`);
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    const graphicsStates = page.node.normalizedEntries().ExtGState;
+    for (const [key, state] of Object.entries(statesOf(doc, a))) {
+        graphicsStates.set(PDFName.of(key), state);
+    }
+    await write(name, doc, note);
+}
+
+const maskGroup = (doc, ops, resources) => formXObject(doc, ops, {
+    Group: { S: 'Transparency', CS: 'DeviceGray' },
+    ...(resources ? { Resources: resources } : {}),
+});
+
+const softMaskState = (doc, mask) => doc.context.obj({ Type: 'ExtGState', SMask: mask });
+
+await softMaskCase('smask-clean', 'M6 soft mask with nothing optional behind it', 'M6-PAGE-SMASKCLEAN-1',
+    'a soft mask whose group form reaches a nested form, with no optional content anywhere below it',
+    (doc) => {
+        const inner = formXObject(doc, '0.5 g 0 0 32 32 re f');
+        const group = maskGroup(doc, 'q /M6MaskInner Do Q', { XObject: { M6MaskInner: inner } });
+        return { M6GS: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: group }) };
+    });
+
+await softMaskCase('smask-none', 'M6 graphics state with no soft mask', 'M6-PAGE-SMASKNONE-1',
+    'a graphics state whose /SMask is /None',
+    (doc) => ({ M6GS: doc.context.obj({ Type: 'ExtGState', SMask: 'None', CA: 1 }) }));
+
+await softMaskCase('smask-dangling-g', 'M6 soft mask with a dangling group', 'M6-PAGE-SMASKDANGLING-1',
+    'a soft mask whose /G points at an object that does not exist',
+    (doc) => ({ M6GS: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: PDFRef.of(9996, 0) }) }));
+
+await softMaskCase('smask-malformed', 'M6 soft mask that is a number', 'M6-PAGE-SMASKMALFORMED-1',
+    'a graphics state whose /SMask is neither /None nor a dictionary',
+    (doc) => ({ M6GS: softMaskState(doc, 42) }));
+
+await softMaskCase('smask-g-not-form', 'M6 soft mask whose group is not a stream', 'M6-PAGE-SMASKGDICT-1',
+    'a soft mask whose /G is a plain dictionary rather than a form XObject stream',
+    (doc) => ({
+        M6GS: softMaskState(doc, {
+            Type: 'Mask', S: 'Luminosity', G: { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64] },
+        }),
+    }));
+
+await softMaskCase('smask-shared-g', 'M6 one soft-mask group behind two graphics states', 'M6-PAGE-SMASKSHARED-1',
+    'two graphics states whose soft masks share one /G, with a group behind it',
+    (doc, a) => {
+        // One group form, reached from two graphics states. A walker without a
+        // visited set would report the group twice; one with it reports it once.
+        const group = maskGroup(doc, '/M6L /OC BDC 1 g 0 0 64 64 re f EMC', { Properties: { M6L: a } });
+        return {
+            M6GS1: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: group }),
+            M6GS2: softMaskState(doc, { Type: 'Mask', S: 'Alpha', G: group }),
+        };
+    });
+
+await softMaskCase('smask-depth-exceeded', 'M6 soft mask deeper than the walker follows', 'M6-PAGE-SMASKDEPTH-1',
+    'a soft mask whose group form opens thirty nested forms, beyond the depth the walker follows',
+    (doc) => {
+        // The soft-mask path is inside the depth contract, not beside it.
+        let next = formXObject(doc, '0 0 0 RG 1 1 2 2 re S');
+        for (let i = 0; i < 30; i += 1) {
+            next = formXObject(doc, 'q /M6N Do Q', { Resources: { XObject: { M6N: next } } });
+        }
+        const group = maskGroup(doc, 'q /M6N Do Q', { XObject: { M6N: next } });
+        return { M6GS: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: group }) };
+    });
+
+// ---------------------------------------------------------------------------
+// /Order label positions this research has not shown it can reproduce
+// ---------------------------------------------------------------------------
+await orderCase('ocg-order-invalid-top-label', 'a text label at the top level of /Order',
+    (doc, g) => ({ Order: [PDFString.of('M6-BAD-LABEL'), g.a, g.b, g.c], ON: [g.a, g.b, g.c] }));
+
+await orderCase('ocg-order-invalid-mid-label', 'a text label part-way through a nested array',
+    (doc, g) => ({
+        Order: [g.a, [g.b, PDFString.of('M6-BAD-LABEL'), g.c]],
+        ON: [g.a, g.b, g.c],
+    }));
+
+{
+    // /Order naming a group that no kept page references. The contract says
+    // this is a refusal rather than a silent omission; without a fixture that
+    // was a sentence rather than a finding.
+    const { doc, font } = await newDoc('M6 order naming an unused group');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-ORDUNUSED-${i}`));
+    const kept = ocg(doc, 'M6-ORD-KEPT');
+    const elsewhere = ocg(doc, 'M6-ORD-ELSEWHERE');
+    setProperties(doc, pages[0], [['M6K', kept]]);
+    setProperties(doc, pages[1], [['M6E', elsewhere]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [kept, elsewhere], D: { Order: [kept, elsewhere], ON: [kept, elsewhere] },
+    }));
+    await write('ocg-order-unused-group', doc, 'page 2 holds a group that /Order names; extracting page 1 leaves it unmappable');
+}
+
+// ---------------------------------------------------------------------------
+// JavaScript held as indirect objects
+//
+// Deleting the key that points at an action removes the reference. Whether it
+// removes the object is a different question, and the one M6 has already been
+// bitten by once with orphaned pages.
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript on /A');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSINDA-1');
+    const action = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-A'));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0], A: action,
+    }]);
+    await write('js-indirect-a', doc, 'an annotation /A pointing at an indirect JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript on /AA');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSINDAA-1');
+    const action = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-AA'));
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Widget', Rect: [120, 300, 400, 330], F: 4,
+        AA: { E: action },
+    }]);
+    await write('js-indirect-aa', doc, 'an annotation /AA entry pointing at an indirect JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript behind /Next');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSINDNEXT-${i}`));
+    const action = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-NEXT'));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: { Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')], Next: action },
+    }]);
+    await write('js-indirect-next', doc, 'a /Next pointing at an indirect JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 indirect JavaScript two /Next links down');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSINDNEST-${i}`));
+    const deep = doc.context.register(jsAction(doc, 'M6-JS-INDIRECT-NESTED'));
+    const middle = doc.context.register(doc.context.obj({
+        Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')], Next: deep,
+    }));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: { Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')], Next: middle },
+    }]);
+    await write('js-indirect-nested', doc, 'indirect JavaScript reached through two indirect /Next links');
+}
+
+// ---------------------------------------------------------------------------
+// /Next, in every shape the specification allows
+// ---------------------------------------------------------------------------
+{
+    const { doc, font } = await newDoc('M6 /Next as an array');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXTARR-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: [{ Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT-ARRAY */') }],
+        },
+    }]);
+    await write('js-next-array', doc, '/Next is an array holding one JavaScript action');
+}
+{
+    const { doc, font } = await newDoc('M6 /Next array with a benign action first');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXTMIX-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: [
+                { Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')] },
+                { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT-MIXED */') },
+            ],
+        },
+    }]);
+    await write('js-next-array-mixed', doc, '/Next is an array whose second element is JavaScript');
+}
+{
+    const { doc, font } = await newDoc('M6 nested /Next');
+    const pages = [1, 2].map((i) => sheet(doc, font, SHEET.A4, `M6-PAGE-JSNEXTNEST-${i}`));
+    addAnnots(doc, pages[0], [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0],
+        A: {
+            Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+            Next: {
+                Type: 'Action', S: 'GoTo', D: [pages[1].ref, PDFName.of('Fit')],
+                Next: { Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-NEXT-NESTED */') },
+            },
+        },
+    }]);
+    await write('js-next-nested', doc, 'JavaScript two /Next links down the chain');
+}
+{
+    const { doc, font } = await newDoc('M6 shared action reference');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSSHARED-1');
+    const shared = doc.context.register(doc.context.obj({
+        Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-SHARED */'),
+    }));
+    addAnnots(doc, page, [
+        { Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0], A: shared },
+        { Type: 'Annot', Subtype: 'Link', Rect: [100, 660, 320, 680], Border: [0, 0, 0], A: shared },
+    ]);
+    await write('js-action-shared', doc, 'one JavaScript action referenced from two annotations');
+}
+{
+    const { doc, font } = await newDoc('M6 cyclic action graph');
+    const page = sheet(doc, font, SHEET.A4, 'M6-PAGE-JSCYCLE-1');
+    const first = doc.context.obj({ Type: 'Action', S: 'GoTo', D: [page.ref, PDFName.of('Fit')] });
+    const firstRef = doc.context.register(first);
+    const second = doc.context.obj({
+        Type: 'Action', S: PDFName.of('JavaScript'), JS: PDFString.of('/* M6-JS-CYCLE */'),
+    });
+    const secondRef = doc.context.register(second);
+    first.set(PDFName.of('Next'), secondRef);
+    second.set(PDFName.of('Next'), firstRef);
+    addAnnots(doc, page, [{
+        Type: 'Annot', Subtype: 'Link', Rect: [100, 700, 320, 720], Border: [0, 0, 0], A: firstRef,
+    }]);
+    await write('js-action-cycle', doc, 'two actions chained into each other through /Next');
+}
+
+// ---------------------------------------------------------------------------
+// Invalid and hostile
+// ---------------------------------------------------------------------------
+writeRaw('invalid', Buffer.from('not a pdf at all\n', 'utf8'), 'not a PDF');
+{
+    // A real PDF whose trailer claims encryption. The xref table sits before
+    // the trailer, so splicing the dictionary does not move any offset it
+    // records — the file stays loadable enough to be *refused* for the right
+    // reason rather than for a parse error.
+    const { doc, font } = await newDoc('M6 encrypted');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-ENC-1');
+    const encRef = doc.context.register(doc.context.obj({
+        Filter: PDFName.of('Standard'), V: PDFNumber.of(1), R: PDFNumber.of(2),
+        O: PDFHexString.of('00'.repeat(32)), U: PDFHexString.of('00'.repeat(32)),
+        P: PDFNumber.of(-1),
+    }));
+    const bytes = Buffer.from(await doc.save({ useObjectStreams: false }));
+    const marker = Buffer.from('trailer\n<<', 'ascii');
+    const at = bytes.indexOf(marker);
+    if (at < 0) throw new Error('could not find the trailer to mark as encrypted');
+    const cut = at + marker.length;
+    const spliced = Buffer.concat([
+        bytes.subarray(0, cut),
+        Buffer.from(` /Encrypt ${encRef.objectNumber} ${encRef.generationNumber} R`, 'ascii'),
+        bytes.subarray(cut),
+    ]);
+    writeRaw('encrypted', spliced, 'a loadable PDF whose trailer declares /Encrypt');
+}
+{
+    // A page tree whose /Count and /Kids disagree with reality.
+    const { doc, font } = await newDoc('M6 broken page tree');
+    sheet(doc, font, SHEET.A4, 'M6-PAGE-BROKEN-1');
+    const tree = doc.catalog.lookup(PDFName.of('Pages'));
+    if (tree instanceof PDFDict) {
+        tree.set(PDFName.of('Count'), PDFNumber.of(7));
+        const kids = tree.lookup(PDFName.of('Kids'));
+        if (kids instanceof PDFArray) kids.push(PDFRef.of(9998, 0));
+    }
+    await write('broken-pagetree', doc, '/Count 7 with two kids, one of which is not there');
+}
+
+fs.writeFileSync(path.join(OUT, 'corpus.json'), `${JSON.stringify(written, null, 2)}\n`);
+console.log(`${written.length} fixtures -> ${path.relative(ROOT, OUT)}`);
+for (const f of written) console.log(`  ${f.name.padEnd(26)} ${String(f.bytes).padStart(8)} B  ${f.note}`);
