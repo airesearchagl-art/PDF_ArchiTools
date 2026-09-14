@@ -173,7 +173,7 @@ group can be named from well below the page.
 | shading pattern | no | no | reached; nothing to open | none |
 | Type 3 font | yes, `/Resources`, used by `/CharProcs` | no | yes, and a `/CharProcs` stream's own `/Resources` | `ocg-type3-properties` (font `/Resources` only) |
 | other font types | no | no | passed over | the corpus's Helvetica |
-| `/ExtGState` | not itself — **but `/SMask /G` is a form XObject with its own `/Resources`** | no | **no** | `ocg-extgstate-smask` — extracts READY with a group behind it |
+| `/ExtGState` | not itself — **but `/SMask /G` is a form XObject with its own `/Resources`** | no; `/OC` on `/G` is checked | yes, as far as `/SMask /G` — since B1; before it, no | `ocg-extgstate-smask` (READY before B1, refused after), `smask-clean`, `smask-none`, `smask-dangling-g`, `smask-malformed`, `smask-g-not-form`, `smask-shared-g`, `smask-depth-exceeded` |
 | `/ColorSpace` | no | no | no | none |
 | `/Shading` | no | no | no | none |
 
@@ -199,7 +199,7 @@ this corpus:
 | --- | --- |
 | destinations drag pages in, unbounded | M6-H5: what happens to an internal link whose target is not in the selection |
 | no document-level structure is copied | M6-H3, M6-H4, M6-H6, M6-H9 |
-| optional content can be named from resource scopes below the page | M6-H9b: how far detection must reach, and whether the `/ExtGState` soft-mask path is closed or stated as a limit |
+| optional content can be named from resource scopes below the page | M6-H9b (adopted): how far detection must reach — the `/ExtGState` soft-mask path was made a condition of implementation and closed as B1 |
 | metadata defaults overwrite | M6-H7, M6-H8 |
 | `flush()` mutates the source | the plan/run split must not assume a source survives a copy unchanged |
 | `addDefaultPage` on empty save | an empty selection must be refused before `save()`, not after |

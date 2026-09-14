@@ -1386,9 +1386,9 @@ const placeXObject = (doc, page, label, ref, x, y) => {
     doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
         OCGs: [a], D: { Order: [a], ON: [a] },
     }));
-    // A soft mask's /G is a form XObject with resources of its own. The walker
-    // does not open /ExtGState, so this is where its scope ends. The fixture
-    // exists so that limit is measured rather than asserted.
+    // A soft mask's /G is a form XObject with resources of its own. Before B1
+    // the walker did not open /ExtGState, and this document extracted READY with
+    // a group behind the mask; it is the closure fixture for that blind path.
     const mask = formXObject(doc, '/M6L /OC BDC 1 g 0 0 64 64 re f EMC', {
         Group: { S: 'Transparency', CS: 'DeviceGray' },
         Resources: { Properties: { M6L: a } },
@@ -1398,6 +1398,90 @@ const placeXObject = (doc, page, label, ref, x, y) => {
     }));
     await write('ocg-extgstate-smask', doc, 'a soft mask behind /ExtGState whose form /Resources /Properties names a group');
 }
+
+// ---------------------------------------------------------------------------
+// Soft masks around the B1 closure
+//
+// Every case is the same supported page — one group, named from the page's own
+// /Properties — so the graphics state is the only thing that can change the
+// verdict. Closing a blind path must not become refusing every soft mask, so
+// the clean shapes matter as much as the broken ones.
+// ---------------------------------------------------------------------------
+
+/** A supported one-group page whose /ExtGState entries come from `statesOf(doc, group)`. */
+async function softMaskCase(name, title, marker, note, statesOf) {
+    const { doc, font } = await newDoc(title);
+    const page = sheet(doc, font, SHEET.A4, marker);
+    const a = ocg(doc, `${marker}-GROUP`);
+    setProperties(doc, page, [['M6A', a]]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({
+        OCGs: [a], D: { Order: [a], ON: [a] },
+    }));
+    const graphicsStates = page.node.normalizedEntries().ExtGState;
+    for (const [key, state] of Object.entries(statesOf(doc, a))) {
+        graphicsStates.set(PDFName.of(key), state);
+    }
+    await write(name, doc, note);
+}
+
+const maskGroup = (doc, ops, resources) => formXObject(doc, ops, {
+    Group: { S: 'Transparency', CS: 'DeviceGray' },
+    ...(resources ? { Resources: resources } : {}),
+});
+
+const softMaskState = (doc, mask) => doc.context.obj({ Type: 'ExtGState', SMask: mask });
+
+await softMaskCase('smask-clean', 'M6 soft mask with nothing optional behind it', 'M6-PAGE-SMASKCLEAN-1',
+    'a soft mask whose group form reaches a nested form, with no optional content anywhere below it',
+    (doc) => {
+        const inner = formXObject(doc, '0.5 g 0 0 32 32 re f');
+        const group = maskGroup(doc, 'q /M6MaskInner Do Q', { XObject: { M6MaskInner: inner } });
+        return { M6GS: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: group }) };
+    });
+
+await softMaskCase('smask-none', 'M6 graphics state with no soft mask', 'M6-PAGE-SMASKNONE-1',
+    'a graphics state whose /SMask is /None',
+    (doc) => ({ M6GS: doc.context.obj({ Type: 'ExtGState', SMask: 'None', CA: 1 }) }));
+
+await softMaskCase('smask-dangling-g', 'M6 soft mask with a dangling group', 'M6-PAGE-SMASKDANGLING-1',
+    'a soft mask whose /G points at an object that does not exist',
+    (doc) => ({ M6GS: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: PDFRef.of(9996, 0) }) }));
+
+await softMaskCase('smask-malformed', 'M6 soft mask that is a number', 'M6-PAGE-SMASKMALFORMED-1',
+    'a graphics state whose /SMask is neither /None nor a dictionary',
+    (doc) => ({ M6GS: softMaskState(doc, 42) }));
+
+await softMaskCase('smask-g-not-form', 'M6 soft mask whose group is not a stream', 'M6-PAGE-SMASKGDICT-1',
+    'a soft mask whose /G is a plain dictionary rather than a form XObject stream',
+    (doc) => ({
+        M6GS: softMaskState(doc, {
+            Type: 'Mask', S: 'Luminosity', G: { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 64, 64] },
+        }),
+    }));
+
+await softMaskCase('smask-shared-g', 'M6 one soft-mask group behind two graphics states', 'M6-PAGE-SMASKSHARED-1',
+    'two graphics states whose soft masks share one /G, with a group behind it',
+    (doc, a) => {
+        // One group form, reached from two graphics states. A walker without a
+        // visited set would report the group twice; one with it reports it once.
+        const group = maskGroup(doc, '/M6L /OC BDC 1 g 0 0 64 64 re f EMC', { Properties: { M6L: a } });
+        return {
+            M6GS1: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: group }),
+            M6GS2: softMaskState(doc, { Type: 'Mask', S: 'Alpha', G: group }),
+        };
+    });
+
+await softMaskCase('smask-depth-exceeded', 'M6 soft mask deeper than the walker follows', 'M6-PAGE-SMASKDEPTH-1',
+    'a soft mask whose group form opens thirty nested forms, beyond the depth the walker follows',
+    (doc) => {
+        // The soft-mask path is inside the depth contract, not beside it.
+        let next = formXObject(doc, '0 0 0 RG 1 1 2 2 re S');
+        for (let i = 0; i < 30; i += 1) {
+            next = formXObject(doc, 'q /M6N Do Q', { Resources: { XObject: { M6N: next } } });
+        }
+        const group = maskGroup(doc, 'q /M6N Do Q', { XObject: { M6N: next } });
+        return { M6GS: softMaskState(doc, { Type: 'Mask', S: 'Luminosity', G: group }) };
+    });
 
 // ---------------------------------------------------------------------------
 // /Order label positions this research has not shown it can reproduce

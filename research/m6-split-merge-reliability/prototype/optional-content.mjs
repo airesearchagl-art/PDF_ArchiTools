@@ -39,6 +39,12 @@
  * visited set and a depth bound, and treats a reference it cannot resolve as a
  * refusal rather than as absence. Only the page's own `/Properties` is rebuilt;
  * one found in any deeper scope is refused.
+ *
+ * A soft mask was the scope that paragraph once left out. `/ExtGState` holds no
+ * content stream itself, but a soft mask's `/G` is a transparency group form
+ * with resources of its own, and a document with a group behind one extracted
+ * READY. That path is walked now (B1), under the same visited set and depth
+ * bound as every other form.
  */
 import { PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFString } from 'pdf-lib';
 
@@ -82,22 +88,23 @@ const dictOf = (value) => {
 export const MAX_RESOURCE_DEPTH = 24;
 
 /**
- * Resource keys the walker opens, because each can hold a content stream with
- * a `/Resources` of its own — and so a `/Properties` of its own.
+ * Resource keys the walker opens, because each can reach a content stream with
+ * a `/Resources` of its own — and so a `/Properties` of its own. `/ExtGState`
+ * is opened only as far as a soft mask's `/G`, the one entry of a graphics
+ * state that holds such a stream.
  */
-export const RESOURCE_KEYS_WALKED = ['Properties', 'XObject', 'Pattern', 'Font'];
+export const RESOURCE_KEYS_WALKED = ['Properties', 'XObject', 'Pattern', 'Font', 'ExtGState'];
 
 /**
  * Resource keys the walker does **not** open.
  *
  * This is a statement about scope, not about safety. `/ColorSpace` and
  * `/Shading` hold no content stream, so they open no resource scope and carry
- * no `/OC`. `/ExtGState` is not a direct attachment point either — but a soft
- * mask's `/G` is a form XObject with resources of its own, so optional content
- * *can* sit behind one, and this walker does not look. That path is recorded as
- * unmeasured, not as clean.
+ * no `/OC`. `/ExtGState` used to be listed here as well, and a group behind a
+ * soft mask extracted READY because of it; it moved to the walked keys to close
+ * B1.
  */
-export const RESOURCE_KEYS_NOT_WALKED = ['ExtGState', 'Shading', 'ColorSpace'];
+export const RESOURCE_KEYS_NOT_WALKED = ['Shading', 'ColorSpace'];
 
 /** The `/D` keys this reader both accepts **and reproduces**. */
 export const HANDLED_D_KEYS = ['Order', 'ON', 'OFF', 'Name', 'BaseState'];
@@ -180,6 +187,7 @@ function orderShapeOf(doc, node, nameOfGroup, depth, unsupported, labelAllowed =
  *   /XObject                 each form or image's /OC, and a form's /Resources
  *   /Pattern                 a tiling pattern's /Resources
  *   /Font                    a Type 3 font's /Resources, and any on /CharProcs
+ *   /ExtGState               a soft mask's /G, a form with /Resources of its own
  *   /Properties              below the page's own scope, every entry
  *
  * A visited set keyed on indirect references makes a cycle terminate and a
@@ -271,6 +279,13 @@ function walkPageResourceGraph(doc, sourceIndex, page, unsupported) {
                 walkType3(entry, `${where} /Font ${key.asString()}`, depth);
             }
         }
+
+        const graphicsStates = subDict(resources, 'ExtGState', where);
+        if (graphicsStates) {
+            for (const [key, entry] of graphicsStates.entries()) {
+                walkSoftMask(entry, `${where} /ExtGState ${key.asString()}`, depth);
+            }
+        }
     };
 
     /**
@@ -337,6 +352,65 @@ function walkPageResourceGraph(doc, sourceIndex, page, unsupported) {
                 walkStream(entry, `${where} /CharProcs ${glyph.asString()}`, depth + 1, false);
             }
         }
+    };
+
+    /**
+     * A graphics state's soft mask. No `/SMask` and `/SMask /None` both mean no
+     * mask. A mask dictionary paints with its `/G`, a transparency group form,
+     * so `/G` is walked like any other form — through `walkStream`, sharing the
+     * visited set and the depth bound rather than keeping a recursion of its
+     * own. Anything that cannot be read as one of those shapes is refused: an
+     * unreadable mask is not an absent one.
+     */
+    const walkSoftMask = (raw, where, depth) => {
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} ${r.reason}`);
+            return;
+        }
+        if (!firstVisit(raw)) return;
+        if (!(r.value instanceof PDFDict)) {
+            refuse(`${where} is not a graphics state dictionary`);
+            return;
+        }
+        const rawMask = r.value.get(PDFName.of('SMask'));
+        if (rawMask === undefined) return;
+        const mask = resolve(doc, rawMask);
+        if (!mask.ok) {
+            refuse(`${where} /SMask ${mask.reason}`);
+            return;
+        }
+        if (mask.value instanceof PDFName) {
+            if (mask.value.asString() !== '/None') {
+                refuse(`${where} /SMask is ${mask.value.asString()}, neither /None nor a dictionary`);
+            }
+            return;
+        }
+        if (!(mask.value instanceof PDFDict)) {
+            refuse(`${where} /SMask is neither /None nor a dictionary`);
+            return;
+        }
+        const groupWhere = `${where} /SMask /G`;
+        const rawGroup = mask.value.get(PDFName.of('G'));
+        if (rawGroup === undefined) {
+            refuse(`${groupWhere} is missing, which a soft mask requires`);
+            return;
+        }
+        const group = resolve(doc, rawGroup);
+        if (!group.ok) {
+            refuse(`${groupWhere} ${group.reason}`);
+            return;
+        }
+        if (!(group.value?.dict instanceof PDFDict)) {
+            refuse(`${groupWhere} is not a form XObject stream`);
+            return;
+        }
+        const subtype = nameOf(group.value.dict.get(PDFName.of('Subtype')));
+        if (subtype && subtype !== '/Form') {
+            refuse(`${groupWhere} is ${subtype}, not a form XObject`);
+            return;
+        }
+        walkStream(rawGroup, groupWhere, depth, true);
     };
 
     /** `/AP` holds a stream per state, or a dictionary of streams per state. */

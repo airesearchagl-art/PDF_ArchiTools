@@ -287,6 +287,7 @@ The detector walks every kept page:
 | `/XObject` | each form or image; a form's own `/Resources`, recursively | an XObject's `/OC`, at any depth reached |
 | `/Pattern` | a tiling pattern's own `/Resources` | nothing on the pattern itself — it is a scope, not an attachment point |
 | `/Font` | a Type 3 font's `/Resources`, and any `/Resources` on a `/CharProcs` stream | likewise — a scope, not an attachment point |
+| `/ExtGState` | each graphics state's `/SMask`, and a mask's `/G` as a form — its own `/Resources`, recursively (since B1) | a mask that cannot be read or is neither `/None` nor a dictionary; a `/G` that is missing, dangling or not a form XObject stream; `/OC` on `/G` |
 | `/Properties` | — | **every entry below the page's own resources**, named by type |
 
 Only the page's own `/Properties` is rebuilt, so a group named from any deeper
@@ -317,7 +318,7 @@ walker in place.
 
 Exercised by a fixture: nested forms, a form's `/Properties`, an `/AP /N`
 stream, a tiling pattern, a Type 3 font's `/Resources`, a cycle, the depth
-bound. Followed by the walker but **exercised by no fixture**: `/AP` state
+bound, and a soft mask's `/G` in each shape listed under *The soft-mask path*. Followed by the walker but **exercised by no fixture**: `/AP` state
 dictionaries, image XObjects below the page, and `/CharProcs` streams carrying
 their own `/Resources`.
 
@@ -328,7 +329,34 @@ not about safety.
 | --- | --- |
 | `/ColorSpace` | holds no content stream, so opens no resource scope and carries no `/OC` |
 | `/Shading` | likewise — no content stream, no resource scope, no `/OC` |
-| `/ExtGState` | not an attachment point, **but** a soft mask's `/G` is a form XObject with resources of its own, so a group *can* sit behind one. `ocg-extgstate-smask` extracts **READY** with a group behind its soft mask. That path is outside the walked scope: unmeasured, not clean — M6-H9b |
+
+### The soft-mask path (B1)
+
+`/ExtGState` was in the table above until B1. A graphics state holds no content
+stream of its own, but a soft mask's `/G` is a transparency group form with
+resources of its own, so a group can sit behind one — and `ocg-extgstate-smask`
+extracted **READY** with a group there. The Human adoption of M6-H9b made
+closing that path a condition of implementation, and it is closed the
+recommended way: the walker opens `/ExtGState`, then each graphics state's
+`/SMask`, and walks `/G` through the same path as every other form — the same
+visited set, the same depth bound.
+
+| shape | before B1 | after |
+| --- | --- | --- |
+| `ocg-extgstate-smask` — a group named from `/G`'s resources | READY | **refused** — `/ExtGState /M6GS /SMask /G /Properties /M6L` |
+| `smask-dangling-g` — `/G` points at an object that is not there | READY | **refused** — `points at 9996 0 R` |
+| `smask-malformed` — `/SMask` is a number | READY | **refused** — `neither /None nor a dictionary` |
+| `smask-g-not-form` — `/G` is a plain dictionary | READY | **refused** — `not a form XObject stream` |
+| `smask-shared-g` — one `/G` with a group behind it, reached from two graphics states | READY | **refused** — the group reported once |
+| `smask-depth-exceeded` — `/G` opens thirty nested forms | READY | **refused** — `nested deeper than 24` |
+| `smask-clean` — `/G` reaches a nested form, nothing optional anywhere | READY | **READY** — 1 group carried, 0 findings |
+| `smask-none` — `/SMask /None` | READY | **READY** — 1 group carried, 0 findings |
+
+The last two rows matter as much as the first six: a soft mask is not a reason
+to refuse; optional content behind one, or a mask that cannot be read, is. The
+clean rows cannot show on their own that the walker *entered* `/G` — a walk that
+found nothing and a walk that never happened look alike from outside. The
+refused rows show it, because they could not have been produced otherwise.
 
 ### `/Order` labels have a position
 

@@ -1246,13 +1246,16 @@ try {
         ocCycleExtract.status === 'REFUSED' && ocCycleExtract.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
         (ocCycleExtract.unsupported ?? []).join(', '));
 
-    // What the walker does not open. Measured, not claimed as clean.
+    // A group behind a soft mask. Until B1 the walker did not open /ExtGState and
+    // this row read READY — an unwalked path, recorded as that rather than as
+    // clean. The measurement is kept so the change shows in the evidence;
+    // section 20 is where the closure is checked.
     const ocSoftMask = await extractWithOptionalContent(bytesOf('ocg-extgstate-smask'), [0]);
     evidence.ocResourceGraph.extGStateSoftMask = {
         status: ocSoftMask.status, unsupported: ocSoftMask.unsupported ?? [],
     };
-    measure('a group behind /ExtGState /SMask /G, a path the walker does not open',
-        `extract ${ocSoftMask.status} — outside the walked scope, so this is unmeasured territory, not a clean result`);
+    measure('a group behind /ExtGState /SMask /G',
+        `extract ${ocSoftMask.status} — READY before B1, when the walker did not open /ExtGState; see section 20`);
 
     // The walker runs on every describe; nothing it adds may refuse a document
     // that was supported before it existed.
@@ -1276,8 +1279,69 @@ try {
 
     humanOpen('M6-H9b resource-graph envelope (RF-E, RF-F)',
         'required keys fail closed and optional content below the page is refused wherever the walker '
-        + 'reaches; whether the unopened /ExtGState soft-mask path must be closed before adoption or '
-        + 'stated as a limit is a decision this research does not take');
+        + 'reaches, a soft-mask /G included since B1; whether carrying ever widens beyond the direct-/OCG '
+        + 'envelope is a decision this research does not take');
+
+    // ---- 20. B1: the soft-mask path -----------------------------------------
+    //
+    // /ExtGState holds no content stream, but a soft mask's /G is a transparency
+    // group form with resources of its own, and a group behind one extracted
+    // READY. The walker now opens that /G like any other form. Closing a blind
+    // path must not turn into refusing every soft mask, so the clean shapes are
+    // asserted as firmly as the broken ones are probed, and every probe checks
+    // the refusal names the path it was found on.
+    console.log('\n=== 20. the soft-mask path (B1) ===');
+    evidence.softMask = {};
+    for (const [fixture, label, found] of [
+        ['ocg-extgstate-smask', 'a group behind a soft mask /G, READY before B1',
+            ['/ExtGState /M6GS /SMask /G /Properties /M6L']],
+        ['smask-dangling-g', 'a soft mask whose /G points at an object that is not there',
+            ['/ExtGState /M6GS /SMask /G points at 9996 0 R']],
+        ['smask-malformed', 'a soft mask that is neither /None nor a dictionary',
+            ['/ExtGState /M6GS /SMask is neither /None nor a dictionary']],
+        ['smask-g-not-form', 'a soft mask whose /G is not a form XObject stream',
+            ['/ExtGState /M6GS /SMask /G is not a form XObject stream']],
+        ['smask-depth-exceeded', 'a soft mask /G whose resources nest past the depth bound',
+            ['/ExtGState /M6GS /SMask /G /XObject /M6N', `nested deeper than ${MAX_RESOURCE_DEPTH}`]],
+    ]) {
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.softMask[fixture] = { label, status: r.status, code: r.code, unsupported: r.unsupported };
+        probe(`${label}: refused on the soft-mask path`,
+            r.status === 'REFUSED' && r.code === 'UNSUPPORTED_OPTIONAL_CONTENT'
+            && (r.unsupported ?? []).some((u) => found.every((part) => u.includes(part))),
+            (r.unsupported ?? []).join(', '));
+    }
+
+    for (const [fixture, label] of [
+        ['smask-clean', 'a soft mask whose group form holds nothing optional'],
+        ['smask-none', 'a graphics state whose /SMask is /None'],
+    ]) {
+        const doc = await PDFDocument.load(bytesOf(fixture), { updateMetadata: false });
+        const findings = describeOptionalContent(doc, [0]);
+        const r = await extractWithOptionalContent(bytesOf(fixture), [0]);
+        evidence.softMask[fixture] = {
+            label, status: r.status, unsupported: findings.unsupported, carried: r.carried ?? null,
+        };
+        assert_(`${label}: not refused`,
+            findings.unsupported.length === 0 && planOptionalContent(findings).status === 'CARRY'
+            && r.status === 'READY',
+            `${r.status}, ${findings.unsupported.length} finding(s), ${r.carried ?? 0} group(s) carried`);
+    }
+
+    // One /G behind two graphics states. The group behind it reported exactly
+    // once shows the soft-mask path shares the visited set with the rest of the
+    // walk rather than keeping one of its own.
+    const smSharedDoc = await PDFDocument.load(bytesOf('smask-shared-g'), { updateMetadata: false });
+    const smSharedFindings = describeOptionalContent(smSharedDoc, [0]).unsupported;
+    const smSharedBehind = smSharedFindings.filter((u) => u.includes('/SMask /G /Properties /M6L')).length;
+    const smSharedExtract = await extractWithOptionalContent(bytesOf('smask-shared-g'), [0]);
+    evidence.softMask['smask-shared-g'] = {
+        findings: smSharedFindings, behindSharedGroupReported: smSharedBehind, extract: smSharedExtract.status,
+    };
+    assert_('one /G shared by two graphics states is walked once, and still refused',
+        smSharedBehind === 1 && smSharedFindings.length === 1
+        && smSharedExtract.status === 'REFUSED' && smSharedExtract.code === 'UNSUPPORTED_OPTIONAL_CONTENT',
+        `group behind the shared /G reported ${smSharedBehind} time(s), extract ${smSharedExtract.status}`);
 
     fs.writeFileSync(
         path.join(RESEARCH, 'evidence.json'),
