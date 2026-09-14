@@ -2,7 +2,7 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "e2ba4b20ac4dbacffb37cbe230859ba9e2cb18c3",
+    "testedResearchHead": "64bbf0cc352e218121dd628c0c875040f2ab4e32",
     "workingTreeDirty": true,
     "researchTreeDirty": false,
     "researchPackageDirtyBeforeRun": false,
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-14T14:34:24.113Z"
+    "ranAt": "2026-09-14T15:19:53.416Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -616,7 +616,7 @@
     "signed": {
       "pages": 5,
       "form": false,
-      "bytesMeasuredOnly": 3152
+      "bytesMeasuredOnly": 3150
     }
   },
   "collisions": {
@@ -2478,10 +2478,10 @@
       "Properties",
       "XObject",
       "Pattern",
-      "Font"
+      "Font",
+      "ExtGState"
     ],
     "notWalked": [
-      "ExtGState",
       "Shading",
       "ColorSpace"
     ],
@@ -2544,8 +2544,10 @@
       "extract": "REFUSED"
     },
     "extGStateSoftMask": {
-      "status": "READY",
-      "unsupported": []
+      "status": "REFUSED",
+      "unsupported": [
+        "page 0 /ExtGState /M6GS /SMask /G /Properties /M6L names an optional-content group below the page's own resources"
+      ]
     },
     "supportedStillCarried": {
       "carried": [
@@ -2565,6 +2567,67 @@
         "ocg-order-unused-group"
       ],
       "refused": []
+    }
+  },
+  "softMask": {
+    "ocg-extgstate-smask": {
+      "label": "a group behind a soft mask /G, READY before B1",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /ExtGState /M6GS /SMask /G /Properties /M6L names an optional-content group below the page's own resources"
+      ]
+    },
+    "smask-dangling-g": {
+      "label": "a soft mask whose /G points at an object that is not there",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /ExtGState /M6GS /SMask /G points at 9996 0 R, which is not in the document"
+      ]
+    },
+    "smask-malformed": {
+      "label": "a soft mask that is neither /None nor a dictionary",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /ExtGState /M6GS /SMask is neither /None nor a dictionary"
+      ]
+    },
+    "smask-g-not-form": {
+      "label": "a soft mask whose /G is not a form XObject stream",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /ExtGState /M6GS /SMask /G is not a form XObject stream"
+      ]
+    },
+    "smask-depth-exceeded": {
+      "label": "a soft mask /G whose resources nest past the depth bound",
+      "status": "REFUSED",
+      "code": "UNSUPPORTED_OPTIONAL_CONTENT",
+      "unsupported": [
+        "page 0 /ExtGState /M6GS /SMask /G /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /XObject /M6N /Resources nested deeper than 24"
+      ]
+    },
+    "smask-clean": {
+      "label": "a soft mask whose group form holds nothing optional",
+      "status": "READY",
+      "unsupported": [],
+      "carried": 1
+    },
+    "smask-none": {
+      "label": "a graphics state whose /SMask is /None",
+      "status": "READY",
+      "unsupported": [],
+      "carried": 1
+    },
+    "smask-shared-g": {
+      "findings": [
+        "page 0 /ExtGState /M6GS1 /SMask /G /Properties /M6L names an optional-content group below the page's own resources"
+      ],
+      "behindSharedGroupReported": 1,
+      "extract": "REFUSED"
     }
   }
 }
