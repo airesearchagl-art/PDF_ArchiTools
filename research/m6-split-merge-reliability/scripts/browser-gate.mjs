@@ -81,6 +81,7 @@ const provenanceOf = () => {
             ':!research/m6-split-merge-reliability/evidence.json',
             ':!research/m6-split-merge-reliability/evidence-browser.json',
             ':!research/m6-split-merge-reliability/evidence-object-graph-memory.json',
+            ':!research/m6-split-merge-reliability/evidence-load-boundary.json',
         ]).length > 0,
         untrackedOutsideResearch: git(['status', '--porcelain=v1', '--untracked-files=all'])
             .split('\n')

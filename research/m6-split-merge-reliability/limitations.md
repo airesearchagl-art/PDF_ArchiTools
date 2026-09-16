@@ -33,6 +33,14 @@ than its evidence.
   measured for the object graph, and none of those Node numbers is claimed to
   transfer. Real drawings were not used either; the synthetic shapes isolate one
   term at a time.
+- **What the load boundary refuses among real drawings.** B3's compatibility
+  corpus is the repository's 419 synthetic documents, with one conservative
+  refusal among them. How many real drawings its strict syntax would refuse is
+  unknown.
+- **The load boundary's own memory in a browser.** B3's browser half checked
+  transfer, cancellation, timeout, typed failure and a refusal inside a Worker.
+  What the boundary itself allocates in a browser was not measured, and no API
+  to measure a Worker's memory was available to the page.
 
 ## Measured in a way that has a caveat
 
@@ -268,6 +276,49 @@ has never been wrong has usually never been checked.
     within one run. The lengths are now MeasuredOnly by name, the plain-save
     prediction records its within-run equality as the structural fact, and the
     evidence from the first tested source, `7ff2901`, was never committed.
+23. **L16 was expected at the wrong stage.** The draft B3 corpus expected L16 —
+    a later stream whose indirect `/Type` points at a name held inside an
+    object stream — to be refused by the decoded-content scan. The boundary
+    walks before it attributes names and attributes before it decodes, and the
+    walk refuses any indirect `/Type` on a stream, so L16 never reaches that
+    scan. The Human's review corrected the expectation to a walk-stage refusal,
+    and L16b was added so the decoded-content scan has a fixture only it can
+    refuse. Every refusal now records its stage, and the gate checks the stage
+    as well as the code.
+24. **The draft boundary read a name the way pdf-lib does not.** It matched
+    dictionary keys and `/Type` values through a case-blind `#xx` decode — right
+    for a detector, wrong for a reading. pdf-lib decodes only uppercase hex, so
+    `/Fi#6cter` is no filter to pdf-lib and `FlateDecode` to the draft. On L21
+    pdf-lib decodes all 46 stored bytes, where the draft would have inflated and
+    counted 35: less than pdf-lib decodes, the one direction the invariant
+    forbids. Found by reading before the first gate run, and confirmed by the
+    oracle on L21. A decode candidate whose names read two ways is now refused
+    (`AMBIGUOUS_NAME_ESCAPE`) rather than resolved.
+25. **The Worker's "uncaught" failure was a rejection, and it reached the page
+    as nothing.** The Worker's message handler was `async`, so the throw meant
+    to test an uncaught error became an unhandled promise rejection, which
+    fires no `error` event on the Worker. The first B3 gate run failed that row.
+    The deliberate throw is now synchronous, a separate case rejects on purpose,
+    and the Worker listens for `unhandledrejection` and posts a typed
+    `UNHANDLED_REJECTION`. Without that listener the page sees 0 events.
+26. **Cancellation and timeout were measured against a Worker that had not
+    started loading.** The draft harness terminated 30 ms after posting, while
+    the Worker was still loading its modules, so "nothing arrives after cancel"
+    held trivially. The Worker now posts `started` immediately before
+    `PDFDocument.load`; cancellation requires started-and-not-ended, and the
+    timeout budget is counted from that message. Fixed before the first gate run.
+27. **The compatibility corpus read one directory level.** The draft B3 gate
+    listed the PDFs in each subdirectory of `test-fixtures/` but not the 52 at
+    its root, so it would have measured 367 documents, not 419. The walk is now
+    recursive and excludes only the load-boundary tree. Fixed before the first
+    gate run.
+28. **The encryption probe checked an error name pdf-lib does not set.**
+    pdf-lib's error classes compile to plain `Error` — `name` and
+    `constructor.name` both say "Error" — so the probe that pdf-lib decodes
+    before its encryption check failed although the decode it looked for,
+    33,554,432 B, had happened. The oracle now classifies the error from its
+    message (`ENCRYPTED_PDF`). The first B3 gate run failed on this row and on
+    #25; no evidence from that run was committed.
 
 ## A note on how each JavaScript site reached zero
 

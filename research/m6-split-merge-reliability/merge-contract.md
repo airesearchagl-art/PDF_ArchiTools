@@ -202,6 +202,11 @@ byte totals checked from each source's count before that source is copied; the
 adopted actual-output ceiling unchanged. Each source's load stays unbounded
 until the load boundary, proposed blocker B3, is closed.
 
+B3 has since closed ([`load-boundary.md`](load-boundary.md)). Under it, each
+source would pass the pre-parse boundary immediately before its own load, and
+the cumulative decode cap is per source, not per merge. Adopting that as Merge's
+load contract is HUMAN-OPEN.
+
 ## Ownership, publication and naming
 
 - **Ownership (M6-H13):** adding, removing or reordering a source, switching

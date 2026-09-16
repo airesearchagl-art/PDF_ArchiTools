@@ -122,6 +122,12 @@ that the copy and the plain save can now be counted before they happen, which
 makes structural caps possible — and that the one term no cap after load can
 reach has a name: the load boundary, proposed as blocker B3.
 
+B3 has since closed as A ([`load-boundary.md`](load-boundary.md)): a pre-parse
+boundary refuses a document before pdf-lib's load could expand it past
+structural caps on decoded bytes, xref entries and object-stream objects. That
+bounds the load's structure, not its heap bytes per object, so the conclusion
+above is unchanged — no memory preset, M5's DO NOT ADOPT.
+
 ---
 
 ## What *can* be closed today: the output ceiling

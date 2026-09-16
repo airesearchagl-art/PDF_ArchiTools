@@ -1,6 +1,6 @@
 {
   "gate": "M6 Split / Merge Reliability Architecture",
-  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; B2 closed on 2026-09-15 as PARTIALLY BOUNDABLE; implementation remains blocked by B3, the load boundary B2 proposed",
+  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; B2 closed on 2026-09-15 as PARTIALLY BOUNDABLE, and its conclusion adopted by the Human on 2026-09-15; B3, the load boundary, accepted by the Human on 2026-09-15 as a mandatory pre-implementation blocker, closed by research on 2026-09-16 as A — hard pre-load boundary proven; the production load-boundary architecture is HUMAN-OPEN, and implementation has not started and is not authorised by this research",
   "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
   "revision": "answers Required Fix A/B/C/D — the optional-content detection envelope, artifact-wide JavaScript remnants, /Order label position, and decision-record consistency. Builds on RF-M6-R1…R6, RF-S1/S2, RF-U1/U2 and RF-V1.",
   "adoption": {
@@ -44,11 +44,47 @@
       {
         "id": "B3",
         "decision": "M6-H11",
-        "state": "OPEN",
-        "proposedBy": "B2 on 2026-09-15 — pending Human confirmation",
+        "state": "CLOSED",
+        "closedOn": "2026-09-16",
+        "outcome": "A — CLOSED: hard pre-load boundary proven",
+        "closedWith": "the Load Boundary Sub-Spike (load-boundary.md): a staged pre-parse boundary — input, raw-name-scan, walk, attribution, declared-values, decode, decoded-content — that answers PASS or a typed REFUSE with its stage before PDFDocument.load is called, decodes through pako with a hard stop, and refuses ambiguous or unsupported syntax rather than resolving it",
+        "closureEvidence": "load-boundary gate, node half: every dangerous shape refused before load at its expected stage, L16 at the walk and L16b only at the decoded-content scan, and K refused with pdf-lib's load never called; per-stream and cumulative caps allowed exactly and refused at +1, with at most the cap plus one 16,384 B chunk ever materialised; a differential oracle over 36 fixtures (one process each), 576 mutants (135 passed) and 419 corpus documents (411 passed) found no document the boundary passed on which pdf-lib decoded more than it counted, and no decode off the observed route. The browser half — transfer, cancellation, timeout, typed failure, refusal inside a Worker — is defence in depth and counts toward none of it. The tested source head is the commit that carries this record and the evidence-only head the one after it",
+        "closureConditionsMet": [
+          "every dangerous shape refused before PDFDocument.load",
+          "the boundary itself bounded: decode, chunk, retention and parse work",
+          "load-time decode surface covered, and the oracle shown not blind",
+          "differential oracle: known false negatives 0",
+          "exact boundary: cap allowed, cap + 1 refused, per stream and cumulatively",
+          "ambiguous or unsupported syntax refused, never guessed at"
+        ],
+        "notClaimed": [
+          "anything beyond pdf-lib 1.17.1",
+          "that no input exists on which the boundary under-counts — known false negatives are 0 across the shapes, mutants and corpus tried",
+          "a bound on heap bytes per parsed object, or any adoptable memory preset",
+          "compatibility with real drawings, which were not available"
+        ],
+        "proposedBy": "B2 on 2026-09-15",
+        "acceptedBy": "Human on 2026-09-15, as a mandatory pre-implementation blocker",
+        "defenceOrder": {
+          "primary": "a pre-parse hard boundary: a bounded inspection of the raw bytes that refuses dangerous load-time expansion before PDFDocument.load is called",
+          "secondary": "a disposable Worker, as defence in depth"
+        },
+        "workerAloneCloses": false,
+        "workerAloneClosesWhyNot": [
+          "a Worker has no standard per-worker hard memory ceiling",
+          "nothing guarantees a typed refusal before an out-of-memory failure",
+          "renderer or process failure isolation is not a hard safety contract",
+          "a timeout is not a memory bound"
+        ],
+        "closureOutcomes": [
+          "A — CLOSED: hard pre-load boundary proven",
+          "B — CLOSED RESEARCH / NEW ARCHITECTURE REQUIRED: a hard load boundary shown not buildable on the current pdf-lib route, and the architecture change named as a new blocker",
+          "C — OPEN: evidence insufficient"
+        ],
         "blocker": "pdf-lib 1.17.1 parses every object and inflates every object stream and cross-reference stream at load, with no cap and no hook to stop it, and no term available before load bounds what that allocates (mem-k-objstm-inflation: 33,149 B in, 33,554,457 B decoded; peak RSS +80.3 MiB during that load, MEASURED_ONLY)",
         "closure": "a Load Boundary Sub-Spike that refuses such a document before pdf-lib's parse can allocate without limit, proven at least against mem-k-objstm-inflation",
-        "forbidden": "starting M6 implementation, or treating an input-byte limit as a bound on load-time memory"
+        "forbidden": "starting M6 implementation, or treating an input-byte limit as a bound on load-time memory",
+        "humanOpen": "whether the pre-parse boundary is adopted as M6's load contract; the limit values; the decoder (pako 2.1.0 is resolved only transitively here); main thread or Worker, and whether the Worker is kept as defence in depth; whether strict-syntax refusals are acceptable for real drawings"
       }
     ],
     "implementationStarted": false,
@@ -290,7 +326,7 @@
       "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is a function of document structure rather than byte length, and is UNKNOWN. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B, at a boundary taken from a real artifact. No such check exists today.",
       "recommended": "adopt an actual-artifact output ceiling now, sharing M5's constant; do NOT adopt a memory preset until an Object-Graph Memory Sub-Spike closes the UNKNOWN",
       "adopted": "adopt an actual-artifact output ceiling; memory presets NOT ADOPTABLE; the Object-Graph Memory Sub-Spike is mandatory before implementation (B2)",
-      "implementationBlocker": "B2 — CLOSED on 2026-09-15 as PARTIALLY BOUNDABLE. The Object-Graph Memory Sub-Spike found the copy and the plain save countable before they happen, the load not boundable with pdf-lib 1.17.1, and no memory preset adoptable; the load boundary it could not close is proposed as B3.",
+      "implementationBlocker": "B2 — CLOSED on 2026-09-15 as PARTIALLY BOUNDABLE. The Object-Graph Memory Sub-Spike found the copy and the plain save countable before they happen, the load not boundable with pdf-lib 1.17.1, and no memory preset adoptable; the load boundary it could not close is proposed as B3. B3 — accepted by the Human on 2026-09-15 and CLOSED by research on 2026-09-16 as A: a pre-parse boundary refuses, before load, what pdf-lib's load would expand past structural caps; its adoption as the load contract is HUMAN-OPEN.",
       "objectGraphMemoryConclusion": {
         "outputCeiling": "ADOPTED / unchanged",
         "memoryModel": "PARTIALLY BOUNDABLE",
@@ -317,8 +353,28 @@
         ],
         "requiredFollowOn": "Load Boundary Sub-Spike — proposed implementation blocker B3",
         "m5Presets": "DO NOT ADOPT",
+        "adoptedByHuman": "2026-09-15 — memory model PARTIALLY BOUNDABLE, M5 presets DO NOT ADOPT, output ceiling ADOPTED / unchanged",
         "basis": "object-graph-memory.md; evidence-object-graph-memory.json",
         "historicalNote": "At adoption this decision's memory model was UNKNOWN and every preset NOT ADOPTABLE. B2 replaced the UNKNOWN with this conclusion; it did not make any preset adoptable."
+      },
+      "loadBoundaryConclusion": {
+        "outcome": "A — CLOSED: hard pre-load boundary proven",
+        "hardPreLoadTerms": [
+          "input bytes — the raw ceiling",
+          "decoded bytes per object or cross-reference stream, and in total — counted by a bounded inflate that stops at the cap plus one chunk",
+          "declared cross-reference entries, from direct /Size or /Index",
+          "objects per object stream, from a direct /N, with offsets in order and objects not overlapping",
+          "parse work — no more values than raw plus decoded bytes"
+        ],
+        "stillUnknown": [
+          "heap bytes per parsed object, as B2 left it",
+          "which real drawings strict syntax refuses"
+        ],
+        "memoryModel": "unchanged — PARTIALLY BOUNDABLE; the load's structure is now bounded before load, its heap bytes are not",
+        "m5Presets": "DO NOT ADOPT — unchanged",
+        "workerAloneCloses": false,
+        "basis": "load-boundary.md; evidence-load-boundary.json",
+        "historicalNote": "H11 was UNKNOWN at adoption; B2 made it PARTIALLY BOUNDABLE and found the load unbounded; B3 was proposed from that finding, accepted by the Human, and closed with this boundary. B3 did not make any preset adoptable."
       },
       "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
       "defer": ["whether the adopted output ceiling shares M5's MAX_OUTPUT_BYTES 268435456 or takes an independently gated M6 value — the research recommends sharing"]

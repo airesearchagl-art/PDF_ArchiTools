@@ -64,14 +64,17 @@ copying as document splitting and merging, and reports success.
 | [`preview-memory.md`](preview-memory.md) | what the thumbnail preview costs, by page count and sheet size, and the alternatives priced |
 | [`budget.md`](budget.md) | memory lifetimes with basis classifications, why a hard memory budget could not be closed at adoption, and what B2 changed |
 | [`object-graph-memory.md`](object-graph-memory.md) | B2, the Object-Graph Memory Sub-Spike: which memory terms of a Split or Merge can be known before the work, from pdf-lib's source and a real copy — PARTIALLY BOUNDABLE |
+| [`load-boundary.md`](load-boundary.md) | B3, the Load Boundary Sub-Spike: a pre-parse boundary that refuses what pdf-lib's load would expand, checked against the real load — A, hard pre-load boundary proven |
 | [`limitations.md`](limitations.md) | what was not measured, caveats on what was, and the instrument defects found on the way |
 | [`human-gate.json`](human-gate.json) | M6-H1 … M6-H14, each with candidates, measured consequences, a recommendation and what stays DEFER |
 | `prototype/extract-destinations.mjs` | E1 and E2, prototyped far enough to prove the orphan-page invariant is reachable |
 | `prototype/form-subset.mjs` | the supported form subset, its detector, Extract reconstruction and Merge collision handling |
 | `prototype/object-graph-memory.mjs` | the walk that counts what `copyPages` will copy, and the plain writer's output length before it allocates |
+| `prototype/load-boundary.mjs` | the staged pre-parse boundary and its bounded inflate |
 | `evidence.json` | structural measurements, written by the research gate |
 | `evidence-browser.json` | preview and lifetime measurements, written by the browser gate |
 | `evidence-object-graph-memory.json` | object-graph structure and phase memory, written by the object-graph memory gate |
+| `evidence-load-boundary.json` | boundary verdicts and stages, decode bounds, the differential oracle, the sweep, compatibility and the Worker, written by the load-boundary gate |
 
 Facts are kept apart from opinions on purpose. `baseline.md`,
 `source-preservation-matrix.md` and `structure-policy.md` contain only observed
@@ -86,11 +89,13 @@ node research/m6-split-merge-reliability/scripts/research-gate.mjs     # node, s
 node research/m6-split-merge-reliability/scripts/browser-gate.mjs      # browser, memory and lifetime
 node research/m6-split-merge-reliability/scripts/make-m6-memory-fixtures.mjs
 node research/m6-split-merge-reliability/scripts/object-graph-memory-gate.mjs   # node, object-graph memory (B2)
+node research/m6-split-merge-reliability/scripts/make-m6-load-boundary-fixtures.mjs
+node research/m6-split-merge-reliability/scripts/load-boundary-gate.mjs         # node + browser, load boundary (B3)
 ```
 
-Fixtures are written to `test-fixtures/m6-split-merge/` and
-`test-fixtures/m6-object-graph-memory/`, both already ignored, so running the
-gates leaves the working tree clean.
+Fixtures are written to `test-fixtures/m6-split-merge/`,
+`test-fixtures/m6-object-graph-memory/` and `test-fixtures/m6-load-boundary/`,
+all already ignored, so running the gates leaves the working tree clean.
 
 Row kinds, as the brief defines them:
 
@@ -111,6 +116,7 @@ Latest run:
 research gate   ASSERT 59  PROBE 82  MEASURE 60  BASELINE-FAIL 18  HUMAN-OPEN 25  159/159
 browser gate    ASSERT  3  PROBE  1  MEASURE 12  BASELINE-FAIL  5  HUMAN-OPEN  3      9/9
 memory gate     ASSERT 25  PROBE  4  MEASURE 21  BASELINE-FAIL  2  HUMAN-OPEN  1    31/31
+load boundary   ASSERT 49  PROBE 31  MEASURE 14  BASELINE-FAIL 18  HUMAN-OPEN  1    98/98
 external HTTP(S) during document work: 0
 ```
 
@@ -128,3 +134,12 @@ the uncommon catalog structures, which pdf-lib does not implement at all.
 B2 has since run that Sub-Spike. It classified the memory model PARTIALLY
 BOUNDABLE, kept every preset DO NOT ADOPT, and proposed the load boundary it
 could not close as blocker B3 — see [`object-graph-memory.md`](object-graph-memory.md).
+
+The Human accepted B3 as a mandatory pre-implementation blocker, and B3 has
+since run the Load Boundary Sub-Spike. A staged pre-parse boundary refused every
+dangerous shape before pdf-lib's load, stayed within its own bounds, and was
+never passed a document on which the real load decoded more than it counted.
+B3 is closed as A — hard pre-load boundary proven, for pdf-lib 1.17.1. That
+bounds the load's structure, not its heap bytes, and no preset became adoptable.
+Adopting the boundary as M6's load contract is a Human decision — see
+[`load-boundary.md`](load-boundary.md).

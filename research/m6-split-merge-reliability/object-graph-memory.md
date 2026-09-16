@@ -436,6 +436,14 @@ allocate without limit, and proves that refusal against at least K.
 This is proposed by B2 and recorded as OPEN pending Human confirmation. It is
 not a decision this research takes.
 
+> **Later, recorded 2026-09-16.** The Human accepted B3 on 2026-09-15 as a
+> mandatory pre-implementation blocker, with a pre-parse boundary as the primary
+> defence and a disposable Worker as the secondary, and ruled that a Worker
+> alone does not close it. The Load Boundary Sub-Spike then built candidate L1
+> and closed B3 as A — hard pre-load boundary proven; see
+> [`load-boundary.md`](load-boundary.md). The section above is left as B2 wrote
+> it.
+
 ## What this Sub-Spike does not claim
 
 - No memory preset, and no heap figure used as a limit.

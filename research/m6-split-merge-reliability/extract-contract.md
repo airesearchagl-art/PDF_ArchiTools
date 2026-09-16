@@ -528,6 +528,10 @@ adopted:
 None of that bounds the load of the source, which pdf-lib performs eagerly and
 without a cap. That is proposed blocker B3.
 
+B3 has since closed with a pre-parse boundary that refuses such a source before
+its load ([`load-boundary.md`](load-boundary.md)). Adopting that boundary as
+Extract's load contract is HUMAN-OPEN.
+
 ## Ownership, publication and naming
 
 - **Ownership (M6-H13):** a preview or export is owned by a run token; changing

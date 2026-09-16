@@ -98,6 +98,7 @@ try {
             ':!research/m6-split-merge-reliability/evidence.json',
             ':!research/m6-split-merge-reliability/evidence-browser.json',
             ':!research/m6-split-merge-reliability/evidence-object-graph-memory.json',
+            ':!research/m6-split-merge-reliability/evidence-load-boundary.json',
         ]).length > 0,
         coreCiRunsThisGate: false,
         dependencies: { 'pdf-lib': require_(require_.resolve('pdf-lib/package.json', { paths: [ROOT] })).version },
