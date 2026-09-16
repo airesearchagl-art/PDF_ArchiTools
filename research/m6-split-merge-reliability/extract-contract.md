@@ -528,9 +528,38 @@ adopted:
 None of that bounds the load of the source, which pdf-lib performs eagerly and
 without a cap. That is proposed blocker B3.
 
-B3 has since closed with a pre-parse boundary that refuses such a source before
-its load ([`load-boundary.md`](load-boundary.md)). Adopting that boundary as
-Extract's load contract is HUMAN-OPEN.
+### Load boundary (M6-H11, B3)
+
+**Historical state — at B3's research completion.** B3 closed with a pre-parse
+boundary that refuses such a source before its load
+([`load-boundary.md`](load-boundary.md)). At that point, adopting that boundary
+as Extract's production load contract was HUMAN-OPEN.
+
+**Resolution — Human Gate, 2026-09-16.** The Human adopted H11-B3-1 … H11-B3-6
+(`human-gate.json`, `M6-H11.loadBoundaryDecisions`). The HUMAN-OPEN state above
+is closed by that decision.
+
+**Current Extract production contract.**
+
+- The pre-parse hard Load Boundary is **mandatory**. `PDFDocument.load()` is
+  called only after the Load Boundary PASSes the source.
+- Dangerous, ambiguous or unsupported load structure is a **typed refusal**, and
+  fails closed. Strict syntax refusal is adopted for the MVP; a refusal is never
+  silent.
+- The proof is bound to **pdf-lib 1.17.1**. A pdf-lib version change re-runs the
+  Load Boundary verification before this contract is treated as holding.
+- Production decodes with **pako 2.1.0**, declared as a direct dependency in the
+  production implementation branch — not relied on transitively. A pako version
+  change requires the B3 regression verification again.
+- The route runs in a **disposable Worker** as secondary defence in depth. A
+  Worker alone is **not** a safety boundary; the Load Boundary is.
+- The research test limits are **NOT ADOPTED** as product defaults. Product
+  limits and real-drawing compatibility are decided in **B4**, which is OPEN and
+  blocks Ready, merge, release and production enablement — not the start of
+  implementation.
+
+In order: Load Boundary → `PDFDocument.load()` on PASS → post-load structural
+planning (above) → copy → release the source → save → actual-output ceiling.
 
 ## Ownership, publication and naming
 

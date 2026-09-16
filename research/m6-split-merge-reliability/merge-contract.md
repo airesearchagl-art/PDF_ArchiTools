@@ -196,16 +196,61 @@ measured that as the shape to keep ([`object-graph-memory.md`](object-graph-memo
   across two — so a cumulative cap can be checked before the copy that would
   exceed it.
 
-Recommended, not adopted: one source loaded at a time and released before the
-next; no preloading of every source; the output's cumulative object and stream
-byte totals checked from each source's count before that source is copied; the
-adopted actual-output ceiling unchanged. Each source's load stays unbounded
-until the load boundary, proposed blocker B3, is closed.
+**Historical state — at B2's completion.** Recommended, not adopted: one source
+loaded at a time and released before the next; no preloading of every source;
+the output's cumulative object and stream byte totals checked from each source's
+count before that source is copied; the adopted actual-output ceiling unchanged.
+Each source's load stays unbounded until the load boundary, proposed blocker B3,
+is closed.
 
-B3 has since closed ([`load-boundary.md`](load-boundary.md)). Under it, each
-source would pass the pre-parse boundary immediately before its own load, and
-the cumulative decode cap is per source, not per merge. Adopting that as Merge's
-load contract is HUMAN-OPEN.
+### Load boundary (M6-H11, B3)
+
+**Historical state — at B3's research completion.** B3 closed
+([`load-boundary.md`](load-boundary.md)). Under it, each source would pass the
+pre-parse boundary immediately before its own load, and the cumulative decode
+cap is per source, not per merge. At that point, adopting that as Merge's
+production load contract was HUMAN-OPEN.
+
+**Resolution — Human Gate, 2026-09-16.** The Human adopted H11-B3-1 … H11-B3-6
+(`human-gate.json`, `M6-H11.loadBoundaryDecisions`). The HUMAN-OPEN state above
+is closed by that decision.
+
+**Current Merge production contract.** Sources are processed one at a time, and
+each one goes through, in this order:
+
+1. the pre-parse **Load Boundary** — a refusal is typed and fails closed;
+2. `PDFDocument.load()` — **only on PASS**;
+3. **post-load structural planning** — the source's exact pre-copy counts,
+   checked against the cumulative structural cap on the output's growth before
+   anything is copied;
+4. **copy**;
+5. **release** of the source, before the next source is inspected.
+
+Kept from B2, as part of this contract:
+
+- **no all-source preload** — sources are never loaded together;
+- sources are processed **sequentially**, and each is **released** before the
+  next;
+- the output's graph growth is subject to a **cumulative structural cap**,
+  checked from each source's plan before its copy;
+- safety is never decided by page count, file size or a memory preset alone.
+
+From the B3 decision:
+
+- the pre-load boundary is **mandatory** for every source;
+- the proof is bound to **pdf-lib 1.17.1**, and a version change re-runs the
+  Load Boundary verification;
+- production decodes with **pako 2.1.0** as a direct dependency, added in the
+  production implementation branch — a pako version change requires the B3
+  regression verification again;
+- a **disposable Worker** is secondary defence in depth, never a safety
+  boundary alone;
+- strict syntax **fails closed**, with a typed refusal that is never silent;
+- the research test limits are **NOT** product defaults;
+- **B4** — product limits and real-drawing compatibility — **remains OPEN**, and
+  blocks Ready, merge, release and production enablement, not implementation.
+
+The adopted actual-output ceiling is unchanged.
 
 ## Ownership, publication and naming
 
