@@ -36,7 +36,8 @@ than its evidence.
 - **What the load boundary refuses among real drawings.** B3's compatibility
   corpus is the repository's 419 synthetic documents, with one conservative
   refusal among them. How many real drawings its strict syntax would refuse is
-  unknown.
+  unknown. The Human recorded that question on 2026-09-16 as blocker B4, which
+  blocks Ready and release but not implementation.
 - **The load boundary's own memory in a browser.** B3's browser half checked
   transfer, cancellation, timeout, typed failure and a refusal inside a Worker.
   What the boundary itself allocates in a browser was not measured, and no API

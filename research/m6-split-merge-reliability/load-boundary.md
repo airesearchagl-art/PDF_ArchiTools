@@ -9,6 +9,14 @@ the evidence below and within the limits stated at the end. The production
 load-boundary architecture is HUMAN-OPEN. M6 implementation has not started, and
 this document does not authorise it.
 
+> **Human Gate, 2026-09-16.** The Human adopted this conclusion and the
+> production load architecture — see
+> [Human Gate decision](#human-gate-decision--2026-09-16) below. The research
+> test limits were **not** adopted as product values: product load policy is
+> blocker B4, which blocks Ready, release and production enablement, not
+> implementation. Implementation has still not started. The result above is
+> left as the research recorded it.
+
 ## How this blocker came to exist
 
 B3 was not known when the M6 decisions were adopted. It was found, in this order:
@@ -29,6 +37,9 @@ B3 was not known when the M6 decisions were adopted. It was found, in this order
    defence order — a pre-parse hard boundary first, a disposable Worker second —
    and ruled that a Worker alone does not close it.
 4. **B3 result (2026-09-16).** This document.
+5. **The Human adopts the production load architecture (2026-09-16)** —
+   H11-B3-1 … H11-B3-6, below.
+6. **B4 — product load policy — remains OPEN**, as a pre-Ready blocker.
 
 ## What pdf-lib 1.17.1's load expands
 
@@ -308,6 +319,9 @@ not:
 
 ## HUMAN-OPEN
 
+As the research left them. The Human Gate answered them on 2026-09-16; see the
+next section.
+
 - Whether a pre-parse boundary is adopted as M6's load contract.
 - The limit values.
 - The decoder. pako 2.1.0 is resolved here only transitively (through
@@ -317,6 +331,46 @@ not:
   defence in depth.
 - Whether strict-syntax refusals are acceptable for real drawings, which this
   research could not measure.
+
+## Human Gate decision — 2026-09-16
+
+The Human adopted B3's research conclusion and decided M6-H11's load boundary
+as follows. The authoritative record is `human-gate.json`,
+`M6-H11.loadBoundaryDecisions`.
+
+| id | topic | decision |
+| --- | --- | --- |
+| H11-B3-1 | load contract | **ADOPT.** The pre-parse hard boundary is M6's mandatory production load contract. `PDFDocument.load()` may be called only on input it PASSes; dangerous, ambiguous or unsupported structure is a typed refusal and fails closed. |
+| H11-B3-2 | product limit values | **DO NOT ADOPT the research test values as product values.** 64 MiB / 4 MiB / 8 MiB / 64 / 100,000 / 10,000 / 64 stay research test values. Product policy is B4. |
+| H11-B3-3 | decoder | **ADOPT pako 2.1.0**, declared as a direct dependency in the production implementation branch, not relied on transitively and not added in this round. Its version is bound to this evidence; changing it requires B3 regression verification again. |
+| H11-B3-4 | execution boundary | **ADOPT a disposable Worker** for the M6 route: Main/UI → input transfer → Worker → pre-parse Load Boundary → `PDFDocument.load()` on PASS only → planning → copy / save → output transfer → cleanup / terminate. The boundary is the primary safety boundary; the Worker is secondary defence in depth and not a safety boundary alone. Its contract: transferable input and output, cancellation, a timeout counted from operation start, typed worker failures, no late publish after cancellation, termination and cleanup. |
+| H11-B3-5 | strict syntax refusal | **ADOPT for the M6 MVP.** What cannot be shown safe is not guessed through; the user gets a typed refusal whose reason is at least equivalent to 「このPDFは安全に処理できることを確認できなかったため処理しません」. Silent failure is forbidden. Real-drawing compatibility is checked in B4. |
+| H11-B3-6 | version binding | **ADOPT.** The proof is bound to pdf-lib 1.17.1. On a pdf-lib version change the Load Boundary verification runs again, and M6's safety is not inherited until the decode surface, tokenizer and oracle contracts hold for the new version. |
+
+### B4 — Product Load Policy / Real-Drawing Compatibility Gate
+
+**OPEN. A pre-Ready / pre-release blocker, not a pre-implementation blocker.**
+
+It decides the product values of every limit — input bytes, decoded bytes per
+stream and in total, decode streams, xref entries, objects per object stream,
+nesting depth — and the conservative syntax refusal policy. It closes either
+with compatibility confirmed on representative real architectural PDFs, or,
+where real drawings cannot be provided, with the Human explicitly adopting
+conservative limits and a refusal policy with that constraint stated. The values
+are not derived from browser heap sizes or from M5's memory presets.
+
+Until B4 closes: no PR Ready, no M6 merge, no production enablement, no product
+default limit treated as final, and no research test value adopted as a product
+default without evidence.
+
+### Implementation
+
+`implementationStarted` stays `false`. The architecture decisions are complete,
+but authorisation to implement waits on a Final Independent Architecture
+Re-Review of the exact current head. Only if that PASSes may a new production
+implementation branch be created — fresh from
+`main@544a3baf6c7dcee02090dc90058735e377a08ea8`, without merging or
+cherry-picking this research branch.
 
 ## Running it
 

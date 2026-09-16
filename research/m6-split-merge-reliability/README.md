@@ -141,5 +141,11 @@ dangerous shape before pdf-lib's load, stayed within its own bounds, and was
 never passed a document on which the real load decoded more than it counted.
 B3 is closed as A — hard pre-load boundary proven, for pdf-lib 1.17.1. That
 bounds the load's structure, not its heap bytes, and no preset became adoptable.
-Adopting the boundary as M6's load contract is a Human decision — see
-[`load-boundary.md`](load-boundary.md).
+Adopting the boundary as M6's load contract was left to the Human. On
+2026-09-16 the Human adopted it as M6's mandatory load contract, with a
+disposable Worker as secondary defence, pako 2.1.0 as the decoder and the proof
+bound to pdf-lib 1.17.1 — but did not adopt the research test limits as product
+values. That product load policy, and how much conservative refusal real
+drawings can bear, is blocker B4: it blocks Ready, release and production
+enablement, not implementation. Implementation has not started, and waits on a
+Final Independent Architecture Re-Review — see [`load-boundary.md`](load-boundary.md).

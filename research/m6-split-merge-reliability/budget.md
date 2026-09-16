@@ -128,6 +128,10 @@ structural caps on decoded bytes, xref entries and object-stream objects. That
 bounds the load's structure, not its heap bytes per object, so the conclusion
 above is unchanged — no memory preset, M5's DO NOT ADOPT.
 
+The Human adopted B3 on 2026-09-16 without adopting its research test limits as
+product values. Those limits are blocker B4, and are not to be derived from
+browser heap sizes or from M5's memory presets.
+
 ---
 
 ## What *can* be closed today: the output ceiling

@@ -1,6 +1,6 @@
 {
   "gate": "M6 Split / Merge Reliability Architecture",
-  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; B2 closed on 2026-09-15 as PARTIALLY BOUNDABLE, and its conclusion adopted by the Human on 2026-09-15; B3, the load boundary, accepted by the Human on 2026-09-15 as a mandatory pre-implementation blocker, closed by research on 2026-09-16 as A — hard pre-load boundary proven; the production load-boundary architecture is HUMAN-OPEN, and implementation has not started and is not authorised by this research",
+  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; B2 closed on 2026-09-15 as PARTIALLY BOUNDABLE, and its conclusion adopted by the Human on 2026-09-15; B3, the load boundary, accepted by the Human on 2026-09-15 as a mandatory pre-implementation blocker, closed by research on 2026-09-16 as A — hard pre-load boundary proven; the B3 conclusion and the production load architecture (H11-B3-1 … H11-B3-6) adopted by the Human on 2026-09-16, with the research test limits NOT adopted as product values; B4, product load policy and real-drawing compatibility, is OPEN and blocks Ready, release and production enablement, not implementation; implementation has not started, and may be authorised only after a Final Independent Architecture Re-Review of the exact current head PASSes",
   "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
   "revision": "answers Required Fix A/B/C/D — the optional-content detection envelope, artifact-wide JavaScript remnants, /Order label position, and decision-record consistency. Builds on RF-M6-R1…R6, RF-S1/S2, RF-U1/U2 and RF-V1.",
   "adoption": {
@@ -84,10 +84,67 @@
         "blocker": "pdf-lib 1.17.1 parses every object and inflates every object stream and cross-reference stream at load, with no cap and no hook to stop it, and no term available before load bounds what that allocates (mem-k-objstm-inflation: 33,149 B in, 33,554,457 B decoded; peak RSS +80.3 MiB during that load, MEASURED_ONLY)",
         "closure": "a Load Boundary Sub-Spike that refuses such a document before pdf-lib's parse can allocate without limit, proven at least against mem-k-objstm-inflation",
         "forbidden": "starting M6 implementation, or treating an input-byte limit as a bound on load-time memory",
-        "humanOpen": "whether the pre-parse boundary is adopted as M6's load contract; the limit values; the decoder (pako 2.1.0 is resolved only transitively here); main thread or Worker, and whether the Worker is kept as defence in depth; whether strict-syntax refusals are acceptable for real drawings"
+        "humanOpen": "whether the pre-parse boundary is adopted as M6's load contract; the limit values; the decoder (pako 2.1.0 is resolved only transitively here); main thread or Worker, and whether the Worker is kept as defence in depth; whether strict-syntax refusals are acceptable for real drawings",
+        "adoptedByHuman": "2026-09-16 — the B3 research conclusion (A) adopted; the production load architecture recorded as M6-H11.loadBoundaryDecisions, H11-B3-1 … H11-B3-6",
+        "humanOpenResolution": "answered by the Human Gate on 2026-09-16: load contract ADOPT (H11-B3-1); the research test limit values NOT adopted as product values, moved to B4 (H11-B3-2); decoder pako 2.1.0 as a direct dependency (H11-B3-3); a disposable Worker as secondary defence in depth (H11-B3-4); strict syntax refusal ADOPT for the MVP, its real-drawing compatibility checked in B4 (H11-B3-5); the proof bound to pdf-lib 1.17.1 (H11-B3-6). The humanOpen text above is left as the research wrote it."
+      }
+    ],
+    "preReadyBlockers": [
+      {
+        "id": "B4",
+        "decision": "M6-H11",
+        "state": "OPEN",
+        "type": "PRE-READY / PRE-RELEASE BLOCKER",
+        "not": "a pre-implementation blocker",
+        "recordedOn": "2026-09-16",
+        "raisedBy": "the Human Gate, in H11-B3-2, on adopting B3",
+        "question": "the product limit policy of M6's production load boundary, and how much conservative refusal of real architectural PDFs is acceptable",
+        "mustDecide": [
+          "max input bytes",
+          "max decoded bytes per stream",
+          "max cumulative decoded bytes",
+          "max decode stream count",
+          "max xref entries",
+          "max objects per object stream",
+          "max nesting depth",
+          "conservative syntax refusal policy"
+        ],
+        "closureEvidence": [
+          "A — compatibility confirmed on representative real architectural PDFs",
+          "B — where real drawings cannot be provided: the Human explicitly adopts conservative product limits and a refusal policy, with that constraint stated"
+        ],
+        "valueRule": "the values are not derived from browser heap sizes or from M5's memory presets",
+        "researchTestValues": "64 MiB input, 4 MiB decoded bytes per stream, 8 MiB cumulative decoded bytes, 64 decode streams, 100,000 xref entries, 10,000 objects per object stream, nesting depth 64 — research test values, NOT ADOPTED as product defaults",
+        "forbiddenBeforeClosure": [
+          "PR Ready",
+          "M6 merge",
+          "production enablement",
+          "adopting the research test limit values as product defaults without evidence",
+          "treating any product default limit as final"
+        ],
+        "doesNotBlock": "creating the M6 production implementation branch and starting implementation, once the Final Independent Architecture Re-Review PASSes"
       }
     ],
     "implementationStarted": false,
+    "implementationAuthorization": {
+      "state": "NOT YET GIVEN",
+      "recordedOn": "2026-09-16",
+      "architectureDecisions": "complete — M6-H1 … M6-H14 adopted on 2026-09-14; B1, B2 and B3 closed; the B3 production load architecture adopted on 2026-09-16",
+      "requires": "a Final Independent Architecture Re-Review of the exact current research head, run in a separate session by an independent reviewer, that PASSes",
+      "thenOnly": "a new M6 production implementation branch created fresh from main@544a3baf6c7dcee02090dc90058735e377a08ea8; the research branch is neither merged nor cherry-picked into it",
+      "notAuthorizedUntilThen": [
+        "creating a production implementation branch",
+        "any src/ change",
+        "adding pako or any other dependency",
+        "starting implementation"
+      ],
+      "notAuthorizedUntilB4Closes": [
+        "Ready",
+        "merge",
+        "any change to main or production",
+        "production enablement"
+      ]
+    },
     "notAuthorizedByThisAdoption": [
       "M6 production implementation, which stays blocked until B1 and B2 are both closed",
       "work on B1 or B2, each of which needs its own Human instruction",
@@ -326,7 +383,7 @@
       "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is a function of document structure rather than byte length, and is UNKNOWN. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B, at a boundary taken from a real artifact. No such check exists today.",
       "recommended": "adopt an actual-artifact output ceiling now, sharing M5's constant; do NOT adopt a memory preset until an Object-Graph Memory Sub-Spike closes the UNKNOWN",
       "adopted": "adopt an actual-artifact output ceiling; memory presets NOT ADOPTABLE; the Object-Graph Memory Sub-Spike is mandatory before implementation (B2)",
-      "implementationBlocker": "B2 — CLOSED on 2026-09-15 as PARTIALLY BOUNDABLE. The Object-Graph Memory Sub-Spike found the copy and the plain save countable before they happen, the load not boundable with pdf-lib 1.17.1, and no memory preset adoptable; the load boundary it could not close is proposed as B3. B3 — accepted by the Human on 2026-09-15 and CLOSED by research on 2026-09-16 as A: a pre-parse boundary refuses, before load, what pdf-lib's load would expand past structural caps; its adoption as the load contract is HUMAN-OPEN.",
+      "implementationBlocker": "B2 — CLOSED on 2026-09-15 as PARTIALLY BOUNDABLE. The Object-Graph Memory Sub-Spike found the copy and the plain save countable before they happen, the load not boundable with pdf-lib 1.17.1, and no memory preset adoptable; the load boundary it could not close is proposed as B3. B3 — accepted by the Human on 2026-09-15 and CLOSED by research on 2026-09-16 as A: a pre-parse boundary refuses, before load, what pdf-lib's load would expand past structural caps. The Human adopted that conclusion and the production load architecture on 2026-09-16 (loadBoundaryDecisions). B4 — product load policy and real-drawing compatibility — is OPEN, and blocks Ready, release and production enablement, not implementation.",
       "objectGraphMemoryConclusion": {
         "outputCeiling": "ADOPTED / unchanged",
         "memoryModel": "PARTIALLY BOUNDABLE",
@@ -374,7 +431,73 @@
         "m5Presets": "DO NOT ADOPT — unchanged",
         "workerAloneCloses": false,
         "basis": "load-boundary.md; evidence-load-boundary.json",
-        "historicalNote": "H11 was UNKNOWN at adoption; B2 made it PARTIALLY BOUNDABLE and found the load unbounded; B3 was proposed from that finding, accepted by the Human, and closed with this boundary. B3 did not make any preset adoptable."
+        "historicalNote": "H11 was UNKNOWN at adoption; B2 made it PARTIALLY BOUNDABLE and found the load unbounded; B3 was proposed from that finding, accepted by the Human, and closed with this boundary. B3 did not make any preset adoptable.",
+        "adoptedByHuman": "2026-09-16 — conclusion A adopted; see loadBoundaryDecisions"
+      },
+      "loadBoundaryDecisions": {
+        "decidedBy": "Human Gate",
+        "decidedOn": "2026-09-16",
+        "basis": "B3 tested source 2c3f841618514887db0667e0bbc1d72eb32ba42e; evidence-only final 5812c6e5a7ef265ce1f91681dc320549538a06d5; load-boundary gate 98/98 in both runs; exact-head Core CI run 35076759871, attempt 1, success — Core CI is not the research gate",
+        "decisions": [
+          {
+            "id": "H11-B3-1",
+            "topic": "Load contract",
+            "decision": "ADOPT",
+            "record": "the pre-parse hard boundary is M6's mandatory production load contract. PDFDocument.load() may be called only on input the load boundary PASSes. Dangerous, ambiguous or unsupported load structure is a typed refusal, and fails closed."
+          },
+          {
+            "id": "H11-B3-2",
+            "topic": "Product limit values",
+            "decision": "DO NOT ADOPT the research test values as product values",
+            "record": "64 MiB input, 4 MiB decoded bytes per stream, 8 MiB cumulative decoded bytes, 64 decode streams, 100,000 xref entries, 10,000 objects per object stream and depth 64 are research test values, not production defaults. The product policy is blocker B4, which blocks Ready, release and production enablement, not implementation."
+          },
+          {
+            "id": "H11-B3-3",
+            "topic": "Decoder",
+            "decision": "ADOPT pako 2.1.0",
+            "record": "B3's evidence holds for the bounded inflate over pako 2.1.0. Production does not rely on a pako that happens to be present transitively: package.json declares pako 2.1.0 as a direct dependency, in the production implementation branch and not in this round. The version contract is bound to the B3 evidence; changing the pako version requires the B3 Load Boundary regression verification again."
+          },
+          {
+            "id": "H11-B3-4",
+            "topic": "Execution boundary",
+            "decision": "ADOPT a disposable Worker for the M6 processing route",
+            "productionShape": [
+              "Main/UI",
+              "input ArrayBuffer transfer",
+              "disposable Worker",
+              "pre-parse Load Boundary",
+              "PDFDocument.load() on PASS only",
+              "planning",
+              "copy / save",
+              "output ArrayBuffer transfer",
+              "Worker cleanup / terminate"
+            ],
+            "primarySafetyBoundary": "the pre-parse Load Boundary",
+            "worker": "secondary defence in depth; a Worker alone is NOT a safety boundary",
+            "workerContract": [
+              "transferable input",
+              "transferable output",
+              "cancellation",
+              "timeout counted from operation start",
+              "typed worker failures",
+              "no late publish after cancellation",
+              "termination and cleanup"
+            ]
+          },
+          {
+            "id": "H11-B3-5",
+            "topic": "Strict syntax refusal",
+            "decision": "ADOPT for the M6 MVP",
+            "record": "syntax whose safety cannot be proven is not guessed through for compatibility; it fails closed. The user receives a typed refusal whose reason is at least equivalent to 「このPDFは安全に処理できることを確認できなかったため処理しません」. Silent failure is forbidden. The real-drawing compatibility of strict refusal is checked in B4."
+          },
+          {
+            "id": "H11-B3-6",
+            "topic": "Version binding",
+            "decision": "ADOPT",
+            "record": "the B3 architecture proof is bound to pdf-lib 1.17.1, and M6 production implementation assumes that version's behaviour. On any pdf-lib version change the Load Boundary verification is run again, and M6's safety is not treated as inherited until the decode surface, tokenizer and oracle contracts hold for the new version."
+          }
+        ],
+        "historicalNote": "H11 UNKNOWN at adoption (2026-09-14) → B2 PARTIALLY BOUNDABLE (2026-09-15) → B3 discovered and accepted (2026-09-15) → B3 A, hard pre-load boundary proven (2026-09-16) → the Human adopts the production load architecture (2026-09-16) → B4, product load policy, OPEN. This record does not change the B3 research result."
       },
       "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
       "defer": ["whether the adopted output ceiling shares M5's MAX_OUTPUT_BYTES 268435456 or takes an independently gated M6 value — the research recommends sharing"]
