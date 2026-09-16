@@ -226,6 +226,14 @@ each one goes through, in this order:
 4. **copy**;
 5. **release** of the source, before the next source is inspected.
 
+**Human adoption resolution — 2026-09-17.** The B2-derived Merge execution
+shape below — no all-source preload, sequential source processing, release of
+each source before the next, cumulative structural planning and cap before copy,
+and no safety decided by page count, file size or a memory preset alone — is
+explicitly ADOPTED as the M6 production implementation contract. It is a Human
+adoption of the existing B2 evidence, not a new research conclusion. Governing
+record: `human-gate.json`, `M6-H11.mergeExecutionDecisions`.
+
 Kept from B2, as part of this contract:
 
 - **no all-source preload** — sources are never loaded together;

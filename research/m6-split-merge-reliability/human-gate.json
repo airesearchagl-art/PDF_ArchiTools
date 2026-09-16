@@ -499,6 +499,43 @@
         ],
         "historicalNote": "H11 UNKNOWN at adoption (2026-09-14) → B2 PARTIALLY BOUNDABLE (2026-09-15) → B3 discovered and accepted (2026-09-15) → B3 A, hard pre-load boundary proven (2026-09-16) → the Human adopts the production load architecture (2026-09-16) → B4, product load policy, OPEN. This record does not change the B3 research result."
       },
+      "mergeExecutionDecisions": {
+        "status": "ADOPTED",
+        "decidedBy": "Human",
+        "adoptedOn": "2026-09-17",
+        "authority": "a Human adoption decision on the existing B2 evidence, not a new B2 technical conclusion. The five items below are the M6 production implementation contract for Merge, no longer a research recommendation. B2 evidence and gates are unchanged.",
+        "raisedBy": "the Final Independent Architecture Re-Review of 19411cec8dbaf395c48a20bcbe5cbbf6800ba380, which found merge-contract.md stating this execution shape as current contract while objectGraphMemoryConclusion recorded it only as safeProductionRecommendation",
+        "evidenceBasis": "B2 Object-Graph Memory Sub-Spike — object-graph-memory.md; evidence-object-graph-memory.json",
+        "memoryModel": "PARTIALLY BOUNDABLE",
+        "decisions": [
+          {
+            "id": "H11-MERGE-1",
+            "topic": "no all-source preload",
+            "record": "a Merge does not call PDFDocument.load() on every source together at its start"
+          },
+          {
+            "id": "H11-MERGE-2",
+            "topic": "sequential source processing",
+            "record": "sources are processed one at a time, each in the order Load Boundary → PASS → PDFDocument.load() → post-load structural planning → copy → source release"
+          },
+          {
+            "id": "H11-MERGE-3",
+            "topic": "release each source before the next",
+            "record": "once the pages and objects a source contributes are copied into the destination, and before the next source is loaded, the source document, source bytes and source-owned resources are released as far as possible; no all-source lifetime is created"
+          },
+          {
+            "id": "H11-MERGE-4",
+            "topic": "cumulative structural planning and cap before copy",
+            "record": "before a source is copied, the cumulative totals after adding it are evaluated from terms B2 showed structurally countable — reachable and copied object count, duplicated stream bytes, largest stream, cumulative destination graph growth — together with the adopted output ceiling; a cap that would be exceeded is a typed refusal before the copy starts"
+          },
+          {
+            "id": "H11-MERGE-5",
+            "topic": "page count, file size or a memory preset alone is not safety",
+            "record": "no safety decision rests on page count, source file size, a browser heap estimate, or M5's 512 MiB / 1 GiB / 2 GiB presets alone; M5's presets stay DO NOT ADOPT"
+          }
+        ],
+        "doesNotChange": "B1, B2 and B3 closure evidence; the B3 Human decisions (loadBoundaryDecisions); B4's state; any research numeric value. No cap value is set by this decision."
+      },
       "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
       "defer": ["whether the adopted output ceiling shares M5's MAX_OUTPUT_BYTES 268435456 or takes an independently gated M6 value — the research recommends sharing"]
     },
