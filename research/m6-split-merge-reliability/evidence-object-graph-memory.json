@@ -2,7 +2,7 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "04a0623fe409c0e50a152e7970afe2171df708c7",
+    "testedResearchHead": "2c3f841618514887db0667e0bbc1d72eb32ba42e",
     "workingTreeDirty": true,
     "researchPackageDirtyBeforeRun": false,
     "coreCiRunsThisGate": false,
@@ -10,7 +10,7 @@
       "pdf-lib": "1.17.1"
     },
     "node": "v24.15.0",
-    "ranAt": "2026-09-14T17:03:07.307Z"
+    "ranAt": "2026-09-16T08:55:44.789Z"
   },
   "corpus": {
     "mem-a-small-vector": {
@@ -126,11 +126,11 @@
             "inputBytes": 854
           },
           "memory": {
-            "rssMeasuredOnly": 64774144,
-            "heapUsedMeasuredOnly": 8768160,
+            "rssMeasuredOnly": 75522048,
+            "heapUsedMeasuredOnly": 8768640,
             "externalMeasuredOnly": 2325516,
             "arrayBuffersMeasuredOnly": 487201,
-            "maxRssMeasuredOnly": 65101824
+            "maxRssMeasuredOnly": 75665408
           }
         },
         {
@@ -145,11 +145,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 65155072,
-            "heapUsedMeasuredOnly": 8881896,
+            "rssMeasuredOnly": 75558912,
+            "heapUsedMeasuredOnly": 8882328,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 65155072
+            "maxRssMeasuredOnly": 75665408
           }
         },
         {
@@ -168,11 +168,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 65159168,
-            "heapUsedMeasuredOnly": 8921592,
+            "rssMeasuredOnly": 75563008,
+            "heapUsedMeasuredOnly": 8922024,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 65159168
+            "maxRssMeasuredOnly": 75665408
           }
         },
         {
@@ -187,11 +187,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 65159168,
-            "heapUsedMeasuredOnly": 8934408,
+            "rssMeasuredOnly": 75563008,
+            "heapUsedMeasuredOnly": 8934792,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 65159168
+            "maxRssMeasuredOnly": 75665408
           }
         },
         {
@@ -213,11 +213,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 64925696,
-            "heapUsedMeasuredOnly": 8992336,
+            "rssMeasuredOnly": 75640832,
+            "heapUsedMeasuredOnly": 8992720,
             "externalMeasuredOnly": 2325046,
             "arrayBuffersMeasuredOnly": 486691,
-            "maxRssMeasuredOnly": 65175552
+            "maxRssMeasuredOnly": 75665408
           }
         },
         {
@@ -233,11 +233,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 64933888,
-            "heapUsedMeasuredOnly": 8992784,
+            "rssMeasuredOnly": 75640832,
+            "heapUsedMeasuredOnly": 8993168,
             "externalMeasuredOnly": 2325046,
             "arrayBuffersMeasuredOnly": 486691,
-            "maxRssMeasuredOnly": 65175552
+            "maxRssMeasuredOnly": 75665408
           }
         },
         {
@@ -253,11 +253,11 @@
             "outputBytesMeasuredOnly": 934
           },
           "memory": {
-            "rssMeasuredOnly": 65339392,
-            "heapUsedMeasuredOnly": 9191352,
+            "rssMeasuredOnly": 75882496,
+            "heapUsedMeasuredOnly": 9191784,
             "externalMeasuredOnly": 2325980,
             "arrayBuffersMeasuredOnly": 487625,
-            "maxRssMeasuredOnly": 65974272
+            "maxRssMeasuredOnly": 76582912
           }
         },
         {
@@ -268,22 +268,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 65343488,
-            "heapUsedMeasuredOnly": 9180944,
+            "rssMeasuredOnly": 75911168,
+            "heapUsedMeasuredOnly": 9181424,
             "externalMeasuredOnly": 2325808,
             "arrayBuffersMeasuredOnly": 487453,
-            "maxRssMeasuredOnly": 65974272
+            "maxRssMeasuredOnly": 76582912
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 65355776,
-            "heapUsedMeasuredOnly": 9188208,
+            "rssMeasuredOnly": 75919360,
+            "heapUsedMeasuredOnly": 9188688,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 65974272
+            "maxRssMeasuredOnly": 76582912
           }
         }
       ]
@@ -314,11 +314,11 @@
             "inputBytes": 1876490
           },
           "memory": {
-            "rssMeasuredOnly": 68964352,
-            "heapUsedMeasuredOnly": 8767760,
+            "rssMeasuredOnly": 77291520,
+            "heapUsedMeasuredOnly": 8768656,
             "externalMeasuredOnly": 4201152,
             "arrayBuffersMeasuredOnly": 2362837,
-            "maxRssMeasuredOnly": 70656000
+            "maxRssMeasuredOnly": 79138816
           }
         },
         {
@@ -333,11 +333,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 106852352,
-            "heapUsedMeasuredOnly": 22012592,
+            "rssMeasuredOnly": 113692672,
+            "heapUsedMeasuredOnly": 22040880,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 110845952
+            "maxRssMeasuredOnly": 116613120
           }
         },
         {
@@ -356,11 +356,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 110886912,
-            "heapUsedMeasuredOnly": 23578440,
+            "rssMeasuredOnly": 116461568,
+            "heapUsedMeasuredOnly": 23591760,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 113250304
+            "maxRssMeasuredOnly": 118116352
           }
         },
         {
@@ -375,11 +375,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 109461504,
-            "heapUsedMeasuredOnly": 22071224,
+            "rssMeasuredOnly": 114126848,
+            "heapUsedMeasuredOnly": 22095904,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 113250304
+            "maxRssMeasuredOnly": 118116352
           }
         },
         {
@@ -401,11 +401,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 123502592,
-            "heapUsedMeasuredOnly": 29322160,
+            "rssMeasuredOnly": 131411968,
+            "heapUsedMeasuredOnly": 29327640,
             "externalMeasuredOnly": 2325048,
             "arrayBuffersMeasuredOnly": 486693,
-            "maxRssMeasuredOnly": 128487424
+            "maxRssMeasuredOnly": 136134656
           }
         },
         {
@@ -421,11 +421,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 123686912,
-            "heapUsedMeasuredOnly": 29322800,
+            "rssMeasuredOnly": 130850816,
+            "heapUsedMeasuredOnly": 29332808,
             "externalMeasuredOnly": 2325048,
             "arrayBuffersMeasuredOnly": 486693,
-            "maxRssMeasuredOnly": 128487424
+            "maxRssMeasuredOnly": 136134656
           }
         },
         {
@@ -441,11 +441,11 @@
             "outputBytesMeasuredOnly": 336399
           },
           "memory": {
-            "rssMeasuredOnly": 146403328,
-            "heapUsedMeasuredOnly": 29730376,
+            "rssMeasuredOnly": 155451392,
+            "heapUsedMeasuredOnly": 29736808,
             "externalMeasuredOnly": 2661447,
             "arrayBuffersMeasuredOnly": 823092,
-            "maxRssMeasuredOnly": 235020288
+            "maxRssMeasuredOnly": 251813888
           }
         },
         {
@@ -456,22 +456,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 145571840,
-            "heapUsedMeasuredOnly": 22537056,
+            "rssMeasuredOnly": 154521600,
+            "heapUsedMeasuredOnly": 22543512,
             "externalMeasuredOnly": 2661274,
             "arrayBuffersMeasuredOnly": 822919,
-            "maxRssMeasuredOnly": 235020288
+            "maxRssMeasuredOnly": 251813888
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 144809984,
-            "heapUsedMeasuredOnly": 22538392,
+            "rssMeasuredOnly": 153788416,
+            "heapUsedMeasuredOnly": 22544848,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 235020288
+            "maxRssMeasuredOnly": 251813888
           }
         }
       ]
@@ -502,11 +502,11 @@
             "inputBytes": 336526
           },
           "memory": {
-            "rssMeasuredOnly": 66437120,
-            "heapUsedMeasuredOnly": 8768296,
+            "rssMeasuredOnly": 75816960,
+            "heapUsedMeasuredOnly": 8768304,
             "externalMeasuredOnly": 2661188,
             "arrayBuffersMeasuredOnly": 822873,
-            "maxRssMeasuredOnly": 66686976
+            "maxRssMeasuredOnly": 76251136
           }
         },
         {
@@ -521,11 +521,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 106930176,
-            "heapUsedMeasuredOnly": 25008680,
+            "rssMeasuredOnly": 115335168,
+            "heapUsedMeasuredOnly": 25083888,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 112017408
+            "maxRssMeasuredOnly": 120086528
           }
         },
         {
@@ -544,11 +544,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 109895680,
-            "heapUsedMeasuredOnly": 26565488,
+            "rssMeasuredOnly": 122880000,
+            "heapUsedMeasuredOnly": 26649064,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 112017408
+            "maxRssMeasuredOnly": 125231104
           }
         },
         {
@@ -563,11 +563,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 108093440,
-            "heapUsedMeasuredOnly": 25065808,
+            "rssMeasuredOnly": 120971264,
+            "heapUsedMeasuredOnly": 25137776,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 112017408
+            "maxRssMeasuredOnly": 125231104
           }
         },
         {
@@ -589,11 +589,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 126517248,
-            "heapUsedMeasuredOnly": 32306128,
+            "rssMeasuredOnly": 139665408,
+            "heapUsedMeasuredOnly": 32397016,
             "externalMeasuredOnly": 2325048,
             "arrayBuffersMeasuredOnly": 486693,
-            "maxRssMeasuredOnly": 131035136
+            "maxRssMeasuredOnly": 144584704
           }
         },
         {
@@ -609,11 +609,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 126181376,
-            "heapUsedMeasuredOnly": 32311296,
+            "rssMeasuredOnly": 139997184,
+            "heapUsedMeasuredOnly": 32397656,
             "externalMeasuredOnly": 2325048,
             "arrayBuffersMeasuredOnly": 486693,
-            "maxRssMeasuredOnly": 131035136
+            "maxRssMeasuredOnly": 144584704
           }
         },
         {
@@ -629,11 +629,11 @@
             "outputBytesMeasuredOnly": 336399
           },
           "memory": {
-            "rssMeasuredOnly": 151461888,
-            "heapUsedMeasuredOnly": 32668104,
+            "rssMeasuredOnly": 168615936,
+            "heapUsedMeasuredOnly": 32766344,
             "externalMeasuredOnly": 2661447,
             "arrayBuffersMeasuredOnly": 823092,
-            "maxRssMeasuredOnly": 264871936
+            "maxRssMeasuredOnly": 274161664
           }
         },
         {
@@ -644,22 +644,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 150614016,
-            "heapUsedMeasuredOnly": 25474904,
+            "rssMeasuredOnly": 168067072,
+            "heapUsedMeasuredOnly": 25567136,
             "externalMeasuredOnly": 2661274,
             "arrayBuffersMeasuredOnly": 822919,
-            "maxRssMeasuredOnly": 264871936
+            "maxRssMeasuredOnly": 274161664
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 149753856,
-            "heapUsedMeasuredOnly": 25476240,
+            "rssMeasuredOnly": 167051264,
+            "heapUsedMeasuredOnly": 25568472,
             "externalMeasuredOnly": 2324875,
             "arrayBuffersMeasuredOnly": 486520,
-            "maxRssMeasuredOnly": 264871936
+            "maxRssMeasuredOnly": 274161664
           }
         }
       ]
@@ -682,7 +682,7 @@
         "objects": 6,
         "streamBytes": 1260199
       },
-      "outputBytesMeasuredOnly": 1261469,
+      "outputBytesMeasuredOnly": 1261465,
       "phases": [
         {
           "phase": "0 before load",
@@ -690,11 +690,11 @@
             "inputBytes": 1261446
           },
           "memory": {
-            "rssMeasuredOnly": 68210688,
-            "heapUsedMeasuredOnly": 8768296,
+            "rssMeasuredOnly": 76517376,
+            "heapUsedMeasuredOnly": 8768640,
             "externalMeasuredOnly": 3586108,
             "arrayBuffersMeasuredOnly": 1747793,
-            "maxRssMeasuredOnly": 69722112
+            "maxRssMeasuredOnly": 77791232
           }
         },
         {
@@ -709,11 +709,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68464640,
-            "heapUsedMeasuredOnly": 8913240,
+            "rssMeasuredOnly": 76677120,
+            "heapUsedMeasuredOnly": 8913560,
             "externalMeasuredOnly": 3584901,
             "arrayBuffersMeasuredOnly": 1746546,
-            "maxRssMeasuredOnly": 69738496
+            "maxRssMeasuredOnly": 77938688
           }
         },
         {
@@ -732,11 +732,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68501504,
-            "heapUsedMeasuredOnly": 8950576,
+            "rssMeasuredOnly": 76681216,
+            "heapUsedMeasuredOnly": 8950896,
             "externalMeasuredOnly": 3584901,
             "arrayBuffersMeasuredOnly": 1746546,
-            "maxRssMeasuredOnly": 69738496
+            "maxRssMeasuredOnly": 77938688
           }
         },
         {
@@ -751,11 +751,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68517888,
-            "heapUsedMeasuredOnly": 8971544,
+            "rssMeasuredOnly": 76693504,
+            "heapUsedMeasuredOnly": 8971840,
             "externalMeasuredOnly": 3584901,
             "arrayBuffersMeasuredOnly": 1746546,
-            "maxRssMeasuredOnly": 69738496
+            "maxRssMeasuredOnly": 77938688
           }
         },
         {
@@ -777,11 +777,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 69812224,
-            "heapUsedMeasuredOnly": 9018640,
+            "rssMeasuredOnly": 77983744,
+            "heapUsedMeasuredOnly": 9018936,
             "externalMeasuredOnly": 4845100,
             "arrayBuffersMeasuredOnly": 3006745,
-            "maxRssMeasuredOnly": 69812224
+            "maxRssMeasuredOnly": 77983744
           }
         },
         {
@@ -797,11 +797,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 69812224,
-            "heapUsedMeasuredOnly": 9019072,
+            "rssMeasuredOnly": 77991936,
+            "heapUsedMeasuredOnly": 9019368,
             "externalMeasuredOnly": 4845100,
             "arrayBuffersMeasuredOnly": 3006745,
-            "maxRssMeasuredOnly": 69812224
+            "maxRssMeasuredOnly": 77991936
           }
         },
         {
@@ -814,14 +814,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 9
             },
-            "outputBytesMeasuredOnly": 1261469
+            "outputBytesMeasuredOnly": 1261465
           },
           "memory": {
-            "rssMeasuredOnly": 71655424,
-            "heapUsedMeasuredOnly": 9231888,
-            "externalMeasuredOnly": 6106569,
-            "arrayBuffersMeasuredOnly": 4268214,
-            "maxRssMeasuredOnly": 71995392
+            "rssMeasuredOnly": 79831040,
+            "heapUsedMeasuredOnly": 9232208,
+            "externalMeasuredOnly": 6106565,
+            "arrayBuffersMeasuredOnly": 4268210,
+            "maxRssMeasuredOnly": 80359424
           }
         },
         {
@@ -832,22 +832,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 70230016,
-            "heapUsedMeasuredOnly": 9218904,
-            "externalMeasuredOnly": 4846370,
-            "arrayBuffersMeasuredOnly": 3008015,
-            "maxRssMeasuredOnly": 71995392
+            "rssMeasuredOnly": 78397440,
+            "heapUsedMeasuredOnly": 9219248,
+            "externalMeasuredOnly": 4846366,
+            "arrayBuffersMeasuredOnly": 3008011,
+            "maxRssMeasuredOnly": 80359424
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 68972544,
-            "heapUsedMeasuredOnly": 9226600,
+            "rssMeasuredOnly": 77135872,
+            "heapUsedMeasuredOnly": 9226944,
             "externalMeasuredOnly": 3584901,
             "arrayBuffersMeasuredOnly": 1746546,
-            "maxRssMeasuredOnly": 71995392
+            "maxRssMeasuredOnly": 80359424
           }
         }
       ]
@@ -870,7 +870,7 @@
         "objects": 4,
         "streamBytes": 400194
       },
-      "outputBytesMeasuredOnly": 401131,
+      "outputBytesMeasuredOnly": 401133,
       "phases": [
         {
           "phase": "0 before load",
@@ -878,11 +878,11 @@
             "inputBytes": 427302
           },
           "memory": {
-            "rssMeasuredOnly": 67330048,
-            "heapUsedMeasuredOnly": 8768032,
+            "rssMeasuredOnly": 76001280,
+            "heapUsedMeasuredOnly": 8769080,
             "externalMeasuredOnly": 2751964,
             "arrayBuffersMeasuredOnly": 913649,
-            "maxRssMeasuredOnly": 67719168
+            "maxRssMeasuredOnly": 76472320
           }
         },
         {
@@ -897,11 +897,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67436544,
-            "heapUsedMeasuredOnly": 9115264,
+            "rssMeasuredOnly": 76095488,
+            "heapUsedMeasuredOnly": 9114888,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69795840
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
@@ -920,11 +920,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67551232,
-            "heapUsedMeasuredOnly": 9167616,
+            "rssMeasuredOnly": 75943936,
+            "heapUsedMeasuredOnly": 9167240,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69795840
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
@@ -939,11 +939,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67551232,
-            "heapUsedMeasuredOnly": 9180976,
+            "rssMeasuredOnly": 76021760,
+            "heapUsedMeasuredOnly": 9180576,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69795840
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
@@ -965,11 +965,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67985408,
-            "heapUsedMeasuredOnly": 9228272,
+            "rssMeasuredOnly": 76582912,
+            "heapUsedMeasuredOnly": 9227872,
             "externalMeasuredOnly": 3134661,
             "arrayBuffersMeasuredOnly": 1296306,
-            "maxRssMeasuredOnly": 69795840
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
@@ -985,11 +985,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 67993600,
-            "heapUsedMeasuredOnly": 9228784,
+            "rssMeasuredOnly": 76582912,
+            "heapUsedMeasuredOnly": 9228384,
             "externalMeasuredOnly": 3134661,
             "arrayBuffersMeasuredOnly": 1296306,
-            "maxRssMeasuredOnly": 69795840
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
@@ -1002,14 +1002,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 7
             },
-            "outputBytesMeasuredOnly": 401131
+            "outputBytesMeasuredOnly": 401133
           },
           "memory": {
-            "rssMeasuredOnly": 68513792,
-            "heapUsedMeasuredOnly": 9425744,
-            "externalMeasuredOnly": 3535792,
-            "arrayBuffersMeasuredOnly": 1697437,
-            "maxRssMeasuredOnly": 69795840
+            "rssMeasuredOnly": 77537280,
+            "heapUsedMeasuredOnly": 9422224,
+            "externalMeasuredOnly": 3535794,
+            "arrayBuffersMeasuredOnly": 1697439,
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
@@ -1020,22 +1020,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 68272128,
-            "heapUsedMeasuredOnly": 9278360,
-            "externalMeasuredOnly": 3126027,
-            "arrayBuffersMeasuredOnly": 1287672,
-            "maxRssMeasuredOnly": 69795840
+            "rssMeasuredOnly": 76800000,
+            "heapUsedMeasuredOnly": 9274864,
+            "externalMeasuredOnly": 3126029,
+            "arrayBuffersMeasuredOnly": 1287674,
+            "maxRssMeasuredOnly": 78499840
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 67837952,
-            "heapUsedMeasuredOnly": 9285624,
+            "rssMeasuredOnly": 76439552,
+            "heapUsedMeasuredOnly": 9282128,
             "externalMeasuredOnly": 2724896,
             "arrayBuffersMeasuredOnly": 886541,
-            "maxRssMeasuredOnly": 69795840
+            "maxRssMeasuredOnly": 78499840
           }
         }
       ]
@@ -1066,11 +1066,11 @@
             "inputBytes": 427302
           },
           "memory": {
-            "rssMeasuredOnly": 67121152,
-            "heapUsedMeasuredOnly": 8769224,
+            "rssMeasuredOnly": 76132352,
+            "heapUsedMeasuredOnly": 8769328,
             "externalMeasuredOnly": 2751964,
             "arrayBuffersMeasuredOnly": 913649,
-            "maxRssMeasuredOnly": 67440640
+            "maxRssMeasuredOnly": 76537856
           }
         },
         {
@@ -1085,11 +1085,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67350528,
-            "heapUsedMeasuredOnly": 9116480,
+            "rssMeasuredOnly": 76365824,
+            "heapUsedMeasuredOnly": 9116560,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69672960
+            "maxRssMeasuredOnly": 78655488
           }
         },
         {
@@ -1108,11 +1108,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67624960,
-            "heapUsedMeasuredOnly": 9214344,
+            "rssMeasuredOnly": 76701696,
+            "heapUsedMeasuredOnly": 9214424,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69672960
+            "maxRssMeasuredOnly": 78655488
           }
         },
         {
@@ -1127,11 +1127,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67624960,
-            "heapUsedMeasuredOnly": 9210576,
+            "rssMeasuredOnly": 76439552,
+            "heapUsedMeasuredOnly": 9210632,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69672960
+            "maxRssMeasuredOnly": 78655488
           }
         },
         {
@@ -1153,11 +1153,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68562944,
-            "heapUsedMeasuredOnly": 9439720,
+            "rssMeasuredOnly": 77508608,
+            "heapUsedMeasuredOnly": 9439528,
             "externalMeasuredOnly": 3144232,
             "arrayBuffersMeasuredOnly": 1305877,
-            "maxRssMeasuredOnly": 69672960
+            "maxRssMeasuredOnly": 78655488
           }
         },
         {
@@ -1173,11 +1173,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 68247552,
-            "heapUsedMeasuredOnly": 9451032,
+            "rssMeasuredOnly": 77221888,
+            "heapUsedMeasuredOnly": 9451088,
             "externalMeasuredOnly": 3144232,
             "arrayBuffersMeasuredOnly": 1305877,
-            "maxRssMeasuredOnly": 69672960
+            "maxRssMeasuredOnly": 78655488
           }
         },
         {
@@ -1193,11 +1193,11 @@
             "outputBytesMeasuredOnly": 415762
           },
           "memory": {
-            "rssMeasuredOnly": 69230592,
-            "heapUsedMeasuredOnly": 9703256,
+            "rssMeasuredOnly": 78364672,
+            "heapUsedMeasuredOnly": 9702672,
             "externalMeasuredOnly": 3559994,
             "arrayBuffersMeasuredOnly": 1721639,
-            "maxRssMeasuredOnly": 70897664
+            "maxRssMeasuredOnly": 80039936
           }
         },
         {
@@ -1208,22 +1208,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 68849664,
-            "heapUsedMeasuredOnly": 9555840,
+            "rssMeasuredOnly": 78049280,
+            "heapUsedMeasuredOnly": 9555280,
             "externalMeasuredOnly": 3150229,
             "arrayBuffersMeasuredOnly": 1311874,
-            "maxRssMeasuredOnly": 70897664
+            "maxRssMeasuredOnly": 80039936
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 68399104,
-            "heapUsedMeasuredOnly": 9557176,
+            "rssMeasuredOnly": 77611008,
+            "heapUsedMeasuredOnly": 9556616,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 70897664
+            "maxRssMeasuredOnly": 80039936
           }
         }
       ]
@@ -1254,11 +1254,11 @@
             "inputBytes": 36673
           },
           "memory": {
-            "rssMeasuredOnly": 66940928,
-            "heapUsedMeasuredOnly": 8767928,
+            "rssMeasuredOnly": 75788288,
+            "heapUsedMeasuredOnly": 8769056,
             "externalMeasuredOnly": 2361335,
             "arrayBuffersMeasuredOnly": 523020,
-            "maxRssMeasuredOnly": 66961408
+            "maxRssMeasuredOnly": 75792384
           }
         },
         {
@@ -1273,11 +1273,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67878912,
-            "heapUsedMeasuredOnly": 9301688,
+            "rssMeasuredOnly": 76316672,
+            "heapUsedMeasuredOnly": 9302744,
             "externalMeasuredOnly": 2324894,
             "arrayBuffersMeasuredOnly": 486539,
-            "maxRssMeasuredOnly": 69664768
+            "maxRssMeasuredOnly": 78503936
           }
         },
         {
@@ -1296,11 +1296,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68304896,
-            "heapUsedMeasuredOnly": 9383816,
+            "rssMeasuredOnly": 77152256,
+            "heapUsedMeasuredOnly": 9384872,
             "externalMeasuredOnly": 2324894,
             "arrayBuffersMeasuredOnly": 486539,
-            "maxRssMeasuredOnly": 69664768
+            "maxRssMeasuredOnly": 78503936
           }
         },
         {
@@ -1315,11 +1315,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68681728,
-            "heapUsedMeasuredOnly": 9428720,
+            "rssMeasuredOnly": 76156928,
+            "heapUsedMeasuredOnly": 9599656,
             "externalMeasuredOnly": 2324894,
             "arrayBuffersMeasuredOnly": 486539,
-            "maxRssMeasuredOnly": 69664768
+            "maxRssMeasuredOnly": 78503936
           }
         },
         {
@@ -1341,11 +1341,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68116480,
-            "heapUsedMeasuredOnly": 9738072,
+            "rssMeasuredOnly": 76701696,
+            "heapUsedMeasuredOnly": 9738896,
             "externalMeasuredOnly": 2325086,
             "arrayBuffersMeasuredOnly": 486731,
-            "maxRssMeasuredOnly": 69664768
+            "maxRssMeasuredOnly": 78503936
           }
         },
         {
@@ -1361,11 +1361,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 68173824,
-            "heapUsedMeasuredOnly": 9738584,
+            "rssMeasuredOnly": 76734464,
+            "heapUsedMeasuredOnly": 9739408,
             "externalMeasuredOnly": 2325086,
             "arrayBuffersMeasuredOnly": 486731,
-            "maxRssMeasuredOnly": 69664768
+            "maxRssMeasuredOnly": 78503936
           }
         },
         {
@@ -1381,11 +1381,11 @@
             "outputBytesMeasuredOnly": 33282
           },
           "memory": {
-            "rssMeasuredOnly": 68608000,
-            "heapUsedMeasuredOnly": 10022808,
+            "rssMeasuredOnly": 76914688,
+            "heapUsedMeasuredOnly": 10023704,
             "externalMeasuredOnly": 2358368,
             "arrayBuffersMeasuredOnly": 520013,
-            "maxRssMeasuredOnly": 69992448
+            "maxRssMeasuredOnly": 78573568
           }
         },
         {
@@ -1396,22 +1396,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 68251648,
-            "heapUsedMeasuredOnly": 9691840,
+            "rssMeasuredOnly": 76939264,
+            "heapUsedMeasuredOnly": 9692760,
             "externalMeasuredOnly": 2358176,
             "arrayBuffersMeasuredOnly": 519821,
-            "maxRssMeasuredOnly": 69992448
+            "maxRssMeasuredOnly": 78573568
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 68395008,
-            "heapUsedMeasuredOnly": 9700336,
+            "rssMeasuredOnly": 76939264,
+            "heapUsedMeasuredOnly": 9701256,
             "externalMeasuredOnly": 2324894,
             "arrayBuffersMeasuredOnly": 486539,
-            "maxRssMeasuredOnly": 69992448
+            "maxRssMeasuredOnly": 78573568
           }
         }
       ]
@@ -1434,7 +1434,7 @@
         "objects": 3,
         "streamBytes": 171
       },
-      "outputBytesMeasuredOnly": 932,
+      "outputBytesMeasuredOnly": 933,
       "phases": [
         {
           "phase": "0 before load",
@@ -1442,11 +1442,11 @@
             "inputBytes": 503388
           },
           "memory": {
-            "rssMeasuredOnly": 66826240,
-            "heapUsedMeasuredOnly": 8768368,
+            "rssMeasuredOnly": 75837440,
+            "heapUsedMeasuredOnly": 8768216,
             "externalMeasuredOnly": 2828050,
             "arrayBuffersMeasuredOnly": 989735,
-            "maxRssMeasuredOnly": 67477504
+            "maxRssMeasuredOnly": 76447744
           }
         },
         {
@@ -1461,11 +1461,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 78655488,
-            "heapUsedMeasuredOnly": 12304712,
+            "rssMeasuredOnly": 86941696,
+            "heapUsedMeasuredOnly": 12302816,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 79515648
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
@@ -1484,11 +1484,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 78643200,
-            "heapUsedMeasuredOnly": 12556608,
+            "rssMeasuredOnly": 86781952,
+            "heapUsedMeasuredOnly": 12554792,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 79515648
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
@@ -1503,11 +1503,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 78696448,
-            "heapUsedMeasuredOnly": 12563616,
+            "rssMeasuredOnly": 86818816,
+            "heapUsedMeasuredOnly": 12561776,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 79515648
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
@@ -1529,11 +1529,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 79601664,
-            "heapUsedMeasuredOnly": 12583928,
+            "rssMeasuredOnly": 87797760,
+            "heapUsedMeasuredOnly": 12580624,
             "externalMeasuredOnly": 2498198,
             "arrayBuffersMeasuredOnly": 659843,
-            "maxRssMeasuredOnly": 79605760
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
@@ -1549,11 +1549,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 78413824,
-            "heapUsedMeasuredOnly": 12601640,
+            "rssMeasuredOnly": 87064576,
+            "heapUsedMeasuredOnly": 12598328,
             "externalMeasuredOnly": 2498198,
             "arrayBuffersMeasuredOnly": 659843,
-            "maxRssMeasuredOnly": 79679488
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
@@ -1566,14 +1566,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 6
             },
-            "outputBytesMeasuredOnly": 932
+            "outputBytesMeasuredOnly": 933
           },
           "memory": {
-            "rssMeasuredOnly": 78790656,
-            "heapUsedMeasuredOnly": 12797232,
-            "externalMeasuredOnly": 2499130,
-            "arrayBuffersMeasuredOnly": 660775,
-            "maxRssMeasuredOnly": 79679488
+            "rssMeasuredOnly": 86728704,
+            "heapUsedMeasuredOnly": 12793944,
+            "externalMeasuredOnly": 2499131,
+            "arrayBuffersMeasuredOnly": 660776,
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
@@ -1584,22 +1584,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 78585856,
-            "heapUsedMeasuredOnly": 10027464,
-            "externalMeasuredOnly": 2325805,
-            "arrayBuffersMeasuredOnly": 487450,
-            "maxRssMeasuredOnly": 79679488
+            "rssMeasuredOnly": 86675456,
+            "heapUsedMeasuredOnly": 10024200,
+            "externalMeasuredOnly": 2325806,
+            "arrayBuffersMeasuredOnly": 487451,
+            "maxRssMeasuredOnly": 88150016
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 78602240,
-            "heapUsedMeasuredOnly": 10034160,
+            "rssMeasuredOnly": 86761472,
+            "heapUsedMeasuredOnly": 10030896,
             "externalMeasuredOnly": 2324873,
             "arrayBuffersMeasuredOnly": 486518,
-            "maxRssMeasuredOnly": 79679488
+            "maxRssMeasuredOnly": 88150016
           }
         }
       ]
@@ -1622,7 +1622,7 @@
         "objects": 2001,
         "streamBytes": 173325
       },
-      "outputBytesMeasuredOnly": 277540,
+      "outputBytesMeasuredOnly": 277542,
       "phases": [
         {
           "phase": "0 before load",
@@ -1630,11 +1630,11 @@
             "inputBytes": 503388
           },
           "memory": {
-            "rssMeasuredOnly": 67526656,
-            "heapUsedMeasuredOnly": 8779912,
+            "rssMeasuredOnly": 76300288,
+            "heapUsedMeasuredOnly": 8780800,
             "externalMeasuredOnly": 2828050,
             "arrayBuffersMeasuredOnly": 989735,
-            "maxRssMeasuredOnly": 68173824
+            "maxRssMeasuredOnly": 76869632
           }
         },
         {
@@ -1649,11 +1649,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 78766080,
-            "heapUsedMeasuredOnly": 12316032,
+            "rssMeasuredOnly": 87183360,
+            "heapUsedMeasuredOnly": 12531328,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 79765504
+            "maxRssMeasuredOnly": 88313856
           }
         },
         {
@@ -1672,11 +1672,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 82100224,
-            "heapUsedMeasuredOnly": 12852928,
+            "rssMeasuredOnly": 89264128,
+            "heapUsedMeasuredOnly": 12860280,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 82354176
+            "maxRssMeasuredOnly": 90042368
           }
         },
         {
@@ -1691,11 +1691,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 82554880,
-            "heapUsedMeasuredOnly": 12866624,
+            "rssMeasuredOnly": 90087424,
+            "heapUsedMeasuredOnly": 12867416,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 82694144
+            "maxRssMeasuredOnly": 90091520
           }
         },
         {
@@ -1717,11 +1717,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 94871552,
-            "heapUsedMeasuredOnly": 15568848,
+            "rssMeasuredOnly": 103485440,
+            "heapUsedMeasuredOnly": 15569640,
             "externalMeasuredOnly": 2671352,
             "arrayBuffersMeasuredOnly": 832997,
-            "maxRssMeasuredOnly": 95821824
+            "maxRssMeasuredOnly": 104153088
           }
         },
         {
@@ -1737,11 +1737,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 93634560,
-            "heapUsedMeasuredOnly": 15552648,
+            "rssMeasuredOnly": 102576128,
+            "heapUsedMeasuredOnly": 15553440,
             "externalMeasuredOnly": 2671352,
             "arrayBuffersMeasuredOnly": 832997,
-            "maxRssMeasuredOnly": 95821824
+            "maxRssMeasuredOnly": 104153088
           }
         },
         {
@@ -1754,14 +1754,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 2004
             },
-            "outputBytesMeasuredOnly": 277540
+            "outputBytesMeasuredOnly": 277542
           },
           "memory": {
-            "rssMeasuredOnly": 96620544,
-            "heapUsedMeasuredOnly": 15677288,
-            "externalMeasuredOnly": 2948892,
-            "arrayBuffersMeasuredOnly": 1110537,
-            "maxRssMeasuredOnly": 102920192
+            "rssMeasuredOnly": 104726528,
+            "heapUsedMeasuredOnly": 15674424,
+            "externalMeasuredOnly": 2948894,
+            "arrayBuffersMeasuredOnly": 1110539,
+            "maxRssMeasuredOnly": 111177728
           }
         },
         {
@@ -1772,22 +1772,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 95948800,
-            "heapUsedMeasuredOnly": 12907488,
-            "externalMeasuredOnly": 2775567,
-            "arrayBuffersMeasuredOnly": 937212,
-            "maxRssMeasuredOnly": 102920192
+            "rssMeasuredOnly": 104456192,
+            "heapUsedMeasuredOnly": 12904648,
+            "externalMeasuredOnly": 2775569,
+            "arrayBuffersMeasuredOnly": 937214,
+            "maxRssMeasuredOnly": 111177728
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 95494144,
-            "heapUsedMeasuredOnly": 12908824,
+            "rssMeasuredOnly": 103837696,
+            "heapUsedMeasuredOnly": 12905984,
             "externalMeasuredOnly": 2498027,
             "arrayBuffersMeasuredOnly": 659672,
-            "maxRssMeasuredOnly": 102920192
+            "maxRssMeasuredOnly": 111177728
           }
         }
       ]
@@ -1818,11 +1818,11 @@
             "inputBytes": 9001068
           },
           "memory": {
-            "rssMeasuredOnly": 76095488,
-            "heapUsedMeasuredOnly": 8768168,
+            "rssMeasuredOnly": 84512768,
+            "heapUsedMeasuredOnly": 8768120,
             "externalMeasuredOnly": 11325730,
             "arrayBuffersMeasuredOnly": 9487415,
-            "maxRssMeasuredOnly": 84824064
+            "maxRssMeasuredOnly": 93474816
           }
         },
         {
@@ -1837,11 +1837,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 76210176,
-            "heapUsedMeasuredOnly": 8899904,
+            "rssMeasuredOnly": 84496384,
+            "heapUsedMeasuredOnly": 8899808,
             "externalMeasuredOnly": 11324895,
             "arrayBuffersMeasuredOnly": 9486540,
-            "maxRssMeasuredOnly": 85241856
+            "maxRssMeasuredOnly": 93519872
           }
         },
         {
@@ -1860,11 +1860,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 76046336,
-            "heapUsedMeasuredOnly": 8936960,
+            "rssMeasuredOnly": 84545536,
+            "heapUsedMeasuredOnly": 8936864,
             "externalMeasuredOnly": 11324895,
             "arrayBuffersMeasuredOnly": 9486540,
-            "maxRssMeasuredOnly": 85241856
+            "maxRssMeasuredOnly": 93519872
           }
         },
         {
@@ -1879,11 +1879,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 76075008,
-            "heapUsedMeasuredOnly": 8958168,
+            "rssMeasuredOnly": 84553728,
+            "heapUsedMeasuredOnly": 8958024,
             "externalMeasuredOnly": 11324895,
             "arrayBuffersMeasuredOnly": 9486540,
-            "maxRssMeasuredOnly": 85241856
+            "maxRssMeasuredOnly": 93519872
           }
         },
         {
@@ -1905,11 +1905,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 85094400,
-            "heapUsedMeasuredOnly": 9231168,
+            "rssMeasuredOnly": 93646848,
+            "heapUsedMeasuredOnly": 9001384,
             "externalMeasuredOnly": 20325088,
             "arrayBuffersMeasuredOnly": 18486733,
-            "maxRssMeasuredOnly": 85241856
+            "maxRssMeasuredOnly": 93646848
           }
         },
         {
@@ -1925,11 +1925,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 85094400,
-            "heapUsedMeasuredOnly": 9002096,
+            "rssMeasuredOnly": 93646848,
+            "heapUsedMeasuredOnly": 9001952,
             "externalMeasuredOnly": 20325088,
             "arrayBuffersMeasuredOnly": 18486733,
-            "maxRssMeasuredOnly": 85241856
+            "maxRssMeasuredOnly": 93646848
           }
         },
         {
@@ -1945,11 +1945,11 @@
             "outputBytesMeasuredOnly": 9001133
           },
           "memory": {
-            "rssMeasuredOnly": 94699520,
-            "heapUsedMeasuredOnly": 9200784,
+            "rssMeasuredOnly": 103211008,
+            "heapUsedMeasuredOnly": 9200688,
             "externalMeasuredOnly": 29326221,
             "arrayBuffersMeasuredOnly": 27487866,
-            "maxRssMeasuredOnly": 95084544
+            "maxRssMeasuredOnly": 103522304
           }
         },
         {
@@ -1960,22 +1960,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 85385216,
-            "heapUsedMeasuredOnly": 9189456,
+            "rssMeasuredOnly": 93962240,
+            "heapUsedMeasuredOnly": 9189408,
             "externalMeasuredOnly": 20326028,
             "arrayBuffersMeasuredOnly": 18487673,
-            "maxRssMeasuredOnly": 95084544
+            "maxRssMeasuredOnly": 103522304
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 76394496,
-            "heapUsedMeasuredOnly": 9196720,
+            "rssMeasuredOnly": 85024768,
+            "heapUsedMeasuredOnly": 9196672,
             "externalMeasuredOnly": 11324895,
             "arrayBuffersMeasuredOnly": 9486540,
-            "maxRssMeasuredOnly": 95084544
+            "maxRssMeasuredOnly": 103522304
           }
         }
       ]
@@ -2006,11 +2006,11 @@
             "inputBytes": 9853
           },
           "memory": {
-            "rssMeasuredOnly": 67043328,
-            "heapUsedMeasuredOnly": 8768168,
+            "rssMeasuredOnly": 75247616,
+            "heapUsedMeasuredOnly": 8768072,
             "externalMeasuredOnly": 2334515,
             "arrayBuffersMeasuredOnly": 496200,
-            "maxRssMeasuredOnly": 67215360
+            "maxRssMeasuredOnly": 75280384
           }
         },
         {
@@ -2025,11 +2025,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67133440,
-            "heapUsedMeasuredOnly": 8899736,
+            "rssMeasuredOnly": 75382784,
+            "heapUsedMeasuredOnly": 8899760,
             "externalMeasuredOnly": 2333665,
             "arrayBuffersMeasuredOnly": 495310,
-            "maxRssMeasuredOnly": 67215360
+            "maxRssMeasuredOnly": 75403264
           }
         },
         {
@@ -2048,11 +2048,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67141632,
-            "heapUsedMeasuredOnly": 8936792,
+            "rssMeasuredOnly": 75407360,
+            "heapUsedMeasuredOnly": 8936816,
             "externalMeasuredOnly": 2333665,
             "arrayBuffersMeasuredOnly": 495310,
-            "maxRssMeasuredOnly": 67215360
+            "maxRssMeasuredOnly": 75407360
           }
         },
         {
@@ -2067,11 +2067,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67145728,
-            "heapUsedMeasuredOnly": 8958000,
+            "rssMeasuredOnly": 75419648,
+            "heapUsedMeasuredOnly": 8957976,
             "externalMeasuredOnly": 2333665,
             "arrayBuffersMeasuredOnly": 495310,
-            "maxRssMeasuredOnly": 67215360
+            "maxRssMeasuredOnly": 75419648
           }
         },
         {
@@ -2093,11 +2093,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 66789376,
-            "heapUsedMeasuredOnly": 9001360,
+            "rssMeasuredOnly": 75501568,
+            "heapUsedMeasuredOnly": 9001336,
             "externalMeasuredOnly": 2342628,
             "arrayBuffersMeasuredOnly": 504273,
-            "maxRssMeasuredOnly": 67215360
+            "maxRssMeasuredOnly": 75501568
           }
         },
         {
@@ -2113,11 +2113,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 66883584,
-            "heapUsedMeasuredOnly": 9001928,
+            "rssMeasuredOnly": 75501568,
+            "heapUsedMeasuredOnly": 9001904,
             "externalMeasuredOnly": 2342628,
             "arrayBuffersMeasuredOnly": 504273,
-            "maxRssMeasuredOnly": 67215360
+            "maxRssMeasuredOnly": 75501568
           }
         },
         {
@@ -2133,11 +2133,11 @@
             "outputBytesMeasuredOnly": 9913
           },
           "memory": {
-            "rssMeasuredOnly": 67432448,
-            "heapUsedMeasuredOnly": 9200616,
+            "rssMeasuredOnly": 76374016,
+            "heapUsedMeasuredOnly": 9200640,
             "externalMeasuredOnly": 2352541,
             "arrayBuffersMeasuredOnly": 514186,
-            "maxRssMeasuredOnly": 68018176
+            "maxRssMeasuredOnly": 76800000
           }
         },
         {
@@ -2148,22 +2148,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 67457024,
-            "heapUsedMeasuredOnly": 9189288,
+            "rssMeasuredOnly": 76115968,
+            "heapUsedMeasuredOnly": 9189360,
             "externalMeasuredOnly": 2343578,
             "arrayBuffersMeasuredOnly": 505223,
-            "maxRssMeasuredOnly": 68018176
+            "maxRssMeasuredOnly": 76800000
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 67497984,
-            "heapUsedMeasuredOnly": 9196552,
+            "rssMeasuredOnly": 76120064,
+            "heapUsedMeasuredOnly": 9196624,
             "externalMeasuredOnly": 2333665,
             "arrayBuffersMeasuredOnly": 495310,
-            "maxRssMeasuredOnly": 68018176
+            "maxRssMeasuredOnly": 76800000
           }
         }
       ]
@@ -2186,7 +2186,7 @@
         "objects": 40,
         "streamBytes": 4901945
       },
-      "outputBytesMeasuredOnly": 4905459,
+      "outputBytesMeasuredOnly": 4905458,
       "phases": [
         {
           "phase": "0 before load",
@@ -2194,11 +2194,11 @@
             "inputBytes": 4908863
           },
           "memory": {
-            "rssMeasuredOnly": 71933952,
-            "heapUsedMeasuredOnly": 8768992,
+            "rssMeasuredOnly": 80424960,
+            "heapUsedMeasuredOnly": 8768968,
             "externalMeasuredOnly": 7233525,
             "arrayBuffersMeasuredOnly": 5395210,
-            "maxRssMeasuredOnly": 76738560
+            "maxRssMeasuredOnly": 84910080
           }
         },
         {
@@ -2213,11 +2213,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 72560640,
-            "heapUsedMeasuredOnly": 8997336,
+            "rssMeasuredOnly": 80633856,
+            "heapUsedMeasuredOnly": 8997376,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 77541376
+            "maxRssMeasuredOnly": 86036480
           }
         },
         {
@@ -2236,11 +2236,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 72568832,
-            "heapUsedMeasuredOnly": 9063328,
+            "rssMeasuredOnly": 80728064,
+            "heapUsedMeasuredOnly": 9063368,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 77541376
+            "maxRssMeasuredOnly": 86036480
           }
         },
         {
@@ -2255,11 +2255,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 72577024,
-            "heapUsedMeasuredOnly": 9075392,
+            "rssMeasuredOnly": 80740352,
+            "heapUsedMeasuredOnly": 9075384,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 77541376
+            "maxRssMeasuredOnly": 86036480
           }
         },
         {
@@ -2281,11 +2281,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 77561856,
-            "heapUsedMeasuredOnly": 9436824,
+            "rssMeasuredOnly": 85798912,
+            "heapUsedMeasuredOnly": 9173768,
             "externalMeasuredOnly": 12128592,
             "arrayBuffersMeasuredOnly": 10290237,
-            "maxRssMeasuredOnly": 77561856
+            "maxRssMeasuredOnly": 86036480
           }
         },
         {
@@ -2301,11 +2301,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 77561856,
-            "heapUsedMeasuredOnly": 9175192,
+            "rssMeasuredOnly": 85864448,
+            "heapUsedMeasuredOnly": 9174328,
             "externalMeasuredOnly": 12128592,
             "arrayBuffersMeasuredOnly": 10290237,
-            "maxRssMeasuredOnly": 77561856
+            "maxRssMeasuredOnly": 86036480
           }
         },
         {
@@ -2318,14 +2318,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 43
             },
-            "outputBytesMeasuredOnly": 4905459
+            "outputBytesMeasuredOnly": 4905458
           },
           "memory": {
-            "rssMeasuredOnly": 83013632,
-            "heapUsedMeasuredOnly": 9403432,
-            "externalMeasuredOnly": 17034051,
-            "arrayBuffersMeasuredOnly": 15195696,
-            "maxRssMeasuredOnly": 83079168
+            "rssMeasuredOnly": 91709440,
+            "heapUsedMeasuredOnly": 9402616,
+            "externalMeasuredOnly": 17034050,
+            "arrayBuffersMeasuredOnly": 15195695,
+            "maxRssMeasuredOnly": 91770880
           }
         },
         {
@@ -2336,22 +2336,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 77905920,
-            "heapUsedMeasuredOnly": 9345992,
-            "externalMeasuredOnly": 12132106,
-            "arrayBuffersMeasuredOnly": 10293751,
-            "maxRssMeasuredOnly": 83087360
+            "rssMeasuredOnly": 86528000,
+            "heapUsedMeasuredOnly": 9345224,
+            "externalMeasuredOnly": 12132105,
+            "arrayBuffersMeasuredOnly": 10293750,
+            "maxRssMeasuredOnly": 91770880
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 73007104,
-            "heapUsedMeasuredOnly": 9347328,
+            "rssMeasuredOnly": 81620992,
+            "heapUsedMeasuredOnly": 9346560,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 83087360
+            "maxRssMeasuredOnly": 91770880
           }
         }
       ]
@@ -2382,11 +2382,11 @@
             "inputBytes": 4908863
           },
           "memory": {
-            "rssMeasuredOnly": 72032256,
-            "heapUsedMeasuredOnly": 8768200,
+            "rssMeasuredOnly": 80203776,
+            "heapUsedMeasuredOnly": 8768704,
             "externalMeasuredOnly": 7233525,
             "arrayBuffersMeasuredOnly": 5395210,
-            "maxRssMeasuredOnly": 76689408
+            "maxRssMeasuredOnly": 85057536
           }
         },
         {
@@ -2401,11 +2401,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 72634368,
-            "heapUsedMeasuredOnly": 8996592,
+            "rssMeasuredOnly": 80248832,
+            "heapUsedMeasuredOnly": 8997112,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
@@ -2424,11 +2424,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 72642560,
-            "heapUsedMeasuredOnly": 9041088,
+            "rssMeasuredOnly": 80265216,
+            "heapUsedMeasuredOnly": 9041608,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
@@ -2443,11 +2443,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 72646656,
-            "heapUsedMeasuredOnly": 9053072,
+            "rssMeasuredOnly": 80265216,
+            "heapUsedMeasuredOnly": 9053544,
             "externalMeasuredOnly": 7226647,
             "arrayBuffersMeasuredOnly": 5388292,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
@@ -2469,11 +2469,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 73154560,
-            "heapUsedMeasuredOnly": 9101536,
+            "rssMeasuredOnly": 80822272,
+            "heapUsedMeasuredOnly": 9102008,
             "externalMeasuredOnly": 7716843,
             "arrayBuffersMeasuredOnly": 5878488,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
@@ -2489,11 +2489,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 73154560,
-            "heapUsedMeasuredOnly": 9102096,
+            "rssMeasuredOnly": 80822272,
+            "heapUsedMeasuredOnly": 9102568,
             "externalMeasuredOnly": 7716843,
             "arrayBuffersMeasuredOnly": 5878488,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
@@ -2509,11 +2509,11 @@
             "outputBytesMeasuredOnly": 491134
           },
           "memory": {
-            "rssMeasuredOnly": 73531392,
-            "heapUsedMeasuredOnly": 9296472,
+            "rssMeasuredOnly": 81514496,
+            "heapUsedMeasuredOnly": 9296992,
             "externalMeasuredOnly": 8207977,
             "arrayBuffersMeasuredOnly": 6369622,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
@@ -2524,22 +2524,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 68628480,
-            "heapUsedMeasuredOnly": 9239040,
+            "rssMeasuredOnly": 76619776,
+            "heapUsedMeasuredOnly": 9239608,
             "externalMeasuredOnly": 3306032,
             "arrayBuffersMeasuredOnly": 1467677,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 68100096,
-            "heapUsedMeasuredOnly": 9246304,
+            "rssMeasuredOnly": 76193792,
+            "heapUsedMeasuredOnly": 9246872,
             "externalMeasuredOnly": 2814898,
             "arrayBuffersMeasuredOnly": 976543,
-            "maxRssMeasuredOnly": 77602816
+            "maxRssMeasuredOnly": 85725184
           }
         }
       ]
@@ -2562,7 +2562,7 @@
         "objects": 20003,
         "streamBytes": 172
       },
-      "outputBytesMeasuredOnly": 340558,
+      "outputBytesMeasuredOnly": 340554,
       "phases": [
         {
           "phase": "0 before load",
@@ -2570,11 +2570,11 @@
             "inputBytes": 1896489
           },
           "memory": {
-            "rssMeasuredOnly": 68747264,
-            "heapUsedMeasuredOnly": 8768120,
+            "rssMeasuredOnly": 77676544,
+            "heapUsedMeasuredOnly": 8768736,
             "externalMeasuredOnly": 4221151,
             "arrayBuffersMeasuredOnly": 2382836,
-            "maxRssMeasuredOnly": 70733824
+            "maxRssMeasuredOnly": 79822848
           }
         },
         {
@@ -2589,11 +2589,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 123424768,
-            "heapUsedMeasuredOnly": 27096784,
+            "rssMeasuredOnly": 126345216,
+            "heapUsedMeasuredOnly": 27066296,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 126971904
+            "maxRssMeasuredOnly": 130269184
           }
         },
         {
@@ -2612,11 +2612,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 125923328,
-            "heapUsedMeasuredOnly": 28637640,
+            "rssMeasuredOnly": 127897600,
+            "heapUsedMeasuredOnly": 28620456,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 128184320
+            "maxRssMeasuredOnly": 130940928
           }
         },
         {
@@ -2631,11 +2631,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 124223488,
-            "heapUsedMeasuredOnly": 27151648,
+            "rssMeasuredOnly": 126914560,
+            "heapUsedMeasuredOnly": 27120560,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 128184320
+            "maxRssMeasuredOnly": 130940928
           }
         },
         {
@@ -2657,11 +2657,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 129269760,
-            "heapUsedMeasuredOnly": 34383680,
+            "rssMeasuredOnly": 138518528,
+            "heapUsedMeasuredOnly": 34337272,
             "externalMeasuredOnly": 2325046,
             "arrayBuffersMeasuredOnly": 486691,
-            "maxRssMeasuredOnly": 135417856
+            "maxRssMeasuredOnly": 143822848
           }
         },
         {
@@ -2677,11 +2677,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 130056192,
-            "heapUsedMeasuredOnly": 34384320,
+            "rssMeasuredOnly": 138792960,
+            "heapUsedMeasuredOnly": 34337984,
             "externalMeasuredOnly": 2325046,
             "arrayBuffersMeasuredOnly": 486691,
-            "maxRssMeasuredOnly": 135417856
+            "maxRssMeasuredOnly": 143822848
           }
         },
         {
@@ -2694,14 +2694,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 20006
             },
-            "outputBytesMeasuredOnly": 340558
+            "outputBytesMeasuredOnly": 340554
           },
           "memory": {
-            "rssMeasuredOnly": 156061696,
-            "heapUsedMeasuredOnly": 30827208,
-            "externalMeasuredOnly": 2665604,
-            "arrayBuffersMeasuredOnly": 827249,
-            "maxRssMeasuredOnly": 264413184
+            "rssMeasuredOnly": 165543936,
+            "heapUsedMeasuredOnly": 30794576,
+            "externalMeasuredOnly": 2665600,
+            "arrayBuffersMeasuredOnly": 827245,
+            "maxRssMeasuredOnly": 278986752
           }
         },
         {
@@ -2712,22 +2712,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 154554368,
-            "heapUsedMeasuredOnly": 23633888,
-            "externalMeasuredOnly": 2665432,
-            "arrayBuffersMeasuredOnly": 827077,
-            "maxRssMeasuredOnly": 264413184
+            "rssMeasuredOnly": 164724736,
+            "heapUsedMeasuredOnly": 23601360,
+            "externalMeasuredOnly": 2665428,
+            "arrayBuffersMeasuredOnly": 827073,
+            "maxRssMeasuredOnly": 278986752
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 154185728,
-            "heapUsedMeasuredOnly": 23635224,
+            "rssMeasuredOnly": 163663872,
+            "heapUsedMeasuredOnly": 23602696,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 264413184
+            "maxRssMeasuredOnly": 278986752
           }
         }
       ]
@@ -2750,7 +2750,7 @@
         "objects": 2,
         "streamBytes": 0
       },
-      "outputBytesMeasuredOnly": 584,
+      "outputBytesMeasuredOnly": 585,
       "phases": [
         {
           "phase": "0 before load",
@@ -2758,11 +2758,11 @@
             "inputBytes": 33149
           },
           "memory": {
-            "rssMeasuredOnly": 67260416,
-            "heapUsedMeasuredOnly": 8768592,
+            "rssMeasuredOnly": 75841536,
+            "heapUsedMeasuredOnly": 8768808,
             "externalMeasuredOnly": 2357811,
             "arrayBuffersMeasuredOnly": 519496,
-            "maxRssMeasuredOnly": 67264512
+            "maxRssMeasuredOnly": 75845632
           }
         },
         {
@@ -2777,11 +2777,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67592192,
-            "heapUsedMeasuredOnly": 8923848,
+            "rssMeasuredOnly": 76222464,
+            "heapUsedMeasuredOnly": 8923992,
             "externalMeasuredOnly": 2324702,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 151703552
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
@@ -2800,11 +2800,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67649536,
-            "heapUsedMeasuredOnly": 8949608,
+            "rssMeasuredOnly": 76222464,
+            "heapUsedMeasuredOnly": 8949752,
             "externalMeasuredOnly": 2324702,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 151703552
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
@@ -2819,11 +2819,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67653632,
-            "heapUsedMeasuredOnly": 8962504,
+            "rssMeasuredOnly": 76222464,
+            "heapUsedMeasuredOnly": 8962624,
             "externalMeasuredOnly": 2324702,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 151703552
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
@@ -2845,11 +2845,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67665920,
-            "heapUsedMeasuredOnly": 9012264,
+            "rssMeasuredOnly": 76304384,
+            "heapUsedMeasuredOnly": 9012384,
             "externalMeasuredOnly": 2324702,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 151703552
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
@@ -2865,11 +2865,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 67665920,
-            "heapUsedMeasuredOnly": 9012752,
+            "rssMeasuredOnly": 76316672,
+            "heapUsedMeasuredOnly": 9012872,
             "externalMeasuredOnly": 2324702,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 151703552
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
@@ -2882,14 +2882,14 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 5
             },
-            "outputBytesMeasuredOnly": 584
+            "outputBytesMeasuredOnly": 585
           },
           "memory": {
-            "rssMeasuredOnly": 68218880,
-            "heapUsedMeasuredOnly": 9192080,
-            "externalMeasuredOnly": 2325286,
-            "arrayBuffersMeasuredOnly": 486931,
-            "maxRssMeasuredOnly": 151703552
+            "rssMeasuredOnly": 76414976,
+            "heapUsedMeasuredOnly": 9192224,
+            "externalMeasuredOnly": 2325287,
+            "arrayBuffersMeasuredOnly": 486932,
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
@@ -2900,22 +2900,22 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 68235264,
-            "heapUsedMeasuredOnly": 9184000,
-            "externalMeasuredOnly": 2325286,
-            "arrayBuffersMeasuredOnly": 486931,
-            "maxRssMeasuredOnly": 151703552
+            "rssMeasuredOnly": 76435456,
+            "heapUsedMeasuredOnly": 9184168,
+            "externalMeasuredOnly": 2325287,
+            "arrayBuffersMeasuredOnly": 486932,
+            "maxRssMeasuredOnly": 160436224
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 67805184,
-            "heapUsedMeasuredOnly": 9191696,
+            "rssMeasuredOnly": 76439552,
+            "heapUsedMeasuredOnly": 9191864,
             "externalMeasuredOnly": 2324702,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 151703552
+            "maxRssMeasuredOnly": 160436224
           }
         }
       ]
@@ -3001,11 +3001,11 @@
           "phase": "0 before load",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 67145728,
-            "heapUsedMeasuredOnly": 8767720,
+            "rssMeasuredOnly": 75051008,
+            "heapUsedMeasuredOnly": 8767880,
             "externalMeasuredOnly": 2324662,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 67276800
+            "maxRssMeasuredOnly": 75153408
           }
         },
         {
@@ -3027,11 +3027,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 67284992,
-            "heapUsedMeasuredOnly": 8899792,
+            "rssMeasuredOnly": 75456512,
+            "heapUsedMeasuredOnly": 8899880,
             "externalMeasuredOnly": 2325728,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 67317760
+            "maxRssMeasuredOnly": 75485184
           }
         },
         {
@@ -3057,11 +3057,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 66953216,
-            "heapUsedMeasuredOnly": 8976904,
+            "rssMeasuredOnly": 75550720,
+            "heapUsedMeasuredOnly": 8976992,
             "externalMeasuredOnly": 2325046,
             "arrayBuffersMeasuredOnly": 486691,
-            "maxRssMeasuredOnly": 67317760
+            "maxRssMeasuredOnly": 75591680
           }
         },
         {
@@ -3079,11 +3079,11 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 67117056,
-            "heapUsedMeasuredOnly": 9205304,
+            "rssMeasuredOnly": 75554816,
+            "heapUsedMeasuredOnly": 9265120,
             "externalMeasuredOnly": 2324874,
             "arrayBuffersMeasuredOnly": 486519,
-            "maxRssMeasuredOnly": 67317760
+            "maxRssMeasuredOnly": 75591680
           }
         },
         {
@@ -3105,11 +3105,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68493312,
-            "heapUsedMeasuredOnly": 9028600,
+            "rssMeasuredOnly": 76853248,
+            "heapUsedMeasuredOnly": 9028712,
             "externalMeasuredOnly": 4846519,
             "arrayBuffersMeasuredOnly": 1746718,
-            "maxRssMeasuredOnly": 71012352
+            "maxRssMeasuredOnly": 79376384
           }
         },
         {
@@ -3135,11 +3135,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 69779456,
-            "heapUsedMeasuredOnly": 9061960,
+            "rssMeasuredOnly": 78127104,
+            "heapUsedMeasuredOnly": 9062072,
             "externalMeasuredOnly": 4845272,
             "arrayBuffersMeasuredOnly": 3006917,
-            "maxRssMeasuredOnly": 71012352
+            "maxRssMeasuredOnly": 79376384
           }
         },
         {
@@ -3157,11 +3157,11 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 68501504,
-            "heapUsedMeasuredOnly": 9047704,
+            "rssMeasuredOnly": 76791808,
+            "heapUsedMeasuredOnly": 9047840,
             "externalMeasuredOnly": 3585073,
             "arrayBuffersMeasuredOnly": 1746718,
-            "maxRssMeasuredOnly": 71012352
+            "maxRssMeasuredOnly": 79376384
           }
         },
         {
@@ -3183,11 +3183,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 108703744,
-            "heapUsedMeasuredOnly": 22163136,
+            "rssMeasuredOnly": 116789248,
+            "heapUsedMeasuredOnly": 22161944,
             "externalMeasuredOnly": 3585246,
             "arrayBuffersMeasuredOnly": 1746891,
-            "maxRssMeasuredOnly": 110546944
+            "maxRssMeasuredOnly": 118865920
           }
         },
         {
@@ -3213,11 +3213,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 130637824,
-            "heapUsedMeasuredOnly": 29387704,
+            "rssMeasuredOnly": 139444224,
+            "heapUsedMeasuredOnly": 29386560,
             "externalMeasuredOnly": 3585419,
             "arrayBuffersMeasuredOnly": 1747064,
-            "maxRssMeasuredOnly": 136765440
+            "maxRssMeasuredOnly": 145244160
           }
         },
         {
@@ -3235,11 +3235,11 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 129552384,
-            "heapUsedMeasuredOnly": 22200496,
+            "rssMeasuredOnly": 138285056,
+            "heapUsedMeasuredOnly": 22199376,
             "externalMeasuredOnly": 3585246,
             "arrayBuffersMeasuredOnly": 1746891,
-            "maxRssMeasuredOnly": 136765440
+            "maxRssMeasuredOnly": 145244160
           }
         },
         {
@@ -3255,11 +3255,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 129945600,
-            "heapUsedMeasuredOnly": 22200792,
+            "rssMeasuredOnly": 138584064,
+            "heapUsedMeasuredOnly": 22199672,
             "externalMeasuredOnly": 3585246,
             "arrayBuffersMeasuredOnly": 1746891,
-            "maxRssMeasuredOnly": 136765440
+            "maxRssMeasuredOnly": 145244160
           }
         },
         {
@@ -3275,22 +3275,22 @@
             "outputBytesMeasuredOnly": 1599020
           },
           "memory": {
-            "rssMeasuredOnly": 146685952,
-            "heapUsedMeasuredOnly": 22642472,
+            "rssMeasuredOnly": 154095616,
+            "heapUsedMeasuredOnly": 22639344,
             "externalMeasuredOnly": 5184266,
             "arrayBuffersMeasuredOnly": 3345911,
-            "maxRssMeasuredOnly": 232034304
+            "maxRssMeasuredOnly": 233512960
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 145203200,
-            "heapUsedMeasuredOnly": 22616536,
+            "rssMeasuredOnly": 152535040,
+            "heapUsedMeasuredOnly": 22613744,
             "externalMeasuredOnly": 3585246,
             "arrayBuffersMeasuredOnly": 1746891,
-            "maxRssMeasuredOnly": 232034304
+            "maxRssMeasuredOnly": 233512960
           }
         }
       ]
@@ -3341,7 +3341,7 @@
         "unsizedStreams": 0,
         "largestObjectNumber": 2106
       },
-      "outputBytesMeasuredOnly": 692568,
+      "outputBytesMeasuredOnly": 692562,
       "released": [
         {
           "name": "mem-d-shared-refs",
@@ -3357,11 +3357,11 @@
           "phase": "0 before load",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 66088960,
-            "heapUsedMeasuredOnly": 8767472,
+            "rssMeasuredOnly": 76079104,
+            "heapUsedMeasuredOnly": 8768224,
             "externalMeasuredOnly": 2324662,
             "arrayBuffersMeasuredOnly": 486347,
-            "maxRssMeasuredOnly": 66183168
+            "maxRssMeasuredOnly": 76222464
           }
         },
         {
@@ -3383,11 +3383,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 66818048,
-            "heapUsedMeasuredOnly": 9129072,
+            "rssMeasuredOnly": 76664832,
+            "heapUsedMeasuredOnly": 9129776,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69545984
+            "maxRssMeasuredOnly": 78544896
           }
         },
         {
@@ -3413,11 +3413,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 68165632,
-            "heapUsedMeasuredOnly": 9431928,
+            "rssMeasuredOnly": 77934592,
+            "heapUsedMeasuredOnly": 9432080,
             "externalMeasuredOnly": 3144232,
             "arrayBuffersMeasuredOnly": 1305877,
-            "maxRssMeasuredOnly": 69545984
+            "maxRssMeasuredOnly": 78544896
           }
         },
         {
@@ -3435,11 +3435,11 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 67338240,
-            "heapUsedMeasuredOnly": 9305424,
+            "rssMeasuredOnly": 77062144,
+            "heapUsedMeasuredOnly": 9306104,
             "externalMeasuredOnly": 2734467,
             "arrayBuffersMeasuredOnly": 896112,
-            "maxRssMeasuredOnly": 69545984
+            "maxRssMeasuredOnly": 78544896
           }
         },
         {
@@ -3461,11 +3461,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 81510400,
-            "heapUsedMeasuredOnly": 12869920,
+            "rssMeasuredOnly": 90120192,
+            "heapUsedMeasuredOnly": 12870560,
             "externalMeasuredOnly": 2907792,
             "arrayBuffersMeasuredOnly": 1069437,
-            "maxRssMeasuredOnly": 81571840
+            "maxRssMeasuredOnly": 90148864
           }
         },
         {
@@ -3491,11 +3491,11 @@
             }
           },
           "memory": {
-            "rssMeasuredOnly": 93745152,
-            "heapUsedMeasuredOnly": 15840784,
+            "rssMeasuredOnly": 103841792,
+            "heapUsedMeasuredOnly": 15841440,
             "externalMeasuredOnly": 3081117,
             "arrayBuffersMeasuredOnly": 1242762,
-            "maxRssMeasuredOnly": 94707712
+            "maxRssMeasuredOnly": 104800256
           }
         },
         {
@@ -3513,11 +3513,11 @@
             "inputBufferCollectableMeasuredOnly": true
           },
           "memory": {
-            "rssMeasuredOnly": 93884416,
-            "heapUsedMeasuredOnly": 13069960,
+            "rssMeasuredOnly": 103907328,
+            "heapUsedMeasuredOnly": 13070336,
             "externalMeasuredOnly": 2907792,
             "arrayBuffersMeasuredOnly": 1069437,
-            "maxRssMeasuredOnly": 94707712
+            "maxRssMeasuredOnly": 104800256
           }
         },
         {
@@ -3533,11 +3533,11 @@
             "predictedPlainBytesMeasuredOnly": null
           },
           "memory": {
-            "rssMeasuredOnly": 93884416,
-            "heapUsedMeasuredOnly": 13078112,
+            "rssMeasuredOnly": 103907328,
+            "heapUsedMeasuredOnly": 13078792,
             "externalMeasuredOnly": 2907792,
             "arrayBuffersMeasuredOnly": 1069437,
-            "maxRssMeasuredOnly": 94707712
+            "maxRssMeasuredOnly": 104800256
           }
         },
         {
@@ -3550,25 +3550,25 @@
               "unsizedStreams": 0,
               "largestObjectNumber": 2106
             },
-            "outputBytesMeasuredOnly": 692568
+            "outputBytesMeasuredOnly": 692562
           },
           "memory": {
-            "rssMeasuredOnly": 96141312,
-            "heapUsedMeasuredOnly": 13202352,
-            "externalMeasuredOnly": 3600360,
-            "arrayBuffersMeasuredOnly": 1762005,
-            "maxRssMeasuredOnly": 102883328
+            "rssMeasuredOnly": 105844736,
+            "heapUsedMeasuredOnly": 13199864,
+            "externalMeasuredOnly": 3600354,
+            "arrayBuffersMeasuredOnly": 1761999,
+            "maxRssMeasuredOnly": 113152000
           }
         },
         {
           "phase": "7b everything released",
           "structural": {},
           "memory": {
-            "rssMeasuredOnly": 94560256,
-            "heapUsedMeasuredOnly": 13203888,
+            "rssMeasuredOnly": 104189952,
+            "heapUsedMeasuredOnly": 13201400,
             "externalMeasuredOnly": 2907792,
             "arrayBuffersMeasuredOnly": 1069437,
-            "maxRssMeasuredOnly": 102883328
+            "maxRssMeasuredOnly": 113152000
           }
         }
       ]
@@ -3731,143 +3731,143 @@
   },
   "measuredOnly": {
     "A-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 53248,
-      "heapUsedAfterLoadMeasuredOnly": 113736,
-      "heapUsedAfterCopyMeasuredOnly": 224176,
+      "loadPeakRssGrowthMeasuredOnly": 0,
+      "heapUsedAfterLoadMeasuredOnly": 113688,
+      "heapUsedAfterCopyMeasuredOnly": 224080,
       "arrayBuffersAfterSaveMeasuredOnly": 424,
-      "peakRssBySaveMeasuredOnly": 872448,
+      "peakRssBySaveMeasuredOnly": 917504,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "B1-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 40189952,
-      "heapUsedAfterLoadMeasuredOnly": 13244832,
-      "heapUsedAfterCopyMeasuredOnly": 20554400,
+      "loadPeakRssGrowthMeasuredOnly": 37474304,
+      "heapUsedAfterLoadMeasuredOnly": 13272224,
+      "heapUsedAfterCopyMeasuredOnly": 20558984,
       "arrayBuffersAfterSaveMeasuredOnly": -1539745,
-      "peakRssBySaveMeasuredOnly": 164364288,
+      "peakRssBySaveMeasuredOnly": 172675072,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "B2-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 45330432,
-      "heapUsedAfterLoadMeasuredOnly": 16240384,
-      "heapUsedAfterCopyMeasuredOnly": 23537832,
+      "loadPeakRssGrowthMeasuredOnly": 43835392,
+      "heapUsedAfterLoadMeasuredOnly": 16315584,
+      "heapUsedAfterCopyMeasuredOnly": 23628712,
       "arrayBuffersAfterSaveMeasuredOnly": 219,
-      "peakRssBySaveMeasuredOnly": 198184960,
+      "peakRssBySaveMeasuredOnly": 197910528,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "C-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 16384,
-      "heapUsedAfterLoadMeasuredOnly": 144944,
-      "heapUsedAfterCopyMeasuredOnly": 250344,
-      "arrayBuffersAfterSaveMeasuredOnly": 2520421,
-      "peakRssBySaveMeasuredOnly": 2273280,
+      "loadPeakRssGrowthMeasuredOnly": 147456,
+      "heapUsedAfterLoadMeasuredOnly": 144920,
+      "heapUsedAfterCopyMeasuredOnly": 250296,
+      "arrayBuffersAfterSaveMeasuredOnly": 2520417,
+      "peakRssBySaveMeasuredOnly": 2568192,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "D-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 2076672,
-      "heapUsedAfterLoadMeasuredOnly": 347232,
-      "heapUsedAfterCopyMeasuredOnly": 460240,
-      "arrayBuffersAfterSaveMeasuredOnly": 783788,
-      "peakRssBySaveMeasuredOnly": 2076672,
+      "loadPeakRssGrowthMeasuredOnly": 2027520,
+      "heapUsedAfterLoadMeasuredOnly": 345808,
+      "heapUsedAfterCopyMeasuredOnly": 458792,
+      "arrayBuffersAfterSaveMeasuredOnly": 783790,
+      "peakRssBySaveMeasuredOnly": 2027520,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "D-all": {
-      "loadPeakRssGrowthMeasuredOnly": 2232320,
-      "heapUsedAfterLoadMeasuredOnly": 347256,
-      "heapUsedAfterCopyMeasuredOnly": 670496,
+      "loadPeakRssGrowthMeasuredOnly": 2117632,
+      "heapUsedAfterLoadMeasuredOnly": 347232,
+      "heapUsedAfterCopyMeasuredOnly": 670200,
       "arrayBuffersAfterSaveMeasuredOnly": 807990,
-      "peakRssBySaveMeasuredOnly": 3457024,
+      "peakRssBySaveMeasuredOnly": 3502080,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "E-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 2703360,
-      "heapUsedAfterLoadMeasuredOnly": 533760,
-      "heapUsedAfterCopyMeasuredOnly": 970144,
+      "loadPeakRssGrowthMeasuredOnly": 2711552,
+      "heapUsedAfterLoadMeasuredOnly": 533688,
+      "heapUsedAfterCopyMeasuredOnly": 969840,
       "arrayBuffersAfterSaveMeasuredOnly": -3007,
-      "peakRssBySaveMeasuredOnly": 3031040,
+      "peakRssBySaveMeasuredOnly": 2781184,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "F-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 12038144,
-      "heapUsedAfterLoadMeasuredOnly": 3536344,
-      "heapUsedAfterCopyMeasuredOnly": 3815560,
-      "arrayBuffersAfterSaveMeasuredOnly": -328960,
-      "peakRssBySaveMeasuredOnly": 12201984,
+      "loadPeakRssGrowthMeasuredOnly": 11702272,
+      "heapUsedAfterLoadMeasuredOnly": 3534600,
+      "heapUsedAfterCopyMeasuredOnly": 3812408,
+      "arrayBuffersAfterSaveMeasuredOnly": -328959,
+      "peakRssBySaveMeasuredOnly": 11702272,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "F-all": {
-      "loadPeakRssGrowthMeasuredOnly": 11591680,
-      "heapUsedAfterLoadMeasuredOnly": 3536120,
-      "heapUsedAfterCopyMeasuredOnly": 6788936,
-      "arrayBuffersAfterSaveMeasuredOnly": 120802,
-      "peakRssBySaveMeasuredOnly": 34746368,
+      "loadPeakRssGrowthMeasuredOnly": 11444224,
+      "heapUsedAfterLoadMeasuredOnly": 3750528,
+      "heapUsedAfterCopyMeasuredOnly": 6788840,
+      "arrayBuffersAfterSaveMeasuredOnly": 120804,
+      "peakRssBySaveMeasuredOnly": 34308096,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "G1-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 417792,
-      "heapUsedAfterLoadMeasuredOnly": 131736,
-      "heapUsedAfterCopyMeasuredOnly": 463000,
+      "loadPeakRssGrowthMeasuredOnly": 45056,
+      "heapUsedAfterLoadMeasuredOnly": 131688,
+      "heapUsedAfterCopyMeasuredOnly": 233264,
       "arrayBuffersAfterSaveMeasuredOnly": 18000451,
-      "peakRssBySaveMeasuredOnly": 10260480,
+      "peakRssBySaveMeasuredOnly": 10047488,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "G2-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 0,
-      "heapUsedAfterLoadMeasuredOnly": 131568,
-      "heapUsedAfterCopyMeasuredOnly": 233192,
+      "loadPeakRssGrowthMeasuredOnly": 122880,
+      "heapUsedAfterLoadMeasuredOnly": 131688,
+      "heapUsedAfterCopyMeasuredOnly": 233264,
       "arrayBuffersAfterSaveMeasuredOnly": 17986,
-      "peakRssBySaveMeasuredOnly": 802816,
+      "peakRssBySaveMeasuredOnly": 1519616,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "I-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 802816,
-      "heapUsedAfterLoadMeasuredOnly": 228344,
-      "heapUsedAfterCopyMeasuredOnly": 667832,
-      "arrayBuffersAfterSaveMeasuredOnly": 9800486,
-      "peakRssBySaveMeasuredOnly": 6340608,
+      "loadPeakRssGrowthMeasuredOnly": 1126400,
+      "heapUsedAfterLoadMeasuredOnly": 228408,
+      "heapUsedAfterCopyMeasuredOnly": 404800,
+      "arrayBuffersAfterSaveMeasuredOnly": 9800485,
+      "peakRssBySaveMeasuredOnly": 6860800,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "I-p10": {
-      "loadPeakRssGrowthMeasuredOnly": 913408,
-      "heapUsedAfterLoadMeasuredOnly": 228392,
-      "heapUsedAfterCopyMeasuredOnly": 333336,
+      "loadPeakRssGrowthMeasuredOnly": 667648,
+      "heapUsedAfterLoadMeasuredOnly": 228408,
+      "heapUsedAfterCopyMeasuredOnly": 333304,
       "arrayBuffersAfterSaveMeasuredOnly": 974412,
-      "peakRssBySaveMeasuredOnly": 913408,
+      "peakRssBySaveMeasuredOnly": 667648,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "J-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 56238080,
-      "heapUsedAfterLoadMeasuredOnly": 18328664,
-      "heapUsedAfterCopyMeasuredOnly": 25615560,
-      "arrayBuffersAfterSaveMeasuredOnly": -1555587,
-      "peakRssBySaveMeasuredOnly": 193679360,
+      "loadPeakRssGrowthMeasuredOnly": 50446336,
+      "heapUsedAfterLoadMeasuredOnly": 18297560,
+      "heapUsedAfterCopyMeasuredOnly": 25568536,
+      "arrayBuffersAfterSaveMeasuredOnly": -1555591,
+      "peakRssBySaveMeasuredOnly": 199163904,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "K-p1": {
-      "loadPeakRssGrowthMeasuredOnly": 84439040,
-      "heapUsedAfterLoadMeasuredOnly": 155256,
-      "heapUsedAfterCopyMeasuredOnly": 243672,
-      "arrayBuffersAfterSaveMeasuredOnly": -32565,
-      "peakRssBySaveMeasuredOnly": 84439040,
+      "loadPeakRssGrowthMeasuredOnly": 84590592,
+      "heapUsedAfterLoadMeasuredOnly": 155184,
+      "heapUsedAfterCopyMeasuredOnly": 243576,
+      "arrayBuffersAfterSaveMeasuredOnly": -32564,
+      "peakRssBySaveMeasuredOnly": 84590592,
       "sourceDocumentCollectableMeasuredOnly": true,
       "inputBufferCollectableMeasuredOnly": true
     },
     "retainedAfterReleaseMeasuredOnly": {
-      "B1": 13770632,
-      "J": 14867104
+      "B1": 13776192,
+      "J": 14833960
     }
   }
 }

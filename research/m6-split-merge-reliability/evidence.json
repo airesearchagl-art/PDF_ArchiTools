@@ -2,9 +2,9 @@
   "provenance": {
     "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
     "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
-    "testedResearchHead": "04a0623fe409c0e50a152e7970afe2171df708c7",
+    "testedResearchHead": "2c3f841618514887db0667e0bbc1d72eb32ba42e",
     "workingTreeDirty": true,
-    "researchTreeDirty": false,
+    "researchTreeDirty": true,
     "researchPackageDirtyBeforeRun": false,
     "untrackedOutsideResearch": [
       "public/tessdata/eng.traineddata",
@@ -33,7 +33,7 @@
       "pdf-lib": "1.17.1",
       "pdfjs-dist": "5.4.449"
     },
-    "ranAt": "2026-09-14T17:03:42.112Z"
+    "ranAt": "2026-09-16T08:56:20.247Z"
   },
   "legacy": {},
   "extractMatrix": {
@@ -58,7 +58,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 2529
+      "bytesMeasuredOnly": 2528
     },
     "one": {
       "requested": 1,
@@ -81,7 +81,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 2097
+      "bytesMeasuredOnly": 2096
     },
     "firstAndLast": {
       "requested": 2,
@@ -104,7 +104,7 @@
         "/Creator",
         "/CreationDate"
       ],
-      "bytesMeasuredOnly": 2114
+      "bytesMeasuredOnly": 2113
     },
     "middle": {
       "requested": 2,
@@ -551,7 +551,7 @@
         0,
         0
       ],
-      "bytesMeasuredOnly": 2672
+      "bytesMeasuredOnly": 2671
     },
     "B+A": {
       "pages": 5,
@@ -611,12 +611,12 @@
         270,
         0
       ],
-      "bytesMeasuredOnly": 3462
+      "bytesMeasuredOnly": 3461
     },
     "signed": {
       "pages": 5,
       "form": false,
-      "bytesMeasuredOnly": 3150
+      "bytesMeasuredOnly": 3149
     }
   },
   "collisions": {
@@ -655,14 +655,14 @@
     }
   },
   "budget": {
-    "mergedBytesMeasuredOnly": 3462,
+    "mergedBytesMeasuredOnly": 3461,
     "sourceBytes": [
       2546,
       1958,
       1941
     ],
     "sumOfSources": 6445,
-    "growthMeasuredOnly": -2983
+    "growthMeasuredOnly": -2984
   },
   "destinations": {
     "dest-direct-2p[0,1]": {
