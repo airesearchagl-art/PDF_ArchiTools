@@ -106,6 +106,7 @@ jobs:
           node scripts/make-annotator-save-fixtures.mjs
           node scripts/make-comparator-fixtures.mjs
           node scripts/make-processor-fixtures.mjs
+          node scripts/make-m6-split-merge-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -180,6 +181,17 @@ jobs:
       # visible only by driving the built app.
       - name: Processor UI ownership
         run: node scripts/smoke-processor-ui.mjs
+
+      # Split / Merge, whose old contract was "it produced bytes, so it worked".
+      # Most of what this asserts is that the tool refuses, by name, before it
+      # has touched anything: a pre-parse load boundary that stops a decode bomb
+      # without materialising it, a structural cap checked before the copy, an
+      # applied signature, XFA, a form outside the proven subset, optional
+      # content behind a soft mask. Where it does produce bytes, the bytes are
+      # reopened and counted — the defect this milestone exists for is an
+      # artifact that looked right and carried pages nobody selected.
+      - name: Split / Merge reliability
+        run: node scripts/smoke-split-merge-reliability.mjs
 
       # Every PDF.js path in the app, not just the Annotator's: which worker a
       # feature fetches is a property of the built bundle and of module

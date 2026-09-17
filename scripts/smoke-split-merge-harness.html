@@ -1,0 +1,371 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Split / Merge reliability — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** M6 orchestration over the synthetic corpus.
+ *
+ * Nothing here re-implements a check. The boundary, the planner, the detectors,
+ * the runners and the readback are the same modules the app ships; if this file
+ * and `src/utils/split-merge` disagree, the gate fails, which is the point.
+ *
+ * It runs in a real browser because two of the things being asserted — that the
+ * work happens in a Worker, and that a superseded run publishes nothing — are
+ * properties of the browser build rather than of the modules.
+ */
+import {
+    M6_STATUS,
+    INTAKE_RESULT,
+    LOAD_REFUSAL,
+    PROVISIONAL_POLICY,
+    MECHANISM_BOUNDS,
+    inspectLoadBoundary,
+    policyFrom,
+    assertEnforceablePolicy,
+    planExtract,
+    runExtract,
+    intakeSources,
+    planMerge,
+    runMerge,
+    planStructuralGraph,
+    reachableGraph,
+    comparePlanWithActual,
+    readbackArtifact,
+    describeOptionalContent,
+    planOptionalContent,
+    readForm,
+    planFormForExtract,
+    scanJavaScript,
+    scanArtifactWideJavaScript,
+    readSourceFacts,
+    measureDestinationInvariants,
+    extractOutputName,
+    mergeOutputName,
+    describeSelection,
+    extractInWorker,
+    mergeInWorker,
+    intakeInWorker,
+    workerAvailable,
+} from '/src/utils/split-merge/index.ts';
+import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
+
+const FIXTURES = '/test-fixtures/m6-split-merge-production';
+const cache = new Map();
+
+async function bytesOf(name) {
+    if (!cache.has(name)) {
+        const response = await fetch(`${FIXTURES}/${name}.pdf`);
+        if (!response.ok) throw new Error(`fixture ${name} missing (${response.status})`);
+        cache.set(name, new Uint8Array(await response.arrayBuffer()));
+    }
+    // A fresh copy each time: several of these get transferred to a worker.
+    const held = cache.get(name);
+    const copy = new Uint8Array(held.length);
+    copy.set(held);
+    return copy;
+}
+
+/** Every value that crosses back to the driver has to survive JSON. */
+const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+
+window.__m6 = {
+    constants: () => plainly({
+        status: M6_STATUS,
+        intake: INTAKE_RESULT,
+        refusal: LOAD_REFUSAL,
+        policy: PROVISIONAL_POLICY,
+        mechanismBounds: MECHANISM_BOUNDS,
+        workerAvailable: workerAvailable(),
+    }),
+
+    /** The pre-parse boundary, on raw bytes, with optional limit overrides. */
+    boundary: async (name, overrides) => {
+        const policy = policyFrom(overrides ? { loadBoundary: overrides } : {});
+        const verdict = inspectLoadBoundary(await bytesOf(name), policy.loadBoundary);
+        return plainly({
+            verdict: verdict.verdict,
+            code: verdict.code ?? null,
+            stage: verdict.stage,
+            reason: verdict.reason ?? null,
+            stats: verdict.stats,
+        });
+    },
+
+    /** Whether the policy validator rejects a limit that cannot refuse. */
+    policyRejects: (patch) => {
+        try {
+            assertEnforceablePolicy({ ...PROVISIONAL_POLICY, ...patch });
+            return { rejected: false };
+        } catch (error) {
+            return { rejected: true, message: String(error.message) };
+        }
+    },
+
+    facts: async (name) => {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        return plainly(readSourceFacts(doc, bytes.length));
+    },
+
+    plan: async (name, selection, options = {}) => {
+        const plan = await planExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            ...options,
+            policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
+        });
+        return plainly({
+            status: plan.status,
+            reason: plan.reason ?? null,
+            structural: plan.structural,
+            losses: plan.losses,
+            requiresConfirmation: plan.requiresConfirmation,
+            detail: plan.detail ?? null,
+            facts: plan.facts,
+        });
+    },
+
+    extract: async (name, selection, options = {}) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: options.confirmedLosses,
+            destinationPolicy: options.destinationPolicy,
+            policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
+        });
+        return plainly({
+            status: result.status,
+            reason: result.reason ?? null,
+            outputName: result.outputName,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            planned: result.planned,
+            actual: result.actual,
+            readback: result.readback,
+            losses: result.losses,
+            detail: result.detail ?? null,
+        });
+    },
+
+    /** The same extract, driven through the disposable Worker. */
+    extractViaWorker: async (name, selection) => {
+        const handle = extractInWorker(await bytesOf(name), {
+            sourceName: `${name}.pdf`,
+            selection,
+            destinationPolicy: 'E2',
+        });
+        const result = await handle.promise;
+        return plainly({
+            status: result.status,
+            outputName: result.outputName,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            readback: result.readback,
+        });
+    },
+
+    /** Start a run in a Worker, cancel it immediately, and see what comes back. */
+    extractCancelled: async (name, selection) => {
+        const handle = extractInWorker(await bytesOf(name), {
+            sourceName: `${name}.pdf`,
+            selection,
+            destinationPolicy: 'E2',
+        });
+        handle.cancel();
+        const result = await Promise.race([
+            handle.promise,
+            new Promise((resolve) => setTimeout(() => resolve({ status: 'NO_ANSWER', bytes: null }), 4000)),
+        ]);
+        return plainly({ status: result.status, published: Boolean(result.bytes) });
+    },
+
+    intake: async (names, types = {}) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({
+                id: name,
+                name: `${name}.pdf`,
+                type: types[name] ?? 'application/pdf',
+                bytes: await bytesOf(name),
+            });
+        }
+        return plainly(await intakeSources(inputs));
+    },
+
+    merge: async (names, options = {}) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({
+                id: name,
+                name: `${name}.pdf`,
+                type: options.types?.[name] ?? 'application/pdf',
+                bytes: await bytesOf(name),
+            });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, {
+            ...options,
+            policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
+        });
+        return plainly({
+            planStatus: plan.status,
+            status: result.status,
+            reason: result.reason ?? null,
+            outputName: result.outputName,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result, pages: r.pageCount })),
+            cumulative: result.cumulative,
+            readback: result.readback,
+            renamedFields: result.renamedFields,
+            detail: result.detail ?? null,
+        });
+    },
+
+    mergeViaWorker: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeInWorker(inputs.map((i) => ({ ...i })), undefined).promise;
+        const plan = planMerge(intake, {});
+        const result = await mergeInWorker(inputs, plan, {
+            metadataPolicy: 'M4',
+            collisionPolicy: 'rename',
+        }).promise;
+        return plainly({
+            status: result.status,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            readback: result.readback,
+        });
+    },
+
+    /**
+     * A5, measured directly: the planner's count against the real copy.
+     *
+     * Deliberately not routed through `runExtract`, so the gate sees the two
+     * numbers itself rather than the run's opinion of whether they matched.
+     */
+    planVersusCopy: async (name, selection) => {
+        const bytes = await bytesOf(name);
+        const source = await PDFDocument.load(bytes, { updateMetadata: false });
+
+        // The same transformation the Extract plan applies, so what is counted
+        // is the graph that will be copied.
+        const { planDestinations, stripInternalDestinations } =
+            await import('/src/utils/split-merge/destinations.ts');
+        const destinations = planDestinations(source, selection);
+        stripInternalDestinations(source, destinations, selection);
+
+        const predicted = await planStructuralGraph(source, selection);
+
+        const out = await PDFDocument.create({ updateMetadata: false });
+        let before = 0;
+        let beforeBytes = 0;
+        for (const [, obj] of out.context.enumerateIndirectObjects()) {
+            before += 1;
+            if (obj instanceof PDFRawStream) beforeBytes += obj.contents.length;
+        }
+        const copied = await out.copyPages(source, selection);
+        let after = 0;
+        let afterBytes = 0;
+        for (const [, obj] of out.context.enumerateIndirectObjects()) {
+            after += 1;
+            if (obj instanceof PDFRawStream) afterBytes += obj.contents.length;
+        }
+        copied.forEach((p) => out.addPage(p));
+        const actual = reachableGraph(out, out.getPageIndices());
+
+        return plainly({
+            predicted,
+            registeredObjects: after - before,
+            registeredStreamBytes: afterBytes - beforeBytes,
+            comparison: comparePlanWithActual(predicted, actual),
+        });
+    },
+
+    /** What today's code does, for contrast. No E2, no readback, no refusal. */
+    baseline: async (name, selection) => {
+        const source = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const out = await PDFDocument.create({ updateMetadata: false });
+        const copied = await out.copyPages(source, selection);
+        copied.forEach((p) => out.addPage(p));
+        const bytes = await out.save();
+        return plainly(await readbackArtifact(bytes));
+    },
+
+    optionalContent: async (name, selection) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const description = describeOptionalContent(doc, selection);
+        return plainly({
+            present: description.present,
+            unsupported: description.unsupported,
+            groups: description.groups.map((g) => g.name),
+            plan: planOptionalContent(description).status,
+        });
+    },
+
+    form: async (name, selection) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const form = readForm(doc);
+        const plan = planFormForExtract(form, selection);
+        return plainly({
+            present: form.present,
+            outsideSubset: form.outsideSubset,
+            fields: form.fields.map((f) => ({ name: f.name, ft: f.ft, value: f.value })),
+            plan: plan.status,
+            code: plan.code ?? null,
+        });
+    },
+
+    javascript: async (name) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const scan = scanJavaScript(doc);
+        return plainly({
+            reachable: scan.count,
+            artifactWide: scanArtifactWideJavaScript(doc),
+            complete: scan.complete,
+            incomplete: scan.incomplete,
+        });
+    },
+
+    /** Names, which M6-H14 made deterministic and self-describing. */
+    names: (sourceName, selection, mergeNames) => plainly({
+        extract: extractOutputName(sourceName, selection),
+        selection: describeSelection(selection),
+        merge: mergeOutputName(mergeNames),
+    }),
+
+    /** Whether an artifact still holds tagging or an attachment. */
+    artifactStructure: async (name, selection) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: ['tagging', 'attachments'],
+        });
+        if (!result.bytes) return plainly({ status: result.status });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        let structParents = 0;
+        for (const page of doc.getPages()) {
+            if (page.node.get(PDFName.of('StructParents')) !== undefined) structParents += 1;
+        }
+        let filespecs = 0;
+        for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+            const type = obj?.get?.(PDFName.of('Type'))?.asString?.();
+            if (type === '/Filespec') filespecs += 1;
+        }
+        return plainly({
+            status: result.status,
+            structTreeRoot: doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined,
+            structParents,
+            filespecs,
+            destinations: measureDestinationInvariants(doc),
+            losses: result.losses.map((l) => l.kind),
+        });
+    },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__m6Ready = true;
+</script>
+</body>
