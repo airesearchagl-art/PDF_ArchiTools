@@ -99,6 +99,7 @@
         "recordedOn": "2026-09-16",
         "raisedBy": "the Human Gate, in H11-B3-2, on adopting B3",
         "question": "the product limit policy of M6's production load boundary, and how much conservative refusal of real architectural PDFs is acceptable",
+        "scope": "the product load policy and real-drawing compatibility gate. On 2026-09-17 the Human recorded that it also covers the post-load structural product caps of M6-H11.extractExecutionDecisions (H11-EXTRACT-3), and the Merge cumulative structural cap values: the pre-load boundary limits and the post-load structural caps are settled at the same product-policy gate. The blocker's id, name and type are unchanged — it stays a pre-Ready / pre-release blocker and does not block implementation.",
         "mustDecide": [
           "max input bytes",
           "max decoded bytes per stream",
@@ -107,7 +108,11 @@
           "max xref entries",
           "max objects per object stream",
           "max nesting depth",
-          "conservative syntax refusal policy"
+          "conservative syntax refusal policy",
+          "max copied object count per Extract — added 2026-09-17, H11-EXTRACT-3",
+          "max duplicated or reachable stream bytes per Extract — added 2026-09-17, H11-EXTRACT-3",
+          "max single reachable stream bytes per Extract — added 2026-09-17, H11-EXTRACT-3",
+          "the Merge cumulative structural cap policy values — added 2026-09-17, H11-MERGE-4"
         ],
         "closureEvidence": [
           "A — compatibility confirmed on representative real architectural PDFs",
@@ -535,6 +540,47 @@
           }
         ],
         "doesNotChange": "B1, B2 and B3 closure evidence; the B3 Human decisions (loadBoundaryDecisions); B4's state; any research numeric value. No cap value is set by this decision."
+      },
+      "extractExecutionDecisions": {
+        "status": "ADOPTED",
+        "decidedBy": "Human",
+        "adoptedOn": "2026-09-17",
+        "authority": "a Human adoption decision on the existing B2 evidence, not a new B2 technical conclusion. The five items below are the M6 production implementation contract for Extract, no longer a research recommendation. B2 evidence and gates are unchanged.",
+        "raisedBy": "the Human Gate, completing on the Extract side the adoption already recorded for Merge in mergeExecutionDecisions; extract-contract.md still carried this execution shape as B2 recommended and not adopted",
+        "evidenceBasis": "B2 Object-Graph Memory Sub-Spike — object-graph-memory.md; evidence-object-graph-memory.json",
+        "memoryModel": "PARTIALLY BOUNDABLE",
+        "decisions": [
+          {
+            "id": "H11-EXTRACT-1",
+            "topic": "post-load exact structural planning before copy",
+            "record": "an Extract runs Load Boundary PASS → PDFDocument.load() → planning of the Extract operation's structural transformation → the exact structural graph plan → cap check → copyPages, in that order. Before copyPages starts, at least the terms B2 proved countable are taken from the graph: objects to be copied, copier entries, duplicated stream bytes, the largest reachable stream, and unselected pages reached. None of them is estimated from page count or file size."
+          },
+          {
+            "id": "H11-EXTRACT-2",
+            "topic": "E2 and sanitization before the graph count",
+            "record": "the E2 destination policy already adopted in M6-H5 is applied before the structural graph is counted, so that the graph counted and the graph handed to copyPages are the same graph. Counting with internal destinations still in place and changing the structure afterwards is forbidden: the Extract plan counts the actual copy graph, after sanitization and reconstruction planning. The existing invariants hold — orphanPageCount === 0, and every surviving destination targets the output page tree. Where unselected page reach remains and cannot be safely explained, the copy does not proceed."
+          },
+          {
+            "id": "H11-EXTRACT-3",
+            "topic": "structural caps checked before copy, with a typed refusal",
+            "record": "the exact structural terms are checked against hard caps before copyPages, and exceeding a cap is a typed refusal raised before copyPages. This decision adopts the mechanism only. No product cap value is adopted here, and no value is back-derived from browser heap, page count, file size, or M5's 512 MiB / 1 GiB / 2 GiB presets — M5's presets stay DO NOT ADOPT. The values are decided in B4."
+          },
+          {
+            "id": "H11-EXTRACT-4",
+            "topic": "release the source before save",
+            "record": "once the copy and reconstruction are complete and the source document is no longer needed, source-side references and source bytes are released before save proceeds, so that the source graph, the destination graph and the output buffer are not held together at save time unnecessarily. The implementation names which holdings are releasable, consistently with RunOwnership and Worker cleanup."
+          },
+          {
+            "id": "H11-EXTRACT-5",
+            "topic": "keep the adopted actual-output ceiling; no memory preset",
+            "record": "the actual-artifact output ceiling stays ADOPTED and unchanged, and no memory preset is adopted. The structural cap and the output ceiling are separate contracts, and both are kept: the structural cap is checked before the copy, the output ceiling before the artifact is published."
+          }
+        ],
+        "productCapValues": {
+          "state": "NOT DECIDED by this adoption",
+          "note": "maximum copied object count, maximum duplicated or reachable stream bytes, and maximum single reachable stream bytes are product choices, not memory MiB presets. They are added to B4's mustDecide and settled pre-Ready / pre-release. Research test values are not promoted to product defaults."
+        },
+        "doesNotChange": "B1, B2 and B3 closure evidence; the B3 Human decisions (loadBoundaryDecisions); the Merge adoption (mergeExecutionDecisions); B4's OPEN state, which stays a pre-Ready blocker and not an implementation blocker; any research numeric value. No cap value is set by this decision."
       },
       "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
       "defer": ["whether the adopted output ceiling shares M5's MAX_OUTPUT_BYTES 268435456 or takes an independently gated M6 value — the research recommends sharing"]

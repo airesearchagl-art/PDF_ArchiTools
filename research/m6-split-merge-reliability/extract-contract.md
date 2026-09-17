@@ -528,6 +528,57 @@ adopted:
 None of that bounds the load of the source, which pdf-lib performs eagerly and
 without a cap. That is proposed blocker B3.
 
+**Human adoption resolution — 2026-09-17.** The four items listed above as
+recommended are no longer a recommendation. The Human adopted the B2-derived
+Extract execution shape as the M6 production implementation contract, recorded
+as H11-EXTRACT-1 … H11-EXTRACT-5 (`human-gate.json`,
+`M6-H11.extractExecutionDecisions`). It is a Human adoption of the existing B2
+evidence, not a new research conclusion, and it sets no cap value. The
+recommendation above is kept as the historical state: B2 recommended, the Human
+decided.
+
+**Current Extract production contract, from that decision.**
+
+1. **H11-EXTRACT-1 — post-load exact structural planning before copy.** The
+   order is Load Boundary PASS → `PDFDocument.load()` → planning of the Extract
+   operation's structural transformation → the exact structural graph plan → cap
+   check → `copyPages`. Before `copyPages` starts, at least the terms B2 proved
+   countable are taken from the graph: objects to be copied, copier entries,
+   duplicated stream bytes, the largest reachable stream, and unselected pages
+   reached. None of them is estimated from page count or file size.
+2. **H11-EXTRACT-2 — E2 before the count.** The E2 destination policy already
+   adopted in M6-H5 is applied before the graph is counted, so that the graph
+   counted and the graph handed to `copyPages` are the same graph. Counting with
+   internal destinations still in place and changing the structure afterwards is
+   forbidden: what is counted is the actual copy graph, after sanitization and
+   reconstruction planning. The invariants hold unchanged —
+   `orphanPageCount === 0`, and every surviving destination targets the output
+   page tree. Where unselected page reach remains and cannot be safely
+   explained, the copy does not proceed.
+3. **H11-EXTRACT-3 — structural caps, checked before copy.** The exact
+   structural terms are checked against hard caps before `copyPages`, and
+   exceeding one is a **typed refusal** raised before `copyPages`. What is
+   adopted is the mechanism. **No product cap value is adopted here**, and none
+   is back-derived from browser heap, page count, file size or M5's 512 MiB /
+   1 GiB / 2 GiB presets — M5's presets stay **DO NOT ADOPT**. The values are
+   decided in **B4**.
+4. **H11-EXTRACT-4 — release the source before `save`.** Once the copy and
+   reconstruction are complete and the source is no longer needed, source-side
+   references and source bytes are released before `save` proceeds, so that the
+   source graph, the destination graph and the output buffer are not held
+   together at save time unnecessarily. Which holdings are releasable is stated
+   by the implementation, consistently with RunOwnership and Worker cleanup.
+5. **H11-EXTRACT-5 — the actual-output ceiling stays, and no memory preset.**
+   The structural cap and the output ceiling are **separate contracts**, and
+   both are kept: the structural cap before the copy, the output ceiling before
+   the artifact is published.
+
+The product cap values — maximum copied object count, maximum duplicated or
+reachable stream bytes, maximum single reachable stream bytes — are product
+choices, not memory MiB presets. They are added to **B4**, which stays OPEN and
+blocks Ready and release, not implementation. Research test values are not
+promoted to product defaults.
+
 ### Load boundary (M6-H11, B3)
 
 **Historical state — at B3's research completion.** B3 closed with a pre-parse
