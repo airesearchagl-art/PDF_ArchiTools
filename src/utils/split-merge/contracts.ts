@@ -38,6 +38,15 @@ export const M6_STATUS = {
     FIELD_SPANS_SELECTION: 'FIELD_SPANS_SELECTION',
     /** The same field name in more than one Merge source. M6-H3. */
     DUPLICATE_FIELD_NAMES: 'DUPLICATE_FIELD_NAMES',
+    /**
+     * The same named destination in more than one Merge source, pointing at
+     * different pages.
+     *
+     * No adopted policy resolves this, and silently overwriting or renaming one
+     * of them would change navigation without saying so. M6-H6 covers
+     * reconstructing named destinations, not reconciling them.
+     */
+    DUPLICATE_NAMED_DESTINATIONS: 'DUPLICATE_NAMED_DESTINATIONS',
     /** Optional content outside the proven direct-/OCG envelope. M6-H9b. */
     UNSUPPORTED_OPTIONAL_CONTENT: 'UNSUPPORTED_OPTIONAL_CONTENT',
     /** The action graph could not be inspected completely. M6-H9c. */
@@ -85,6 +94,21 @@ export const M6_STATUS = {
     PLAN_ACTUAL_MISMATCH: 'PLAN_ACTUAL_MISMATCH',
     /** An invariant this contract exists to hold did not hold in the artifact. */
     INVARIANT_VIOLATED: 'INVARIANT_VIOLATED',
+    /**
+     * A safety census could not be proven to have covered the artifact.
+     *
+     * The adopted clarification: a census ends COMPLETE or REFUSED. A count
+     * produced by giving up is not an invariant, so an incomplete inspection
+     * is a typed failure rather than a zero.
+     */
+    CENSUS_INCOMPLETE: 'CENSUS_INCOMPLETE',
+    /**
+     * What planning decided and what the run re-derived from the bytes do not
+     * agree. Never a reason to skip the work and continue.
+     */
+    PLAN_RUNTIME_MISMATCH: 'PLAN_RUNTIME_MISMATCH',
+    /** A loss requiring confirmation was not confirmed. */
+    CONFIRMATION_REQUIRED: 'CONFIRMATION_REQUIRED',
 } as const;
 
 export type M6Status = typeof M6_STATUS[keyof typeof M6_STATUS];
@@ -132,6 +156,23 @@ export type M6Loss =
     | 'page-labels'
     | 'document-javascript'
     | 'applied-signature'
+    /**
+     * An unsigned `/Sig` field that was removed.
+     *
+     * Kept apart from `applied-signature` because they are different facts: one
+     * is a signature that was applied to the source, the other a form control
+     * that was never signed. Labelling the second as the first told the person
+     * their document had been signed when it had not.
+     */
+    | 'empty-signature-field'
+    /**
+     * A Merge source that was not merged.
+     *
+     * This is not a loss of document content, and reporting it as one — under
+     * `internal-links`, which is what happened — told the person a link was
+     * broken when a whole file had been left out.
+     */
+    | 'excluded-source'
     | 'article-threads';
 
 export const M6_LOSS_LABEL_JA: Record<M6Loss, string> = {
@@ -143,8 +184,22 @@ export const M6_LOSS_LABEL_JA: Record<M6Loss, string> = {
     'page-labels': 'ページラベル',
     'document-javascript': '文書内のJavaScript',
     'applied-signature': '適用済みの電子署名',
+    'empty-signature-field': '未署名の署名欄',
+    'excluded-source': '統合に含まれなかったPDF',
     'article-threads': '記事スレッド（/B）',
 };
+
+/**
+ * Losses a person has to agree to before they happen.
+ *
+ * A loss outside this set is disclosed, not gated. The distinction matters
+ * because a confirmation is only meaningful for something that was shown, and
+ * showing everything would bury the two that destroy what the source carried.
+ */
+export const CONFIRMATION_REQUIRED_LOSSES: readonly M6Loss[] = ['attachments', 'tagging'];
+
+export const requiresConfirmation = (kind: M6Loss): boolean =>
+    CONFIRMATION_REQUIRED_LOSSES.includes(kind);
 
 /** One thing that was dropped or changed, with enough detail to report it. */
 export interface LossRecord {
@@ -347,8 +402,17 @@ export interface ReadbackFacts {
     taggingRemnants: number;
     /** Indirect objects nothing reachable points at. Must be 0 after the sweep. */
     unreachableObjects: number;
-    /** Whether the readback scan itself completed. */
+    /** Whether the reachable action scan completed. */
     complete: boolean;
+    /**
+     * Whether every artifact-wide census proved it covered the artifact.
+     *
+     * False is a refusal, never a zero: the counts above are only invariants
+     * when the scan that produced them is known to have been complete.
+     */
+    censusComplete: boolean;
+    /** Why a census could not prove completeness. */
+    censusRefusal?: string;
 }
 
 /** One Merge input's answer. M6-H10: every input carries one. */

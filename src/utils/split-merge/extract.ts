@@ -61,17 +61,22 @@ import {
     planStructuralGraph,
 } from './structural-graph';
 import {
-    applyExtractMetadata,
     describeStructuralLosses,
     dropOpenAction,
     hasOutlines,
     hasPageLabels,
-    hasXmpMetadata,
-    metadataGaps,
-    readInfo,
-    removeAttachments,
 } from './structure';
-import { pruneUnreachable, scrubAllJavaScript, stripTaggingEverywhere } from './prune';
+import {
+    applyMetadataSnapshot,
+    metadataGaps,
+    snapshotMetadata,
+} from './metadata';
+import {
+    pruneUnreachable,
+    removeAttachmentsEverywhere,
+    scrubAllJavaScript,
+    stripTaggingEverywhere,
+} from './prune';
 import { extractOutputName } from './naming';
 import { checkArtifactInvariants, readbackArtifact } from './readback';
 
@@ -177,7 +182,21 @@ export async function planExtract(
     const facts = readSourceFacts(doc, sourceBytes.length);
 
     // ---- 3. refusals knowable from the source alone --------------------------
-    if (!facts.readable || !facts.pageTreeWalks) {
+    //
+    // XFA is asked FIRST. A document can carry XFA and a malformed `/Fields` at
+    // the same time, and reporting the malformed field tree would give the
+    // vaguer of two true answers — and make XFA detection depend on a valid
+    // `/Fields`, which is exactly what it must not depend on.
+    if (facts.hasXfa) {
+        return refusedPlan(
+            M6_STATUS.XFA_UNSAFE,
+            'XFAフォームを含むPDFは、内容を失わずに抽出できないため処理しません。',
+            selection,
+            facts,
+            destinationPolicy,
+        );
+    }
+    if (!facts.pageTreeWalks) {
         return refusedPlan(
             M6_STATUS.UNSUPPORTED_DOCUMENT,
             'このPDFのページ構造を確認できませんでした。',
@@ -186,10 +205,13 @@ export async function planExtract(
             destinationPolicy,
         );
     }
-    if (facts.hasXfa) {
+    if (!facts.readable) {
+        // The only thing `readSourceFacts` declares unreadable is the AcroForm
+        // field tree, so this says what it actually is rather than blaming the
+        // document as a whole.
         return refusedPlan(
-            M6_STATUS.XFA_UNSAFE,
-            'XFAフォームを含むPDFは、内容を失わずに抽出できないため処理しません。',
+            M6_STATUS.UNSUPPORTED_FORM,
+            'フォーム構造を読み取れないため処理しません。',
             selection,
             facts,
             destinationPolicy,
@@ -292,9 +314,22 @@ export async function planExtract(
             { unreadable: closure.unreadable },
         );
     }
-    // BLK-2: attachments are removed from the working copy, before planning,
+    // BLK-2R: attachments are removed from the working copy, before planning,
     // so the payload is never part of the graph that gets counted or copied.
-    removeAttachments(working);
+    // An `/EF` carrier is recognised semantically, so a typeless one inside an
+    // unsupported action is found too — and the census refuses rather than
+    // reporting zero if it cannot prove it covered the document.
+    const plannedAttachments = removeAttachmentsEverywhere(working);
+    if (!plannedAttachments.complete) {
+        return refusedPlan(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            '添付ファイルの有無を完全に確認できなかったため処理しません。',
+            selection,
+            facts,
+            destinationPolicy,
+            { reason: plannedAttachments.reason },
+        );
+    }
     // Every `/Sig` widget goes, applied or empty: the reconstruction does not
     // rebuild signature fields (M6-H3 defers that), and a widget left behind
     // would be an orphan in the artifact. An applied signature is additionally a
@@ -302,6 +337,29 @@ export async function planExtract(
     if (facts.hasSignatureField) removeSignatureWidgets(working);
 
     const structural = await planStructuralGraph(working, selection);
+
+    /**
+     * RF-H — the pre-copy invariant is hard, not a readback.
+     *
+     * After every adopted sanitization and reconstruction plan, the graph must
+     * reach no page that is not being copied. `/Thread` and a cross-page
+     * `/Popup` are two routes this contract does not support; there will be
+     * others. Letting the copy run and refusing afterwards means the orphan was
+     * created and then thrown away, and H11-EXTRACT-2 says the graph counted is
+     * the graph copied. So this is a backstop for paths nobody has enumerated,
+     * and it refuses before `copyPages` rather than after `save`.
+     */
+    if (structural.pageLeavesReached > 0) {
+        return refusedPlan(
+            M6_STATUS.UNSUPPORTED_DOCUMENT,
+            'このPDFには、選択していないページを参照する構造が残っています。'
+            + '安全に説明できないため処理しません。',
+            selection,
+            facts,
+            destinationPolicy,
+            { pageLeavesReached: structural.pageLeavesReached },
+        );
+    }
 
     // ---- 6. the cap check, before any copy ----------------------------------
     const breach = checkStructuralCaps(structural, policy.structural);
@@ -316,16 +374,50 @@ export async function planExtract(
         );
     }
 
-    const losses: LossRecord[] = [
+    const losses: LossRecord[] = [];
+    const plannedSeen = new Set<string>();
+    const addPlanned = (loss: LossRecord): void => {
+        // Two detectors can legitimately find the same fact — the facts reader
+        // and the attachment remover both name an embedded file. Reporting it
+        // twice reads as two attachments.
+        const key = `${loss.kind}|${loss.what ?? ''}|${loss.fromIndex ?? ''}`;
+        if (plannedSeen.has(key)) return;
+        plannedSeen.add(key);
+        losses.push(loss);
+    };
+    for (const loss of [
         ...strip.losses,
         ...closure.losses,
         ...describeStructuralLosses(facts),
-    ];
+    ]) addPlanned(loss);
     if (hasOutlines(doc)) {
-        losses.push({ kind: 'outlines', why: 'しおりは引き継がれません（今回の対応範囲外）。' });
+        addPlanned({ kind: 'outlines', why: 'しおりは引き継がれません（今回の対応範囲外）。' });
     }
     if (hasPageLabels(doc)) {
-        losses.push({ kind: 'page-labels', why: 'ページラベルは引き継がれません（今回の対応範囲外）。' });
+        addPlanned({ kind: 'page-labels', why: 'ページラベルは引き継がれません（今回の対応範囲外）。' });
+    }
+    if (plannedAttachments.names.length > 0) {
+        addPlanned({
+            kind: 'attachments',
+            what: plannedAttachments.names.join(', '),
+            why: '添付ファイルは抽出後のPDFに引き継がれません。',
+        });
+    }
+    for (const kind of plannedAttachments.removedActions) {
+        addPlanned({
+            kind: 'internal-links',
+            what: '/' + kind,
+            why: '対応範囲外のアクションに添付が含まれていたため、そのアクションごと削除しました。',
+        });
+    }
+    if (facts.hasSignatureField && !facts.hasAppliedSignature) {
+        // RF-F: an unsigned field is not an applied signature, and saying so
+        // told people their document had been signed when it had not.
+        addPlanned({
+            kind: 'empty-signature-field',
+            what: facts.signatureFieldNames.join(', '),
+            why: '未署名の署名欄は抽出後のPDFには引き継がれないため削除しました。',
+        });
     }
 
     // A loss may be accepted, never assumed. Only the two that destroy something
@@ -419,14 +511,20 @@ export async function runExtract(
     const selection = plan.selection;
 
     // A working copy, transformed exactly as planning transformed its own.
+    /**
+     * RF-E — the metadata is snapshotted, not held.
+     *
+     * A second loaded document kept purely to read metadata at the end made
+     * "release the source before save" untrue: the release was an assignment
+     * with a live object graph behind it. The snapshot holds strings, numbers
+     * and copied byte arrays, so this document can be, and is, dropped here.
+     */
+    const metadataSnapshot = await (async () => {
+        const metadataSource = await PDFDocument.load(sourceBytes, { updateMetadata: false });
+        return snapshotMetadata(metadataSource);
+    })();
+
     let working: PDFDocument | null = await PDFDocument.load(sourceBytes, { updateMetadata: false });
-    // Metadata is read from a document this run does not transform: the working
-    // copy is about to have destinations stripped and attachments removed, and
-    // a metadata comparison against a mutated source would compare the artifact
-    // with something that never existed.
-    const metadataSource = await PDFDocument.load(sourceBytes, { updateMetadata: false });
-    const sourceInfo = readInfo(metadataSource);
-    const sourceHadXmp = hasXmpMetadata(metadataSource);
     const strip = sanitizeDestinations(working, selection);
     const closure = closeSourcePageRefs(working, selection);
     if (closure.unreadable.length > 0) {
@@ -438,13 +536,31 @@ export async function runExtract(
         );
     }
     if (plan.facts.hasSignatureField) removeSignatureWidgets(working);
-    const removedAttachments = removeAttachments(working);
+    const removedAttachments = removeAttachmentsEverywhere(working);
+    if (!removedAttachments.complete) {
+        return refusedResult(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            '添付ファイルの有無を完全に確認できなかったため処理しません。',
+            outputName,
+            { reason: removedAttachments.reason },
+        );
+    }
 
     const ocDescription = describeOptionalContent(working, selection);
     const form = readForm(working);
     const formPlan = planFormForExtract(form, selection);
 
     const planned: StructuralPlan = await planStructuralGraph(working, selection);
+    // RF-H, on the graph this run will actually copy.
+    if (planned.pageLeavesReached > 0) {
+        return refusedResult(
+            M6_STATUS.UNSUPPORTED_DOCUMENT,
+            'このPDFには、選択していないページを参照する構造が残っています。'
+            + '安全に説明できないため処理しません。',
+            outputName,
+            { pageLeavesReached: planned.pageLeavesReached },
+        );
+    }
     const breach = checkStructuralCaps(planned, policy.structural);
     if (breach) {
         return refusedResult(M6_STATUS.OVER_STRUCTURAL_CAP, breach.reason, outputName, {
@@ -499,8 +615,24 @@ export async function runExtract(
     // Every tagging remnant, not just the catalog keys: an annotation's
     // `/StructParent` and a form XObject's `/StructParents` point at a tree
     // that is gone just as surely as a page's does.
-    stripTaggingEverywhere(out);
-    removeAttachments(out);
+    const strippedTagging = stripTaggingEverywhere(out);
+    if (!strippedTagging.complete) {
+        return refusedResult(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            'タグ構造を完全に確認できなかったため処理しません。',
+            outputName,
+            { reason: strippedTagging.reason },
+        );
+    }
+    const outputAttachments = removeAttachmentsEverywhere(out);
+    if (!outputAttachments.complete) {
+        return refusedResult(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            '添付ファイルの有無を完全に確認できなかったため処理しません。',
+            outputName,
+            { reason: outputAttachments.reason },
+        );
+    }
     dropOpenAction(out);
 
     const sanitized = sanitizeJavaScript(out);
@@ -513,9 +645,17 @@ export async function runExtract(
     // Belt and braces beside the sweep below: a script inside something that
     // is still reachable has to go too, and a top-level `/S` check never saw
     // an action nested as a direct dictionary.
-    scrubAllJavaScript(out);
+    const scrubbed = scrubAllJavaScript(out);
+    if (!scrubbed.complete) {
+        return refusedResult(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            'JavaScriptの有無を完全に確認できなかったため処理しません。',
+            outputName,
+            { reason: scrubbed.reason },
+        );
+    }
 
-    const metadata = applyExtractMetadata(metadataSource, out, options.sourceName);
+    const metadata = applyMetadataSnapshot(out, metadataSnapshot, options.sourceName);
 
     // A5, decided now that both counts exist. A mismatch means the graph that
     // was capped is not the graph that was copied, which makes the cap check a
@@ -561,7 +701,7 @@ export async function runExtract(
     // M6-H7: metadata is part of the artifact, so a gap is a refusal rather
     // than a note attached to a file already handed over.
     const reopened = await PDFDocument.load(bytes, { updateMetadata: false });
-    const gaps = metadataGaps(sourceInfo, reopened, sourceHadXmp);
+    const gaps = metadataGaps(metadataSnapshot, reopened);
     if (gaps.length > 0) {
         return refusedResult(
             M6_STATUS.METADATA_NOT_PRESERVED,
@@ -579,12 +719,30 @@ export async function runExtract(
         });
     }
 
-    const losses: LossRecord[] = [...strip.losses, ...describeStructuralLosses(plan.facts)];
-    if (removedAttachments.names.length > 0) {
+    /**
+     * RF-I — the result carries every loss the plan named.
+     *
+     * Losses were being recomputed here from a narrower set, so outlines, page
+     * labels and the page-reference removals the plan had already found
+     * disappeared from a successful result. A loss that is known and not
+     * reported is a silent loss whatever the reason it went missing.
+     */
+    const losses: LossRecord[] = [...plan.losses];
+    const seenLoss = new Set(losses.map((l) => `${l.kind}|${l.what ?? ''}|${l.fromIndex ?? ''}`));
+    for (const loss of [...strip.losses, ...closure.losses, ...describeStructuralLosses(plan.facts)]) {
+        const key = `${loss.kind}|${loss.what ?? ''}|${loss.fromIndex ?? ''}`;
+        if (seenLoss.has(key)) continue;
+        seenLoss.add(key);
+        losses.push(loss);
+    }
+    for (const kind of removedAttachments.removedActions) {
+        const key = `internal-links|/${kind}|`;
+        if (seenLoss.has(key)) continue;
+        seenLoss.add(key);
         losses.push({
-            kind: 'attachments',
-            what: removedAttachments.names.join(', '),
-            why: '添付ファイルを削除しました。',
+            kind: 'internal-links',
+            what: '/' + kind,
+            why: '対応範囲外のアクションに添付が含まれていたため、そのアクションごと削除しました。',
         });
     }
 

@@ -41,6 +41,7 @@ export type WorkerRequest =
         plan: MergePlan;
         metadataPolicy: MergeMetadataPolicy;
         collisionPolicy: FieldCollisionPolicy;
+        confirmedLosses?: string[];
         policy?: M6PolicyOverrides;
     }
     | { kind: 'cancel'; runId: string };

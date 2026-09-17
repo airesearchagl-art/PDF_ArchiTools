@@ -48,8 +48,18 @@ import {
     mergeInWorker,
     intakeInWorker,
     workerAvailable,
+    censusIndirectObjects,
+    countByCensus,
+    CENSUS_BUDGET,
+    carriesJavaScript,
+    scrubAllJavaScript,
+    snapshotMetadata,
+    metadataGaps,
+    infoText,
 } from '/src/utils/split-merge/index.ts';
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef } from 'pdf-lib';
+import {
+    PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFString,
+} from 'pdf-lib';
 
 const FIXTURES = '/test-fixtures/m6-split-merge-production';
 const cache = new Map();
@@ -205,6 +215,7 @@ window.__m6 = {
         const intake = await intakeSources(inputs);
         const plan = planMerge(intake, options);
         const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
             ...options,
             policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
         });
@@ -379,6 +390,7 @@ function walkEverything(doc) {
         javascript: 0,
         fileAttachmentAnnots: 0,
         filespecsWithEF: 0,
+        efCarriers: 0,
         embeddedFileStreams: 0,
         orphanPages: 0,
         strayPageRefs: 0,
@@ -409,6 +421,8 @@ function walkEverything(doc) {
             }
             if (nameOf(dict.get(PDFName.of('Type'))) === '/Filespec'
                 && dict.get(PDFName.of('EF')) !== undefined) out.filespecsWithEF += 1;
+            // Any `/EF` at all, declared or not: the semantic carrier.
+            if (dict.get(PDFName.of('EF')) !== undefined) out.efCarriers += 1;
             if (nameOf(dict.get(PDFName.of('Type'))) === '/EmbeddedFile') {
                 out.embeddedFileStreams += 1;
             }
@@ -525,7 +539,7 @@ Object.assign(window.__m6, {
         }
         const intake = await intakeSources(inputs);
         const plan = planMerge(intake, options);
-        const result = await runMerge(inputs, plan, options);
+        const result = await runMerge(inputs, plan, { confirmedLosses: plan.requiresConfirmation, ...options });
         if (!result.bytes) {
             return plainly({
                 status: result.status,
@@ -594,7 +608,8 @@ Object.assign(window.__m6, {
             ? { ...r, result: 'NOT_DECIDED', reason: 'このファイルは確認が完了しませんでした。' }
             : r));
         const plan = planMerge(damaged, {});
-        const result = await runMerge(inputs, plan, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,});
         return plainly({
             planStatus: plan.status,
             status: result.status,
@@ -633,13 +648,118 @@ Object.assign(window.__m6, {
             info: {},
         }));
         const plan = planMerge(lying, {});
-        const result = await runMerge(inputs, plan, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,});
         return plainly({
             planStatus: plan.status,
             status: result.status,
             reason: result.reason ?? null,
             bytes: result.bytes ? result.bytes.length : null,
         });
+    },
+
+    /** A Merge run WITHOUT confirming what the plan says needs confirming. */
+    mergeUnconfirmed: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {});
+        return plainly({
+            requiresConfirmation: plan.requiresConfirmation,
+            status: result.status,
+            bytes: result.bytes ? result.bytes.length : null,
+            losses: result.losses,
+        });
+    },
+
+    /**
+     * A census driven past its own budget, to prove what it does then.
+     *
+     * The whole architectural claim of round 3 is that a census ends COMPLETE
+     * or REFUSED. Asserting that on documents it can cover proves only the
+     * first half. This builds a document with direct nesting deeper than the
+     * budget and asks for the same JavaScript count — the answer must be a
+     * refusal, and the refusal must reach the scrubber, not a zero.
+     *
+     * These bytes would never get past the pre-parse Load Boundary, which
+     * refuses at a far shallower nesting cap. That is the point: this is the
+     * behaviour of the layer behind the gate, tested without the gate.
+     */
+    censusDeepDirect: async (depth) => {
+        const doc = await PDFDocument.create({ updateMetadata: false });
+        doc.addPage();
+        let node = doc.context.obj({
+            Type: 'Action', S: 'JavaScript', JS: PDFString.of('app.alert(1)'),
+        });
+        for (let i = 0; i < depth; i += 1) node = doc.context.obj([node]);
+        doc.catalog.set(PDFName.of('M6Deep'), doc.context.register(node));
+        const walked = censusIndirectObjects(doc, () => undefined);
+        const counted = countByCensus(doc, ({ dict }) => carriesJavaScript(dict));
+        const scrub = scrubAllJavaScript(doc);
+        return plainly({
+            depth,
+            maxDirectDepth: CENSUS_BUDGET.maxDirectDepth,
+            censusComplete: walked.complete,
+            censusReason: walked.complete ? null : walked.reason,
+            countComplete: counted.complete,
+            count: counted.complete ? counted.value : null,
+            scrubComplete: scrub.complete,
+            scrubbed: scrub.complete ? scrub.scrubbed : null,
+        });
+    },
+
+    /** A metadata snapshot, and whether the artifact's XMP still decodes. */
+    metadataRoundTrip: async (name, selection) => {
+        const source = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const snapshot = snapshotMetadata(source);
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        if (!result.bytes) return plainly({ status: result.status });
+        const artifact = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const after = snapshotMetadata(artifact);
+        const text = (u8) => new TextDecoder().decode(u8 ?? new Uint8Array());
+        return plainly({
+            status: result.status,
+            gaps: metadataGaps(snapshot, artifact),
+            sourceFilters: snapshot.xmp ? snapshot.xmp.filters : [],
+            sourceDecodable: snapshot.xmp ? snapshot.xmp.decodable : null,
+            artifactFilters: after.xmp ? after.xmp.filters : [],
+            artifactDecodable: after.xmp ? after.xmp.decodable : null,
+            xmpEqual: text(snapshot.xmp && snapshot.xmp.decoded)
+                === text(after.xmp && after.xmp.decoded),
+            markerInDecoded: text(after.xmp && after.xmp.decoded)
+                .includes('M6R3_XMP_FLATE_MARKER'),
+            title: after.info.Title ? infoText(after.info.Title) : null,
+        });
+    },
+
+    /**
+     * Whether `copyPages` ran at all.
+     *
+     * RF-H asks for a refusal BEFORE the copy, not a readback after it. A
+     * status alone cannot tell those apart, so the copy is counted for the
+     * duration of one run and the method put back afterwards.
+     */
+    extractCountingCopies: async (name, selection) => {
+        const original = PDFDocument.prototype.copyPages;
+        let calls = 0;
+        PDFDocument.prototype.copyPages = function counted(...args) {
+            calls += 1;
+            return original.apply(this, args);
+        };
+        try {
+            const result = await runExtract(await bytesOf(name), {
+                selection, sourceName: `${name}.pdf`,
+                confirmedLosses: ['tagging', 'attachments'],
+            });
+            return plainly({ status: result.status, copyPagesCalls: calls });
+        } finally {
+            PDFDocument.prototype.copyPages = original;
+        }
     },
 
     /** Facts a refusal depends on, for the inherited-signature cases. */

@@ -18,6 +18,7 @@
  * Run:  npm run build
  *       node scripts/make-m6-split-merge-fixtures.mjs
  *       node scripts/make-m6-remediation-fixtures.mjs
+ *       node scripts/make-m6-round3-fixtures.mjs
  *       node scripts/smoke-split-merge-ui.mjs
  */
 import fs from 'node:fs';
@@ -292,6 +293,174 @@ try {
             mergeText.includes(name) && mergeText.includes(label),
             mergeText.includes(name) ? 'named' : 'MISSING');
     }
+
+    // ---- 6. BLK-4R: supersede does not erase the request --------------------
+    //
+    // Cancellation used to be implemented as `return`, so an intake that was
+    // superseded mid-flight dropped files the person had already picked and left
+    // `busy` set. That is the M6-H10 defect — an input vanishing between the
+    // picker and the list — reintroduced through the cancellation path.
+    //
+    // The invariant: after any supersede, EVERY requested file holds a terminal
+    // intake record, and nothing is still working. The record is read off the
+    // row rather than out of the prose, so 'shown as cancelled' and 'gone' can
+    // never look the same to this gate.
+    console.log('\n=== 6. BLK-4R supersede keeps every requested file ===');
+
+    const openMergeTab = async () => page.evaluate(() => {
+        document.querySelectorAll('[data-usage-target="split-tabs"] button')[1]
+            ?.click();
+    });
+    const openMerge = async () => {
+        await openSplitMerge();
+        await openMergeTab();
+        await settle(400);
+    };
+    const mergeRows = () => page.$$eval('[data-usage-target="merge-row"]',
+        (els) => els.map((el) => ({
+            name: el.getAttribute('data-m6-name'),
+            intake: el.getAttribute('data-m6-intake'),
+        })));
+    const working = async () => (await bodyText()).includes('処理中 / Working');
+
+    for (const { label, seed, disturb } of [
+        {
+            label: 'a file is removed',
+            seed: ['merge-b'],
+            disturb: () => page.evaluate(() => {
+                document.querySelectorAll('[data-usage-target="merge-row"]')[0]
+                    ?.querySelector('button[title="Remove"]')?.click();
+            }),
+        },
+        {
+            // Two seeded rows, because the second row is the one with an
+            // enabled Move Up.
+            label: 'the list is reordered',
+            seed: ['merge-b', 'nav-goto'],
+            disturb: () => page.evaluate(() => {
+                document.querySelectorAll('[data-usage-target="merge-row"]')[1]
+                    ?.querySelector('button[title="Move Up"]')?.click();
+            }),
+        },
+        {
+            label: 'the tab is switched away',
+            seed: ['merge-b'],
+            // Scoped to the component's tab strip: `PDF抽出` is also a
+            // substring of the app-level `PDF抽出・統合`, and clicking that
+            // one supersedes nothing.
+            disturb: () => page.evaluate(() => {
+                document.querySelector('[data-usage-target="split-tabs"] button')
+                    ?.click();
+            }),
+        },
+    ]) {
+        await openMerge();
+        let mi = await page.$('input[type="file"]');
+        await mi.uploadFile(...seed.map(fixture));
+        await settle(3500);
+        const seeded = (await mergeRows()).length;
+
+        // Two more, the first of which reads slowly, so the disturbance lands
+        // while the intake is genuinely in flight.
+        await page.evaluate(() => {
+            window.__m6SlowFiles = { 'merge-a.pdf': 3000 };
+        });
+        mi = await page.$('input[type="file"]');
+        await mi.uploadFile(fixture('merge-a'), fixture('nav-4p'));
+        await settle(500);
+        check(`${label}: the intake really was in flight`,
+            seeded === seed.length && (await working()),
+            `${seeded} seeded rows, busy ${await working()}`);
+
+        await disturb();
+        await settle(7000);
+        // The tab case has to come back to look at the list.
+        await openMergeTab();
+        await settle(400);
+
+        const rows = await mergeRows();
+        const shape = rows.map((r) => `${r.name}=${r.intake}`).join(', ');
+        const expected = (label === 'a file is removed' ? seeded - 1 : seeded) + 2;
+        check(`${label}: nothing is left working`, (await working()) === false, 'idle');
+        check(`${label}: every row holds a terminal record`,
+            rows.length === expected && rows.every((r) => r.intake !== 'PENDING'),
+            `${rows.length} rows (expected ${expected}): ${shape}`);
+        check(`${label}: both interrupted files are still there, as cancelled`,
+            ['merge-a.pdf', 'nav-4p.pdf'].every(
+                (n) => rows.some((r) => r.name === n && r.intake === 'CANCELLED'),
+            ),
+            shape);
+    }
+
+    // A second upload arriving mid-intake supersedes the first. Both requests
+    // are the person's; neither may be dropped.
+    await openMerge();
+    await page.evaluate(() => {
+        window.__m6SlowFiles = { 'merge-a.pdf': 3000 };
+    });
+    let racing = await page.$('input[type="file"]');
+    await racing.uploadFile(fixture('merge-a'), fixture('nav-4p'));
+    await settle(500);
+    racing = await page.$('input[type="file"]');
+    await racing.uploadFile(fixture('merge-b'));
+    await settle(9000);
+
+    const raced = await mergeRows();
+    const racedShape = raced.map((r) => `${r.name}=${r.intake}`).join(', ');
+    check('a re-upload during intake: nothing is left working',
+        (await working()) === false, 'idle');
+    check('a re-upload during intake: all three requested files have a record',
+        raced.length === 3 && raced.every((r) => r.intake !== 'PENDING'),
+        `${raced.length} rows: ${racedShape}`);
+    check('and the file chosen last is the one that was decided',
+        raced.some((r) => r.name === 'merge-b.pdf' && r.intake === 'ACCEPTED'),
+        racedShape);
+
+    // ---- 7. RF-C: a gated loss list is never truncated ----------------------
+    //
+    // The list used to be cut at eight, so an attachment could fall off the end
+    // while the broad approval still authorised deleting it. A confirmation is
+    // only valid for what was actually shown.
+    console.log('\n=== 7. RF-C the confirmation shows every loss it gates ===');
+    await openSplitMerge();
+    const manyInput = await page.$('input[type="file"]');
+    await manyInput.uploadFile(fixture('r3-many-losses'));
+    await settle(3500);
+
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="extract-pages"] > div')?.click();
+    });
+    await settle(400);
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="extract-export"]')?.click();
+    });
+    const gatedShown = await waitForText('内容を了承して書き出し');
+    check('the confirmation is asked for before anything is written',
+        gatedShown, gatedShown ? 'shown' : 'NOT SHOWN');
+
+    const gatedList = await page
+        .$eval('[data-usage-target="m6-confirm-losses"]', (el) => ({
+            text: el.textContent ?? '',
+            items: el.querySelectorAll('li').length,
+        }))
+        .catch(() => null);
+    check('both confirmation-required losses are listed in full',
+        Boolean(gatedList)
+        && gatedList.items === 2
+        && gatedList.text.includes('添付ファイル')
+        && gatedList.text.includes('タグ構造'),
+        gatedList ? `${gatedList.items} items` : 'NOT FOUND');
+    check('and the attachment is named by filename before the click',
+        Boolean(gatedList) && gatedList.text.includes('secret-notes.txt'),
+        gatedList ? gatedList.text.slice(0, 100) : 'NOT FOUND');
+
+    // The informational remainder is disclosed too — collapsed is allowed, gone
+    // is not.
+    const informationalShown = await bodyText();
+    check('the informational losses are on screen as well',
+        informationalShown.includes('しおり（アウトライン）')
+        && informationalShown.includes('ページラベル'),
+        'outlines and page labels named');
 
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));

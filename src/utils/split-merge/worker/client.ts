@@ -312,6 +312,7 @@ export function mergeInWorker(
     options: {
         metadataPolicy: MergeMetadataPolicy;
         collisionPolicy: FieldCollisionPolicy;
+        confirmedLosses?: string[];
         policy?: M6PolicyOverrides;
     },
 ): RunHandle<MergeResult> {
@@ -327,6 +328,7 @@ export function mergeInWorker(
             plan,
             metadataPolicy: options.metadataPolicy,
             collisionPolicy: options.collisionPolicy,
+            confirmedLosses: options.confirmedLosses,
             policy: options.policy,
         },
         copies.map((c) => c.bytes),

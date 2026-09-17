@@ -108,6 +108,7 @@ async function handle(request: WorkerRequest): Promise<void> {
             const result = await runMerge(inputs, plan, {
                 metadataPolicy: request.metadataPolicy,
                 collisionPolicy: request.collisionPolicy,
+                confirmedLosses: request.confirmedLosses,
                 policy,
                 stillOurs,
             });

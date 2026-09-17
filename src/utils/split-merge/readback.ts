@@ -5,18 +5,11 @@
  * itself. A sanitizer that reports what it removed is describing its own
  * intent; the counts that matter are taken from the file afterwards.
  *
- * This is the step that would have caught each of the defects M6 exists to fix —
- * and, after the Independent Review, the step that had to get stricter, because
- * three of them reported zero while the thing was in the bytes:
- *
- *   - a JavaScript action held as a **direct** dictionary inside a detached
- *     object, which a top-level `/S` check never sees;
- *   - a page `/FileAttachment` annotation and the payload stream it reached,
- *     both detached and both serialized;
- *   - a source-page reference surviving on a route that is not `/Dest`.
- *
- * So the counts below are taken by walking the artifact, not by asking the code
- * that produced it.
+ * Each artifact-wide census runs on the shared complete-or-refuse primitive, so
+ * the numbers below are either a measurement of the whole artifact or a typed
+ * refusal. There is no state in which a scan gives up and the count reads zero —
+ * which is what a bounded scanner did, three times, while the thing it was
+ * looking for was in the bytes.
  */
 import { PDFDocument } from 'pdf-lib';
 import type { ReadbackFacts } from './contracts';
@@ -25,8 +18,8 @@ import { scanJavaScript } from './javascript';
 import { countOrphanWidgets } from './forms';
 import {
     censusAttachments,
+    censusJavaScript,
     censusTagging,
-    countArtifactWideJavaScript,
     countUnreachable,
 } from './prune';
 
@@ -41,22 +34,38 @@ export async function readbackArtifact(bytes: Uint8Array): Promise<ReadbackFacts
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
     const destinations = measureDestinationInvariants(doc);
     const reachable = scanJavaScript(doc);
+
+    const js = censusJavaScript(doc);
     const attachments = censusAttachments(doc);
     const tagging = censusTagging(doc);
+
+    const refusals = [js, attachments, tagging]
+        .filter((c) => !c.complete)
+        .map((c) => (c as { reason: string }).reason);
+
+    /**
+     * When any census refused, the counts it would have produced are not
+     * reported as zero. They are reported as the artifact's own numbers where
+     * another complete census supplied them, and `censusComplete` is false —
+     * which `checkArtifactInvariants` turns into a refusal before anything else
+     * is considered.
+     */
     return {
         pageCount: doc.getPageCount(),
         orphanPageCount: destinations.orphanPageCount,
         danglingDestinations: destinations.danglingDestinations,
         sourcePageReferences: countSourcePageReferences(doc),
         reachableJavaScript: reachable.count,
-        artifactWideJavaScript: countArtifactWideJavaScript(doc),
+        artifactWideJavaScript: js.complete ? js.value.length : Number.NaN,
         orphanWidgets: countOrphanWidgets(doc),
-        fileAttachmentAnnots: attachments.fileAttachmentAnnots,
-        filespecsWithEF: attachments.filespecsWithEF,
-        embeddedFileStreams: attachments.embeddedFileStreams,
-        taggingRemnants: tagging.total,
+        fileAttachmentAnnots: attachments.complete ? attachments.value.fileAttachmentAnnots : Number.NaN,
+        filespecsWithEF: attachments.complete ? attachments.value.efCarriers : Number.NaN,
+        embeddedFileStreams: attachments.complete ? attachments.value.payloadStreams : Number.NaN,
+        taggingRemnants: tagging.complete ? tagging.value.total : Number.NaN,
         unreachableObjects: countUnreachable(doc),
         complete: reachable.complete,
+        censusComplete: refusals.length === 0,
+        censusRefusal: refusals.length > 0 ? refusals.join('; ') : undefined,
     };
 }
 
@@ -74,11 +83,22 @@ export interface InvariantBreach {
  * thing it prevents is shipping the content of pages the user did not select.
  * The rest follow the same rule: a count that should be zero is checked on the
  * bytes, not assumed from the code path that produced them.
+ *
+ * Census completeness is checked **first**. A zero that came out of an
+ * incomplete scan would satisfy every check below it.
  */
 export function checkArtifactInvariants(
     facts: ReadbackFacts,
     expectedPages: number,
 ): InvariantBreach | null {
+    if (!facts.censusComplete) {
+        return {
+            invariant: 'every artifact census is complete',
+            value: 0,
+            reason: '書き出したPDFを完全に検査できたことを確認できませんでした'
+                + `（${facts.censusRefusal ?? '理由不明'}）。`,
+        };
+    }
     if (!facts.complete) {
         return {
             invariant: 'readback completes',
@@ -142,7 +162,7 @@ export function checkArtifactInvariants(
         return {
             invariant: 'no attachment payload survives',
             value: total,
-            reason: `書き出したPDFに添付ファイルの実体が残っていました`
+            reason: '書き出したPDFに添付ファイルの実体が残っていました'
                 + `（注釈 ${facts.fileAttachmentAnnots} / 指定 ${facts.filespecsWithEF} / 本体 ${facts.embeddedFileStreams}）。`,
         };
     }

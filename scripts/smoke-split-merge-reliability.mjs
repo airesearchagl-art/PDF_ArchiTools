@@ -614,12 +614,22 @@ try {
         && inhAppliedExtract.production?.orphanWidgets === 0,
         `${inhAppliedExtract.status}, orphan widgets ${inhAppliedExtract.production?.orphanWidgets}`);
 
+    // RF-F: an unsigned field is not an applied signature. Asserting the
+    // wrong label here would have encoded the wrong terminology into the gate.
     const emptySigMerge = await call('mergeAndInspect', ['rem-inherited-sig-field', 'merge-b'], null);
-    check('an empty signature field is removed, and the loss is named',
+    check('an empty signature field is removed, and named as an EMPTY one',
         emptySigMerge.status === 'READY'
-        && (emptySigMerge.losses ?? []).some((l) => l.kind === 'applied-signature'),
+        && (emptySigMerge.losses ?? []).some((l) => l.kind === 'empty-signature-field')
+        && !(emptySigMerge.losses ?? []).some((l) => l.kind === 'applied-signature'),
         `${emptySigMerge.status}, losses `
         + JSON.stringify((emptySigMerge.losses ?? []).map((l) => l.kind)));
+
+    const emptySigExtract = await call('extractAndInspect', 'rem-inherited-sig-field', [0], null);
+    check('Extract discloses the empty signature removal too',
+        emptySigExtract.status === 'READY'
+        && (emptySigExtract.losses ?? []).some((l) => l.kind === 'empty-signature-field'),
+        `${emptySigExtract.status}, losses `
+        + JSON.stringify((emptySigExtract.losses ?? []).map((l) => l.kind)));
 
     // ---- 18. RF-8: metadata ---------------------------------------------------
     console.log('\n=== 18. RF-8 metadata ===');
@@ -711,8 +721,305 @@ try {
     check('and the refusal names the file it could not decide',
         (undecided.reason ?? '').includes('merge-b.pdf'), undecided.reason ?? '');
 
-    // ---- 23. local only ------------------------------------------------------
-    console.log('\n=== 23. local only ===');
+    // ---- 23. BLK-1R: JavaScript that never says it is JavaScript ------------
+    //
+    // A Rendition action carries its script in `/JS` and its `/S` says
+    // `/Rendition`. The reachable scanner asked about `/S` and answered zero.
+    // The chain variants put the same carrier behind a run of indirect objects,
+    // so a scan whose reach depends on traversal depth fails at some length.
+    console.log('\n=== 23. BLK-1R subtype-independent JavaScript ===');
+
+    for (const [fixture, marker] of [
+        ['r3-rendition-js', 'M6R3_RENDITION_SHALLOW'],
+        ['r3-rendition-js-chain-126', 'M6R3_RENDITION_126'],
+        ['r3-rendition-js-chain-127', 'M6R3_RENDITION_127'],
+        ['r3-rendition-js-chain-128', 'M6R3_RENDITION_128'],
+        ['r3-rendition-js-chain-129', 'M6R3_RENDITION_129'],
+        ['r3-rendition-js-chain-130', 'M6R3_RENDITION_130'],
+    ]) {
+        const r = await call('extractAndInspect', fixture, [0], marker);
+        check(`${fixture}: no script survives, by independent walk and by bytes`,
+            r.status === 'READY'
+            && r.independent?.javascript === 0
+            && r.markerInBytes === false,
+            `${r.status}, independent js ${r.independent?.javascript}, `
+            + `marker ${r.markerInBytes}`);
+    }
+    const renditionMerge = await call('mergeAndInspect',
+        ['r3-rendition-js', 'merge-b'], 'M6R3_RENDITION_SHALLOW');
+    check('a Merge carries no Rendition script either',
+        renditionMerge.status === 'READY'
+        && renditionMerge.independent?.javascript === 0
+        && renditionMerge.markerInBytes === false,
+        `${renditionMerge.status}, js ${renditionMerge.independent?.javascript}, `
+        + `marker ${renditionMerge.markerInBytes}`);
+
+    // ---- 24. BLK-2R: an attachment that never says it is one ----------------
+    //
+    // `/EF` is what makes a payload an embedded file. `/Type /Filespec` is how
+    // a well-behaved producer labels it, and is not a precondition.
+    console.log('\n=== 24. BLK-2R semantic attachment detection ===');
+
+    for (const [fixture, marker] of [
+        ['r3-typeless-ef', 'M6R3_TYPELESS_SHALLOW'],
+        ['r3-typeless-ef-deep', 'M6R3_TYPELESS_DEEP'],
+        ['r3-explicit-filespec', 'M6R3_EXPLICIT_PAYLOAD'],
+    ]) {
+        const r = await call('extractAndInspect', fixture, [0], marker);
+        check(`${fixture}: no /EF carrier and no payload left in the bytes`,
+            r.status === 'READY'
+            && r.independent?.efCarriers === 0
+            && r.independent?.embeddedFileStreams === 0
+            && r.markerInBytes === false,
+            `${r.status}, carriers ${r.independent?.efCarriers}, `
+            + `streams ${r.independent?.embeddedFileStreams}, marker ${r.markerInBytes}`);
+        check(`${fixture}: and the removal is disclosed`,
+            (r.losses ?? []).some((l) => l.kind === 'attachments'),
+            JSON.stringify((r.losses ?? []).map((l) => l.kind)));
+    }
+    const efMerge = await call('mergeAndInspect',
+        ['r3-typeless-ef', 'merge-b'], 'M6R3_TYPELESS_SHALLOW');
+    check('a Merge carries no undeclared payload either',
+        efMerge.status === 'READY'
+        && efMerge.independent?.efCarriers === 0
+        && efMerge.markerInBytes === false,
+        `${efMerge.status}, carriers ${efMerge.independent?.efCarriers}, `
+        + `marker ${efMerge.markerInBytes}`);
+
+    // ---- 25. a census ends COMPLETE or REFUSED ------------------------------
+    //
+    // The adopted clarification, tested as behaviour rather than as a comment:
+    // there is no state in which a scan gives up and the count reads zero.
+    console.log('\n=== 25. complete-or-refuse census ===');
+
+    const shallow = await call('censusDeepDirect', 8);
+    check('a census within budget completes and finds the script',
+        shallow.censusComplete === true
+        && shallow.countComplete === true
+        && shallow.count === 1
+        && shallow.scrubbed === 1,
+        `complete ${shallow.censusComplete}, count ${shallow.count}, `
+        + `scrubbed ${shallow.scrubbed}`);
+
+    const starved = await call('censusDeepDirect', shallow.maxDirectDepth + 64);
+    check('a census past its budget refuses instead of reporting zero',
+        starved.censusComplete === false
+        && starved.countComplete === false
+        && starved.count === null,
+        `complete ${starved.censusComplete}, count ${starved.count}`);
+    check('and the refusal reaches the scrubber, which does not claim success',
+        starved.scrubComplete === false && starved.scrubbed === null,
+        `scrubComplete ${starved.scrubComplete}, scrubbed ${starved.scrubbed}`);
+    note('census refusal', String(starved.censusReason));
+
+    // ---- 26. RF-A: safety facts are re-derived from the bytes ---------------
+    console.log('\n=== 26. RF-A authoritative revalidation ===');
+
+    for (const fixture of [
+        'r3-xfa-empty-fields', 'r3-xfa-missing-fields', 'r3-xfa-malformed-fields',
+    ]) {
+        const intakeRow = (await call('intake', [fixture]))[0];
+        const extracted = await call('extract', fixture, [0]);
+        check(`${fixture}: XFA is found without depending on a valid /Fields`,
+            intakeRow.result === 'XFA_UNSAFE' && extracted.status === 'XFA_UNSAFE',
+            `intake ${intakeRow.result}, extract ${extracted.status}`);
+    }
+    const badForm = (await call('intake', ['r3-malformed-acroform']))[0];
+    const badFormExtract = await call('extract', 'r3-malformed-acroform', [0]);
+    check('a malformed AcroForm fails closed, and says it is the form',
+        badForm.result === 'UNSUPPORTED_FORM'
+        && badFormExtract.status === 'UNSUPPORTED_FORM',
+        `intake ${badForm.result}, extract ${badFormExtract.status}`);
+
+    for (const [fixture, expected] of [
+        ['signature-applied', 'SIGNATURE_UNSAFE'],
+        ['r3-xfa-empty-fields', 'XFA_UNSAFE'],
+        ['r3-xfa-missing-fields', 'XFA_UNSAFE'],
+        ['r3-malformed-acroform', 'UNSUPPORTED_FORM'],
+        ['form-choice', 'UNSUPPORTED_FORM'],
+    ]) {
+        const r = await call('mergeWithFalseIntake', ['merge-a', fixture]);
+        check(`an ACCEPTED record for ${fixture} does not get past the run`,
+            r.status === expected && r.bytes === null,
+            `${r.status}, bytes ${r.bytes}`);
+    }
+
+    // ---- 27. RF-B: Merge rebuilds its destinations --------------------------
+    console.log('\n=== 27. RF-B Merge destination reconstruction ===');
+
+    for (const [names, label] of [
+        [['nav-4p', 'merge-b'], 'a link source placed first'],
+        [['merge-b', 'nav-4p'], 'the same source at a page offset'],
+        [['nav-goto', 'merge-b'], 'a /GoTo action'],
+        [['named-destination', 'merge-b'], 'a named destination'],
+    ]) {
+        const r = await call('mergeAndInspect', names, null);
+        check(`${label}: nothing points outside the merged page tree`,
+            r.status === 'READY'
+            && r.independent?.strayPageRefs === 0
+            && r.independent?.orphanPages === 0
+            && r.production?.danglingDestinations === 0,
+            `${r.status}, stray ${r.independent?.strayPageRefs}, `
+            + `orphans ${r.independent?.orphanPages}, `
+            + `dangling ${r.production?.danglingDestinations}`);
+    }
+    const nameClash = await call('mergeAndInspect',
+        ['named-destination', 'named-destination'], null);
+    check('a named-destination collision is refused, not quietly resolved',
+        nameClash.status === 'DUPLICATE_NAMED_DESTINATIONS',
+        `${nameClash.status}`);
+
+    // ---- 28. RF-D: a compressed XMP packet stays readable -------------------
+    console.log('\n=== 28. RF-D compressed metadata ===');
+
+    const xmp = await call('metadataRoundTrip', 'r3-xmp-flate', [0]);
+    check('the source packet really is compressed, and decodes',
+        (xmp.sourceFilters ?? []).includes('FlateDecode')
+        && xmp.sourceDecodable === true,
+        `${JSON.stringify(xmp.sourceFilters)}, decodable ${xmp.sourceDecodable}`);
+    check('the artifact packet decodes to the same XMP',
+        xmp.status === 'READY'
+        && xmp.artifactDecodable === true
+        && xmp.xmpEqual === true
+        && xmp.markerInDecoded === true,
+        `${xmp.status}, decodable ${xmp.artifactDecodable}, `
+        + `equal ${xmp.xmpEqual}, marker ${xmp.markerInDecoded}`);
+    check('and no metadata gap is left to report',
+        (xmp.gaps ?? []).length === 0, JSON.stringify(xmp.gaps));
+
+    // ---- 29. RF-H: the page-reference invariant refuses before the copy -----
+    console.log('\n=== 29. RF-H pre-copy invariant ===');
+
+    const popup = await call('extractCountingCopies', 'r3-popup-crosspage', [0]);
+    check('a cross-page /Popup is refused, and copyPages never ran',
+        popup.status !== 'READY' && popup.copyPagesCalls === 0,
+        `${popup.status}, copyPages ${popup.copyPagesCalls}x`);
+    const ordinary = await call('extractCountingCopies', 'nav-4p', [0]);
+    check('and an ordinary document still reaches the copy',
+        ordinary.status === 'READY' && ordinary.copyPagesCalls > 0,
+        `${ordinary.status}, copyPages ${ordinary.copyPagesCalls}x`);
+    const thread = await call('extractAndInspect', 'r3-thread', [0], null);
+    check('a /Thread bead chain is removed, disclosed, and leaves nothing stray',
+        thread.status === 'READY'
+        && thread.independent?.strayPageRefs === 0
+        && (thread.losses ?? []).some((l) => l.kind === 'article-threads'),
+        `${thread.status}, stray ${thread.independent?.strayPageRefs}, losses `
+        + JSON.stringify((thread.losses ?? []).map((l) => l.kind)));
+
+    // ---- 30. RF-F and RF-G: losses named for what they are ------------------
+    console.log('\n=== 30. RF-F / RF-G loss labels ===');
+
+    const emptySig = await call('extractAndInspect', 'signature-field-empty', [0], null);
+    check('an unsigned signature field is dropped as itself, not as a form failure',
+        emptySig.status === 'READY'
+        && (emptySig.losses ?? []).some((l) => l.kind === 'empty-signature-field'),
+        `${emptySig.status}, `
+        + JSON.stringify((emptySig.losses ?? []).map((l) => l.kind)));
+    const emptySigOnMerge = await call('mergeAndInspect',
+        ['signature-field-empty', 'merge-b'], null);
+    check('and the same on the Merge route',
+        emptySigOnMerge.status === 'READY'
+        && (emptySigOnMerge.losses ?? []).some((l) => l.kind === 'empty-signature-field'),
+        `${emptySigOnMerge.status}, `
+        + JSON.stringify((emptySigOnMerge.losses ?? []).map((l) => l.kind)));
+
+    for (const fixture of ['ocmd', 'ocg-extgstate-smask']) {
+        const r = await call('mergeAndInspect', ['merge-a', fixture], null);
+        const labelled = (r.losses ?? []).filter((l) => l.kind === 'excluded-source');
+        check(`${fixture} is reported as an excluded source, not a broken link`,
+            r.status === 'READY'
+            && labelled.some((l) => (l.what ?? '').includes(fixture)),
+            JSON.stringify((r.losses ?? []).map((l) => `${l.kind}:${l.what ?? ''}`)));
+    }
+
+    // ---- 31. RF-I: every loss the plan named reaches the result -------------
+    console.log('\n=== 31. RF-I planned losses survive to the result ===');
+
+    const deferred = await call('extractAndInspect', 'r3-deferred-structures', [0], null);
+    const deferredKinds = (deferred.losses ?? []).map((l) => l.kind);
+    check('outlines and page labels are disclosed on a successful Extract',
+        deferred.status === 'READY'
+        && deferredKinds.includes('outlines')
+        && deferredKinds.includes('page-labels'),
+        `${deferred.status}, ${JSON.stringify(deferredKinds)}`);
+    const deferredMerge = await call('mergeAndInspect',
+        ['r3-deferred-structures', 'merge-b'], null);
+    const mergeKinds = (deferredMerge.losses ?? []).map((l) => l.kind);
+    check('and on a successful Merge',
+        deferredMerge.status === 'READY'
+        && mergeKinds.includes('outlines')
+        && mergeKinds.includes('page-labels'),
+        `${deferredMerge.status}, ${JSON.stringify(mergeKinds)}`);
+
+    const manyPlan = await call('plan', 'r3-many-losses', [0]);
+    check('a document with many losses needs both confirmations before it runs',
+        manyPlan.status === 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION'
+        && (manyPlan.requiresConfirmation ?? []).includes('attachments')
+        && (manyPlan.requiresConfirmation ?? []).includes('tagging'),
+        `${manyPlan.status}, `
+        + JSON.stringify(manyPlan.requiresConfirmation));
+    const manyRun = await call('extractAndInspect', 'r3-many-losses', [0], null);
+    const ranKeys = new Set((manyRun.losses ?? []).map((l) => `${l.kind}|${l.what ?? ''}`));
+    const dropped = (manyPlan.losses ?? [])
+        .filter((l) => !ranKeys.has(`${l.kind}|${l.what ?? ''}`));
+    check('and no loss the plan named disappears from the result',
+        manyRun.status === 'READY' && dropped.length === 0,
+        `${manyRun.status}, planned ${(manyPlan.losses ?? []).length}, dropped `
+        + JSON.stringify(dropped.map((l) => `${l.kind}:${l.what ?? ''}`)));
+    check('the attachment is among them, by name',
+        (manyRun.losses ?? []).some((l) => l.kind === 'attachments'
+            && (l.what ?? '').includes('secret-notes.txt')),
+        JSON.stringify((manyRun.losses ?? [])
+            .filter((l) => l.kind === 'attachments').map((l) => l.what)));
+
+    // ---- 32. optional-content configuration fidelity ------------------------
+    //
+    // Two sources can each be individually supported and still not have one
+    // coherent default configuration between them. Picking one silently would
+    // hide a layer in the other.
+    console.log('\n=== 32. optional-content configuration fidelity ===');
+
+    const ocAgree = await call('mergeAndInspect', ['r3-oc-name-a', 'r3-oc-name-same'], null);
+    check('two sources whose default configurations agree merge, keeping both groups',
+        ocAgree.status === 'READY'
+        && (ocAgree.optionalContent?.groups ?? []).includes('M6-OC-A')
+        && (ocAgree.optionalContent?.groups ?? []).includes('M6-OC-C'),
+        `${ocAgree.status}, `
+        + JSON.stringify(ocAgree.optionalContent?.groups));
+    const ocName = await call('mergeAndInspect', ['r3-oc-name-a', 'r3-oc-name-b'], null);
+    check('a disagreeing /D /Name is refused rather than one being chosen',
+        ocName.status === 'UNSUPPORTED_OPTIONAL_CONTENT', `${ocName.status}`);
+    const ocOrder = await call('mergeAndInspect', ['r3-oc-order', 'r3-oc-no-order'], null);
+    check('an ordered source plus an unordered one is refused',
+        ocOrder.status === 'UNSUPPORTED_OPTIONAL_CONTENT', `${ocOrder.status}`);
+    const ocBase = await call('mergeAndInspect', ['r3-oc-order', 'r3-oc-basestate-on'], null);
+    check('a /BaseState the sources agree on is carried, not dropped',
+        ocBase.status === 'READY'
+        && (ocBase.optionalContent?.groups ?? []).length === 2,
+        `${ocBase.status}, `
+        + JSON.stringify(ocBase.optionalContent?.groups));
+
+    // ---- 33. a Merge confirmation that actually blocks ----------------------
+    console.log('\n=== 33. Merge confirmation semantics ===');
+
+    const unconfirmed = await call('mergeUnconfirmed', ['with-attachment', 'merge-b']);
+    check('a confirmation-required Merge does not proceed unconfirmed',
+        (unconfirmed.requiresConfirmation ?? []).length > 0
+        && unconfirmed.status === 'CONFIRMATION_REQUIRED'
+        && unconfirmed.bytes === null,
+        `requires ${JSON.stringify(unconfirmed.requiresConfirmation)}, `
+        + `${unconfirmed.status}, bytes ${unconfirmed.bytes}`);
+    check('and the refusal carries the losses it is asking about',
+        (unconfirmed.losses ?? []).some((l) => l.kind === 'attachments'),
+        JSON.stringify((unconfirmed.losses ?? []).map((l) => l.kind)));
+    const confirmed = await call('mergeAndInspect', ['with-attachment', 'merge-b'], null);
+    check('and it proceeds once those losses are confirmed',
+        confirmed.status === 'READY'
+        && confirmed.independent?.efCarriers === 0,
+        `${confirmed.status}, carriers ${confirmed.independent?.efCarriers}`);
+
+    // ---- 34. local only ------------------------------------------------------
+    console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));
     check('no page error during the run', pageErrors.length === 0, pageErrors.join(' | '));
 

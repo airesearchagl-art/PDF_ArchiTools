@@ -1,23 +1,24 @@
 /**
- * What the artifact actually holds, and taking out what nothing points at.
+ * What the artifact actually holds, taking out what nothing points at — and
+ * refusing rather than reporting zero when the inspection cannot be proven
+ * complete.
  *
  * pdf-lib writes **everything registered in the context**, reachable or not
  * (`core/writers/PDFWriter.js` walks `enumerateIndirectObjects`). That single
- * fact is behind three separate defects this milestone has now met:
- *
- *   - pages `copyPages` copied and never inserted into `/Pages`;
- *   - a JavaScript action detached from the key that reached it, still in the
- *     bytes;
- *   - an embedded file whose `/Filespec` was deleted, its payload stream still
- *     in the bytes.
+ * fact is behind several defects this milestone has met: pages `copyPages`
+ * copied and never inserted into `/Pages`; a JavaScript action detached from the
+ * key that reached it; an embedded file whose `/Filespec` was deleted with its
+ * payload stream still in the bytes.
  *
  * Removing a reference is not removing an object. So the artifact is swept:
- * everything reachable from the document's roots is kept, and everything else
- * is deleted before `save()`.
+ * everything reachable from the document's roots is kept, and everything else is
+ * deleted before `save()`. This is deliberately a **reachability** sweep rather
+ * than a list of things to remove — a list only removes the shapes somebody
+ * thought of.
  *
- * This is deliberately a **reachability** sweep rather than a list of things to
- * remove. A list only removes the shapes somebody thought of; the next detached
- * object of a shape nobody listed would ship exactly as these did.
+ * Every census here runs on the shared complete-or-refuse primitive in
+ * `census.ts`. Detection stays domain-specific and separate, so a change to what
+ * counts as JavaScript cannot quietly change what counts as an attachment.
  */
 import {
     PDFArray,
@@ -28,27 +29,29 @@ import {
     PDFStream,
 } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
+import { censusIndirectObjects, collectByCensus, dictOf } from './census';
+import type { CensusNode, CensusOutcome } from './census';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
     return typeof asString === 'function' ? asString.call(v) : '';
 };
 
-/** The dictionary of a dictionary or of a stream, or `null`. */
-const dictOf = (value: unknown): PDFDict | null => {
-    if (value instanceof PDFDict) return value;
-    const inner = (value as { dict?: unknown } | null)?.dict;
-    return inner instanceof PDFDict ? inner : null;
-};
+// ---------------------------------------------------------------------------
+// Reachability, and the sweep
+// ---------------------------------------------------------------------------
 
 /**
  * Every indirect object reachable from the document's roots.
  *
- * The roots are the catalog and the trailer's `/Info`, which is everything a
- * reader can start from in a document this code produces. Bounded by the
- * visited set rather than by a depth limit: a reachability answer that gave up
- * early would delete objects that are reachable, which is the one failure mode
- * worse than keeping a detached one.
+ * The roots are marked **by reference**, not by object: pushing the catalog
+ * object walks everything under it but never adds the catalog's own reference,
+ * so an earlier version of this sweep deleted the catalog and the artifact
+ * reopened with no page tree at all. A root that is not marked is not a root.
+ *
+ * Bounded by the visited set rather than by a depth limit. A reachability answer
+ * that gave up early would delete objects that are reachable, which is the one
+ * failure mode worse than keeping a detached one.
  */
 function reachableRefs(doc: PDFDocument): Set<string> {
     const live = new Set<string>();
@@ -60,24 +63,9 @@ function reachableRefs(doc: PDFDocument): Set<string> {
         stack.push(value);
     };
 
-    /**
-     * The roots are marked **by reference**, not by object.
-     *
-     * Pushing the catalog object walks everything under it but never adds the
-     * catalog's own reference to the live set, so the sweep deleted the catalog
-     * and the artifact reopened with no page tree at all. A root that is not
-     * marked as live is not a root.
-     */
-    const { Root, Info } = doc.context.trailerInfo as {
-        Root?: unknown;
-        Info?: unknown;
-    };
+    const { Root, Info } = doc.context.trailerInfo as { Root?: unknown; Info?: unknown };
     if (Root !== undefined) push(Root);
     if (Info !== undefined) push(Info);
-
-    // A document whose trailer does not name its catalog is still walked from
-    // the catalog object, and every `/Catalog` in the table is treated as a root:
-    // deleting one because the trailer was unusual is not a trade this sweep makes.
     push(doc.catalog);
     for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
         const dict = dictOf(obj);
@@ -116,12 +104,7 @@ function reachableRefs(doc: PDFDocument): Set<string> {
     return live;
 }
 
-/**
- * Indirect objects nothing reachable points at.
- *
- * Measured on an artifact rather than used to remove anything, so the sweep's
- * result can be asserted on the bytes instead of trusted from the sweep.
- */
+/** Indirect objects nothing reachable points at, measured on an artifact. */
 export function countUnreachable(doc: PDFDocument): number {
     const live = reachableRefs(doc);
     let count = 0;
@@ -132,18 +115,11 @@ export function countUnreachable(doc: PDFDocument): number {
 }
 
 export interface PruneReport {
-    /** Indirect objects deleted because nothing reachable pointed at them. */
     deleted: number;
-    /** What was deleted, by `/Type` or `/Subtype`, for the gate to read. */
     byKind: Record<string, number>;
 }
 
-/**
- * Delete every indirect object nothing reachable points at.
- *
- * Run immediately before `save()`, after all reconstruction and sanitization, so
- * what survives is what a reader can actually get to.
- */
+/** Delete every indirect object nothing reachable points at. */
 export function pruneUnreachable(doc: PDFDocument): PruneReport {
     const live = reachableRefs(doc);
     const doomed: PDFRef[] = [];
@@ -154,15 +130,15 @@ export function pruneUnreachable(doc: PDFDocument): PruneReport {
         doomed.push(ref);
         const dict = dictOf(obj);
         const kind = dict
-            ? (nameOf(dict.get(PDFName.of('Subtype'))) || nameOf(dict.get(PDFName.of('Type'))) || 'untyped')
+            ? (nameOf(dict.get(PDFName.of('Subtype')))
+                || nameOf(dict.get(PDFName.of('Type')))
+                || 'untyped')
             : (obj instanceof PDFStream ? 'stream' : 'other');
         byKind[kind] = (byKind[kind] ?? 0) + 1;
     }
 
     for (const ref of doomed) {
         const obj = doc.context.lookup(ref);
-        // Scrubbed before deletion, so that any route this code has not modelled
-        // finds an empty dictionary rather than the thing that was removed.
         const dict = dictOf(obj);
         if (dict) {
             for (const [key] of [...dict.entries()]) dict.delete(key);
@@ -173,295 +149,334 @@ export function pruneUnreachable(doc: PDFDocument): PruneReport {
     return { deleted: doomed.length, byKind };
 }
 
-/**
- * Every JavaScript action in the artifact, wherever it sits.
- *
- * The old scanner asked one question of each **top-level** indirect object: is
- * its `/S` `/JavaScript`? That misses a JavaScript action held as a direct
- * dictionary inside another object — under `/Next` on a detached `/GoTo`, under
- * `/AA` on a detached form field, under `/AA` on an annotation the copy brought
- * across — and all three reported `artifact-wide 0` about a file that carried
- * the script. Measured on three fixtures: production readback 0, the marker
- * present in the serialized bytes.
- *
- * So this walks into everything: dictionaries, arrays, and the dictionaries of
- * streams, cycle-safe, and counts an action wherever it is. `/JS` is counted as
- * well as `/S /JavaScript`, because an action dictionary stripped of its `/S`
- * still carries the script.
- */
-export function findJavaScriptActions(doc: PDFDocument): { holder: PDFDict; viaRef: string | null }[] {
-    const found: { holder: PDFDict; viaRef: string | null }[] = [];
-    const seen = new Set<object>();
+// ---------------------------------------------------------------------------
+// JavaScript
+// ---------------------------------------------------------------------------
 
-    const walk = (value: unknown, viaRef: string | null, depth: number): void => {
-        if (depth > 256) return;
-        if (value instanceof PDFRef) {
-            let target: unknown;
-            try {
-                target = doc.context.lookup(value);
-            } catch {
-                return;
+/**
+ * Whether a dictionary carries JavaScript, whatever it calls itself.
+ *
+ * `/S /JavaScript` is the obvious form and not the only one: a Rendition action
+ * carries its script in `/JS` under `/S /Rendition`, and the reachable scanner
+ * that asked only about `/S` reported **zero** for a document whose action held
+ * `/JS`. So the question is about the script, not the subtype — an action
+ * dictionary that holds `/JS` holds JavaScript however it is labelled.
+ */
+export const carriesJavaScript = (dict: PDFDict): boolean =>
+    dict.get(PDFName.of('JS')) !== undefined
+    || nameOf(dict.get(PDFName.of('S'))) === '/JavaScript';
+
+/** Every JavaScript carrier in the artifact, or a refusal. */
+export function censusJavaScript(doc: PDFDocument): CensusOutcome<CensusNode[]> {
+    return collectByCensus(doc, (node) => carriesJavaScript(node.dict));
+}
+
+/**
+ * Scrub every JavaScript carrier the census found, and delete the indirect ones.
+ *
+ * Returns a refusal when the census could not prove it covered the artifact:
+ * scrubbing what an incomplete scan happened to find and then reporting success
+ * is the failure this whole module was rebuilt to remove.
+ */
+export type ScrubOutcome =
+    | { complete: true; scrubbed: number }
+    | { complete: false; reason: string };
+
+export function scrubAllJavaScript(doc: PDFDocument): ScrubOutcome {
+    const census = censusJavaScript(doc);
+    if (!census.complete) return { complete: false, reason: census.reason };
+
+    const rootTags = new Set<string>();
+    for (const node of census.value) {
+        rootTags.add(node.rootTag);
+        // The entry that holds it goes, so the artifact does not keep an action
+        // dictionary stripped of everything that made it one.
+        if (node.parent) {
+            const { container, key } = node.parent;
+            if (container instanceof PDFDict) container.delete(PDFName.of(String(key)));
+        }
+        for (const [key] of [...node.dict.entries()]) node.dict.delete(key);
+    }
+
+    // An indirect object that WAS a carrier is emptied above; the reachability
+    // sweep removes it once nothing points at it.
+    for (const tag of rootTags) {
+        for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+            if (ref.tag !== tag) continue;
+            const dict = dictOf(obj);
+            if (dict && carriesJavaScript(dict)) {
+                for (const [key] of [...dict.entries()]) dict.delete(key);
             }
-            if (target !== undefined) walk(target, value.tag, depth + 1);
-            return;
         }
-        if (typeof value !== 'object' || value === null) return;
-        if (seen.has(value)) return;
-        seen.add(value);
-
-        if (value instanceof PDFDict) {
-            const isAction = nameOf(value.get(PDFName.of('S'))) === '/JavaScript'
-                || value.get(PDFName.of('JS')) !== undefined;
-            if (isAction) found.push({ holder: value, viaRef });
-            for (const [, entry] of value.entries()) walk(entry, viaRef, depth + 1);
-            return;
-        }
-        if (value instanceof PDFArray) {
-            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), viaRef, depth + 1);
-            return;
-        }
-        if (value instanceof PDFStream) {
-            for (const [, entry] of value.dict.entries()) walk(entry, viaRef, depth + 1);
-        }
-    };
-
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        walk(obj instanceof PDFRawStream ? obj.dict : obj, ref.tag, 0);
     }
 
-    return found;
+    return { complete: true, scrubbed: census.value.length };
 }
 
-/** The count the artifact invariant is stated in terms of. */
-export function countArtifactWideJavaScript(doc: PDFDocument): number {
-    return findJavaScriptActions(doc).length;
-}
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
 
 /**
- * Scrub every JavaScript action found anywhere, then delete the indirect ones.
+ * Whether a dictionary is an attachment carrier.
  *
- * Belt and braces beside {@link pruneUnreachable}: the sweep removes detached
- * objects, and this removes a script even where it sits inside something that
- * is still reachable and has to stay.
+ * **Semantic, not declared.** A dictionary carrying `/EF` is a file
+ * specification whether or not it says `/Type /Filespec`, and the stream behind
+ * it is a payload whether or not it says `/Type /EmbeddedFile`. Measured: a
+ * typeless `/EF` carrier inside a `/Launch` action evaded detection, evaded
+ * removal, and its payload bytes were in the artifact while the census reported
+ * zero.
  */
-export function scrubAllJavaScript(doc: PDFDocument): number {
-    const actions = findJavaScriptActions(doc);
-    for (const { holder } of actions) {
-        for (const [key] of [...holder.entries()]) holder.delete(key);
-    }
-    // Any object that WAS a JavaScript action is now an empty dictionary; the
-    // reachability sweep takes the detached ones out on the next pass.
-    const doomed: PDFRef[] = [];
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        if (!(obj instanceof PDFDict)) continue;
-        if (obj.entries().length > 0) continue;
-        // Only objects this scrub emptied, not every empty dictionary: an
-        // emptied action is the one shape known to have been one.
-        if (actions.some((a) => a.viaRef === ref.tag)) doomed.push(ref);
-    }
-    for (const ref of doomed) doc.context.delete(ref);
-    return actions.length;
-}
+export const carriesEmbeddedFile = (dict: PDFDict): boolean =>
+    dict.get(PDFName.of('EF')) !== undefined;
+
+export const isFileAttachmentAnnot = (dict: PDFDict): boolean =>
+    nameOf(dict.get(PDFName.of('Subtype'))) === '/FileAttachment';
 
 export interface AttachmentCensus {
+    /** Dictionaries carrying `/EF`, whatever their `/Type`. */
+    efCarriers: number;
     fileAttachmentAnnots: number;
-    filespecs: number;
-    filespecsWithEF: number;
-    embeddedFileStreams: number;
+    /** Streams reachable through an `/EF`, whatever their `/Type`. */
+    payloadStreams: number;
+    /** Names found, for disclosure. */
+    names: string[];
 }
 
-/**
- * Attachments as an independent count, taken from the object table rather than
- * from the code that removed them.
- *
- * The production remover reporting what it removed is the remover describing its
- * own intent. Measured: it reported an attachment removed while the page's
- * `/FileAttachment` annotation, and the embedded payload stream it reached, were
- * both still in the serialized bytes.
- */
-export function censusAttachments(doc: PDFDocument): AttachmentCensus {
-    const census: AttachmentCensus = {
+const textOf = (v: unknown): string | null => {
+    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
+    return typeof decode === 'function' ? decode.call(v) : null;
+};
+
+/** The attachment census, or a refusal. */
+export function censusAttachments(doc: PDFDocument): CensusOutcome<AttachmentCensus> {
+    const result: AttachmentCensus = {
+        efCarriers: 0,
         fileAttachmentAnnots: 0,
-        filespecs: 0,
-        filespecsWithEF: 0,
-        embeddedFileStreams: 0,
+        payloadStreams: 0,
+        names: [],
     };
-    const seen = new Set<object>();
+    const payloadTags = new Set<string>();
 
-    const walk = (value: unknown, depth: number): void => {
-        if (depth > 256) return;
-        if (value instanceof PDFRef) {
-            let target: unknown;
-            try {
-                target = doc.context.lookup(value);
-            } catch {
-                return;
-            }
-            if (target !== undefined) walk(target, depth + 1);
-            return;
-        }
-        if (typeof value !== 'object' || value === null) return;
-        if (seen.has(value)) return;
-        seen.add(value);
+    const outcome = censusIndirectObjects(doc, (node) => {
+        const { dict } = node;
+        if (isFileAttachmentAnnot(dict)) result.fileAttachmentAnnots += 1;
+        if (!carriesEmbeddedFile(dict)) return;
+        result.efCarriers += 1;
+        const label = textOf(dict.get(PDFName.of('F')))
+            ?? textOf(dict.get(PDFName.of('UF')))
+            ?? textOf(doc.context.lookup(dict.get(PDFName.of('F')) as never));
+        if (label && !result.names.includes(label)) result.names.push(label);
 
-        const dict = dictOf(value);
-        if (dict) {
-            if (nameOf(dict.get(PDFName.of('Subtype'))) === '/FileAttachment') {
-                census.fileAttachmentAnnots += 1;
-            }
-            if (nameOf(dict.get(PDFName.of('Type'))) === '/Filespec') {
-                census.filespecs += 1;
-                if (dict.get(PDFName.of('EF')) !== undefined) census.filespecsWithEF += 1;
-            }
-            if (nameOf(dict.get(PDFName.of('Type'))) === '/EmbeddedFile') {
-                census.embeddedFileStreams += 1;
+        const ef = dict.get(PDFName.of('EF'));
+        const efDict = ef instanceof PDFRef ? doc.context.lookup(ef) : ef;
+        if (!(efDict instanceof PDFDict)) return;
+        for (const [, target] of efDict.entries()) {
+            if (target instanceof PDFRef) {
+                if (!payloadTags.has(target.tag)) {
+                    payloadTags.add(target.tag);
+                    result.payloadStreams += 1;
+                }
+            } else if (target instanceof PDFStream) {
+                result.payloadStreams += 1;
             }
         }
+    });
 
-        if (value instanceof PDFDict) {
-            for (const [, entry] of value.entries()) walk(entry, depth + 1);
-        } else if (value instanceof PDFArray) {
-            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
-        } else if (value instanceof PDFStream) {
-            for (const [, entry] of value.dict.entries()) walk(entry, depth + 1);
-        }
-    };
-
-    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
-        walk(obj instanceof PDFRawStream ? obj.dict : obj, 0);
-    }
-    return census;
+    if (!outcome.complete) return outcome;
+    return { complete: true, value: result, nodes: outcome.nodes, roots: outcome.roots };
 }
 
+export type AttachmentRemoval =
+    | { complete: true; removed: number; names: string[]; removedActions: string[] }
+    | { complete: false; reason: string };
+
 /**
- * Tagging remnants, counted across every copied reachable structure rather than
- * at the catalog only.
+ * Remove every attachment, everywhere, and leave nothing half-removed.
  *
- * M6-H9a says strip every remnant. A `/StructParent` on an annotation, or
- * `/StructParents` on a form XObject, points a reader's accessibility machinery
- * at a tree that is gone — the same defect as leaving it on a page, in a place
- * the first implementation did not look.
+ * Three things go together, because removing any one of them alone is what
+ * produced the defects: the `/EF` entry, the payload streams behind it, and —
+ * when the carrier sits inside an action this contract does not support, such as
+ * `/Launch` — the whole containing action. Deleting a `/Launch` action's file
+ * and leaving the action behind would ship a broken action, which is a partial
+ * semantic this contract does not invent.
  */
+export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval {
+    const names: string[] = [];
+    const removedActions: string[] = [];
+    /** Indirect objects to delete, and whose incoming references to remove. */
+    const condemnedTags = new Set<string>();
+    let removed = 0;
+
+    const condemn = (raw: unknown): void => {
+        if (raw instanceof PDFRef) condemnedTags.add(raw.tag);
+    };
+
+    /** An action this contract does not carry, so removing it whole is safe. */
+    const unsupportedAction = (dict: PDFDict): string | null => {
+        const s = nameOf(dict.get(PDFName.of('S')));
+        if (!s) return null;
+        return s === '/GoTo' ? null : s;
+    };
+
+    // ---- phase 1: identify, by a census that proves it covered the artifact ---
+    const carriers = collectByCensus(doc, (node) => carriesEmbeddedFile(node.dict));
+    if (!carriers.complete) return { complete: false, reason: carriers.reason };
+    const annots = collectByCensus(doc, (node) => isFileAttachmentAnnot(node.dict));
+    if (!annots.complete) return { complete: false, reason: annots.reason };
+
+    for (const node of carriers.value) {
+        const { dict, parent, depth, rootTag } = node;
+        const label = textOf(dict.get(PDFName.of('F')))
+            ?? textOf(dict.get(PDFName.of('UF')))
+            ?? textOf(doc.context.lookup(dict.get(PDFName.of('F')) as never));
+        if (label && !names.includes(label)) names.push(label);
+
+        const ef = dict.get(PDFName.of('EF'));
+        const efDict = ef instanceof PDFRef ? doc.context.lookup(ef) : ef;
+        if (efDict instanceof PDFDict) {
+            for (const [, target] of efDict.entries()) condemn(target);
+            for (const [key] of [...efDict.entries()]) efDict.delete(key);
+        }
+        condemn(ef);
+        dict.delete(PDFName.of('EF'));
+        removed += 1;
+
+        // A carrier that IS an indirect object is condemned whole; one nested
+        // directly inside something else is edited in place.
+        if (depth === 0) condemnedTags.add(rootTag);
+        else if (parent && parent.container instanceof PDFDict) {
+            const holder = parent.container;
+            const kind = unsupportedAction(holder);
+            if (kind) {
+                // A `/Launch` whose file has been taken away is a broken action,
+                // and this contract does not invent partial action semantics. The
+                // whole action goes, and the removal is named.
+                removedActions.push(kind);
+                for (const [key] of [...holder.entries()]) holder.delete(key);
+                removed += 1;
+            } else {
+                holder.delete(PDFName.of(String(parent.key)));
+            }
+        }
+    }
+
+    for (const node of annots.value) {
+        condemn(node.dict.get(PDFName.of('FS')));
+        node.dict.delete(PDFName.of('FS'));
+        if (node.depth === 0) condemnedTags.add(node.rootTag);
+        else if (node.parent?.container instanceof PDFArray) {
+            const array = node.parent.container;
+            for (let i = array.size() - 1; i >= 0; i -= 1) {
+                if (dictOf(array.get(i)) === node.dict) array.remove(i);
+            }
+        }
+        removed += 1;
+    }
+
+    const namesDict = doc.catalog.lookup(PDFName.of('Names'));
+    if (namesDict instanceof PDFDict && namesDict.get(PDFName.of('EmbeddedFiles')) !== undefined) {
+        namesDict.delete(PDFName.of('EmbeddedFiles'));
+        removed += 1;
+    }
+
+    // ---- phase 2: remove every incoming reference, then the objects -----------
+    //
+    // The census deliberately does not follow references — that is what makes it
+    // complete — so it cannot see that an `/Annots` array holds a reference to a
+    // condemned annotation. Taking the object out without taking the reference
+    // out left the annotation in the artifact, counted by the readback and
+    // reported as a survival. So references are removed by their own pass.
+    if (condemnedTags.size > 0) {
+        const pass = censusIndirectObjects(doc, ({ dict }) => {
+            for (const [key, value] of [...dict.entries()]) {
+                if (value instanceof PDFRef && condemnedTags.has(value.tag)) dict.delete(key);
+                if (value instanceof PDFArray) {
+                    for (let i = value.size() - 1; i >= 0; i -= 1) {
+                        const entry = value.get(i);
+                        if (entry instanceof PDFRef && condemnedTags.has(entry.tag)) value.remove(i);
+                    }
+                }
+            }
+        });
+        if (!pass.complete) return { complete: false, reason: pass.reason };
+    }
+
+    for (const tag of condemnedTags) {
+        for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+            if (ref.tag !== tag) continue;
+            const dict = dictOf(obj);
+            if (dict) {
+                for (const [key] of [...dict.entries()]) dict.delete(key);
+            }
+            doc.context.delete(ref);
+            removed += 1;
+            break;
+        }
+    }
+
+    return { complete: true, removed, names, removedActions };
+}
+
+// ---------------------------------------------------------------------------
+// Tagging
+// ---------------------------------------------------------------------------
+
 export interface TaggingCensus {
     structTreeRoot: boolean;
     markInfo: boolean;
-    pageStructParents: number;
-    annotationStructParent: number;
-    xobjectStructParents: number;
+    structParents: number;
+    structParent: number;
     total: number;
 }
 
-export function censusTagging(doc: PDFDocument): TaggingCensus {
-    const census: TaggingCensus = {
+/** Tagging remnants across every copied reachable structure, or a refusal. */
+export function censusTagging(doc: PDFDocument): CensusOutcome<TaggingCensus> {
+    const result: TaggingCensus = {
         structTreeRoot: doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined,
         markInfo: doc.catalog.get(PDFName.of('MarkInfo')) !== undefined,
-        pageStructParents: 0,
-        annotationStructParent: 0,
-        xobjectStructParents: 0,
+        structParents: 0,
+        structParent: 0,
         total: 0,
     };
-
-    for (const page of doc.getPages()) {
-        if (page.node.get(PDFName.of('StructParents')) !== undefined) census.pageStructParents += 1;
-    }
-
-    const seen = new Set<object>();
-    const walk = (value: unknown, depth: number): void => {
-        if (depth > 256) return;
-        if (value instanceof PDFRef) {
-            let target: unknown;
-            try {
-                target = doc.context.lookup(value);
-            } catch {
-                return;
-            }
-            if (target !== undefined) walk(target, depth + 1);
-            return;
-        }
-        if (typeof value !== 'object' || value === null) return;
-        if (seen.has(value)) return;
-        seen.add(value);
-
-        const dict = dictOf(value);
-        if (dict) {
-            const subtype = nameOf(dict.get(PDFName.of('Subtype')));
-            const type = nameOf(dict.get(PDFName.of('Type')));
-            if (type === '/Annot' || (subtype && subtype !== '/Form' && subtype !== '/Image' && dict.get(PDFName.of('Rect')) !== undefined)) {
-                if (dict.get(PDFName.of('StructParent')) !== undefined) census.annotationStructParent += 1;
-            }
-            if (subtype === '/Form' || subtype === '/Image') {
-                if (dict.get(PDFName.of('StructParents')) !== undefined) census.xobjectStructParents += 1;
-            }
-        }
-
-        if (value instanceof PDFDict) {
-            for (const [, entry] of value.entries()) walk(entry, depth + 1);
-        } else if (value instanceof PDFArray) {
-            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
-        } else if (value instanceof PDFStream) {
-            for (const [, entry] of value.dict.entries()) walk(entry, depth + 1);
-        }
-    };
-
-    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
-        walk(obj instanceof PDFRawStream ? obj.dict : obj, 0);
-    }
-
-    census.total = (census.structTreeRoot ? 1 : 0)
-        + (census.markInfo ? 1 : 0)
-        + census.pageStructParents
-        + census.annotationStructParent
-        + census.xobjectStructParents;
-    return census;
+    const outcome = censusIndirectObjects(doc, ({ dict }) => {
+        if (dict.get(PDFName.of('StructParents')) !== undefined) result.structParents += 1;
+        if (dict.get(PDFName.of('StructParent')) !== undefined) result.structParent += 1;
+    });
+    if (!outcome.complete) return outcome;
+    result.total = (result.structTreeRoot ? 1 : 0)
+        + (result.markInfo ? 1 : 0)
+        + result.structParents
+        + result.structParent;
+    return { complete: true, value: result, nodes: outcome.nodes, roots: outcome.roots };
 }
 
-/**
- * Strip every tagging remnant, everywhere it was found.
- *
- * `/MarkInfo` goes with the tree: a document that declares itself marked while
- * carrying no structure tree is making a claim the artifact cannot support.
- */
-export function stripTaggingEverywhere(doc: PDFDocument): TaggingCensus {
+export type TaggingStrip =
+    | { complete: true; before: TaggingCensus }
+    | { complete: false; reason: string };
+
+/** Strip every tagging remnant, everywhere, or refuse. */
+export function stripTaggingEverywhere(doc: PDFDocument): TaggingStrip {
     const before = censusTagging(doc);
+    if (!before.complete) return { complete: false, reason: before.reason };
 
     doc.catalog.delete(PDFName.of('StructTreeRoot'));
     doc.catalog.delete(PDFName.of('MarkInfo'));
 
-    const seen = new Set<object>();
-    const walk = (value: unknown, depth: number): void => {
-        if (depth > 256) return;
-        if (value instanceof PDFRef) {
-            let target: unknown;
-            try {
-                target = doc.context.lookup(value);
-            } catch {
-                return;
-            }
-            if (target !== undefined) walk(target, depth + 1);
-            return;
-        }
-        if (typeof value !== 'object' || value === null) return;
-        if (seen.has(value)) return;
-        seen.add(value);
+    const outcome = censusIndirectObjects(doc, ({ dict }) => {
+        dict.delete(PDFName.of('StructParent'));
+        dict.delete(PDFName.of('StructParents'));
+    });
+    if (!outcome.complete) return { complete: false, reason: outcome.reason };
 
-        const dict = dictOf(value);
-        if (dict) {
-            dict.delete(PDFName.of('StructParent'));
-            dict.delete(PDFName.of('StructParents'));
-        }
+    return { complete: true, before: before.value };
+}
 
-        if (value instanceof PDFDict) {
-            for (const [, entry] of value.entries()) walk(entry, depth + 1);
-        } else if (value instanceof PDFArray) {
-            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
-        } else if (value instanceof PDFStream) {
-            for (const [, entry] of value.dict.entries()) walk(entry, depth + 1);
-        }
-    };
-
+/** Raw-stream payload bytes still in the context, for a gate to compare. */
+export function rawStreamCount(doc: PDFDocument): number {
+    let count = 0;
     for (const [, obj] of doc.context.enumerateIndirectObjects()) {
-        walk(obj instanceof PDFRawStream ? obj.dict : obj, 0);
+        if (obj instanceof PDFRawStream) count += 1;
     }
-
-    return before;
+    return count;
 }

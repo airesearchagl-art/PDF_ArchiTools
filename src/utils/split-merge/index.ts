@@ -23,6 +23,9 @@
 export {
     M6_STATUS,
     M6_LOSS_LABEL_JA,
+    CONFIRMATION_REQUIRED_LOSSES,
+    requiresConfirmation,
+    isAcceptedIntake,
     INTAKE_RESULT,
     INTAKE_LABEL_JA,
     GENERIC_REFUSAL_JA,
@@ -91,6 +94,32 @@ export { scanJavaScript, scanArtifactWideJavaScript, sanitizeJavaScript } from '
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export { measureDestinationInvariants, planDestinations } from './destinations';
 export { readbackArtifact, checkArtifactInvariants } from './readback';
+export {
+    censusIndirectObjects,
+    countByCensus,
+    collectByCensus,
+    CENSUS_BUDGET,
+} from './census';
+export type { CensusNode, CensusOutcome } from './census';
+export {
+    censusAttachments,
+    censusJavaScript,
+    censusTagging,
+    countUnreachable,
+    pruneUnreachable,
+    removeAttachmentsEverywhere,
+    scrubAllJavaScript,
+    stripTaggingEverywhere,
+    carriesJavaScript,
+    carriesEmbeddedFile,
+} from './prune';
+export {
+    snapshotMetadata,
+    applyMetadataSnapshot,
+    metadataGaps,
+    infoText,
+} from './metadata';
+export type { MetadataSnapshot } from './metadata';
 export { extractOutputName, mergeOutputName, describeSelection } from './naming';
 
 export { planExtract, runExtract } from './extract';

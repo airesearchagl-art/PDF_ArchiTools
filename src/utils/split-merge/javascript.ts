@@ -42,6 +42,18 @@ function look(doc: PDFDocument, value: unknown): unknown {
     }
 }
 
+/**
+ * Whether a dictionary carries JavaScript, whatever it calls itself.
+ *
+ * `/S /JavaScript` is the obvious form and not the only one. A Rendition
+ * action carries its script in `/JS` under `/S /Rendition`, and this scanner
+ * — which asked only about `/S` — reported **zero** for a document whose
+ * action held `/JS`. The question is about the script, not the subtype.
+ */
+export const actionCarriesJavaScript = (dict: PDFDict): boolean =>
+    dict.get(PDFName.of('JS')) !== undefined
+    || nameOf(dict.get(PDFName.of('S'))) === '/JavaScript';
+
 /** A document the scanner cannot finish inspecting is refused, never passed. */
 class Unscannable extends Error {}
 
@@ -89,7 +101,7 @@ function walkActionValue(
     if (!(action instanceof PDFDict)) {
         throw new Unscannable('an action position holds neither an action nor a destination');
     }
-    if (nameOf(action.get(PDFName.of('S'))) === '/JavaScript') {
+    if (actionCarriesJavaScript(action)) {
         found.push({ ...owner, ref: raw instanceof PDFRef ? raw : null });
     }
     walkAction(doc, action, 'Next', found, depth + 1, seen);
@@ -134,7 +146,7 @@ function walkAction(
         throw new Unscannable(`${key} is neither an action nor a destination`);
     }
 
-    if (nameOf(resolved.get(PDFName.of('S'))) === '/JavaScript') {
+    if (actionCarriesJavaScript(resolved)) {
         // The reference is recorded next to the holder: deleting the key
         // detaches the action, and deleting the object is what removes it.
         found.push({ holder, key, ref: raw instanceof PDFRef ? raw : null });
@@ -171,7 +183,7 @@ function walkJavaScriptNameTree(
         for (let i = 0; i + 1 < names.size(); i += 2) {
             const raw = names.get(i + 1);
             const entry = look(doc, raw);
-            if (entry instanceof PDFDict && nameOf(entry.get(PDFName.of('S'))) === '/JavaScript') {
+            if (entry instanceof PDFDict && actionCarriesJavaScript(entry)) {
                 found.push({
                     holder: names,
                     key: i + 1,
@@ -304,7 +316,7 @@ export function scanArtifactWideJavaScript(doc: PDFDocument): number {
     let count = 0;
     for (const [, obj] of doc.context.enumerateIndirectObjects()) {
         if (!(obj instanceof PDFDict)) continue;
-        if (nameOf(obj.get(PDFName.of('S'))) !== '/JavaScript') continue;
+        if (!actionCarriesJavaScript(obj)) continue;
         count += 1;
     }
     return count;
@@ -377,7 +389,7 @@ export function sanitizeJavaScript(doc: PDFDocument): SanitizeOutcome {
     const doomed: PDFRef[] = [];
     for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
         if (!(obj instanceof PDFDict)) continue;
-        if (nameOf(obj.get(PDFName.of('S'))) !== '/JavaScript') continue;
+        if (!actionCarriesJavaScript(obj)) continue;
         doomed.push(ref);
     }
     for (const ref of doomed) {

@@ -46,6 +46,7 @@ import {
     M6Error,
     M6_STATUS,
     M6_LOSS_LABEL_JA,
+    requiresConfirmation,
     GENERIC_REFUSAL_JA,
     inspectLoadBoundary,
     INTAKE_LABEL_JA,
@@ -146,11 +147,13 @@ export const PdfSplitMerge: React.FC = () => {
     const [extractBusy, setExtractBusy] = useState(false);
     const [extractNotice, setExtractNotice] = useState<Notice | null>(null);
     const [pendingLosses, setPendingLosses] = useState<LossRecord[] | null>(null);
+    const [lossesExpanded, setLossesExpanded] = useState(false);
 
     // --- Merge state -------------------------------------------------------
     const [mergeFiles, setMergeFiles] = useState<MergeFileEntry[]>([]);
     const [mergeBusy, setMergeBusy] = useState(false);
     const [mergeNotice, setMergeNotice] = useState<Notice | null>(null);
+    const [mergeConfirmed, setMergeConfirmed] = useState<string[]>([]);
 
     // --- Ownership (M6-H13) ------------------------------------------------
     const ownership = useRef(
@@ -324,7 +327,7 @@ export const PdfSplitMerge: React.FC = () => {
             });
             console.error(error);
         } finally {
-            if (token.isCurrent()) setExtractBusy(false);
+            setExtractBusy(false);
         }
     };
 
@@ -444,11 +447,65 @@ export const PdfSplitMerge: React.FC = () => {
             fileIds: [...mergeFiles.map((f) => f.id), ...requested.map((r) => r.id)],
         });
 
+        /**
+         * BLK-4R — supersede is not permission to erase the request.
+         *
+         * The handler used to `return` when ownership was superseded, so files
+         * the person had picked vanished before reaching the list and `busy`
+         * could stay set. That is the M6-H10 defect — an input disappearing
+         * between the picker and the list — reintroduced by the cancellation
+         * path. Every requested file is finalized here, whatever happens: the
+         * ones that were decided keep their record, and the rest are written in
+         * as CANCELLED with their filename and reason.
+         */
+        const terminal = (result: IntakeRecord['result'], reason: string) =>
+            (item: { id: string; file: File; name: string }): MergeFileEntry => ({
+                id: item.id,
+                file: item.file,
+                name: item.name,
+                bytes: new Uint8Array(0),
+                intake: {
+                    id: item.id,
+                    name: item.name,
+                    sizeBytes: item.file.size,
+                    result,
+                    reason,
+                    pageCount: 0,
+                    pageTreeWalks: false,
+                    hasAcroForm: false,
+                    fieldNames: [],
+                    hasOptionalContent: false,
+                    hasStructTree: false,
+                    hasAttachments: false,
+                    info: {},
+                },
+            });
+
+        const finalizeCancelled = (): void => {
+            const cancelled = requested.map(terminal(
+                'CANCELLED',
+                '操作が変更されたため、このファイルの確認は中止しました。',
+            ));
+            setMergeFiles((prev) => {
+                const known = new Set(prev.map((f) => f.id));
+                return [...prev, ...cancelled.filter((c) => !known.has(c.id))];
+            });
+            setMergeNotice({
+                tone: 'warn',
+                text: `${cancelled.length} 件のファイルは確認を中止しました: `
+                    + cancelled.map((c) => c.name).join('、'),
+            });
+            setMergeBusy(false);
+        };
+
         try {
             const entries: MergeFileEntry[] = [];
             for (const item of requested) {
                 const buffer = await item.file.arrayBuffer();
-                if (!token.isCurrent()) return;
+                if (!token.isCurrent()) {
+                    finalizeCancelled();
+                    return;
+                }
                 entries.push({
                     id: item.id,
                     file: item.file,
@@ -472,7 +529,10 @@ export const PdfSplitMerge: React.FC = () => {
                 })()
                 : await intakeSources(inputs, { stillOurs: () => token.isCurrent() });
             inFlight.current = null;
-            if (!token.isCurrent()) return;
+            if (!token.isCurrent()) {
+                finalizeCancelled();
+                return;
+            }
 
             /**
              * BLK-4: every requested file gets a row and a state.
@@ -513,12 +573,15 @@ export const PdfSplitMerge: React.FC = () => {
                 });
             }
         } finally {
-            if (token.isCurrent()) setMergeBusy(false);
+            // `busy` always resolves. A superseded run left it set, and the UI
+            // sat at 処理中 with nothing running.
+            setMergeBusy(false);
         }
     };
 
     const moveFile = (index: number, direction: 'up' | 'down') => {
         supersede();
+        setMergeConfirmed([]);
         setMergeFiles((prev) => {
             const next = [...prev];
             const target = direction === 'up' ? index - 1 : index + 1;
@@ -530,6 +593,7 @@ export const PdfSplitMerge: React.FC = () => {
 
     const removeFile = (id: string) => {
         supersede();
+        setMergeConfirmed([]);
         setMergeFiles((prev) => prev.filter((f) => f.id !== id));
     };
 
@@ -604,11 +668,31 @@ export const PdfSplitMerge: React.FC = () => {
                 .map((f) => f.intake)
                 .filter((r): r is IntakeRecord => r !== undefined);
             const plan = planMerge(intake, { metadataPolicy: 'M4', collisionPolicy: 'rename' });
+
+            /**
+             * A confirmation flag that is computed and ignored is not a
+             * confirmation. If the plan says something needs agreeing to, the
+             * losses are shown and the run waits for a second click.
+             */
+            const outstanding = plan.requiresConfirmation.filter(
+                (k) => !mergeConfirmed.includes(k),
+            );
+            if (outstanding.length > 0) {
+                setMergeConfirmed(plan.requiresConfirmation);
+                setMergeNotice({
+                    tone: 'warn',
+                    code: M6_STATUS.CONFIRMATION_REQUIRED,
+                    text: 'この統合では次の内容が失われます。内容を確認してから、もう一度実行してください。',
+                    losses: plan.losses,
+                });
+                return;
+            }
             const result = workerAvailable()
                 ? await (() => {
                     const handle = mergeInWorker(inputs, plan, {
                         metadataPolicy: 'M4',
                         collisionPolicy: 'rename',
+                        confirmedLosses: mergeConfirmed,
                     });
 
                     inFlight.current = handle;
@@ -618,6 +702,7 @@ export const PdfSplitMerge: React.FC = () => {
                 : await runMerge(inputs, plan, {
                     metadataPolicy: 'M4',
                     collisionPolicy: 'rename',
+                    confirmedLosses: mergeConfirmed,
                     stillOurs: () => token.isCurrent(),
                 });
 
@@ -660,16 +745,60 @@ export const PdfSplitMerge: React.FC = () => {
                         <code style={{ marginRight: 8, fontSize: '0.85em', color: '#666' }}>{notice.code}</code>
                     )}
                     <span>{notice.text}</span>
-                    {notice.losses && notice.losses.length > 0 && (
-                        <ul style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
-                            {notice.losses.slice(0, 8).map((loss, i) => (
-                                <li key={`${loss.kind}-${i}`}>
-                                    {M6_LOSS_LABEL_JA[loss.kind]}
-                                    {loss.what ? `（${loss.what}）` : ''} — {loss.why}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                    {notice.losses && notice.losses.length > 0 && (() => {
+                        /**
+                         * RF-C — a loss that needs agreeing to is never truncated.
+                         *
+                         * The list used to be cut at eight, so an attachment could
+                         * drop off the end while the broad approval still authorised
+                         * deleting it. A confirmation is only valid for what was
+                         * actually shown, so everything in the confirmation set is
+                         * shown in full; only the informational remainder collapses,
+                         * and it says how many it is hiding.
+                         */
+                        const gated = notice.losses.filter((l) => requiresConfirmation(l.kind));
+                        const informational = notice.losses.filter((l) => !requiresConfirmation(l.kind));
+                        const shownInformational = lossesExpanded
+                            ? informational
+                            : informational.slice(0, 6);
+                        const hidden = informational.length - shownInformational.length;
+                        const row = (loss: LossRecord, key: string) => (
+                            <li key={key}>
+                                {M6_LOSS_LABEL_JA[loss.kind]}
+                                {loss.what ? `（${loss.what}）` : ''} — {loss.why}
+                            </li>
+                        );
+                        return (
+                            <>
+                                {gated.length > 0 && (
+                                    <ul
+                                        data-usage-target="m6-confirm-losses"
+                                        style={{ margin: '8px 0 0', paddingLeft: '18px', fontWeight: 600 }}
+                                    >
+                                        {gated.map((loss, i) => row(loss, `gated-${loss.kind}-${i}`))}
+                                    </ul>
+                                )}
+                                {shownInformational.length > 0 && (
+                                    <ul style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
+                                        {shownInformational.map((loss, i) => row(loss, `info-${loss.kind}-${i}`))}
+                                    </ul>
+                                )}
+                                {hidden > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setLossesExpanded(true)}
+                                        style={{
+                                            marginTop: '6px', background: 'none', border: 'none',
+                                            padding: 0, color: '#4a90e2', cursor: 'pointer',
+                                            textDecoration: 'underline', fontSize: '0.95em',
+                                        }}
+                                    >
+                                        ほか {hidden} 件を表示（全 {notice.losses.length} 件）
+                                    </button>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             </div>
         );
@@ -832,6 +961,12 @@ export const PdfSplitMerge: React.FC = () => {
                                     return (
                                         <div
                                             key={file.id}
+                                            /* BLK-4R is asserted per row: a requested file must end
+                                               in a terminal state, so the state is on the element
+                                               rather than only in the sentence inside it. */
+                                            data-usage-target="merge-row"
+                                            data-m6-name={file.name}
+                                            data-m6-intake={file.intake?.result ?? 'PENDING'}
                                             style={{
                                                 display: 'flex', alignItems: 'center', padding: '15px',
                                                 border: `1px solid ${accepted ? '#eee' : '#e0b4b4'}`,
