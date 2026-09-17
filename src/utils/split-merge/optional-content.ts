@@ -189,6 +189,60 @@ function orderShapeOf(
  * opened: they hold no content stream, so they open no resource scope and carry
  * no `/OC`. That is a statement about scope, not about safety.
  */
+/**
+ * A page's **effective** `/Resources`, resolved through the page tree.
+ *
+ * `/Resources` is an inheritable attribute: a page that declares none takes its
+ * parent's, and the parent's `/Properties`, `/XObject`, `/ExtGState` and the
+ * soft masks under them are just as much part of what that page draws with.
+ *
+ * Reading only the `/Resources` present on the page itself made every inherited
+ * scope invisible, and invisible read as "none" — the same blind-path shape as
+ * B1, one level up. A document whose optional content lives in an inherited
+ * dictionary extracted READY with the group unexamined.
+ *
+ * Malformed inheritance is a refusal, not an absence: a `/Parent` chain that
+ * loops, a `/Parent` that does not resolve, and a `/Resources` of the wrong type
+ * each mean this reader cannot say what the page draws with.
+ */
+function effectiveResources(
+    doc: PDFDocument,
+    pageNode: PDFDict,
+    where: string,
+    refuse: (text: string) => void,
+): unknown {
+    const own = pageNode.get(PDFName.of('Resources'));
+    if (own !== undefined) return own;
+
+    const seen = new Set<string>();
+    let node: PDFDict = pageNode;
+    for (let depth = 0; depth <= MECHANISM_BOUNDS.maxInheritanceDepth; depth += 1) {
+        const parentRaw = node.get(PDFName.of('Parent'));
+        if (parentRaw === undefined) return undefined;
+        if (parentRaw instanceof PDFRef) {
+            if (seen.has(parentRaw.tag)) {
+                refuse(`${where} /Parent chain loops, so its resources cannot be resolved`);
+                return undefined;
+            }
+            seen.add(parentRaw.tag);
+        }
+        const resolved = resolve(doc, parentRaw);
+        if (!resolved.ok) {
+            refuse(`${where} /Parent ${resolved.reason}`);
+            return undefined;
+        }
+        if (!(resolved.value instanceof PDFDict)) {
+            refuse(`${where} /Parent is not a dictionary`);
+            return undefined;
+        }
+        node = resolved.value;
+        const inherited = node.get(PDFName.of('Resources'));
+        if (inherited !== undefined) return inherited;
+    }
+    refuse(`${where} /Parent chain deeper than ${MECHANISM_BOUNDS.maxInheritanceDepth}`);
+    return undefined;
+}
+
 function walkPageResourceGraph(
     doc: PDFDocument,
     sourceIndex: number,
@@ -447,7 +501,12 @@ function walkPageResourceGraph(
         }
     }
 
-    walkResources(pageNode.get(PDFName.of('Resources')), `page ${sourceIndex}`, 0);
+    // The page's EFFECTIVE resources, inherited ones included (M6-H9b-A).
+    walkResources(
+        effectiveResources(doc, pageNode, `page ${sourceIndex}`, refuse),
+        `page ${sourceIndex}`,
+        0,
+    );
 }
 
 /**
@@ -603,7 +662,12 @@ export function describeOptionalContent(
     wanted.forEach((sourceIndex, position) => {
         const page = pages[sourceIndex];
         if (!page) return;
-        const resources = look(doc, page.node.get(PDFName.of('Resources')));
+        // The carried set is read from the effective resources too, so a page
+        // whose /Properties is inherited is carried rather than silently empty.
+        const resources = look(
+            doc,
+            effectiveResources(doc, page.node, `page ${sourceIndex}`, (t) => out.unsupported.push(t)),
+        );
         const properties = resources instanceof PDFDict
             ? look(doc, resources.get(PDFName.of('Properties')))
             : undefined;
@@ -779,10 +843,54 @@ export function carryOptionalContent(
     if (description.dName !== null) d.Name = PDFString.of(description.dName);
     if (description.baseState === SUPPORTED_BASE_STATE) d.BaseState = PDFName.of('ON');
 
-    out.catalog.set(
-        PDFName.of('OCProperties'),
-        out.context.obj({ OCGs: ordered, D: d } as never),
-    );
+    /**
+     * Merged into whatever is already there, not written over it.
+     *
+     * A Merge carries one source at a time, and replacing `/OCProperties` per
+     * source left the artifact holding only the last one's groups — measured:
+     * two sources, each with its own layer, and the output listed one. The
+     * groups from every source are accumulated, and so are `/ON`, `/OFF` and
+     * `/Order`.
+     */
+    const existing = out.catalog.lookup(PDFName.of('OCProperties'));
+    if (existing instanceof PDFDict) {
+        const mergedGroups = [...refsOf(existing.lookup(PDFName.of('OCGs')))];
+        for (const ref of ordered) {
+            if (!mergedGroups.some((r) => r.tag === ref.tag)) mergedGroups.push(ref);
+        }
+        const previousD = existing.lookup(PDFName.of('D'));
+        const mergedD: Record<string, unknown> = {};
+        if (previousD instanceof PDFDict) {
+            const previousOn = refsOf(previousD.lookup(PDFName.of('ON')));
+            const previousOff = refsOf(previousD.lookup(PDFName.of('OFF')));
+            const combinedOn = [...previousOn, ...on];
+            const combinedOff = [...previousOff, ...off];
+            if (combinedOn.length > 0) mergedD.ON = combinedOn;
+            if (combinedOff.length > 0) mergedD.OFF = combinedOff;
+            const previousOrder = previousD.lookup(PDFName.of('Order'));
+            const thisOrder = d.Order;
+            if (previousOrder instanceof PDFArray || thisOrder !== undefined) {
+                const combined: unknown[] = [];
+                if (previousOrder instanceof PDFArray) {
+                    for (let i = 0; i < previousOrder.size(); i += 1) combined.push(previousOrder.get(i));
+                }
+                if (Array.isArray(thisOrder)) combined.push(...thisOrder);
+                else if (thisOrder !== undefined) combined.push(thisOrder);
+                if (combined.length > 0) mergedD.Order = combined;
+            }
+        } else {
+            Object.assign(mergedD, d);
+        }
+        out.catalog.set(
+            PDFName.of('OCProperties'),
+            out.context.obj({ OCGs: mergedGroups, D: mergedD } as never),
+        );
+    } else {
+        out.catalog.set(
+            PDFName.of('OCProperties'),
+            out.context.obj({ OCGs: ordered, D: d } as never),
+        );
+    }
 
     return {
         status: 'CARRIED',

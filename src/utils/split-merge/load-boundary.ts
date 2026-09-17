@@ -193,10 +193,18 @@ const SCANNED_NAMES = new Set([...DECODE_TYPES, ...FORBIDDEN_NAMES]);
  *
  * Derived rather than hardcoded: every `#xx` escape costs three raw bytes for
  * one decoded character, so a name of N characters occupies at most 3N raw
- * bytes. The prototype used a flat 40, which is safe for these targets but is a
- * scan-coverage constant that has to move if a longer name is ever added.
+ * bytes after the `/`. `Encrypt` is 7 characters, so `/#45#6E#63#72#79#70#74`
+ * is 21 bytes of name.
+ *
+ * The bound is measured on the **name**, excluding the leading `/`. Measuring
+ * from the slash made a fully escaped `/Encrypt` one byte too long to consider,
+ * and the scan skipped it — `/Encrypt` and a partly escaped `/Encr#79pt` were
+ * refused while `/#45#6E#63#72#79#70#74` PASSed. That is exactly the case the
+ * superset scan exists for, so the margin below is deliberate rather than
+ * exact: a scan that is one byte short of its own worst case is a scan whose
+ * completeness depends on arithmetic nobody re-checks.
  */
-const MAX_SCANNED_NAME_RAW_BYTES = 3 * Math.max(...[...SCANNED_NAMES].map((n) => n.length));
+const MAX_SCANNED_NAME_RAW_BYTES = 4 * Math.max(...[...SCANNED_NAMES].map((n) => n.length));
 
 const latin1 = (b: Uint8Array, from: number, to: number): string => {
     let s = '';
@@ -253,10 +261,15 @@ function scanNames(
     const found: { at: number; name: string }[] = [];
     for (let i = from; i < to; i += 1) {
         if (b[i] !== 0x2f) continue;
-        let j = i + 1;
-        while (j < to && !WS[b[j]] && !DELIM[b[j]] && j - i <= MAX_SCANNED_NAME_RAW_BYTES) j += 1;
-        if (j - i <= MAX_SCANNED_NAME_RAW_BYTES) {
-            const loose = decodeLoose(latin1(b, i + 1, j));
+        const nameStart = i + 1;
+        let j = nameStart;
+        // The whole name is consumed, so the cursor never restarts inside one and
+        // read a suffix as if it were a name of its own. Only the decode is
+        // bounded, and the bound is on name bytes rather than on bytes since the
+        // slash — the difference is what let a fully escaped `/Encrypt` through.
+        while (j < to && !WS[b[j]] && !DELIM[b[j]]) j += 1;
+        if (j - nameStart <= MAX_SCANNED_NAME_RAW_BYTES) {
+            const loose = decodeLoose(latin1(b, nameStart, j));
             if (targets.has(loose)) found.push({ at: i, name: loose });
         }
         i = j - 1;

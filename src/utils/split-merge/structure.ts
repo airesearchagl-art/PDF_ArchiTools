@@ -70,7 +70,40 @@ export function stripTagging(doc: PDFDocument): { stripped: boolean; pages: numb
 export function removeAttachments(doc: PDFDocument): { removed: number; names: string[] } {
     const names: string[] = [];
     let removed = 0;
+    const doomed = new Map<string, PDFRef>();
 
+    const condemn = (raw: unknown): void => {
+        if (raw instanceof PDFRef) doomed.set(raw.tag, raw);
+    };
+
+    const noteName = (spec: PDFDict): void => {
+        const label = textOf(doc.context.lookup(spec.get(PDFName.of('F')) as never))
+            ?? textOf(doc.context.lookup(spec.get(PDFName.of('UF')) as never))
+            ?? textOf(spec.get(PDFName.of('F')));
+        if (label && !names.includes(label)) names.push(label);
+    };
+
+    /**
+     * A `/Filespec` and everything hanging off its `/EF`.
+     *
+     * Deleting the `/Filespec` alone leaves the payload stream registered, and
+     * pdf-lib writes everything registered — measured, the embedded bytes were
+     * still in the artifact after the attachment was reported removed.
+     */
+    const condemnFilespec = (raw: unknown): void => {
+        const spec = raw instanceof PDFRef ? doc.context.lookup(raw) : raw;
+        if (!(spec instanceof PDFDict)) return;
+        noteName(spec);
+        const ef = doc.context.lookup(spec.get(PDFName.of('EF')) as never) ?? spec.get(PDFName.of('EF'));
+        if (ef instanceof PDFDict) {
+            for (const [, streamRef] of ef.entries()) condemn(streamRef);
+            for (const [key] of [...ef.entries()]) ef.delete(key);
+        }
+        spec.delete(PDFName.of('EF'));
+        condemn(raw);
+    };
+
+    // Route 1 — the catalog's embedded-files name tree.
     const namesDict = doc.catalog.lookup(PDFName.of('Names'));
     if (namesDict instanceof PDFDict && namesDict.get(PDFName.of('EmbeddedFiles')) !== undefined) {
         const embedded = namesDict.lookup(PDFName.of('EmbeddedFiles'));
@@ -79,7 +112,8 @@ export function removeAttachments(doc: PDFDocument): { removed: number; names: s
             if (list instanceof PDFArray) {
                 for (let i = 0; i + 1 < list.size(); i += 2) {
                     const label = textOf(doc.context.lookup(list.get(i)));
-                    if (label) names.push(label);
+                    if (label && !names.includes(label)) names.push(label);
+                    condemnFilespec(list.get(i + 1));
                 }
             }
         }
@@ -87,32 +121,51 @@ export function removeAttachments(doc: PDFDocument): { removed: number; names: s
         removed += 1;
     }
 
-    const doomed: PDFRef[] = [];
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        if (!(obj instanceof PDFDict)) continue;
-        if (nameOf(obj.get(PDFName.of('Type'))) !== '/Filespec') continue;
-        if (obj.get(PDFName.of('EF')) === undefined) continue;
-        const label = textOf(doc.context.lookup(obj.get(PDFName.of('F')) as never))
-            ?? textOf(doc.context.lookup(obj.get(PDFName.of('UF')) as never));
-        if (label && !names.includes(label)) names.push(label);
-        doomed.push(ref);
-    }
-
-    // Detach the annotations that point at them first, so the artifact does not
-    // keep a `/FileAttachment` whose target is gone.
+    // Route 2 — a `/FileAttachment` annotation on a page. The annotation, its
+    // `/FS` filespec and the payload behind it all go; the annotation object
+    // itself is condemned, not merely taken out of `/Annots`.
     for (const page of doc.getPages()) {
         const annots = page.node.lookup(PDFName.of('Annots'));
         if (!(annots instanceof PDFArray)) continue;
         for (let i = annots.size() - 1; i >= 0; i -= 1) {
-            const annot = doc.context.lookup(annots.get(i));
+            const raw = annots.get(i);
+            const annot = doc.context.lookup(raw);
             if (!(annot instanceof PDFDict)) continue;
             if (nameOf(annot.get(PDFName.of('Subtype'))) !== '/FileAttachment') continue;
+            condemnFilespec(annot.get(PDFName.of('FS')));
+            annot.delete(PDFName.of('FS'));
             annots.remove(i);
+            condemn(raw);
             removed += 1;
         }
     }
 
-    for (const ref of doomed) {
+    // Route 3 — any remaining `/Filespec` with an `/EF`, wherever it sits.
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (!(obj instanceof PDFDict)) continue;
+        if (nameOf(obj.get(PDFName.of('Type'))) !== '/Filespec') continue;
+        if (obj.get(PDFName.of('EF')) === undefined) continue;
+        condemnFilespec(ref);
+    }
+
+    // Route 4 — any `/EmbeddedFile` stream, whatever reached it.
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        const inner = (obj as unknown as { dict?: unknown })?.dict;
+        const dict = obj instanceof PDFDict
+            ? obj
+            : (inner instanceof PDFDict ? inner : null);
+        if (!dict) continue;
+        if (nameOf(dict.get(PDFName.of('Type'))) !== '/EmbeddedFile') continue;
+        condemn(ref);
+    }
+
+    for (const ref of doomed.values()) {
+        const obj = doc.context.lookup(ref);
+        // Scrubbed before deletion: if some route this contract has not modelled
+        // still holds the reference, what it finds is empty rather than the file.
+        if (obj instanceof PDFDict) {
+            for (const [key] of [...obj.entries()]) obj.delete(key);
+        }
         doc.context.delete(ref);
         removed += 1;
     }
@@ -157,36 +210,106 @@ export function readInfo(doc: PDFDocument): Record<string, string> {
  * deliberately.
  */
 export function applyExtractMetadata(
+    source: PDFDocument,
     out: PDFDocument,
-    sourceInfo: Record<string, string>,
     sourceName: string,
-): { carried: string[]; dropped: string[] } {
+): { carried: string[]; dropped: string[]; xmp: boolean } {
     const carried: string[] = [];
     const dropped: string[] = [];
 
-    const setters: Record<string, (v: string) => void> = {
-        Title: (v) => out.setTitle(v),
-        Author: (v) => out.setAuthor(v),
-        Subject: (v) => out.setSubject(v),
-        Keywords: (v) => out.setKeywords(v.split(/[,\s]+/).filter(Boolean)),
-        Creator: (v) => out.setCreator(v),
-    };
+    /**
+     * The whole Info dictionary, custom keys included.
+     *
+     * The first implementation copied a hand-picked five — Title, Author,
+     * Subject, Keywords, Creator — through pdf-lib's setters, so a `/Company`
+     * key, a project code, or anything else a drawing office puts in Info was
+     * dropped without being named. M6-H7 adopts M5's H12 contract, and H12's
+     * whole point is that metadata is part of the artifact rather than a nicety.
+     */
+    const infoRef = source.context.trailerInfo.Info;
+    const sourceDict = infoRef ? source.context.lookup(infoRef) : undefined;
 
-    for (const [key, value] of Object.entries(sourceInfo)) {
-        const setter = setters[key];
-        if (setter && value) {
-            setter(value);
-            carried.push(key);
-        } else if (!setter) {
-            dropped.push(key);
+    const outInfoRef = out.context.trailerInfo.Info;
+    let outDict = outInfoRef ? out.context.lookup(outInfoRef) : undefined;
+    if (!(outDict instanceof PDFDict)) {
+        const created = out.context.obj({} as never);
+        out.context.trailerInfo.Info = out.context.register(created);
+        outDict = created;
+    }
+
+    if (sourceDict instanceof PDFDict && outDict instanceof PDFDict) {
+        for (const [key, value] of sourceDict.entries()) {
+            const name = key.asString().replace(/^\//, '');
+            // Producer is pdf-lib's to state: the artifact really was written by
+            // this build, and claiming the source's writer would be a false
+            // provenance claim rather than preservation.
+            if (name === 'Producer') {
+                dropped.push(name);
+                continue;
+            }
+            const resolved = value instanceof PDFRef ? source.context.lookup(value) : value;
+            const cloned = (resolved as { clone?: (ctx: unknown) => unknown } | undefined)?.clone;
+            if (typeof cloned !== 'function') {
+                dropped.push(name);
+                continue;
+            }
+            outDict.set(key, cloned.call(resolved, out.context) as never);
+            carried.push(name);
         }
     }
 
-    if (!sourceInfo.Title) {
+    if (!carried.includes('Title')) {
         out.setTitle(sourceName);
         carried.push('Title');
     }
-    return { carried, dropped };
+
+    // The XMP packet, carried as bytes. It is a stream in the catalog, and
+    // nothing in a copy path touches it.
+    let xmp = false;
+    const xmpRaw = source.catalog.get(PDFName.of('Metadata'));
+    if (xmpRaw !== undefined) {
+        const stream = xmpRaw instanceof PDFRef ? source.context.lookup(xmpRaw) : xmpRaw;
+        const contents = (stream as { contents?: Uint8Array } | undefined)?.contents;
+        if (contents instanceof Uint8Array) {
+            const copy = new Uint8Array(contents.length);
+            copy.set(contents);
+            const carriedStream = out.context.stream(copy, {
+                Type: 'Metadata',
+                Subtype: 'XML',
+            });
+            out.catalog.set(PDFName.of('Metadata'), out.context.register(carriedStream));
+            xmp = true;
+            carried.push('Metadata(XMP)');
+        } else {
+            dropped.push('Metadata(XMP)');
+        }
+    }
+
+    return { carried, dropped, xmp };
+}
+
+/**
+ * What the artifact kept of the source's metadata, measured by reopening it.
+ *
+ * M6-H7 makes metadata part of the artifact, so failing to carry it is a
+ * refusal rather than a note attached to a file already handed over. The
+ * comparison is against the source's own Info dictionary, key by key.
+ */
+export function metadataGaps(
+    sourceInfo: Record<string, string>,
+    artifact: PDFDocument,
+    sourceHadXmp: boolean,
+): string[] {
+    const gaps: string[] = [];
+    const artifactInfo = readInfo(artifact);
+    for (const [key, value] of Object.entries(sourceInfo)) {
+        if (key === 'Producer' || key === 'ModDate') continue;
+        if (artifactInfo[key] !== value) gaps.push(key);
+    }
+    if (sourceHadXmp && artifact.catalog.get(PDFName.of('Metadata')) === undefined) {
+        gaps.push('Metadata(XMP)');
+    }
+    return gaps;
 }
 
 /**
@@ -274,4 +397,9 @@ export function markProvisionalPolicy(out: PDFDocument, origin: string): void {
     if (dict instanceof PDFDict) {
         dict.set(PDFName.of('M6PolicyOrigin'), PDFString.of(origin));
     }
+}
+
+/** Whether the source carries an XMP packet, so its absence can be detected. */
+export function hasXmpMetadata(doc: PDFDocument): boolean {
+    return doc.catalog.get(PDFName.of('Metadata')) !== undefined;
 }

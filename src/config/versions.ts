@@ -39,8 +39,8 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '表題欄の位置を指定して、1ページ1行の図面一覧をExcel（.xlsx）へ書き出す機能を追加'
     },
     splitMerge: {
-        version: '2.0.0',
-        lastUpdate: '2026/09/17',
+        version: '2.0.1',
+        lastUpdate: '2026/09/18',
         changelog: '安全に処理できない場合は理由を示して中止するよう全面的に作り直し。'
             + '選択していないページが出力に混入する不具合を修正し、'
             + '統合時に読み込めなかったファイルを一覧に明示。'

@@ -64,6 +64,40 @@ function look(doc: PDFDocument, value: unknown): unknown {
  */
 const NON_ANNOT_PAGE_REFERENCE_KEYS = ['B'] as const;
 
+/**
+ * A destination's parameters, as plain values.
+ *
+ * H11-EXTRACT-4 requires the source to be released before `save`, and a
+ * rebuild record that held the source's own `PDFName` and `PDFNumber` objects
+ * kept the source context alive through the whole save — the release was a
+ * variable assignment with a live object graph behind it. So the tail is
+ * described rather than carried: a name becomes a string, a number becomes a
+ * number, and the output's objects are built from those.
+ */
+export type DestParam =
+    | { kind: 'name'; value: string }
+    | { kind: 'number'; value: number }
+    | { kind: 'null' };
+
+const describeParam = (value: unknown): DestParam => {
+    const asString = (value as { asString?: () => string } | null)?.asString;
+    if (typeof asString === 'function') {
+        return { kind: 'name', value: asString.call(value).replace(/^\//, '') };
+    }
+    const asNumber = (value as { asNumber?: () => number } | null)?.asNumber;
+    if (typeof asNumber === 'function') return { kind: 'number', value: asNumber.call(value) };
+    if (typeof value === 'number') return { kind: 'number', value };
+    return { kind: 'null' };
+};
+
+const describeTail = (values: unknown[]): DestParam[] => values.map(describeParam);
+
+const materializeTail = (out: PDFDocument, tail: DestParam[]): unknown[] => tail.map((t) => {
+    if (t.kind === 'name') return PDFName.of(t.value);
+    if (t.kind === 'number') return out.context.obj(t.value as never);
+    return out.context.obj(null as never);
+});
+
 type LinkKind = 'explicit' | 'named';
 
 interface FoundLink {
@@ -239,13 +273,21 @@ export interface DestinationRebuild {
     annotIndex: number;
     holderIsAction: boolean;
     targetIndex: number;
-    tail: unknown[];
+    /** Plain values, so nothing here keeps the source document alive. */
+    tail: DestParam[];
+}
+
+/** A named destination that survived, described in plain values. */
+export interface SurvivingName {
+    name: string;
+    targetIndex: number;
+    tail: DestParam[];
 }
 
 export interface StripOutcome {
     rebuild: DestinationRebuild[];
     /** Named destinations whose target survived, to be written to the output. */
-    survivingNames: NamedDestination[];
+    survivingNames: SurvivingName[];
     losses: LossRecord[];
 }
 
@@ -277,7 +319,7 @@ export function stripInternalDestinations(
                     annotIndex: link.annotIndex,
                     holderIsAction: link.key === 'D',
                     targetIndex: entry.targetIndex,
-                    tail: entry.tail,
+                    tail: describeTail(entry.tail),
                 });
             } else {
                 losses.push({
@@ -299,7 +341,7 @@ export function stripInternalDestinations(
                 annotIndex: link.annotIndex,
                 holderIsAction: link.key === 'D',
                 targetIndex: link.targetIndex,
-                tail: link.tail,
+                tail: describeTail(link.tail),
             });
         } else {
             losses.push({
@@ -327,9 +369,13 @@ export function stripInternalDestinations(
         });
     }
 
-    const survivingNames = plan.named.filter(
-        (n) => n.targetIndex !== null && kept.has(n.targetIndex),
-    );
+    const survivingNames: SurvivingName[] = plan.named
+        .filter((n) => n.targetIndex !== null && kept.has(n.targetIndex))
+        .map((n) => ({
+            name: n.name,
+            targetIndex: n.targetIndex as number,
+            tail: describeTail(n.tail),
+        }));
     for (const n of plan.named) {
         if (n.targetIndex === null || !kept.has(n.targetIndex)) {
             losses.push({
@@ -375,11 +421,7 @@ export function rebuildDestinations(
         const target = outRefOf(item.targetIndex);
         if (!target) continue;
 
-        const tail = item.tail.map((t) => {
-            const clone = (t as { clone?: (ctx: unknown) => unknown } | null)?.clone;
-            return typeof clone === 'function' ? clone.call(t, out.context) : t;
-        });
-        const dest = out.context.obj([target, ...tail] as never[]);
+        const dest = out.context.obj([target, ...materializeTail(out, item.tail)] as never[]);
         if (item.holderIsAction) {
             annot.set(
                 PDFName.of('A'),
@@ -399,11 +441,10 @@ export function rebuildDestinations(
             if (n.targetIndex === null) continue;
             const target = outRefOf(n.targetIndex);
             if (!target) continue;
-            const tail = n.tail.map((t) => {
-                const clone = (t as { clone?: (ctx: unknown) => unknown } | null)?.clone;
-                return typeof clone === 'function' ? clone.call(t, out.context) : t;
-            });
-            flat.push(PDFString.of(n.name), out.context.obj([target, ...tail] as never[]));
+            flat.push(
+                PDFString.of(n.name),
+                out.context.obj([target, ...materializeTail(out, n.tail)] as never[]),
+            );
         }
         if (flat.length > 0) {
             out.catalog.set(
@@ -417,7 +458,412 @@ export function rebuildDestinations(
 }
 
 /**
- * Count, on an artifact, the two things the invariant is about.
+ * Every place a page reference can hide, walked before the copy. M6-H5A.
+ *
+ * `/Dest` was never the only route, and the Independent Review found the rest:
+ * an annotation's own `/P` back-pointer, an `/AA` on an annotation, a widget or
+ * a page, and a `/GoTo` reached through a recursive `/Next` chain. Each carries
+ * a reference to a page of the **source**, and a source-page reference in an
+ * output document means nothing a reader can follow — while the copier, which
+ * has no branch for what a reference points at, will happily drag the whole page
+ * in behind it.
+ *
+ * So the rule is uniform: a source-page reference is stripped before the graph
+ * is counted, and rebuilt afterwards only against output page references. What
+ * cannot be rebuilt is reported; what cannot be understood is refused.
+ */
+const ACTION_CHAIN_BOUND = 32;
+
+interface PageRefSite {
+    /** The dictionary holding the key. */
+    holder: PDFDict;
+    key: string;
+    /** Where it was found, for the loss report. */
+    where: string;
+    fromIndex: number;
+    /** The source page index the reference resolves to, when it resolves. */
+    targetIndex: number | null;
+    /** `dest` when the value is a destination array, `page` for a bare `/P`. */
+    shape: 'dest' | 'page';
+    tail: unknown[];
+}
+
+/**
+ * Walk one action, and everything chained behind it, collecting the page
+ * references it holds.
+ *
+ * Bounded and cycle-aware. A chain that cannot be finished is reported as
+ * unreadable rather than quietly truncated, because a truncated walk that found
+ * nothing looks exactly like a clean one.
+ */
+function collectActionPageRefs(
+    doc: PDFDocument,
+    holder: PDFDict,
+    key: string,
+    where: string,
+    fromIndex: number,
+    pageIndexOf: (ref: PDFRef) => number | null,
+    out: PageRefSite[],
+    unreadable: string[],
+    depth: number,
+    seen: Set<string>,
+): void {
+    if (depth > ACTION_CHAIN_BOUND) {
+        unreadable.push(`${where}: action chain deeper than ${ACTION_CHAIN_BOUND}`);
+        return;
+    }
+    const raw = holder.get(PDFName.of(key));
+    if (raw === undefined) return;
+    if (raw instanceof PDFRef) {
+        if (seen.has(raw.tag)) {
+            unreadable.push(`${where}: cyclic action chain`);
+            return;
+        }
+        seen.add(raw.tag);
+    }
+    const resolved = look(doc, raw);
+
+    if (resolved instanceof PDFArray) {
+        // Under `/Next` an array is a list of actions; under a destination key
+        // it is the destination itself. Only the key says which.
+        if (key === 'Next') {
+            for (let i = 0; i < resolved.size(); i += 1) {
+                const item = look(doc, resolved.get(i));
+                if (!(item instanceof PDFDict)) continue;
+                collectFromActionDict(
+                    doc, item, `${where} /Next[${i}]`, fromIndex, pageIndexOf,
+                    out, unreadable, depth + 1, new Set(seen),
+                );
+            }
+        }
+        return;
+    }
+    if (!(resolved instanceof PDFDict)) return;
+    collectFromActionDict(
+        doc, resolved, where, fromIndex, pageIndexOf, out, unreadable, depth + 1, seen,
+    );
+}
+
+function collectFromActionDict(
+    doc: PDFDocument,
+    action: PDFDict,
+    where: string,
+    fromIndex: number,
+    pageIndexOf: (ref: PDFRef) => number | null,
+    out: PageRefSite[],
+    unreadable: string[],
+    depth: number,
+    seen: Set<string>,
+): void {
+    if (depth > ACTION_CHAIN_BOUND) {
+        unreadable.push(`${where}: action chain deeper than ${ACTION_CHAIN_BOUND}`);
+        return;
+    }
+    if (nameOf(action.get(PDFName.of('S'))) === '/GoTo') {
+        const raw = action.get(PDFName.of('D'));
+        const dest = look(doc, raw);
+        if (dest instanceof PDFArray) {
+            const first = dest.get(0);
+            const tail: unknown[] = [];
+            for (let k = 1; k < dest.size(); k += 1) tail.push(dest.get(k));
+            if (first instanceof PDFRef) {
+                out.push({
+                    holder: action,
+                    key: 'D',
+                    where: `${where} /GoTo /D`,
+                    fromIndex,
+                    targetIndex: pageIndexOf(first),
+                    shape: 'dest',
+                    tail,
+                });
+            }
+        }
+    }
+    collectActionPageRefs(
+        doc, action, 'Next', `${where} /Next`, fromIndex, pageIndexOf,
+        out, unreadable, depth + 1, seen,
+    );
+}
+
+/** Every entry of an additional-actions dictionary, walked for page references. */
+function collectAdditionalActions(
+    doc: PDFDocument,
+    owner: PDFDict,
+    where: string,
+    fromIndex: number,
+    pageIndexOf: (ref: PDFRef) => number | null,
+    out: PageRefSite[],
+    unreadable: string[],
+): void {
+    const raw = owner.get(PDFName.of('AA'));
+    if (raw === undefined) return;
+    const aa = look(doc, raw);
+    if (!(aa instanceof PDFDict)) {
+        unreadable.push(`${where} /AA is not a dictionary`);
+        return;
+    }
+    for (const [key] of aa.entries()) {
+        collectActionPageRefs(
+            doc, aa, key.asString().replace(/^\//, ''),
+            `${where} /AA ${key.asString()}`, fromIndex, pageIndexOf,
+            out, unreadable, 0, new Set(),
+        );
+    }
+}
+
+/**
+ * Every source-page reference reachable from the kept pages, on every route
+ * M6-H5A names.
+ */
+export function collectSourcePageRefs(
+    doc: PDFDocument,
+    selection: number[],
+): { sites: PageRefSite[]; unreadable: string[] } {
+    const pages = doc.getPages();
+    const byTag = new Map(pages.map((p, i) => [p.ref.tag, i]));
+    const pageIndexOf = (ref: PDFRef): number | null => byTag.get(ref.tag) ?? null;
+    const sites: PageRefSite[] = [];
+    const unreadable: string[] = [];
+
+    for (const index of selection) {
+        const page = pages[index];
+        if (!page) continue;
+
+        // The page's own additional actions.
+        collectAdditionalActions(
+            doc, page.node, `page ${index}`, index, pageIndexOf, sites, unreadable,
+        );
+
+        const annots = look(doc, page.node.get(PDFName.of('Annots')));
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            const annot = look(doc, annots.get(i));
+            if (!(annot instanceof PDFDict)) continue;
+            const where = `page ${index} annotation ${i}`;
+
+            // An annotation's `/P` names the page it belongs to. In a copy it
+            // names a page of the source, whether or not that page was kept.
+            const parentRaw = annot.get(PDFName.of('P'));
+            if (parentRaw instanceof PDFRef) {
+                sites.push({
+                    holder: annot,
+                    key: 'P',
+                    where: `${where} /P`,
+                    fromIndex: index,
+                    targetIndex: pageIndexOf(parentRaw),
+                    shape: 'page',
+                    tail: [],
+                });
+            }
+
+            collectActionPageRefs(
+                doc, annot, 'A', `${where} /A`, index, pageIndexOf, sites, unreadable, 0, new Set(),
+            );
+            collectAdditionalActions(doc, annot, where, index, pageIndexOf, sites, unreadable);
+        }
+    }
+
+    return { sites, unreadable };
+}
+
+/**
+ * Plan and strip in one call, so the plan never escapes.
+ *
+ * `DestinationPlan` holds `PDFDict` holders from the source — that is what
+ * makes the strip possible — and a caller that kept it would keep the source
+ * context alive right through `save()`. Confining it here makes source
+ * retention impossible by construction rather than by discipline.
+ */
+export function sanitizeDestinations(
+    doc: PDFDocument,
+    selection: number[],
+): StripOutcome {
+    const plan = planDestinations(doc, selection);
+    return stripInternalDestinations(doc, plan, selection);
+}
+
+/** Whether E1 would refuse this selection, decided without keeping the plan. */
+export function wouldBreakNavigation(
+    doc: PDFDocument,
+    selection: number[],
+): { wouldBreak: number; otherSites: { fromIndex: number; key: string }[] } {
+    const plan = planDestinations(doc, selection);
+    return { wouldBreak: plan.wouldBreak, otherSites: plan.otherSites };
+}
+
+/** What M6-H5A's second pass removed, and what has to go back. */
+export interface PageRefClosure {
+    /** Rebuilt after the copy, against output page references. */
+    rebuild: {
+        fromIndex: number;
+        annotIndex: number | null;
+        pagePath: 'annot-P' | 'none';
+        targetIndex: number;
+    }[];
+    losses: LossRecord[];
+    /** Structures the walk could not finish. A refusal, not an absence. */
+    unreadable: string[];
+}
+
+/**
+ * Strip every remaining source-page reference from the pages being copied.
+ *
+ * Runs after {@link stripInternalDestinations}, which has already taken the
+ * `/Dest` and top-level `/A /GoTo /D` shapes. What is left is exactly the set
+ * M6-H5A added: `/P`, `/AA` on an annotation, a widget or a page, and a `/GoTo`
+ * reached through `/Next`.
+ *
+ * `/P` is the only one rebuilt, because it has an output equivalent: the page
+ * the annotation ends up on. An action chain that reaches a `/GoTo` is removed
+ * and reported — reconstructing an arbitrary chain against a subset of pages is
+ * not a shape this contract has proven.
+ */
+export function closeSourcePageRefs(
+    doc: PDFDocument,
+    selection: number[],
+): PageRefClosure {
+    const kept = new Set(selection);
+    const { sites, unreadable } = collectSourcePageRefs(doc, selection);
+    const rebuild: PageRefClosure['rebuild'] = [];
+    const losses: LossRecord[] = [];
+
+    const pages = doc.getPages();
+    const annotIndexOf = (pageIndex: number, holder: PDFDict): number | null => {
+        const page = pages[pageIndex];
+        if (!page) return null;
+        const annots = look(doc, page.node.get(PDFName.of('Annots')));
+        if (!(annots instanceof PDFArray)) return null;
+        for (let i = 0; i < annots.size(); i += 1) {
+            if (look(doc, annots.get(i)) === holder) return i;
+        }
+        return null;
+    };
+
+    for (const site of sites) {
+        if (site.shape === 'page' && site.key === 'P') {
+            const annotIndex = annotIndexOf(site.fromIndex, site.holder);
+            // The annotation belongs to the page it sits on, which is kept by
+            // construction — it was reached by walking that page.
+            if (annotIndex !== null && kept.has(site.fromIndex)) {
+                rebuild.push({
+                    fromIndex: site.fromIndex,
+                    annotIndex,
+                    pagePath: 'annot-P',
+                    targetIndex: site.fromIndex,
+                });
+            }
+            site.holder.delete(PDFName.of('P'));
+            continue;
+        }
+
+        // An action's page reference. Removed, and named.
+        site.holder.delete(PDFName.of(site.key));
+        losses.push({
+            kind: 'internal-links',
+            fromIndex: site.fromIndex,
+            what: site.where,
+            why: site.targetIndex === null
+                ? 'ページとして解決できない参照のため削除しました。'
+                : kept.has(site.targetIndex)
+                    ? '対応範囲外の経路（アクション連鎖）からのページ参照のため削除しました。'
+                    : 'リンク先のページが選択されていません。',
+        });
+    }
+
+    return { rebuild, losses, unreadable };
+}
+
+/** Put `/P` back, pointing at the page the annotation actually sits on. */
+export function rebuildSourcePageRefs(
+    out: PDFDocument,
+    closure: PageRefClosure,
+    selection: number[],
+): number {
+    const outPages = out.getPages();
+    let rebuilt = 0;
+    for (const item of closure.rebuild) {
+        const position = selection.indexOf(item.targetIndex);
+        const page = outPages[position];
+        if (!page || item.annotIndex === null) continue;
+        const annots = page.node.lookup(PDFName.of('Annots'));
+        if (!(annots instanceof PDFArray)) continue;
+        const annot = out.context.lookup(annots.get(item.annotIndex));
+        if (!(annot instanceof PDFDict)) continue;
+        annot.set(PDFName.of('P'), page.ref);
+        rebuilt += 1;
+    }
+    return rebuilt;
+}
+
+/**
+ * Source-page references surviving in an artifact.
+ *
+ * A page reference in an output document is legitimate only when it resolves to
+ * a page of that document's own tree. Anything else — a reference to a page
+ * object outside the tree, or one that resolves to nothing — is a reference the
+ * copy brought across and nobody retargeted.
+ */
+export function countSourcePageReferences(doc: PDFDocument): number {
+    const inTree = new Set(doc.getPages().map((p) => p.ref.tag));
+    let count = 0;
+
+    const isStrayPageRef = (raw: unknown): boolean => {
+        if (!(raw instanceof PDFRef)) return false;
+        let target: unknown;
+        try {
+            target = doc.context.lookup(raw);
+        } catch {
+            return false;
+        }
+        if (!(target instanceof PDFDict)) return false;
+        if (nameOf(target.get(PDFName.of('Type'))) !== '/Page') return false;
+        return !inTree.has(raw.tag);
+    };
+
+    const seen = new Set<object>();
+    const walkAction = (value: unknown, depth: number): void => {
+        if (depth > ACTION_CHAIN_BOUND) return;
+        const action = look(doc, value);
+        if (!(action instanceof PDFDict)) return;
+        if (seen.has(action)) return;
+        seen.add(action);
+        const dest = look(doc, action.get(PDFName.of('D')));
+        if (dest instanceof PDFArray && isStrayPageRef(dest.get(0))) count += 1;
+        const next = action.get(PDFName.of('Next'));
+        const resolved = look(doc, next);
+        if (resolved instanceof PDFArray) {
+            for (let i = 0; i < resolved.size(); i += 1) walkAction(resolved.get(i), depth + 1);
+        } else if (next !== undefined) {
+            walkAction(next, depth + 1);
+        }
+    };
+
+    const walkAdditional = (owner: PDFDict): void => {
+        const aa = look(doc, owner.get(PDFName.of('AA')));
+        if (!(aa instanceof PDFDict)) return;
+        for (const [, entry] of aa.entries()) walkAction(entry, 0);
+    };
+
+    for (const page of doc.getPages()) {
+        walkAdditional(page.node);
+        const annots = look(doc, page.node.get(PDFName.of('Annots')));
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            const annot = look(doc, annots.get(i));
+            if (!(annot instanceof PDFDict)) continue;
+            if (isStrayPageRef(annot.get(PDFName.of('P')))) count += 1;
+            const dest = look(doc, annot.get(PDFName.of('Dest')));
+            if (dest instanceof PDFArray && isStrayPageRef(dest.get(0))) count += 1;
+            walkAction(annot.get(PDFName.of('A')), 0);
+            walkAdditional(annot);
+        }
+    }
+
+    return count;
+}
+
+/**
+ * Count, on an artifact, what the invariants are about.
  *
  * `orphanPageCount` is indirect `/Page` objects outside the output page tree.
  * `danglingDestinations` is surviving internal destinations that do not target a

@@ -46,6 +46,8 @@ import {
     M6Error,
     M6_STATUS,
     M6_LOSS_LABEL_JA,
+    GENERIC_REFUSAL_JA,
+    inspectLoadBoundary,
     INTAKE_LABEL_JA,
     PROVISIONAL_POLICY,
 } from '../utils/split-merge';
@@ -236,40 +238,93 @@ export const PdfSplitMerge: React.FC = () => {
         }
     }, []);
 
+    /**
+     * Take a file, preflight it, and only then show it.
+     *
+     * Two contracts meet here, and both were broken before.
+     *
+     * **BLK-3 — the upload itself is owned.** Reading a file is asynchronous, so
+     * a slow file chosen first can finish after a fast file chosen second. With
+     * no ownership over the *preparation*, the late run wrote its bytes into
+     * state the second file already owned: B's name and page count on screen,
+     * A's bytes in the export. Every `await` below is followed by a currency
+     * check, and only a current run writes anything.
+     *
+     * **Preview comes after the boundary.** PDF.js is a parser, and handing it
+     * untrusted input before the M6 Load Boundary has passed the bytes makes it
+     * the first thing to touch them — which is exactly the position the boundary
+     * exists to occupy. The order is: own the run, preflight, PASS, then parse.
+     */
     const handleExtractUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+
         supersede();
         setExtractNotice(null);
         setPendingLosses(null);
         setSelected(new Set());
         setPageCount(0);
-        setExtractFile(file);
+        setExtractBytes(null);
+        setExtractFile(null);
         setExtractBusy(true);
+
+        const token = ownership.current.begin({
+            operation: 'extract',
+            fileIds: [`${file.name}:${file.size}:${file.lastModified}`],
+            selection: '',
+            destinationPolicy: 'E2',
+            metadataPolicy: 'M4',
+            collisionPolicy: 'rename',
+        });
+
         try {
             const buffer = await file.arrayBuffer();
+            if (!token.isCurrent()) return;
             const bytes = new Uint8Array(buffer);
-            setExtractBytes(bytes);
+
+            // The pre-parse boundary, before any parser sees the bytes.
+            const verdict = inspectLoadBoundary(bytes, PROVISIONAL_POLICY.loadBoundary);
+            if (!token.isCurrent()) return;
+            if (verdict.verdict === 'REFUSE') {
+                setExtractFile(file);
+                setExtractNotice({
+                    tone: 'error',
+                    code: M6_STATUS.LOAD_BOUNDARY_REFUSED,
+                    text: GENERIC_REFUSAL_JA,
+                });
+                return;
+            }
+
             configurePdfWorker();
             // pdf.js is given its own copy: it detaches the buffer it is handed,
             // and the export path needs these bytes afterwards.
             const preview = new Uint8Array(bytes.length);
             preview.set(bytes);
             const doc = await pdfjsLib.getDocument({ data: preview }).promise;
+            if (!token.isCurrent()) {
+                // A superseded run releases what it opened rather than leaving a
+                // PDF.js document alive behind the one that won.
+                void doc.destroy();
+                return;
+            }
+
+            // Bytes, file identity and page count are published together, by the
+            // run that owns them, so no two of them can come from different files.
             pdfDoc.current = doc;
+            setExtractBytes(bytes);
+            setExtractFile(file);
             setPageCount(doc.numPages);
         } catch (error) {
-
+            if (!token.isCurrent()) return;
+            setExtractFile(file);
             setExtractNotice({
                 tone: 'error',
-                code: 'UNSUPPORTED_DOCUMENT',
+                code: M6_STATUS.UNSUPPORTED_DOCUMENT,
                 text: 'このPDFを読み取れませんでした。',
             });
-
             console.error(error);
         } finally {
-
-            setExtractBusy(false);
+            if (token.isCurrent()) setExtractBusy(false);
         }
     };
 
@@ -374,22 +429,33 @@ export const PdfSplitMerge: React.FC = () => {
         supersede();
         setMergeNotice(null);
         setMergeBusy(true);
+
+        // The token is taken before the first `await`, so the reads below belong
+        // to it. Taking it afterwards left the file reads unowned, which is the
+        // window BLK-3 is about.
+        const stamp = Date.now();
+        const requested = files.map((file, i) => ({
+            id: `${file.name}:${file.size}:${file.lastModified}:${stamp}:${i}`,
+            file,
+            name: file.name,
+        }));
+        const token = ownership.current.begin({
+            ...snapshot,
+            fileIds: [...mergeFiles.map((f) => f.id), ...requested.map((r) => r.id)],
+        });
+
         try {
             const entries: MergeFileEntry[] = [];
-            for (const file of files) {
-                const bytes = new Uint8Array(await file.arrayBuffer());
+            for (const item of requested) {
+                const buffer = await item.file.arrayBuffer();
+                if (!token.isCurrent()) return;
                 entries.push({
-                    id: `${file.name}:${file.size}:${entries.length}:${Date.now()}`,
-                    file,
-                    name: file.name,
-                    bytes,
+                    id: item.id,
+                    file: item.file,
+                    name: item.name,
+                    bytes: new Uint8Array(buffer),
                 });
             }
-
-            const token = ownership.current.begin({
-                ...snapshot,
-                fileIds: [...mergeFiles, ...entries].map((f) => f.id),
-            });
 
             const inputs = entries.map((e) => ({
                 id: e.id,
@@ -404,23 +470,50 @@ export const PdfSplitMerge: React.FC = () => {
                     inFlight.current = handle;
                     return handle.promise;
                 })()
-
                 : await intakeSources(inputs, { stillOurs: () => token.isCurrent() });
             inFlight.current = null;
             if (!token.isCurrent()) return;
+
+            /**
+             * BLK-4: every requested file gets a row and a state.
+             *
+             * A file the worker never answered for is shown as NOT_DECIDED rather
+             * than dropped from the list. The list is built from the **requested**
+             * set, not from whatever intake happened to return.
+             */
             const byId = new Map(intake.map((r) => [r.id, r]));
-            const withIntake = entries.map((e) => ({ ...e, intake: byId.get(e.id) }));
+            const withIntake: MergeFileEntry[] = entries.map((e) => ({
+                ...e,
+                intake: byId.get(e.id) ?? {
+                    id: e.id,
+                    name: e.name,
+                    sizeBytes: e.bytes.length,
+                    result: 'NOT_DECIDED',
+                    reason: 'このファイルは確認が完了しませんでした。',
+                    pageCount: 0,
+                    pageTreeWalks: false,
+                    hasAcroForm: false,
+                    fieldNames: [],
+                    hasOptionalContent: false,
+                    hasStructTree: false,
+                    hasAttachments: false,
+                    info: {},
+                },
+            }));
             setMergeFiles((prev) => [...prev, ...withIntake]);
-            const rejected = intake.filter((r) => r.result !== 'ACCEPTED');
+
+            const rejected = withIntake.filter((e) => e.intake?.result !== 'ACCEPTED');
             if (rejected.length > 0) {
                 setMergeNotice({
                     tone: 'warn',
-                    text: `${rejected.length} 件のファイルは統合できません。一覧の理由を確認してください。`,
+                    text: `${rejected.length} 件のファイルは統合できません: `
+                        + rejected
+                            .map((e) => `${e.name}（${INTAKE_LABEL_JA[e.intake?.result ?? 'NOT_DECIDED']}）`)
+                            .join('、'),
                 });
             }
         } finally {
-
-            setMergeBusy(false);
+            if (token.isCurrent()) setMergeBusy(false);
         }
     };
 
@@ -465,12 +558,21 @@ export const PdfSplitMerge: React.FC = () => {
             document.body.appendChild(link);
             link.click();
             link.remove();
+            /**
+             * BLK-4: the completion notice is derived from the authoritative
+             * requested-source set, not from the successful ones.
+             *
+             * Every excluded file is named with its reason. "Visible if you count
+             * the pages" is not telling someone a file was left out.
+             */
             const omitted = result.intake.filter((r) => r.result !== 'ACCEPTED');
             setMergeNotice({
                 tone: omitted.length > 0 ? 'warn' : 'info',
                 text: omitted.length > 0
-                    ? `${result.outputName} を書き出しました。${omitted.length} 件は含まれていません: `
-                        + omitted.map((r) => r.name).join(', ')
+                    ? `${result.outputName} を書き出しました。次の ${omitted.length} 件は含まれていません: `
+                        + omitted
+                            .map((r) => `${r.name}（${INTAKE_LABEL_JA[r.result]}${r.reason ? `: ${r.reason}` : ''}）`)
+                            .join('、')
                     : `${result.outputName} を書き出しました。`,
                 losses: result.losses,
             });
@@ -790,7 +892,31 @@ export const PdfSplitMerge: React.FC = () => {
                     </div>
                 )}
             </div>
-            <div style={{ fontSize: '0.75em', color: '#999', marginTop: '6px' }}>
+            {/*
+                The B4 notice is part of the layout, not an overlay.
+
+                It used to sit immediately above a footer that is positioned, so
+                the two overlapped and the sentence was obscured at desktop and
+                narrow widths alike. A safety notice nobody can read is not a
+                notice, so it gets its own block, its own space, and a colour with
+                enough contrast to survive being small.
+            */}
+            <div
+                data-usage-target="m6-b4-notice"
+                style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    flexShrink: 0,
+                    fontSize: '0.8em',
+                    lineHeight: 1.5,
+                    color: '#7a5b00',
+                    backgroundColor: '#fdf8ec',
+                    border: '1px solid #e6d2a8',
+                    borderRadius: '4px',
+                    padding: '8px 10px',
+                    margin: '12px 0 8px',
+                }}
+            >
                 安全上の上限値は暫定です（B4 未決定 / {PROVISIONAL_POLICY.origin}）。
             </div>
             <VersionFooter

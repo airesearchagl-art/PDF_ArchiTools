@@ -13,7 +13,7 @@
  *   no late publish after cancellation, termination and cleanup.
  */
 import type { ExtractResult, IntakeRecord, MergePlan, MergeResult } from '../contracts';
-import { M6_STATUS } from '../contracts';
+import { INTAKE_RESULT, M6_STATUS } from '../contracts';
 import type { M6PolicyOverrides } from '../policy';
 import type {
     DestinationPolicy,
@@ -225,6 +225,35 @@ export function extractInWorker(
     );
 }
 
+/**
+ * A finalized record for every requested source, whatever happened.
+ *
+ * BLK-4: intake used to answer `[]` when the worker failed, timed out or was
+ * cancelled, and a Merge built from that list omitted files the person had
+ * chosen while reporting an ordinary success. An input that was requested and
+ * never decided is not an input that can be quietly left out — it is one the
+ * run has to name and fail closed on.
+ */
+const undecided = (
+    inputs: { id: string; name: string; bytes: Uint8Array }[],
+    result: IntakeRecord['result'],
+    reason: string,
+): IntakeRecord[] => inputs.map((i) => ({
+    id: i.id,
+    name: i.name,
+    sizeBytes: i.bytes.length,
+    result,
+    reason,
+    pageCount: 0,
+    pageTreeWalks: false,
+    hasAcroForm: false,
+    fieldNames: [],
+    hasOptionalContent: false,
+    hasStructTree: false,
+    hasAttachments: false,
+    info: {},
+}));
+
 export function intakeInWorker(
     inputs: { id: string; name: string; type?: string; bytes: Uint8Array }[],
     policy?: M6PolicyOverrides,
@@ -234,15 +263,46 @@ export function intakeInWorker(
         copy.set(i.bytes);
         return { id: i.id, name: i.name, type: i.type, bytes: copy.buffer };
     });
+    const requested = inputs.map((i) => ({ id: i.id, name: i.name, bytes: i.bytes }));
+
+    /** Fill in whatever the worker did not answer for. */
+    const complete = (answered: IntakeRecord[]): IntakeRecord[] => {
+        const byId = new Map(answered.map((r) => [r.id, r]));
+        return requested.map((i) => byId.get(i.id) ?? undecided(
+            [i],
+            INTAKE_RESULT.NOT_DECIDED,
+            'このファイルは確認が完了しませんでした。',
+        )[0]);
+    };
+
     return runInWorker<IntakeRecord[]>(
         { kind: 'merge-intake', inputs: copies, policy },
         copies.map((c) => c.bytes),
         (response) => {
-            if (response.kind === 'intake-done') return { done: true, value: response.intake };
-            if (response.kind === 'cancelled') return { done: true, value: [] };
+            if (response.kind === 'intake-done') {
+                return { done: true, value: complete(response.intake) };
+            }
+            if (response.kind === 'cancelled') {
+                return {
+                    done: true,
+                    value: undecided(
+                        requested,
+                        INTAKE_RESULT.CANCELLED,
+                        '操作が変更されたため、確認を中止しました。',
+                    ),
+                };
+            }
             return { done: false };
         },
-        () => [],
+        (code, reason) => undecided(
+            requested,
+            code === 'CANCELLED'
+                ? INTAKE_RESULT.CANCELLED
+                : /timeout/i.test(reason) || /時間/.test(reason)
+                    ? INTAKE_RESULT.WORKER_TIMEOUT
+                    : INTAKE_RESULT.WORKER_ERROR,
+            reason,
+        ),
     );
 }
 

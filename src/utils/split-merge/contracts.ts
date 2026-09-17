@@ -65,6 +65,14 @@ export const M6_STATUS = {
     OVER_STRUCTURAL_CAP: 'OVER_STRUCTURAL_CAP',
     /** The produced artifact exceeds the adopted actual-output ceiling. */
     OVER_OUTPUT_BUDGET: 'OVER_OUTPUT_BUDGET',
+    /**
+     * The output would have gone out without what the source came in with.
+     *
+     * M6-H7 carries metadata under M5's H12 contract, and H12 makes metadata
+     * part of the artifact — so failing to carry it is a refusal, not a note
+     * attached to a file already handed over.
+     */
+    METADATA_NOT_PRESERVED: 'METADATA_NOT_PRESERVED',
 
     /** The run was superseded. M6-H13. */
     CANCELLED: 'CANCELLED',
@@ -308,12 +316,37 @@ export interface ReadbackFacts {
     orphanPageCount: number;
     /** Surviving internal destinations that do not target the output tree. */
     danglingDestinations: number;
+    /**
+     * Source-page references surviving anywhere in the artifact. Must be 0.
+     *
+     * M6-H5A: `/Dest` was never the only route. `/A /GoTo`, a recursive `/Next`,
+     * an annotation, widget or page `/AA`, and an annotation's own `/P` can each
+     * carry a page reference, and a reference to a page of the *source* cannot
+     * mean anything in the output.
+     */
+    sourcePageReferences: number;
     /** JavaScript actions a reader can reach. Must be 0. */
     reachableJavaScript: number;
-    /** JavaScript action dictionaries in the object table. Must be 0. */
+    /**
+     * JavaScript actions anywhere in the artifact, nested included. Must be 0.
+     *
+     * Counted by walking into every indirect object rather than by asking each
+     * top-level one whether its own `/S` is `/JavaScript` — which is what let a
+     * detached `/GoTo` carrying a direct action under `/Next` report zero.
+     */
     artifactWideJavaScript: number;
     /** Widgets belonging to no field. Must be 0. */
     orphanWidgets: number;
+    /** `/FileAttachment` annotations anywhere in the artifact. Must be 0. */
+    fileAttachmentAnnots: number;
+    /** `/Filespec` objects carrying an `/EF`. Must be 0. */
+    filespecsWithEF: number;
+    /** `/EmbeddedFile` payload streams. Must be 0. */
+    embeddedFileStreams: number;
+    /** Tagging remnants of every defined kind, summed. Must be 0 when stripped. */
+    taggingRemnants: number;
+    /** Indirect objects nothing reachable points at. Must be 0 after the sweep. */
+    unreachableObjects: number;
     /** Whether the readback scan itself completed. */
     complete: boolean;
 }
@@ -326,8 +359,23 @@ export const INTAKE_RESULT = {
     ENCRYPTED: 'ENCRYPTED',
     SIGNATURE_UNSAFE: 'SIGNATURE_UNSAFE',
     XFA_UNSAFE: 'XFA_UNSAFE',
+    UNSUPPORTED_FORM: 'UNSUPPORTED_FORM',
+    UNSUPPORTED_OPTIONAL_CONTENT: 'UNSUPPORTED_OPTIONAL_CONTENT',
     LOAD_BOUNDARY_REFUSED: 'LOAD_BOUNDARY_REFUSED',
+    /**
+     * The worker failed, timed out, or was cancelled before this input was
+     * decided.
+     *
+     * These exist because the alternative was worse: intake collapsing to an
+     * empty list on failure let a Merge proceed having silently omitted files
+     * the person chose. An input with no finalized state is not an input that
+     * can be left out quietly — it is one the run has to fail closed on.
+     */
+    WORKER_ERROR: 'WORKER_ERROR',
+    WORKER_TIMEOUT: 'WORKER_TIMEOUT',
     CANCELLED: 'CANCELLED',
+    /** Requested, and never decided. Always a refusal, never an omission. */
+    NOT_DECIDED: 'NOT_DECIDED',
 } as const;
 
 export type IntakeResultCode = typeof INTAKE_RESULT[keyof typeof INTAKE_RESULT];
@@ -339,9 +387,18 @@ export const INTAKE_LABEL_JA: Record<IntakeResultCode, string> = {
     ENCRYPTED: 'パスワード保護されています',
     SIGNATURE_UNSAFE: '電子署名が適用されています',
     XFA_UNSAFE: 'XFAフォームを含みます',
+    UNSUPPORTED_FORM: '対応範囲外のフォームを含みます',
+    UNSUPPORTED_OPTIONAL_CONTENT: '対応範囲外のオプショナルコンテンツを含みます',
     LOAD_BOUNDARY_REFUSED: '安全に読み込めることを確認できませんでした',
+    WORKER_ERROR: '確認処理が失敗しました',
+    WORKER_TIMEOUT: '確認処理が時間内に終わりませんでした',
     CANCELLED: '中止されました',
+    NOT_DECIDED: '確認できていません',
 };
+
+/** Only an ACCEPTED input may be copied. Everything else is named and excluded. */
+export const isAcceptedIntake = (code: IntakeResultCode): boolean =>
+    code === INTAKE_RESULT.ACCEPTED;
 
 /**
  * One input, after intake.

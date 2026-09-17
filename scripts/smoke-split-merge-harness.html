@@ -49,7 +49,7 @@ import {
     intakeInWorker,
     workerAvailable,
 } from '/src/utils/split-merge/index.ts';
-import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef } from 'pdf-lib';
 
 const FIXTURES = '/test-fixtures/m6-split-merge-production';
 const cache = new Map();
@@ -364,6 +364,296 @@ window.__m6 = {
         });
     },
 };
+
+/**
+ * An INDEPENDENT artifact walker.
+ *
+ * Deliberately written here rather than imported from `src/utils/split-merge`.
+ * The production scanner is the thing under test: three of the Independent
+ * Review's findings were cases where it reported zero about a file that carried
+ * the thing. An oracle that asked the same code the same question would have
+ * agreed with it every time.
+ */
+function walkEverything(doc) {
+    const out = {
+        javascript: 0,
+        fileAttachmentAnnots: 0,
+        filespecsWithEF: 0,
+        embeddedFileStreams: 0,
+        orphanPages: 0,
+        strayPageRefs: 0,
+        structTreeRoot: false,
+        markInfo: false,
+        structParents: 0,
+        structParent: 0,
+        objects: 0,
+    };
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    const inTree = new Set(doc.getPages().map((pg) => pg.ref.tag));
+    out.structTreeRoot = doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined;
+    out.markInfo = doc.catalog.get(PDFName.of('MarkInfo')) !== undefined;
+
+    const seen = new Set();
+    const walk = (value, depth) => {
+        if (!value || depth > 200) return;
+        if (seen.has(value)) return;
+        seen.add(value);
+        const dict = value instanceof PDFDict
+            ? value
+            : (value?.dict instanceof PDFDict ? value.dict : null);
+        if (dict) {
+            if (nameOf(dict.get(PDFName.of('S'))) === '/JavaScript'
+                || dict.get(PDFName.of('JS')) !== undefined) out.javascript += 1;
+            if (nameOf(dict.get(PDFName.of('Subtype'))) === '/FileAttachment') {
+                out.fileAttachmentAnnots += 1;
+            }
+            if (nameOf(dict.get(PDFName.of('Type'))) === '/Filespec'
+                && dict.get(PDFName.of('EF')) !== undefined) out.filespecsWithEF += 1;
+            if (nameOf(dict.get(PDFName.of('Type'))) === '/EmbeddedFile') {
+                out.embeddedFileStreams += 1;
+            }
+            if (dict.get(PDFName.of('StructParents')) !== undefined) out.structParents += 1;
+            if (dict.get(PDFName.of('StructParent')) !== undefined) out.structParent += 1;
+            for (const [, entry] of dict.entries()) walk(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) {
+            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+        }
+    };
+
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        out.objects += 1;
+        const type = obj?.get?.(PDFName.of('Type'))?.asString?.();
+        if (type === '/Page' && !inTree.has(ref.tag)) out.orphanPages += 1;
+        walk(obj, 0);
+    }
+
+    // A page reference that does not resolve into this document's own tree.
+    const strayRef = (raw) => {
+        if (!(raw instanceof PDFRef)) return false;
+        let target;
+        try { target = doc.context.lookup(raw); } catch { return false; }
+        if (!(target instanceof PDFDict)) return false;
+        if (nameOf(target.get(PDFName.of('Type'))) !== '/Page') return false;
+        return !inTree.has(raw.tag);
+    };
+    const actionSeen = new Set();
+    const walkAction = (raw, depth) => {
+        if (depth > 64) return;
+        let action = raw;
+        if (raw instanceof PDFRef) { try { action = doc.context.lookup(raw); } catch { return; } }
+        if (!(action instanceof PDFDict) || actionSeen.has(action)) return;
+        actionSeen.add(action);
+        let dest = action.get(PDFName.of('D'));
+        if (dest instanceof PDFRef) { try { dest = doc.context.lookup(dest); } catch { dest = null; } }
+        if (dest instanceof PDFArray && strayRef(dest.get(0))) out.strayPageRefs += 1;
+        let next = action.get(PDFName.of('Next'));
+        if (next instanceof PDFRef) { try { next = doc.context.lookup(next); } catch { next = null; } }
+        if (next instanceof PDFArray) {
+            for (let i = 0; i < next.size(); i += 1) walkAction(next.get(i), depth + 1);
+        } else if (next) walkAction(next, depth + 1);
+    };
+    const walkAa = (owner) => {
+        let aa = owner.get(PDFName.of('AA'));
+        if (aa instanceof PDFRef) { try { aa = doc.context.lookup(aa); } catch { aa = null; } }
+        if (!(aa instanceof PDFDict)) return;
+        for (const [, entry] of aa.entries()) walkAction(entry, 0);
+    };
+    for (const pg of doc.getPages()) {
+        walkAa(pg.node);
+        let annots = pg.node.get(PDFName.of('Annots'));
+        if (annots instanceof PDFRef) { try { annots = doc.context.lookup(annots); } catch { annots = null; } }
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            let annot = annots.get(i);
+            if (annot instanceof PDFRef) { try { annot = doc.context.lookup(annot); } catch { continue; } }
+            if (!(annot instanceof PDFDict)) continue;
+            if (strayRef(annot.get(PDFName.of('P')))) out.strayPageRefs += 1;
+            let d = annot.get(PDFName.of('Dest'));
+            if (d instanceof PDFRef) { try { d = doc.context.lookup(d); } catch { d = null; } }
+            if (d instanceof PDFArray && strayRef(d.get(0))) out.strayPageRefs += 1;
+            walkAction(annot.get(PDFName.of('A')), 0);
+            walkAa(annot);
+        }
+    }
+    out.taggingRemnants = (out.structTreeRoot ? 1 : 0) + (out.markInfo ? 1 : 0)
+        + out.structParents + out.structParent;
+    return out;
+}
+
+/** Whether a literal marker appears in the serialized bytes. */
+function bytesContain(bytes, marker) {
+    const needle = new TextEncoder().encode(marker);
+    outer: for (let i = 0; i + needle.length <= bytes.length; i += 1) {
+        for (let j = 0; j < needle.length; j += 1) {
+            if (bytes[i + j] !== needle[j]) continue outer;
+        }
+        return true;
+    }
+    return false;
+}
+
+Object.assign(window.__m6, {
+    /** Extract, then inspect the artifact with the independent walker. */
+    extractAndInspect: async (name, selection, marker, options = {}) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: options.confirmedLosses ?? ['tagging', 'attachments'],
+            destinationPolicy: options.destinationPolicy,
+        });
+        if (!result.bytes) {
+            return plainly({ status: result.status, reason: result.reason ?? null, independent: null });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            status: result.status,
+            outputName: result.outputName,
+            losses: result.losses,
+            production: result.readback,
+            independent: walkEverything(doc),
+            markerInBytes: marker ? bytesContain(result.bytes, marker) : null,
+        });
+    },
+
+    /** Merge, then inspect the artifact with the independent walker. */
+    mergeAndInspect: async (names, marker, options = {}) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, options);
+        if (!result.bytes) {
+            return plainly({
+                status: result.status,
+                reason: result.reason ?? null,
+                intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+                independent: null,
+            });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const oc = describeOptionalContent(doc, null);
+        return plainly({
+            status: result.status,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+            losses: result.losses,
+            production: result.readback,
+            independent: walkEverything(doc),
+            markerInBytes: marker ? bytesContain(result.bytes, marker) : null,
+            optionalContent: {
+                present: oc.present,
+                groups: oc.groups.map((g) => g.name),
+                unsupported: oc.unsupported,
+            },
+        });
+    },
+
+    /** The Info dictionary and XMP of an extracted artifact, read back. */
+    extractMetadata: async (name, selection) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        if (!result.bytes) return plainly({ status: result.status, reason: result.reason ?? null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const info = {};
+        const infoRef = doc.context.trailerInfo.Info;
+        const dict = infoRef ? doc.context.lookup(infoRef) : null;
+        if (dict instanceof PDFDict) {
+            for (const [key, value] of dict.entries()) {
+                const resolved = value instanceof PDFRef ? doc.context.lookup(value) : value;
+                info[key.asString().replace(/^\//, '')] =
+                    typeof resolved?.decodeText === 'function' ? resolved.decodeText() : String(resolved);
+            }
+        }
+        return plainly({
+            status: result.status,
+            info,
+            hasXmp: doc.catalog.get(PDFName.of('Metadata')) !== undefined,
+            xmpMarkerInBytes: bytesContain(result.bytes, 'M6_XMP_MARKER'),
+        });
+    },
+
+    /**
+     * A Merge where one requested source was never decided.
+     *
+     * BLK-4: intake used to answer `[]` when the worker failed, and a Merge built
+     * from that list omitted files the person chose while reporting success. The
+     * `NOT_DECIDED` record here is what the hardened client now synthesises for
+     * an input the worker never answered for, so this drives the same shape.
+     */
+    mergeUndecided: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const damaged = intake.map((r, i) => (i === intake.length - 1
+            ? { ...r, result: 'NOT_DECIDED', reason: 'このファイルは確認が完了しませんでした。' }
+            : r));
+        const plan = planMerge(damaged, {});
+        const result = await runMerge(inputs, plan, {});
+        return plainly({
+            planStatus: plan.status,
+            status: result.status,
+            reason: result.reason ?? plan.reason ?? null,
+            bytes: result.bytes ? result.bytes.length : null,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+        });
+    },
+
+    /**
+     * A Merge driven with intake facts that claim every source is fine.
+     *
+     * The promoted ADV-7: main-thread intake facts are UX facts. In a worker they
+     * arrive as a message, and a message is not an authority. This hands the run
+     * an ACCEPTED record for a source whose bytes hold a form outside the adopted
+     * envelope, and the run has to refuse on what it reads rather than on what it
+     * was told.
+     */
+    mergeWithFalseIntake: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const lying = inputs.map((i) => ({
+            id: i.id,
+            name: i.name,
+            sizeBytes: i.bytes.length,
+            result: 'ACCEPTED',
+            pageCount: 1,
+            pageTreeWalks: true,
+            hasAcroForm: false,
+            fieldNames: [],
+            hasOptionalContent: false,
+            hasStructTree: false,
+            hasAttachments: false,
+            info: {},
+        }));
+        const plan = planMerge(lying, {});
+        const result = await runMerge(inputs, plan, {});
+        return plainly({
+            planStatus: plan.status,
+            status: result.status,
+            reason: result.reason ?? null,
+            bytes: result.bytes ? result.bytes.length : null,
+        });
+    },
+
+    /** Facts a refusal depends on, for the inherited-signature cases. */
+    signatureFacts: async (name) => {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const facts = readSourceFacts(doc, bytes.length);
+        return plainly({
+            hasSignatureField: facts.hasSignatureField,
+            hasAppliedSignature: facts.hasAppliedSignature,
+            names: facts.signatureFieldNames,
+        });
+    },
+});
 
 document.getElementById('state').textContent = 'ready';
 window.__m6Ready = true;

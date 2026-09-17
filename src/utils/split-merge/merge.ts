@@ -45,9 +45,19 @@ import { inspectLoadBoundary } from './load-boundary';
 import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
 import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
-import { describeOptionalContent } from './optional-content';
+import {
+    carryOptionalContent,
+    describeOptionalContent,
+    planOptionalContent,
+} from './optional-content';
+import {
+    closeSourcePageRefs,
+    rebuildSourcePageRefs,
+    sanitizeDestinations,
+} from './destinations';
+import { pruneUnreachable, scrubAllJavaScript, stripTaggingEverywhere } from './prune';
 import { sanitizeJavaScript } from './javascript';
-import { readForm, rebuildAcroForm, removeSignatureWidgets } from './forms';
+import { planFormForExtract, readForm, rebuildAcroForm, removeSignatureWidgets } from './forms';
 import type { FormField } from './forms';
 import { checkCumulativeCaps, graphOfWholeDocument, planStructuralGraph } from './structural-graph';
 import {
@@ -55,7 +65,6 @@ import {
     dropOpenAction,
     readInfo,
     removeAttachments,
-    stripTagging,
 } from './structure';
 import { mergeOutputName } from './naming';
 import { checkArtifactInvariants, readbackArtifact } from './readback';
@@ -168,9 +177,29 @@ async function intakeOne(input: MergeInput, policy: M6Policy): Promise<IntakeRec
     const form = readForm(doc);
     record.fieldNames = form.fields.map((f) => f.name);
 
+    /**
+     * The adopted envelopes are decided at intake, so an unsupported source is
+     * excluded **and named** rather than failing the whole merge.
+     *
+     * M6-H10 adopted explicit partial intake: produce what can be produced and
+     * state what was omitted. Deciding the form envelope here and the optional-
+     * content envelope somewhere else would have made one of them refuse the
+     * batch and the other quietly drop a file — the same answer reported two
+     * different ways. `runMerge` revalidates both from the bytes regardless,
+     * which is what catches intake facts that are stale or untrue.
+     */
+    const formPlan = planFormForExtract(form, doc.getPageIndices());
+    if (formPlan.status === 'REFUSE') {
+        record.result = formPlan.code === 'XFA_UNSAFE'
+            ? INTAKE_RESULT.XFA_UNSAFE
+            : INTAKE_RESULT.UNSUPPORTED_FORM;
+        record.reason = formPlan.reason;
+        return record;
+    }
+
     const oc = describeOptionalContent(doc, null);
     if (oc.present && oc.unsupported.length > 0) {
-        record.result = INTAKE_RESULT.UNREADABLE;
+        record.result = INTAKE_RESULT.UNSUPPORTED_OPTIONAL_CONTENT;
         record.reason = `対応範囲外のオプショナルコンテンツを含みます: ${oc.unsupported[0]}`;
         return record;
     }
@@ -211,6 +240,29 @@ export function planMerge(intake: IntakeRecord[], options: MergeOptions = {}): M
     const excluded = new Set(options.excluded ?? []);
     const metadataPolicy = options.metadataPolicy ?? 'M4';
     const collisionPolicy = options.collisionPolicy ?? 'rename';
+
+    /**
+     * BLK-4: a requested source with no finalized state fails the whole plan.
+     *
+     * The alternative — treating it as simply absent — is exactly the silent
+     * omission this contract exists to stop. `NOT_DECIDED` is never a reason
+     * to proceed with fewer files than were asked for.
+     */
+    const undecided = intake.filter((r) => r.result === INTAKE_RESULT.NOT_DECIDED);
+    if (undecided.length > 0) {
+        return {
+            status: M6_STATUS.UNSUPPORTED_DOCUMENT,
+            reason: '次のファイルを確認できなかったため、統合を中止しました: '
+                + undecided.map((r) => r.name).join(', '),
+            intake,
+            order: [],
+            metadataPolicy,
+            collisionPolicy,
+            losses: [],
+            requiresConfirmation: [],
+            detail: { undecided: undecided.map((r) => r.name) },
+        };
+    }
 
     const accepted = intake.filter(
         (r) => r.result === INTAKE_RESULT.ACCEPTED && !excluded.has(r.id),
@@ -385,9 +437,125 @@ export async function runMerge(
         // the reconstruction does not rebuild signature fields, so its widget
         // would arrive in the artifact belonging to nothing. It goes here,
         // before the graph is counted, so the count still describes the copy.
+        // Read before the removal: `removeSignatureWidgets` takes the fields
+        // out, so a form read afterwards has nothing left to name and the loss
+        // went unreported.
+        const signatureFieldNames = readForm(source).signatureFields;
         removeSignatureWidgets(source);
 
+        /**
+         * RF-3 and the promoted ADV-7: the worker revalidates from the bytes.
+         *
+         * Intake's facts were read on the main thread, for the UI. They are not
+         * a safety authority: they can be stale, and in a worker they arrive as
+         * a message. Everything a refusal depends on is decided again here, from
+         * the document just loaded out of the bytes this run owns.
+         */
+        const revalidated = readSourceFacts(source, input.bytes.length);
+        if (!revalidated.readable || !revalidated.pageTreeWalks) {
+            return refusedMerge(
+                M6_STATUS.UNSUPPORTED_DOCUMENT,
+                input.name + ': このPDFのページ構造を確認できませんでした。',
+                plan.intake,
+                outputName,
+                { source: input.name },
+            );
+        }
+        if (revalidated.hasXfa) {
+            return refusedMerge(
+                M6_STATUS.XFA_UNSAFE,
+                input.name + ': XFAフォームを含むPDFは統合できません。',
+                plan.intake,
+                outputName,
+                { source: input.name },
+            );
+        }
+        if (revalidated.hasAppliedSignature) {
+            return refusedMerge(
+                M6_STATUS.SIGNATURE_UNSAFE,
+                input.name + ': 電子署名が適用されたPDFは統合できません。',
+                plan.intake,
+                outputName,
+                { source: input.name },
+            );
+        }
+
         const form = readForm(source);
+        // RF-3: the adopted /Tx envelope applies to a Merge source exactly as it
+        // applies to an Extract selection. A form is not supported merely because
+        // pdf-lib can copy its widgets.
+        const formPlan = planFormForExtract(form, indices);
+        if (formPlan.status === 'REFUSE') {
+            return refusedMerge(
+                formPlan.code === 'XFA_UNSAFE'
+                    ? M6_STATUS.XFA_UNSAFE
+                    : formPlan.code === 'FIELD_SPANS_SELECTION'
+                        ? M6_STATUS.FIELD_SPANS_SELECTION
+                        : formPlan.code === 'UNSUPPORTED_FORM'
+                            ? M6_STATUS.UNSUPPORTED_FORM
+                            : M6_STATUS.UNSUPPORTED_DOCUMENT,
+                input.name + ': ' + formPlan.reason,
+                plan.intake,
+                outputName,
+                { source: input.name, ...formPlan.detail },
+            );
+        }
+
+        // RF-4: the optional-content envelope, revalidated from the bytes.
+        const sourceOc = describeOptionalContent(source, indices);
+        const ocPlan = planOptionalContent(sourceOc);
+        if (ocPlan.status === 'REFUSE') {
+            return refusedMerge(
+                M6_STATUS.UNSUPPORTED_OPTIONAL_CONTENT,
+                input.name + ': ' + ocPlan.reason,
+                plan.intake,
+                outputName,
+                { source: input.name, unsupported: ocPlan.unsupported },
+            );
+        }
+
+        // M6-H5A, per source: every source-page reference is stripped before
+        // this source is counted or copied, so none survives into the merged
+        // output and the count describes the graph the copy walks.
+        const strip = sanitizeDestinations(source, indices);
+        const closure = closeSourcePageRefs(source, indices);
+        if (closure.unreadable.length > 0) {
+            return refusedMerge(
+                M6_STATUS.UNSCANNABLE_ACTIONS,
+                input.name + ': この文書のアクション構造を完全に検査できませんでした: '
+                + closure.unreadable.join(', '),
+                plan.intake,
+                outputName,
+                { source: input.name, unreadable: closure.unreadable },
+            );
+        }
+        const label = (l: LossRecord): LossRecord => ({
+            ...l,
+            what: [input.name, l.what].filter(Boolean).join(' '),
+        });
+        losses.push(...strip.losses.map(label));
+        losses.push(...closure.losses.map(label));
+
+        // BLK-2: the payload leaves before the graph is counted or copied.
+        const strippedAttachments = removeAttachments(source);
+        if (strippedAttachments.names.length > 0) {
+            losses.push({
+                kind: 'attachments',
+                what: input.name + ': ' + strippedAttachments.names.join(', '),
+                why: '添付ファイルは統合後のPDFに引き継がれません。',
+            });
+        }
+
+        if (signatureFieldNames.length > 0) {
+            // An empty signature field is safe to remove and its removal is
+            // still a structural loss, so it is named rather than assumed.
+            losses.push({
+                kind: 'applied-signature',
+                what: input.name + ': ' + signatureFieldNames.join(', '),
+                why: '空の署名欄は統合後のPDFには引き継がれないため削除しました。',
+            });
+        }
+
         const sourceFields: FormField[] = form.fields.filter((f) => f.ft !== '/Sig');
 
         // ---- structural planning, and the cumulative cap before the copy ----
@@ -409,6 +577,44 @@ export async function runMerge(
         const copied = await out.copyPages(source, indices);
         copied.forEach((page) => out.addPage(page));
         cumulative = after;
+
+        // The annotation /P back-pointers now name the merged output's pages.
+        rebuildSourcePageRefs(
+            out,
+            {
+                ...closure,
+                rebuild: closure.rebuild.map((r) => ({
+                    ...r,
+                    targetIndex: r.targetIndex + firstNewPage,
+                })),
+            },
+            Array.from({ length: out.getPageCount() }, (_v, i) => i),
+        );
+
+        if (sourceOc.present
+            && sourceOc.unsupported.length === 0
+            && sourceOc.pageProperties.length > 0) {
+            // RF-4: the proven direct-/OCG envelope is carried into the merged
+            // artifact instead of silently dropped. Page positions are shifted to
+            // the merged ones, so the structural mapping still resolves.
+            const shifted = {
+                ...sourceOc,
+                pageProperties: sourceOc.pageProperties.map((e) => ({
+                    ...e,
+                    pageIndex: e.pageIndex + firstNewPage,
+                })),
+            };
+            const carried = carryOptionalContent(source, shifted, out);
+            if (carried.status === 'REFUSED') {
+                return refusedMerge(
+                    M6_STATUS.UNSUPPORTED_OPTIONAL_CONTENT,
+                    input.name + ': ' + carried.reason,
+                    plan.intake,
+                    outputName,
+                    { source: input.name, unsupported: carried.unsupported },
+                );
+            }
+        }
 
         if (sourceFields.length > 0) {
             const rebuilt = rebuildAcroForm(out, sourceFields, {
@@ -436,7 +642,7 @@ export async function runMerge(
         );
     }
 
-    stripTagging(out);
+    stripTaggingEverywhere(out);
     const removedAttachments = removeAttachments(out);
     if (removedAttachments.names.length > 0) {
         losses.push({
@@ -458,7 +664,11 @@ export async function runMerge(
         );
     }
 
+    scrubAllJavaScript(out);
     applyMergeMetadata(out, plan.metadataPolicy, metadataSources);
+
+    // Nothing points at it, so nothing writes it.
+    pruneUnreachable(out);
 
     const bytes = await out.save({ useObjectStreams: false });
 

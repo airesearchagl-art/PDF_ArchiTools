@@ -107,6 +107,33 @@ function walkPageTree(doc: PDFDocument): { leaves: number; consistent: boolean }
     return { leaves, consistent };
 }
 
+/**
+ * An inheritable field attribute, resolved up the `/Parent` chain.
+ *
+ * `/FT` and `/V` are inheritable, so a terminal field may carry neither and
+ * still be a signature field holding an applied signature. Reading only what
+ * sits on the field itself made an inherited applied signature invisible, and
+ * the document went on to be refused as `UNSUPPORTED_FORM` — or, worse for a
+ * Merge, accepted — instead of being recognised as signed.
+ */
+function inheritedField(doc: PDFDocument, field: PDFDict, key: string): unknown {
+    const seen = new Set<string>();
+    let current: PDFDict | null = field;
+    for (let depth = 0; current && depth <= MECHANISM_BOUNDS.maxInheritanceDepth; depth += 1) {
+        const own = current.get(PDFName.of(key));
+        if (own !== undefined) return look(doc, own);
+        const parentRaw: unknown = current.get(PDFName.of('Parent'));
+        if (parentRaw === undefined) return undefined;
+        if (parentRaw instanceof PDFRef) {
+            if (seen.has(parentRaw.tag)) return undefined;
+            seen.add(parentRaw.tag);
+        }
+        const parent = look(doc, parentRaw);
+        current = parent instanceof PDFDict ? parent : null;
+    }
+    return undefined;
+}
+
 /** Every terminal AcroForm field, walked through `/Kids` with a bound. */
 function walkFields(
     doc: PDFDocument,
@@ -238,13 +265,15 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
             facts.hasAcroForm = true;
             facts.hasXfa = acro.get(PDFName.of('XFA')) !== undefined;
             const readable = walkFields(doc, acro, (field, name) => {
-                const ft = nameOf(field.get(PDFName.of('FT')));
+                // Resolved through `/Parent`, because both keys are inheritable.
+                const ft = nameOf(field.get(PDFName.of('FT')))
+                    || nameOf(inheritedField(doc, field, 'FT'));
                 if (ft !== '/Sig') return;
                 facts.hasSignatureField = true;
                 facts.signatureFieldNames.push(name || '(no name)');
                 // The distinction that matters: a value that is a dictionary is
                 // an applied signature. An empty field is a form control.
-                const value = look(doc, field.get(PDFName.of('V')));
+                const value = inheritedField(doc, field, 'V');
                 if (value instanceof PDFDict) facts.hasAppliedSignature = true;
             });
             if (!readable) facts.readable = false;

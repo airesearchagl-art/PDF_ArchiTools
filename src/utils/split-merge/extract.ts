@@ -41,9 +41,11 @@ import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
 import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
 import {
-    planDestinations,
+    closeSourcePageRefs,
     rebuildDestinations,
-    stripInternalDestinations,
+    rebuildSourcePageRefs,
+    sanitizeDestinations,
+    wouldBreakNavigation,
 } from './destinations';
 import {
     carryOptionalContent,
@@ -64,10 +66,12 @@ import {
     dropOpenAction,
     hasOutlines,
     hasPageLabels,
+    hasXmpMetadata,
+    metadataGaps,
     readInfo,
     removeAttachments,
-    stripTagging,
 } from './structure';
+import { pruneUnreachable, scrubAllJavaScript, stripTaggingEverywhere } from './prune';
 import { extractOutputName } from './naming';
 import { checkArtifactInvariants, readbackArtifact } from './readback';
 
@@ -245,7 +249,7 @@ export async function planExtract(
         );
     }
 
-    const destinations = planDestinations(doc, selection);
+    const destinations = wouldBreakNavigation(doc, selection);
     if (destinationPolicy === 'E1'
         && (destinations.wouldBreak > 0 || destinations.otherSites.length > 0)) {
         const parts: string[] = [];
@@ -273,8 +277,24 @@ export async function planExtract(
     // document. A second load is used rather than the one above, so planning
     // never hands the caller a mutated document.
     const working = await PDFDocument.load(sourceBytes, { updateMetadata: false });
-    const workingDestinations = planDestinations(working, selection);
-    const strip = stripInternalDestinations(working, workingDestinations, selection);
+    const strip = sanitizeDestinations(working, selection);
+    // M6-H5A: the routes `/Dest` never covered, closed before the graph is
+    // counted so the count describes a graph with no source-page reference in
+    // it. A route the walk could not finish is a refusal, not an absence.
+    const closure = closeSourcePageRefs(working, selection);
+    if (closure.unreadable.length > 0) {
+        return refusedPlan(
+            M6_STATUS.UNSCANNABLE_ACTIONS,
+            `この文書のアクション構造を完全に検査できませんでした: ${closure.unreadable.join(', ')}`,
+            selection,
+            facts,
+            destinationPolicy,
+            { unreadable: closure.unreadable },
+        );
+    }
+    // BLK-2: attachments are removed from the working copy, before planning,
+    // so the payload is never part of the graph that gets counted or copied.
+    removeAttachments(working);
     // Every `/Sig` widget goes, applied or empty: the reconstruction does not
     // rebuild signature fields (M6-H3 defers that), and a widget left behind
     // would be an orphan in the artifact. An applied signature is additionally a
@@ -298,6 +318,7 @@ export async function planExtract(
 
     const losses: LossRecord[] = [
         ...strip.losses,
+        ...closure.losses,
         ...describeStructuralLosses(facts),
     ];
     if (hasOutlines(doc)) {
@@ -337,17 +358,27 @@ export async function planExtract(
     };
 }
 
+/**
+ * A refusal, with the losses that caused it.
+ *
+ * RF-7: the confirmation path used to answer with an empty `losses` array, so
+ * the UI asked someone to agree to a structural loss it could not name — the
+ * attachment's filename in particular. A confirmation is only valid for what was
+ * visibly presented, which means the losses have to travel with the refusal that
+ * asks for it.
+ */
 const refusedResult = (
     status: ExtractResult['status'],
     reason: string,
     outputName: string,
     detail?: Record<string, unknown>,
+    losses: LossRecord[] = [],
 ): ExtractResult => ({
     status,
     reason,
     bytes: null,
     outputName,
-    losses: [],
+    losses,
     planned: null,
     actual: null,
     readback: null,
@@ -371,7 +402,15 @@ export async function runExtract(
 
     const plan = await planExtract(sourceBytes, options);
     if (plan.status !== M6_STATUS.READY) {
-        return refusedResult(plan.status, plan.reason ?? GENERIC_REFUSAL_JA, outputName, plan.detail);
+        // The losses travel with the refusal: a confirmation the UI cannot name
+        // is a confirmation nobody actually gave.
+        return refusedResult(
+            plan.status,
+            plan.reason ?? GENERIC_REFUSAL_JA,
+            outputName,
+            { ...plan.detail, requiresConfirmation: plan.requiresConfirmation },
+            plan.losses,
+        );
     }
     if (!stillOurs()) {
         return refusedResult(M6_STATUS.CANCELLED, '操作が変更されたため、この処理は中止しました。', outputName);
@@ -381,10 +420,25 @@ export async function runExtract(
 
     // A working copy, transformed exactly as planning transformed its own.
     let working: PDFDocument | null = await PDFDocument.load(sourceBytes, { updateMetadata: false });
-    const sourceInfo = readInfo(working);
-    const destinations = planDestinations(working, selection);
-    const strip = stripInternalDestinations(working, destinations, selection);
+    // Metadata is read from a document this run does not transform: the working
+    // copy is about to have destinations stripped and attachments removed, and
+    // a metadata comparison against a mutated source would compare the artifact
+    // with something that never existed.
+    const metadataSource = await PDFDocument.load(sourceBytes, { updateMetadata: false });
+    const sourceInfo = readInfo(metadataSource);
+    const sourceHadXmp = hasXmpMetadata(metadataSource);
+    const strip = sanitizeDestinations(working, selection);
+    const closure = closeSourcePageRefs(working, selection);
+    if (closure.unreadable.length > 0) {
+        return refusedResult(
+            M6_STATUS.UNSCANNABLE_ACTIONS,
+            `この文書のアクション構造を完全に検査できませんでした: ${closure.unreadable.join(', ')}`,
+            outputName,
+            { unreadable: closure.unreadable },
+        );
+    }
     if (plan.facts.hasSignatureField) removeSignatureWidgets(working);
+    const removedAttachments = removeAttachments(working);
 
     const ocDescription = describeOptionalContent(working, selection);
     const form = readForm(working);
@@ -423,6 +477,7 @@ export async function runExtract(
 
     // ---- 8. reconstruction ---------------------------------------------------
     rebuildDestinations(out, strip, selection);
+    rebuildSourcePageRefs(out, closure, selection);
 
     if (ocDescription.present && ocDescription.unsupported.length === 0) {
         const carried = carryOptionalContent(working, ocDescription, out);
@@ -441,8 +496,11 @@ export async function runExtract(
         if (carriedFields.length > 0) rebuildAcroForm(out, carriedFields, { da: form.da });
     }
 
-    stripTagging(out);
-    const removedAttachments = removeAttachments(out);
+    // Every tagging remnant, not just the catalog keys: an annotation's
+    // `/StructParent` and a form XObject's `/StructParents` point at a tree
+    // that is gone just as surely as a page's does.
+    stripTaggingEverywhere(out);
+    removeAttachments(out);
     dropOpenAction(out);
 
     const sanitized = sanitizeJavaScript(out);
@@ -452,7 +510,12 @@ export async function runExtract(
         });
     }
 
-    applyExtractMetadata(out, sourceInfo, options.sourceName);
+    // Belt and braces beside the sweep below: a script inside something that
+    // is still reachable has to go too, and a top-level `/S` check never saw
+    // an action nested as a direct dictionary.
+    scrubAllJavaScript(out);
+
+    const metadata = applyExtractMetadata(metadataSource, out, options.sourceName);
 
     // A5, decided now that both counts exist. A mismatch means the graph that
     // was capped is not the graph that was copied, which makes the cap check a
@@ -474,6 +537,12 @@ export async function runExtract(
         return refusedResult(M6_STATUS.CANCELLED, '操作が変更されたため、この処理は中止しました。', outputName);
     }
 
+    // Nothing points at it, so nothing writes it. pdf-lib serialises every
+    // registered object whether or not it is reachable, which is how a
+    // detached action and an orphaned attachment payload both reached the
+    // bytes while every count said zero.
+    pruneUnreachable(out);
+
     // ---- 10. save ------------------------------------------------------------
     const bytes = await out.save({ useObjectStreams: false });
 
@@ -489,6 +558,19 @@ export async function runExtract(
     }
 
     // ---- 12. readback --------------------------------------------------------
+    // M6-H7: metadata is part of the artifact, so a gap is a refusal rather
+    // than a note attached to a file already handed over.
+    const reopened = await PDFDocument.load(bytes, { updateMetadata: false });
+    const gaps = metadataGaps(sourceInfo, reopened, sourceHadXmp);
+    if (gaps.length > 0) {
+        return refusedResult(
+            M6_STATUS.METADATA_NOT_PRESERVED,
+            '元のPDFの文書情報を引き継げませんでした: ' + gaps.join(', '),
+            outputName,
+            { gaps, carried: metadata.carried, dropped: metadata.dropped },
+        );
+    }
+
     const readback = await readbackArtifact(bytes);
     const invariant = checkArtifactInvariants(readback, selection.length);
     if (invariant) {

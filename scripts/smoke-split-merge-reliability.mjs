@@ -482,8 +482,237 @@ try {
         constants.policy.provisional === true && constants.policy.origin === 'PROVISIONAL_PRE_B4',
         `${constants.policy.origin}`);
 
-    // ---- 13. local only ------------------------------------------------------
-    console.log('\n=== 13. local only ===');
+    // ---- 13. BLK-1: artifact-wide JavaScript, measured independently --------
+    //
+    // Every check below reads the artifact with the gate's own walker and looks
+    // for the marker in the serialized bytes. The production scanner reported
+    // zero for all three of these while the script was in the file, so asking it
+    // again would prove nothing.
+    console.log('\n=== 13. BLK-1 artifact-wide JavaScript ===');
+
+    for (const [fixture, marker, selection] of [
+        ['rem-js-detached-next', 'M6JS_DETACHED_NEXT', [0, 1]],
+        ['rem-js-fileattachment-aa', 'M6JS_FILEATTACH_AA', [0]],
+        ['rem-js-detached-parent-field', 'M6JS_DETACHED_FIELD', [0]],
+    ]) {
+        const r = await call('extractAndInspect', fixture, selection, marker);
+        check(`${fixture}: no JavaScript survives, by independent inspection`,
+            r.status === 'READY'
+            && r.independent?.javascript === 0
+            && r.markerInBytes === false,
+            `${r.status}, independent js ${r.independent?.javascript}, marker in bytes ${r.markerInBytes}`);
+        check(`${fixture}: the production readback agrees with the independent one`,
+            r.production?.artifactWideJavaScript === r.independent?.javascript,
+            `production ${r.production?.artifactWideJavaScript} vs independent ${r.independent?.javascript}`);
+    }
+
+    // ---- 14. BLK-2: the attachment payload is gone --------------------------
+    console.log('\n=== 14. BLK-2 attachment payload ===');
+
+    const att = await call('extractAndInspect', 'rem-js-fileattachment-aa', [0],
+        'M6ATTACHMENT_PAYLOAD_MARKER');
+    check('the embedded payload is absent from the serialized bytes',
+        att.markerInBytes === false, `marker in bytes ${att.markerInBytes}`);
+    check('no FileAttachment annotation, Filespec /EF or EmbeddedFile survives',
+        att.independent?.fileAttachmentAnnots === 0
+        && att.independent?.filespecsWithEF === 0
+        && att.independent?.embeddedFileStreams === 0,
+        JSON.stringify({
+            annots: att.independent?.fileAttachmentAnnots,
+            filespecs: att.independent?.filespecsWithEF,
+            streams: att.independent?.embeddedFileStreams,
+        }));
+    check('the attachment is named in the losses, so a confirmation can show it',
+        (att.losses ?? []).some((l) => l.kind === 'attachments' && (l.what ?? '').includes('secret-notes.txt')),
+        JSON.stringify((att.losses ?? []).map((l) => `${l.kind}:${l.what ?? ''}`)));
+
+    const attMerge = await call('mergeAndInspect', ['rem-js-fileattachment-aa', 'merge-b'],
+        'M6ATTACHMENT_PAYLOAD_MARKER');
+    check('a Merge carries no attachment payload either',
+        attMerge.status === 'READY'
+        && attMerge.markerInBytes === false
+        && attMerge.independent?.embeddedFileStreams === 0,
+        `${attMerge.status}, marker ${attMerge.markerInBytes}`);
+
+    // ---- 15. M6-H5A: source-page references on every route ----------------
+    console.log('\n=== 15. M6-H5A source-page reference closure ===');
+
+    for (const fixture of [
+        'rem-pageref-annot-p',
+        'rem-pageref-annot-aa',
+        'rem-pageref-page-aa',
+        'rem-pageref-recursive-next',
+    ]) {
+        const r = await call('extractAndInspect', fixture, [0], null);
+        check(`${fixture}: no source-page reference survives`,
+            r.status === 'READY'
+            && r.independent?.strayPageRefs === 0
+            && r.independent?.orphanPages === 0,
+            `${r.status}, stray ${r.independent?.strayPageRefs}, orphan ${r.independent?.orphanPages}`);
+    }
+
+    // A widget `/AA` is outside the adopted `/Tx` envelope (M6-H3 lists `/AA`
+    // among the entries the reconstruction does not restore), so the contract's
+    // answer is a typed refusal rather than a carried document. Asserting READY
+    // here would have been asserting that the envelope leaks.
+    const widgetAa = await call('extractAndInspect', 'rem-pageref-widget-aa', [0], null);
+    check('rem-pageref-widget-aa: refused as UNSUPPORTED_FORM, so nothing is carried',
+        widgetAa.status === 'UNSUPPORTED_FORM' && widgetAa.independent === null,
+        `${widgetAa.status}`);
+    const keptBoth = await call('extractAndInspect', 'rem-pageref-annot-p', [0, 1], null);
+    check('rem-pageref-annot-p with both pages kept still holds the invariant',
+        keptBoth.status === 'READY' && keptBoth.independent?.strayPageRefs === 0,
+        `${keptBoth.status}, stray ${keptBoth.independent?.strayPageRefs}`);
+
+    const mergeRefs = await call('mergeAndInspect', ['rem-pageref-annot-p', 'merge-b'], null);
+    check('a Merge rebuilds page references against the merged output',
+        mergeRefs.status === 'READY' && mergeRefs.independent?.strayPageRefs === 0,
+        `${mergeRefs.status}, stray ${mergeRefs.independent?.strayPageRefs}`);
+
+    // ---- 16. M6-H9b-A: inherited resources ----------------------------------
+    console.log('\n=== 16. M6-H9b-A inherited resources ===');
+
+    const inhProps = await call('optionalContent', 'rem-inherited-properties', [0]);
+    check('optional content in an INHERITED /Properties is found',
+        inhProps.present === true && inhProps.groups.includes('M6-INHERITED-LAYER'),
+        JSON.stringify({ present: inhProps.present, groups: inhProps.groups }));
+    const inhPropsExtract = await call('extract', 'rem-inherited-properties', [0]);
+    check('and the extract carries it rather than reporting none',
+        inhPropsExtract.status === 'READY', `${inhPropsExtract.status}`);
+
+    for (const [fixture, why] of [
+        ['rem-inherited-xobject-oc', 'an inherited /XObject carrying /OC'],
+        ['rem-inherited-smask-g', 'an inherited /ExtGState /SMask /G naming a group'],
+    ]) {
+        const found = await call('optionalContent', fixture, [0]);
+        const extracted = await call('extract', fixture, [0]);
+        check(`${why} is found and refused, not blind READY`,
+            found.unsupported.length > 0
+            && extracted.status === 'UNSUPPORTED_OPTIONAL_CONTENT',
+            `${extracted.status}: ${found.unsupported.join(' | ')}`);
+    }
+
+    // ---- 17. RF-6: inherited field type and signature ------------------------
+    console.log('\n=== 17. RF-6 inherited /FT and /V ===');
+
+    const inhSig = await call('signatureFacts', 'rem-inherited-sig-field');
+    check('an inherited /FT /Sig is seen as a signature field',
+        inhSig.hasSignatureField === true && inhSig.hasAppliedSignature === false,
+        JSON.stringify(inhSig));
+    const inhApplied = await call('signatureFacts', 'rem-inherited-sig-applied');
+    check('an inherited applied signature is seen as applied',
+        inhApplied.hasSignatureField === true && inhApplied.hasAppliedSignature === true,
+        JSON.stringify(inhApplied));
+
+    const inhAppliedIntake = await call('intake', ['rem-inherited-sig-applied']);
+    check('Merge refuses an inherited applied signature as SIGNATURE_UNSAFE',
+        inhAppliedIntake[0].result === 'SIGNATURE_UNSAFE',
+        `${inhAppliedIntake[0].result}`);
+    const inhAppliedExtract = await call('extractAndInspect', 'rem-inherited-sig-applied', [0], null);
+    check('Extract removes it and leaves no orphan widget',
+        inhAppliedExtract.status === 'READY'
+        && inhAppliedExtract.production?.orphanWidgets === 0,
+        `${inhAppliedExtract.status}, orphan widgets ${inhAppliedExtract.production?.orphanWidgets}`);
+
+    const emptySigMerge = await call('mergeAndInspect', ['rem-inherited-sig-field', 'merge-b'], null);
+    check('an empty signature field is removed, and the loss is named',
+        emptySigMerge.status === 'READY'
+        && (emptySigMerge.losses ?? []).some((l) => l.kind === 'applied-signature'),
+        `${emptySigMerge.status}, losses `
+        + JSON.stringify((emptySigMerge.losses ?? []).map((l) => l.kind)));
+
+    // ---- 18. RF-8: metadata ---------------------------------------------------
+    console.log('\n=== 18. RF-8 metadata ===');
+
+    const meta = await call('extractMetadata', 'rem-metadata-rich', [0]);
+    check('the standard Info keys survive',
+        meta.info?.Title === 'M6_TITLE_MARKER' && meta.info?.Author === 'M6_AUTHOR_MARKER',
+        JSON.stringify(meta.info));
+    check('custom Info keys survive too',
+        meta.info?.Company === 'M6_COMPANY_MARKER' && meta.info?.M6Custom === 'M6_CUSTOM_MARKER',
+        JSON.stringify({ Company: meta.info?.Company, M6Custom: meta.info?.M6Custom }));
+    check('the XMP packet is carried, and is in the bytes',
+        meta.hasXmp === true && meta.xmpMarkerInBytes === true,
+        `xmp ${meta.hasXmp}, marker ${meta.xmpMarkerInBytes}`);
+
+    // ---- 19. tagging remnants below the catalog -------------------------------
+    console.log('\n=== 19. tagging remnants ===');
+
+    const tags = await call('extractAndInspect', 'rem-tagging-remnants', [0], null);
+    check('every defined tagging remnant is zero, annotations and XObjects included',
+        tags.status === 'READY' && tags.independent?.taggingRemnants === 0,
+        JSON.stringify({
+            status: tags.status,
+            root: tags.independent?.structTreeRoot,
+            markInfo: tags.independent?.markInfo,
+            structParents: tags.independent?.structParents,
+            structParent: tags.independent?.structParent,
+        }));
+
+    // ---- 20. RF-1: Encrypt, spelled every way ---------------------------------
+    console.log('\n=== 20. RF-1 escaped /Encrypt ===');
+
+    for (const fixture of [
+        'rem-encrypt-plain',
+        'rem-encrypt-partly-escaped',
+        'rem-encrypt-fully-escaped',
+        'rem-encrypt-lowercase-escaped',
+    ]) {
+        const v = await call('boundary', fixture);
+        check(`${fixture} is refused as ENCRYPTED`,
+            v.verdict === 'REFUSE' && v.code === 'ENCRYPTED',
+            `${v.verdict} ${v.code ?? ''} @${v.stage}`);
+    }
+
+    // ---- 21. RF-3 and RF-4: Merge revalidation and optional content -----------
+    console.log('\n=== 21. RF-3 / RF-4 Merge envelope ===');
+
+    // M6-H10 adopted explicit partial intake: a source outside an adopted
+    // envelope is excluded and named, and the merge still produces what it can.
+    // The whole batch failing would be a different contract, and a source
+    // vanishing from the list would be the defect this milestone exists for.
+    for (const [fixture, expected] of [
+        ['form-choice', 'UNSUPPORTED_FORM'],
+        ['form-tx-ff', 'UNSUPPORTED_FORM'],
+        ['ocmd', 'UNSUPPORTED_OPTIONAL_CONTENT'],
+        ['ocg-extgstate-smask', 'UNSUPPORTED_OPTIONAL_CONTENT'],
+    ]) {
+        const r = await call('mergeAndInspect', ['merge-a', fixture], null);
+        const row = (r.intake ?? []).find((x) => x.name === `${fixture}.pdf`);
+        check(`a Merge source with ${fixture} is excluded as ${expected}, and named`,
+            r.status === 'READY' && row?.result === expected,
+            `${r.status}, ${fixture} = ${row?.result}`);
+    }
+
+    // And the backstop: `runMerge` revalidates from the bytes, so intake facts
+    // that are stale or untrue cannot carry an unsupported source through.
+    const bypassed = await call('mergeWithFalseIntake', ['merge-a', 'form-choice']);
+    check('false SAFE intake facts do not bypass the worker revalidation',
+        bypassed.status === 'UNSUPPORTED_FORM' && bypassed.bytes === null,
+        `${bypassed.status}: ${(bypassed.reason ?? '').slice(0, 60)}`);
+
+    const ocgMerge = await call('mergeAndInspect', ['rem-merge-ocg-a', 'rem-merge-ocg-b'], null);
+    check('a Merge of two supported OCG sources carries coherent optional content',
+        ocgMerge.status === 'READY'
+        && ocgMerge.optionalContent?.present === true
+        && ocgMerge.optionalContent?.unsupported.length === 0
+        && ocgMerge.optionalContent?.groups.includes('M6-MERGE-LAYER-A')
+        && ocgMerge.optionalContent?.groups.includes('M6-MERGE-LAYER-B'),
+        `${ocgMerge.status}, groups `
+        + JSON.stringify(ocgMerge.optionalContent?.groups));
+
+    // ---- 22. BLK-4: no silent merge omission ----------------------------------
+    console.log('\n=== 22. BLK-4 no silent omission ===');
+
+    const undecided = await call('mergeUndecided', ['merge-a', 'merge-b']);
+    check('an undecided requested source fails the plan closed',
+        undecided.planStatus !== 'READY' && undecided.bytes === null,
+        `${undecided.planStatus}: ${(undecided.reason ?? '').slice(0, 70)}`);
+    check('and the refusal names the file it could not decide',
+        (undecided.reason ?? '').includes('merge-b.pdf'), undecided.reason ?? '');
+
+    // ---- 23. local only ------------------------------------------------------
+    console.log('\n=== 23. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));
     check('no page error during the run', pageErrors.length === 0, pageErrors.join(' | '));
 
