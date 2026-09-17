@@ -90,7 +90,7 @@ export {
 
 export { readSourceFacts, classifyLoadError } from './source-facts';
 export { describeOptionalContent, planOptionalContent } from './optional-content';
-export { scanJavaScript, scanArtifactWideJavaScript, sanitizeJavaScript } from './javascript';
+export { scanJavaScript, sanitizeJavaScript } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export { measureDestinationInvariants, planDestinations } from './destinations';
 export { readbackArtifact, checkArtifactInvariants } from './readback';

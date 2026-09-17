@@ -38,7 +38,7 @@ import {
     readForm,
     planFormForExtract,
     scanJavaScript,
-    scanArtifactWideJavaScript,
+    censusJavaScript,
     readSourceFacts,
     measureDestinationInvariants,
     extractOutputName,
@@ -332,9 +332,12 @@ window.__m6 = {
     javascript: async (name) => {
         const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
         const scan = scanJavaScript(doc);
+        // The artifact-wide number comes from the census, which is the only
+        // thing in the package that claims to have looked everywhere.
+        const census = censusJavaScript(doc);
         return plainly({
             reachable: scan.count,
-            artifactWide: scanArtifactWideJavaScript(doc),
+            artifactWide: census.complete ? census.value.length : null,
             complete: scan.complete,
             incomplete: scan.incomplete,
         });

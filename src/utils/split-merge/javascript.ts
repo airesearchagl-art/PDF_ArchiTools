@@ -305,22 +305,6 @@ export function scanJavaScript(doc: PDFDocument): JavaScriptScan {
     };
 }
 
-/**
- * The object table, independent of what can be reached from the catalog.
- *
- * `enumerateIndirectObjects` lists what the document will actually write, so a
- * JavaScript action that was detached but never deleted shows up here and
- * nowhere else. This is the measurement the reachable scan cannot make.
- */
-export function scanArtifactWideJavaScript(doc: PDFDocument): number {
-    let count = 0;
-    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
-        if (!(obj instanceof PDFDict)) continue;
-        if (!actionCarriesJavaScript(obj)) continue;
-        count += 1;
-    }
-    return count;
-}
 
 export type SanitizeOutcome =
     | { status: 'REFUSED'; incomplete: string[]; reason: string }
