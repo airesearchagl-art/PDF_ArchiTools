@@ -1,0 +1,631 @@
+{
+  "gate": "M6 Split / Merge Reliability Architecture",
+  "status": "ADOPTED — M6-H1 … M6-H14 adopted by the Human on 2026-09-14, as proposed; this research itself adopted nothing; B1 closed on 2026-09-15; B2 closed on 2026-09-15 as PARTIALLY BOUNDABLE, and its conclusion adopted by the Human on 2026-09-15; B3, the load boundary, accepted by the Human on 2026-09-15 as a mandatory pre-implementation blocker, closed by research on 2026-09-16 as A — hard pre-load boundary proven; the B3 conclusion and the production load architecture (H11-B3-1 … H11-B3-6) adopted by the Human on 2026-09-16, with the research test limits NOT adopted as product values; B4, product load policy and real-drawing compatibility, is OPEN and blocks Ready, release and production enablement, not implementation; implementation has not started, and may be authorised only after a Final Independent Architecture Re-Review of the exact current head PASSes",
+  "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+  "revision": "answers Required Fix A/B/C/D — the optional-content detection envelope, artifact-wide JavaScript remnants, /Order label position, and decision-record consistency. Builds on RF-M6-R1…R6, RF-S1/S2, RF-U1/U2 and RF-V1.",
+  "adoption": {
+    "status": "ADOPTED",
+    "adoptedOn": "2026-09-14",
+    "recordedOn": "2026-09-15",
+    "decidedBy": "Human — the repository owner, in reply to the M6 Human Architecture Adoption Proposal",
+    "scope": "every decision M6-H1 … M6-H14, as proposed and without amendment",
+    "researchBasis": {
+      "testedSourceHead": "e2ba4b20ac4dbacffb37cbe230859ba9e2cb18c3",
+      "evidenceOnlyFinalHead": "749462423fc4d25b49acf5ea51f312c055d82711",
+      "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+      "researchGate": "151/151",
+      "browserGate": "9/9",
+      "independentArchitectureReReview": "PASS",
+      "exactHeadCoreCi": "run 34856692922 completed / success — Core CI is separate from the M6 research gate and does not verify the research conclusions"
+    },
+    "implementationBlockers": [
+      {
+        "id": "B1",
+        "decision": "M6-H9b",
+        "state": "CLOSED",
+        "closedOn": "2026-09-15",
+        "closedWith": "closure A, as adopted: the walker opens /ExtGState -> /SMask -> /G and walks /G as a form through the same walkStream, sharing the visited set and the depth bound of 24; no /SMask and /SMask /None are clean, and a mask that cannot be read or is neither /None nor a dictionary, or a /G that is missing, dangling or not a form XObject stream, is refused",
+        "closureEvidence": "research gate section 20: ocg-extgstate-smask READY before the fix and REFUSED after; smask-dangling-g, smask-malformed, smask-g-not-form and smask-depth-exceeded refused on the soft-mask path; smask-shared-g walked once and refused; smask-clean and smask-none not refused. The tested source head is the commit that carries this record and the evidence-only head the one after it; neither can be named inside the file",
+        "blocker": "the /ExtGState -> /SMask -> /G -> form XObject resources path is not walked; ocg-extgstate-smask extracts READY with a group behind it",
+        "closure": "recommended: add the soft-mask form's resource scope to the walker and check it under the existing fail-closed contract; minimum: refuse with UNSUPPORTED_OPTIONAL_CONTENT as soon as /ExtGState /SMask is present",
+        "forbidden": "READY while this known blind path remains open"
+      },
+      {
+        "id": "B2",
+        "decision": "M6-H11",
+        "state": "CLOSED",
+        "closedOn": "2026-09-15",
+        "closedWith": "the Object-Graph Memory Sub-Spike (object-graph-memory.md): memory model PARTIALLY BOUNDABLE. Every term a copy and a plain save create is countable before it exists once the source is loaded; the load itself is not boundable with pdf-lib 1.17.1; heap bytes per object stay UNKNOWN; no memory preset is adoptable, M5's included",
+        "closureEvidence": "object-graph memory gate: the walker equalled the real copy in 15 shapes; merge growth equalled the per-source plans in 2 merges; plain-writer output length predicted exactly in 3 cases; probes that page count, file size and packing do not bound the graph, and that input bytes do not bound load-time decode (mem-k-objstm-inflation, 1,012x). The tested source head is the commit that carries this record and the evidence-only head the one after it",
+        "blocker": "M6 Object-Graph Memory Sub-Spike — the dominant memory term is UNKNOWN",
+        "closure": "answer the four questions in budget.md from pinned source",
+        "forbidden": "any M6 memory preset before it closes, M5's 512 MiB / 1 GiB / 2 GiB included"
+      },
+      {
+        "id": "B3",
+        "decision": "M6-H11",
+        "state": "CLOSED",
+        "closedOn": "2026-09-16",
+        "outcome": "A — CLOSED: hard pre-load boundary proven",
+        "closedWith": "the Load Boundary Sub-Spike (load-boundary.md): a staged pre-parse boundary — input, raw-name-scan, walk, attribution, declared-values, decode, decoded-content — that answers PASS or a typed REFUSE with its stage before PDFDocument.load is called, decodes through pako with a hard stop, and refuses ambiguous or unsupported syntax rather than resolving it",
+        "closureEvidence": "load-boundary gate, node half: every dangerous shape refused before load at its expected stage, L16 at the walk and L16b only at the decoded-content scan, and K refused with pdf-lib's load never called; per-stream and cumulative caps allowed exactly and refused at +1, with at most the cap plus one 16,384 B chunk ever materialised; a differential oracle over 36 fixtures (one process each), 576 mutants (135 passed) and 419 corpus documents (411 passed) found no document the boundary passed on which pdf-lib decoded more than it counted, and no decode off the observed route. The browser half — transfer, cancellation, timeout, typed failure, refusal inside a Worker — is defence in depth and counts toward none of it. The tested source head is the commit that carries this record and the evidence-only head the one after it",
+        "closureConditionsMet": [
+          "every dangerous shape refused before PDFDocument.load",
+          "the boundary itself bounded: decode, chunk, retention and parse work",
+          "load-time decode surface covered, and the oracle shown not blind",
+          "differential oracle: known false negatives 0",
+          "exact boundary: cap allowed, cap + 1 refused, per stream and cumulatively",
+          "ambiguous or unsupported syntax refused, never guessed at"
+        ],
+        "notClaimed": [
+          "anything beyond pdf-lib 1.17.1",
+          "that no input exists on which the boundary under-counts — known false negatives are 0 across the shapes, mutants and corpus tried",
+          "a bound on heap bytes per parsed object, or any adoptable memory preset",
+          "compatibility with real drawings, which were not available"
+        ],
+        "proposedBy": "B2 on 2026-09-15",
+        "acceptedBy": "Human on 2026-09-15, as a mandatory pre-implementation blocker",
+        "defenceOrder": {
+          "primary": "a pre-parse hard boundary: a bounded inspection of the raw bytes that refuses dangerous load-time expansion before PDFDocument.load is called",
+          "secondary": "a disposable Worker, as defence in depth"
+        },
+        "workerAloneCloses": false,
+        "workerAloneClosesWhyNot": [
+          "a Worker has no standard per-worker hard memory ceiling",
+          "nothing guarantees a typed refusal before an out-of-memory failure",
+          "renderer or process failure isolation is not a hard safety contract",
+          "a timeout is not a memory bound"
+        ],
+        "closureOutcomes": [
+          "A — CLOSED: hard pre-load boundary proven",
+          "B — CLOSED RESEARCH / NEW ARCHITECTURE REQUIRED: a hard load boundary shown not buildable on the current pdf-lib route, and the architecture change named as a new blocker",
+          "C — OPEN: evidence insufficient"
+        ],
+        "blocker": "pdf-lib 1.17.1 parses every object and inflates every object stream and cross-reference stream at load, with no cap and no hook to stop it, and no term available before load bounds what that allocates (mem-k-objstm-inflation: 33,149 B in, 33,554,457 B decoded; peak RSS +80.3 MiB during that load, MEASURED_ONLY)",
+        "closure": "a Load Boundary Sub-Spike that refuses such a document before pdf-lib's parse can allocate without limit, proven at least against mem-k-objstm-inflation",
+        "forbidden": "starting M6 implementation, or treating an input-byte limit as a bound on load-time memory",
+        "humanOpen": "whether the pre-parse boundary is adopted as M6's load contract; the limit values; the decoder (pako 2.1.0 is resolved only transitively here); main thread or Worker, and whether the Worker is kept as defence in depth; whether strict-syntax refusals are acceptable for real drawings",
+        "adoptedByHuman": "2026-09-16 — the B3 research conclusion (A) adopted; the production load architecture recorded as M6-H11.loadBoundaryDecisions, H11-B3-1 … H11-B3-6",
+        "humanOpenResolution": "answered by the Human Gate on 2026-09-16: load contract ADOPT (H11-B3-1); the research test limit values NOT adopted as product values, moved to B4 (H11-B3-2); decoder pako 2.1.0 as a direct dependency (H11-B3-3); a disposable Worker as secondary defence in depth (H11-B3-4); strict syntax refusal ADOPT for the MVP, its real-drawing compatibility checked in B4 (H11-B3-5); the proof bound to pdf-lib 1.17.1 (H11-B3-6). The humanOpen text above is left as the research wrote it."
+      }
+    ],
+    "preReadyBlockers": [
+      {
+        "id": "B4",
+        "decision": "M6-H11",
+        "state": "OPEN",
+        "type": "PRE-READY / PRE-RELEASE BLOCKER",
+        "not": "a pre-implementation blocker",
+        "recordedOn": "2026-09-16",
+        "raisedBy": "the Human Gate, in H11-B3-2, on adopting B3",
+        "question": "the product limit policy of M6's production load boundary, and how much conservative refusal of real architectural PDFs is acceptable",
+        "scope": "the product load policy and real-drawing compatibility gate. On 2026-09-17 the Human recorded that it also covers the post-load structural product caps of M6-H11.extractExecutionDecisions (H11-EXTRACT-3), and the Merge cumulative structural cap values: the pre-load boundary limits and the post-load structural caps are settled at the same product-policy gate. The blocker's id, name and type are unchanged — it stays a pre-Ready / pre-release blocker and does not block implementation.",
+        "mustDecide": [
+          "max input bytes",
+          "max decoded bytes per stream",
+          "max cumulative decoded bytes",
+          "max decode stream count",
+          "max xref entries",
+          "max objects per object stream",
+          "max nesting depth",
+          "conservative syntax refusal policy",
+          "max copied object count per Extract — added 2026-09-17, H11-EXTRACT-3",
+          "max duplicated or reachable stream bytes per Extract — added 2026-09-17, H11-EXTRACT-3",
+          "max single reachable stream bytes per Extract — added 2026-09-17, H11-EXTRACT-3",
+          "the Merge cumulative structural cap policy values — added 2026-09-17, H11-MERGE-4"
+        ],
+        "closureEvidence": [
+          "A — compatibility confirmed on representative real architectural PDFs",
+          "B — where real drawings cannot be provided: the Human explicitly adopts conservative product limits and a refusal policy, with that constraint stated"
+        ],
+        "valueRule": "the values are not derived from browser heap sizes or from M5's memory presets",
+        "researchTestValues": "64 MiB input, 4 MiB decoded bytes per stream, 8 MiB cumulative decoded bytes, 64 decode streams, 100,000 xref entries, 10,000 objects per object stream, nesting depth 64 — research test values, NOT ADOPTED as product defaults",
+        "forbiddenBeforeClosure": [
+          "PR Ready",
+          "M6 merge",
+          "production enablement",
+          "adopting the research test limit values as product defaults without evidence",
+          "treating any product default limit as final"
+        ],
+        "doesNotBlock": "creating the M6 production implementation branch and starting implementation, once the Final Independent Architecture Re-Review PASSes"
+      }
+    ],
+    "implementationStarted": false,
+    "implementationAuthorization": {
+      "state": "NOT YET GIVEN",
+      "recordedOn": "2026-09-16",
+      "architectureDecisions": "complete — M6-H1 … M6-H14 adopted on 2026-09-14; B1, B2 and B3 closed; the B3 production load architecture adopted on 2026-09-16",
+      "requires": "a Final Independent Architecture Re-Review of the exact current research head, run in a separate session by an independent reviewer, that PASSes",
+      "thenOnly": "a new M6 production implementation branch created fresh from main@544a3baf6c7dcee02090dc90058735e377a08ea8; the research branch is neither merged nor cherry-picked into it",
+      "notAuthorizedUntilThen": [
+        "creating a production implementation branch",
+        "any src/ change",
+        "adding pako or any other dependency",
+        "starting implementation"
+      ],
+      "notAuthorizedUntilB4Closes": [
+        "Ready",
+        "merge",
+        "any change to main or production",
+        "production enablement"
+      ]
+    },
+    "notAuthorizedByThisAdoption": [
+      "M6 production implementation, which stays blocked until B1 and B2 are both closed",
+      "work on B1 or B2, each of which needs its own Human instruction",
+      "running the Object-Graph Memory Sub-Spike",
+      "Ready, merge, or any change to main or production"
+    ],
+    "fieldNote": "Each decision keeps recommended as the research wrote it; adopted records what the Human chose. Where the two differ — M6-H9b, where the research listed the soft-mask path under defer and the adoption makes closing it mandatory; M6-H11, where the sub-spike moves from defer to a blocker — adopted and implementationBlocker govern."
+  },
+  "evidence": [
+    "evidence.json",
+    "evidence-browser.json",
+    "baseline.md",
+    "source-preservation-matrix.md",
+    "structure-policy.md",
+    "extract-contract.md",
+    "merge-contract.md",
+    "preview-memory.md",
+    "budget.md",
+    "limitations.md"
+  ],
+  "decisions": [
+    {
+      "id": "M6-H1",
+      "question": "Applied signature policy for Extract",
+      "candidates": [
+        "A — hard refuse any source carrying an applied signature",
+        "B — allow the unsigned derivative, but remove the signature widget and its appearance stream",
+        "C — allow, with a persistent artifact-level indication that this is an unsigned derivative"
+      ],
+      "measured": "The cryptographic signature is removed and the appearance is not. After a legacy extract the AcroForm is absent, no signature field remains, and one widget survives carrying its /AP. Rendering the signature rectangle gives 4,325 non-white pixels out of 24,300 in the source and 4,325 out of 24,300 in the extract — pixel for pixel identical. A reader opening the derived file sees a signed-looking block on a document that carries no signature.",
+      "recommended": "B",
+      "adopted": "B — allow the unsigned derivative, removing the signature widget and its appearance stream; a persistent artifact-level indication stays DEFER",
+      "why": "The previous recommendation allowed the unsigned derivative without saying anything about the appearance, which the measurement now shows is the part the reader actually sees. Removing the widget and its /AP makes the derived document honestly unsigned. C is a reasonable addition to B rather than an alternative to it; A remains correct for anyone who does not want derived copies of signed documents at all.",
+      "defer": ["what a persistent artifact-level indication should be (C) — visible watermark, metadata, or both"]
+    },
+    {
+      "id": "M6-H2",
+      "question": "Applied signature policy for Merge",
+      "candidates": ["A — refuse any source carrying an applied signature", "B — permit with explicit confirmation"],
+      "measured": "Merging a signed source produced a 5-page ordinary file with no mention of the signature. The appearance finding in M6-H1 applies here too, and is worse: the signed document's appearance now sits among other people's content.",
+      "recommended": "A",
+      "adopted": "A — refuse any Merge source carrying an applied signature",
+      "why": "Unchanged by the new evidence, and strengthened by it. The asymmetry with M6-H1 is deliberate: an extract is openly a derivative of one document, a merge is a new document that would carry another's signature block.",
+      "defer": []
+    },
+    {
+      "id": "M6-H3",
+      "question": "AcroForm and widget preservation",
+      "candidates": [
+        "S1-A — reconstruct simple /Tx only, typed refusal for everything else",
+        "S1-B — AcroForm is a typed refusal in the M6 MVP, with a Form Reconstruction Sub-Spike to follow",
+        "reconstruct a broader subset, once each type has fixtures and post-readback proof"
+      ],
+      "measured": "The previous round advertised /Tx /Btn /Ch /Sig on the strength of one type's evidence: the reconstruction only ever restored /T, /FT and /V. It read /Ff without writing it back, never touched /DV, never carried AcroForm /DR, and never checked that a button's /AS still names a state in its /AP. Each shape now has a fixture. Rebuilt: form-tx-plain, value M6-TX-VALUE preserved, 0 orphan widgets. Refused as UNSUPPORTED_FORM: form-tx-ff, form-tx-dv, form-dr, form-separate-widget, form-hierarchical, form-checkbox, form-radio, form-choice. Refused as FIELD_SPANS_SELECTION: form-field-across-pages, which reports the straddle as its primary reason and carries the other subset reasons with it. Refused as DUPLICATE_FIELD_NAMES on request: collide-a + collide-b, which rename to source1./source2. with both values intact and 0 orphan widgets when renaming is chosen.",
+      "supportedSubset": ["/Tx, merged field/widget, with none of /Ff, /DV, /AA, no separate widget dictionaries, no inherited /FT or /V, and a /DA that does not name a font from AcroForm /DR"],
+      "refusedWithFixtures": {
+        "/Ff": "form-tx-ff — read, never restored",
+        "/DV": "form-tx-dv — not restored",
+        "AcroForm /DR": "form-dr — the /DA names a /DR font that is not carried",
+        "separate field + widget dictionaries": "form-separate-widget",
+        "inherited /FT or /V": "form-hierarchical",
+        "/Btn checkbox": "form-checkbox — /AS and /AP consistency unproven",
+        "/Btn radio group": "form-radio — kids hold their own appearance states",
+        "/Ch": "form-choice — /Opt not restored",
+        "/CO, field /AA, document JavaScript": "detected and refused, which is what makes rename-on-collision offerable at all"
+      },
+      "preservedCodes": ["FIELD_SPANS_SELECTION", "DUPLICATE_FIELD_NAMES", "zero orphan widgets in any successful output"],
+      "recommended": "S1-A — supported reconstruction is simple /Tx only",
+      "adopted": "S1-A — reconstruct simple /Tx only; typed refusal for everything else, keeping FIELD_SPANS_SELECTION, DUPLICATE_FIELD_NAMES and zero orphan widgets",
+      "why": "This is what the committed evidence proves, and no more. Widening the subset means adding fixtures and post-readback proof for each type, not editing a list of names — which is how the previous recommendation came to claim four types on one type's evidence. Applied signatures stay governed by M6-H1 and M6-H2 rather than by generic form reconstruction.",
+      "defer": [
+        "/Btn checkbox and radio groups, including /AS to /AP consistency",
+        "/Ch and /Opt",
+        "ordinary /Sig form reconstruction",
+        "/Ff and /DV restoration",
+        "AcroForm /DR carrying and merging",
+        "separate field and widget dictionaries",
+        "hierarchical /FT and /V inheritance",
+        "whether the MVP ships /Tx reconstruction at all (S1-A) or refuses AcroForm entirely (S1-B)"
+      ]
+    },
+    {
+      "id": "M6-H4",
+      "question": "XFA",
+      "candidates": ["refuse where the operation would drop it", "declare unsupported and name the loss"],
+      "measured": "XFA present in the source is absent from the output, unreported, for both operations.",
+      "recommended": "refuse, following M5's adopted refuse-if-dropped",
+      "adopted": "REFUSE — where the operation would drop XFA, following M5's refuse-if-dropped",
+      "why": "Consistency across tools matters more than a marginal capability, and M5 already owns the contract.",
+      "defer": []
+    },
+    {
+      "id": "M6-H5",
+      "question": "Internal destinations pointing at pages excluded from an Extract",
+      "candidates": [
+        "E1 — refuse the selected set, naming the pages that would break",
+        "E2 — keep the set, remove or retarget the link, report the loss",
+        "E3 — drop the link silently (not recommended)"
+      ],
+      "measured": "Today is none of these. Measured per shape: a destination to a SELECTED page still produces an orphan copy and lands outside the page tree (dest-direct-2p with both pages kept: 2 in tree, 1 orphan, 0 destinations landing in the document); the same holds for /A /GoTo /D. Cyclic destinations produce 2 orphans from a one-page selection. An article bead reaches another page with no annotation involved at all. The E2 prototype produces 0 orphan pages in all ten cases, every surviving destination lands in the output page tree, and every removed one is reported; E1 refuses before copying anything.",
+      "recommended": "E2 as the default, E1 available as a stricter setting, and the invariant below adopted as a production contract",
+      "adopted": "E2 as the default and E1 as a stricter setting, with the invariant adopted as a production contract: orphanPageCount === 0 and every surviving internal destination targets the output page tree",
+      "invariant": "every indirect /Page object in an Extract artifact is a member of its output page tree (orphanPageCount === 0), and every surviving internal destination targets a page of that tree",
+      "why": "E0 — what ships today — is worse than E3: it keeps a link that navigates nowhere a reader can reach AND ships the content of pages the user did not select. The invariant is checkable after serialization, which is where it is checked in the gate.",
+      "defer": []
+    },
+    {
+      "id": "M6-H6",
+      "question": "Outlines, named destinations and page labels",
+      "candidates": ["reconstruct for kept pages", "declare dropped and name the loss"],
+      "measured": "All three are dropped by both operations today, even when every page is extracted. Named destinations ARE reconstructable: the E2 prototype rebuilds the entries whose target survives and reports the rest — with both pages of dest-named-2p kept, 4 destinations land in the document and nothing is lost; keeping only page 1, the surviving entry is rebuilt and 2 losses are reported by name. Outlines and page labels were NOT prototyped.",
+      "recommended": "reconstruct named destinations (proven); treat outlines and page labels as reconstructable in principle but unproven here",
+      "adopted": "reconstruct named destinations only; outlines and page labels DEFER",
+      "why": "Saying 'reconstruct' for all three would claim evidence that exists for one of them. Page labels are arithmetic on /Nums and outlines are a tree walk, so neither looks hard — but neither has been shown to work, and the difference between those two statements is the point of this document.",
+      "defer": [
+        "outline reconstruction, including hierarchies deeper than one level",
+        "page-label range arithmetic across a non-contiguous selection"
+      ]
+    },
+    {
+      "id": "M6-H7",
+      "question": "Extract metadata",
+      "candidates": ["carry the source's metadata under M5 H12", "neutral derived metadata"],
+      "measured": "Output carries only pdf-lib's /Producer /ModDate /Creator /CreationDate; /Title /Author /Subject /Keywords /Company /M6Custom /M6Indirect and the XMP packet are all lost.",
+      "recommended": "carry it, under M5's H12 contract",
+      "adopted": "carry under M5's H12 contract; metadata that cannot be preserved safely is refused",
+      "why": "Extract has exactly one source, so there is no ambiguity, and M5 already owns a tested carry-or-refuse implementation.",
+      "defer": []
+    },
+    {
+      "id": "M6-H8",
+      "question": "Merge metadata",
+      "candidates": [
+        "M1 — first source's metadata",
+        "M2 — neutral newly-derived metadata",
+        "M3 — the user chooses a source",
+        "M4 — synthesized provenance naming the sources"
+      ],
+      "measured": "Output carries pdf-lib's four keys — M2 by accident, and without saying so.",
+      "recommended": "M4, with M1 available",
+      "adopted": "M4 synthesized provenance as the default, with M1 first-source metadata as an option",
+      "why": "A merged document is a new document and its honest metadata says so. M1 fits the common 'append appendices to this drawing' shape and should be offered rather than assumed.",
+      "defer": []
+    },
+    {
+      "id": "M6-H9a",
+      "question": "Tagged documents — /StructTreeRoot",
+      "candidates": ["refuse a tagged document", "strip every tagging remnant and confirm the accessibility loss", "reconstruct the structure tree"],
+      "measured": "The drop is not clean. Before: {structTreeRoot: true, markInfo: true, pageStructParents: true}. After a legacy extract: {false, false, true}. The artifact keeps a page claiming membership of a structure tree it does not contain.",
+      "detector": "catalog /StructTreeRoot present, or any page carrying /StructParents",
+      "recommended": "strip every remnant — /StructParents included — and report the accessibility loss explicitly",
+      "adopted": "strip every tagging remnant, /StructParents included, and disclose the accessibility loss",
+      "why": "Shipping the half-structure is not an option once it is known about: a page that claims a parent tree that is absent is a document that lies about itself. Refusing tagged documents outright would block a legitimate and common case; reconstruction is a genuine feature, not an MVP.",
+      "defer": ["structure-tree reconstruction for kept pages"]
+    },
+    {
+      "id": "M6-H9b",
+      "question": "Optional content — /OCProperties",
+      "candidates": [
+        "carry the configuration for groups the kept pages reference, refusing anything outside the handled envelope",
+        "refuse every document carrying optional content",
+        "drop and confirm the visibility change"
+      ],
+      "measured": "Today's drop is not clean: before {ocProperties: true, pageOptionalContentProperties: true}, after {false, true} — the page's marked content still names a group the document no longer configures, so a viewer shows its own default rather than the author's. Thirteen documents now carry and match their source after the artifact is reopened, on group count, group names, ON, OFF, /D /Name, /BaseState, /D /Order structure and page /Properties resolution, all equal in every one. Eight for the group mapping: ocproperties (1 carried, 1 on), ocg-multiple (2 carried, 1 on, 1 off), ocg-two-pages-opposite (2 carried, on [M6-OCG-A], off [M6-OCG-B]), ocg-shared-across-pages (1 carried, referenced from both pages), ocg-reordered-properties (2 carried, keys written in opposite order on each page), ocg-many-pages (3 carried over 3 pages, 2 on, 1 off, one shared), ocg-d-name (/D /Name reproduced), ocg-basestate-on (/BaseState /ON reproduced). Five for the order structure: ocg-order-flat, ocg-order-nested, ocg-order-labeled-nested, ocg-order-empty (stays empty) and ocg-order-absent (stays absent). The two-page opposite-state pairing is the one an earlier positional mapping could invert. Refused with UNSUPPORTED_OPTIONAL_CONTENT: ocmd, ocmd-nested, ocg-basestate-off, ocg-order-malformed, ocg-configs, annot-oc, xobject-oc, malformed-ocproperties, ocg-order-invalid-top-label, ocg-order-invalid-mid-label, ocg-order-unused-group, ocg-missing-ocgs, ocg-missing-d, ocg-dangling-ocgs-ref, ocg-nested-form-xobject, ocg-form-properties, ocg-annotation-appearance-properties, ocg-pattern-properties, ocg-type3-properties, resource-cycle and resource-depth-exceeded. The fourteen supported fixtures still read as carryable with the resource-graph walker in place. ocg-extgstate-smask, a group behind a soft mask /G, extracted READY until B1 opened that path; it is refused now, together with smask-dangling-g, smask-malformed, smask-g-not-form, smask-shared-g and smask-depth-exceeded, while smask-clean and smask-none still carry.",
+      "envelope": {
+        "carried": "the page's own /Resources /Properties entries resolving to plain /OCG dictionaries, with a /D whose keys are within Order, ON, OFF, Name, BaseState — and which are reproduced in the artifact, not merely accepted at the door",
+        "refused": "/OCMD in any form, a /VE visibility expression, a /BaseState other than /ON, any other /D key, an /Order entry that is neither a group, a nested array nor a text label, an /Order text label anywhere but the first element of a nested array, an /Order naming a group no kept page uses, any /Properties entry that is neither /OCG nor /OCMD, /OCProperties /Configs, an annotation carrying /OC, an XObject carrying /OC at any depth the walker reaches, an /OCProperties that cannot be read, an /OCProperties without /OCGs or without /D, an /OCGs entry that does not resolve or is not a group, any /Properties entry below the page's own resources — in a form XObject, an annotation appearance stream, a tiling pattern, a Type 3 font or a soft mask /G — a soft mask that cannot be read or is neither /None nor a dictionary, a soft mask /G that is missing, dangling or not a form XObject stream, and a resource graph deeper than 24 scopes"
+      },
+      "detectionEnvelope": "A contract that refuses everything outside the handled shapes is only true if the unhandled shapes can be found. The detector has been widened three times, each time with a fixture per shape; the third is B1, described below. First, four attachment points that were invisible: /OCProperties /Configs (ocg-configs), an annotation's /OC (annot-oc), an XObject's /OC (xobject-oc) and an /OCProperties that cannot be walked (malformed-ocproperties). Second, the resource graph below the page, which a page-level scan never opened: a form XObject two levels down carrying /OC (ocg-nested-form-xobject), a form XObject's own /Resources /Properties (ocg-form-properties), an annotation appearance stream's own /Resources /Properties (ocg-annotation-appearance-properties), a tiling pattern's (ocg-pattern-properties) and a Type 3 font's (ocg-type3-properties). Required keys fail closed: a missing /OCGs (ocg-missing-ocgs) or /D (ocg-missing-d) is refused rather than read as an empty default, and an /OCGs entry pointing at an object that does not exist (ocg-dangling-ocgs-ref) is refused rather than read as a value. The walk is bounded: a visited set keyed on indirect references ends a cycle and counts a shared object once (resource-cycle — the group behind the cycle is reported exactly once and the depth bound is never reached), and a graph deeper than 24 scopes is refused rather than reported as clean (resource-depth-exceeded). Walked: /Annots and their /AP streams, /XObject, /Pattern, Type 3 /Font, /ExtGState as far as a soft mask /G, and /Properties below the page's own scope. Not walked: /ColorSpace and /Shading, which open no content stream. /ExtGState was on that list until B1: a soft mask /G is a form XObject with resources of its own, and ocg-extgstate-smask extracted READY with a group behind it. The walker now opens it through the same walk, visited set and depth bound — smask-shared-g reports the group behind a shared /G once, and smask-depth-exceeded is refused at the bound; a clean mask and /SMask /None are not refused (smask-clean, smask-none), and an unreadable mask or a dangling or non-form /G is (smask-malformed, smask-dangling-g, smask-g-not-form). Followed by the walker but exercised by no fixture: /AP state dictionaries, image XObjects below the page, and /CharProcs streams carrying their own /Resources. Support was not widened by any of this: the refusals became real.",
+      "orderRule": "/Order is mapped recursively rather than flattened: a group reference becomes the mapped output reference, a nested array becomes a nested array, an absent /Order stays absent and an empty one stays empty. A text label is reproduced only where this research has shown it can be — as the first element of a nested array, titling a section. A label at the top level (ocg-order-invalid-top-label) or part-way through a nested array (ocg-order-invalid-mid-label) is refused rather than carried on the strength of being a string, and an /Order naming a group no kept page uses (ocg-order-unused-group) is refused rather than silently dropped. Proven on five carried shapes — flat, empty, absent, nested, and nested opening with a label — each compared as a structure after reopening the artifact, not as a set of groups. An earlier version collected only the references it found at any depth and rewrote a flat array, so nesting and labels were silently lost, an empty /Order was filled in and an absent one was invented; the comparison did not notice because it compared the set.",
+      "mapping": "structural: (selected source page + /Properties key + source OCG ref) to (output page + same key + output OCG ref), with the resulting output refs deduplicated. Positions are never used, so a page whose keys are written in a different order, or a group referenced from two pages, still resolves. An earlier version paired by position and reset its source cursor on every output page: one kept page worked, two could swap ON for OFF.",
+      "provenOnReadback": ["group count", "group names", "ON", "OFF", "/D /Name", "/BaseState", "/D /Order structure", "page /Properties resolution"],
+      "detector": "catalog /OCProperties present, or optional content found by walking each kept page's resource graph — /Annots and their /AP streams, /XObject, /Pattern, Type 3 /Font and soft mask /G scopes, recursively — with a visited set and a depth bound of 24; an unresolvable reference is a refusal, not an absence",
+      "recommended": "carry within the envelope above; typed refusal outside it",
+      "adopted": "carry only the proven direct-/OCG envelope; typed refusal outside it; closing the /ExtGState /SMask /G path is mandatory before implementation (B1)",
+      "implementationBlocker": "B1 — CLOSED on 2026-09-15. The /ExtGState /SMask /G path, which the walker did not open at adoption, had to be closed before implementation; it was closed the recommended way, by walking the soft-mask form's resources under the existing fail-closed contract (ocg-extgstate-smask READY before, REFUSED after). READY with that path unwalked stays forbidden.",
+      "why": "Carrying is proven for the direct-/OCG case and the refusal is proven for /OCMD, so neither half is asserted. An /OCMD decides visibility from a set of groups and optionally a nested boolean expression; carrying a subset of that evaluation would silently change what the reader sees, which is the failure this decision exists to prevent.",
+      "defer": [
+        "/OCMD, with or without a /VE visibility expression — refused for now, not designed",
+        "/BaseState /OFF and /Unchanged",
+        "usage application dictionaries, /RBGroups and /Locked, which fall outside the handled /D keys"
+      ]
+    },
+    {
+      "id": "M6-H9c",
+      "question": "Document JavaScript and /OpenAction",
+      "candidates": ["refuse any JavaScript-bearing source", "sanitize: remove and prove by readback", "carry"],
+      "measured": "Seven sites, each with its own fixture, each found by the scanner in the source and absent from the sanitized output measured by reopening it: /Names /JavaScript, /OpenAction as a JavaScript action, annotation /A, annotation /AA, page /AA, field /AA, and JavaScript behind a /Next. Total remaining after readback across all seven: 0. A document with no JavaScript scans 0 and completes. An action reachable by two routes through the same holder is counted once — 1 action from 2 visits. Five /Next shapes then measured separately, all reaching 0 remaining: a dictionary, an array, an array whose second element is JavaScript, JavaScript two links down a nested chain, and one action referenced from two annotations (2 sites, 2 removed — different holders, so two references rather than one). A cyclic action graph is refused with UNSCANNABLE_ACTIONS rather than passed.",
+      "arrayRule": "an array's meaning is decided by the key holding it: a destination under /OpenAction, /Dest or /D; a list of actions under /Next, every element of which is walked. An earlier version treated every array as a destination and stopped, so JavaScript inside a /Next array was never visited and the document passed.",
+      "scannerScope": [
+        "catalog /OpenAction",
+        "catalog /AA",
+        "catalog /Names /JavaScript, including /Kids",
+        "page /AA",
+        "annotation /A and every /AA sub-entry",
+        "AcroForm fields walked through /Kids: /A and /AA",
+        "/Next on every action found above"
+      ],
+      "boundedBy": "MAX_ACTION_DEPTH 32, with a per-chain cycle set; a chain deeper than the bound, a cycle, or an action dictionary that cannot be read makes the document UNSCANNABLE_ACTIONS rather than a quiet pass",
+      "mechanismNote": "Two of the seven sites reach zero because copyPages never copies catalog-level structure, not because the sanitizer removed them. Recorded per site rather than summarised, so a future change that started copying /Names would not silently move a row from one column to the other.",
+      "artifactWideRule": "The contract is two counts at zero, not one: what a reader can reach, and what the object table holds. Deleting the key that points at an action detaches it; it does not delete the object, and pdf-lib writes everything registered in the context whether or not anything points at it — the same mechanism that leaves orphaned pages behind after a copyPages. Measured: five of seven JavaScript cases put an action into the artifact's object table at all (annotation /A, annotation /AA, /Next, a doubly-nested /Next, and one indirect action referenced twice — 1 object each after the copy); the other two hold the action as a direct dictionary inside the annotation, so it never becomes a separate object. Every JavaScript action dictionary is now scrubbed of its entries and deleted from the table, and the artifact-wide count after reopening is 0 in all seven. Before this, 'no reachable JavaScript' was a true sentence about a file that still carried the script.",
+      "recommended": "sanitize and prove by readback, refusing any document the scanner cannot finish inspecting; /OpenAction whose action is a page destination stays with M6-H5",
+      "adopted": "sanitize and prove by readback: reachable JavaScript count === 0 AND artifact-wide indirect JavaScript action count === 0; UNSCANNABLE_ACTIONS when the scan cannot finish",
+      "why": "Carrying document JavaScript into a derived document is a security decision nobody asked for, and refusing on mere presence would block documents where the script is incidental. What makes sanitization recommendable rather than hopeful is the readback count, and what makes it safe is that an uninspectable document is refused.",
+      "defer": ["action types beyond JavaScript — /Launch, /ImportData and friends are not part of this envelope"]
+    },
+    {
+      "id": "M6-H9d",
+      "question": "Embedded files and attachments",
+      "candidates": ["carry", "remove with explicit confirmation", "refuse"],
+      "measured": "Dropped silently by both operations. pdf-lib has a write path for embedding files but no read path for copying a source's.",
+      "detector": "catalog /Names /EmbeddedFiles present, or any /Filespec with an /EF",
+      "recommended": "remove with explicit confirmation for Extract; carry for Merge is DEFER",
+      "adopted": "Extract: remove with explicit confirmation naming the files; Merge: carrying attachments is DEFER",
+      "why": "An attachment belongs to the document, not to a page, so an extract of two pages has no principled claim to it — but losing one silently is the behaviour being corrected. The confirmation names the files being dropped.",
+      "defer": ["carrying attachments through a Merge, where the union is at least well defined"]
+    },
+    {
+      "id": "M6-H10",
+      "question": "Merge intake — all-or-nothing or explicit partial",
+      "candidates": ["all-or-nothing", "explicit partial with every omission named"],
+      "measured": "Today a non-PDF is skipped by a bare continue and a failed load is caught and logged to the console; the file never appears in the list. broken-pagetree and malformed-acroform both LOAD cleanly, so intake cannot be 'whatever the loader accepts'.",
+      "recommended": "explicit partial, with a per-input typed result and every omission named in the UI",
+      "adopted": "explicit partial intake, with a per-input typed result and every omitted source shown in the UI",
+      "why": "Matches M5's adopted B2 batch shape. The page tree must be walked during intake, because two hostile fixtures load without complaint.",
+      "defer": []
+    },
+    {
+      "id": "M6-H11",
+      "question": "Memory and output ceilings",
+      "candidates": [
+        "reuse M5's 512 MiB / 1 GiB / 2 GiB presets and MAX_OUTPUT_BYTES 268435456",
+        "derive M6-specific ceilings",
+        "adopt the output ceiling now and defer the memory budget to a sub-spike"
+      ],
+      "measured": "The dominant memory term — what a parsed pdf-lib document and its copied object graph weigh — is a function of document structure rather than byte length, and is UNKNOWN. The output ceiling needs no model: admitted at 3,462 B, refused at 3,461 B, at a boundary taken from a real artifact. No such check exists today.",
+      "recommended": "adopt an actual-artifact output ceiling now, sharing M5's constant; do NOT adopt a memory preset until an Object-Graph Memory Sub-Spike closes the UNKNOWN",
+      "adopted": "adopt an actual-artifact output ceiling; memory presets NOT ADOPTABLE; the Object-Graph Memory Sub-Spike is mandatory before implementation (B2)",
+      "implementationBlocker": "B2 — CLOSED on 2026-09-15 as PARTIALLY BOUNDABLE. The Object-Graph Memory Sub-Spike found the copy and the plain save countable before they happen, the load not boundable with pdf-lib 1.17.1, and no memory preset adoptable; the load boundary it could not close is proposed as B3. B3 — accepted by the Human on 2026-09-15 and CLOSED by research on 2026-09-16 as A: a pre-parse boundary refuses, before load, what pdf-lib's load would expand past structural caps. The Human adopted that conclusion and the production load architecture on 2026-09-16 (loadBoundaryDecisions). B4 — product load policy and real-drawing compatibility — is OPEN, and blocks Ready, release and production enablement, not implementation.",
+      "objectGraphMemoryConclusion": {
+        "outputCeiling": "ADOPTED / unchanged",
+        "memoryModel": "PARTIALLY BOUNDABLE",
+        "hardStructuralTerms": [
+          "input bytes — before load",
+          "objects the copy registers, copier map entries, raw stream bytes the copy duplicates, the largest stream, unselected pages reached — after load, before copy (EXACT; equal to the real copy in 15 shapes)",
+          "Merge output growth per source — before that source is copied (EXACT; equal in 2 merges)",
+          "plain-writer output length — before its buffer is allocated (EXACT; equal in 3 cases)"
+        ],
+        "unknownTerms": [
+          "the load: every object parsed eagerly, every object and xref stream inflated with no cap; input bytes do not bound it",
+          "heap bytes per object, per map entry, per copier entry — an engine property",
+          "heap still held after every document is released (MEASURED_ONLY +13.1 MiB for B1); the PDFRef and PDFName pools fit, the cause is not measured",
+          "object-stream output length before compression, and any upper bound on it",
+          "browser heap limits, collector timing and array-buffer accounting"
+        ],
+        "safeProductionRecommendation": [
+          "no memory preset",
+          "structural caps on the EXACT terms, checked after load and before copy, with a typed refusal — values are product choices, not memory figures",
+          "Merge one source at a time, releasing each, no preloading, with the cumulative output growth checked from each source's plan before its copy",
+          "release the source before save",
+          "keep the adopted actual-output ceiling",
+          "close the load boundary before implementation"
+        ],
+        "requiredFollowOn": "Load Boundary Sub-Spike — proposed implementation blocker B3",
+        "m5Presets": "DO NOT ADOPT",
+        "adoptedByHuman": "2026-09-15 — memory model PARTIALLY BOUNDABLE, M5 presets DO NOT ADOPT, output ceiling ADOPTED / unchanged",
+        "basis": "object-graph-memory.md; evidence-object-graph-memory.json",
+        "historicalNote": "At adoption this decision's memory model was UNKNOWN and every preset NOT ADOPTABLE. B2 replaced the UNKNOWN with this conclusion; it did not make any preset adoptable."
+      },
+      "loadBoundaryConclusion": {
+        "outcome": "A — CLOSED: hard pre-load boundary proven",
+        "hardPreLoadTerms": [
+          "input bytes — the raw ceiling",
+          "decoded bytes per object or cross-reference stream, and in total — counted by a bounded inflate that stops at the cap plus one chunk",
+          "declared cross-reference entries, from direct /Size or /Index",
+          "objects per object stream, from a direct /N, with offsets in order and objects not overlapping",
+          "parse work — no more values than raw plus decoded bytes"
+        ],
+        "stillUnknown": [
+          "heap bytes per parsed object, as B2 left it",
+          "which real drawings strict syntax refuses"
+        ],
+        "memoryModel": "unchanged — PARTIALLY BOUNDABLE; the load's structure is now bounded before load, its heap bytes are not",
+        "m5Presets": "DO NOT ADOPT — unchanged",
+        "workerAloneCloses": false,
+        "basis": "load-boundary.md; evidence-load-boundary.json",
+        "historicalNote": "H11 was UNKNOWN at adoption; B2 made it PARTIALLY BOUNDABLE and found the load unbounded; B3 was proposed from that finding, accepted by the Human, and closed with this boundary. B3 did not make any preset adoptable.",
+        "adoptedByHuman": "2026-09-16 — conclusion A adopted; see loadBoundaryDecisions"
+      },
+      "loadBoundaryDecisions": {
+        "decidedBy": "Human Gate",
+        "decidedOn": "2026-09-16",
+        "basis": "B3 tested source 2c3f841618514887db0667e0bbc1d72eb32ba42e; evidence-only final 5812c6e5a7ef265ce1f91681dc320549538a06d5; load-boundary gate 98/98 in both runs; exact-head Core CI run 35076759871, attempt 1, success — Core CI is not the research gate",
+        "decisions": [
+          {
+            "id": "H11-B3-1",
+            "topic": "Load contract",
+            "decision": "ADOPT",
+            "record": "the pre-parse hard boundary is M6's mandatory production load contract. PDFDocument.load() may be called only on input the load boundary PASSes. Dangerous, ambiguous or unsupported load structure is a typed refusal, and fails closed."
+          },
+          {
+            "id": "H11-B3-2",
+            "topic": "Product limit values",
+            "decision": "DO NOT ADOPT the research test values as product values",
+            "record": "64 MiB input, 4 MiB decoded bytes per stream, 8 MiB cumulative decoded bytes, 64 decode streams, 100,000 xref entries, 10,000 objects per object stream and depth 64 are research test values, not production defaults. The product policy is blocker B4, which blocks Ready, release and production enablement, not implementation."
+          },
+          {
+            "id": "H11-B3-3",
+            "topic": "Decoder",
+            "decision": "ADOPT pako 2.1.0",
+            "record": "B3's evidence holds for the bounded inflate over pako 2.1.0. Production does not rely on a pako that happens to be present transitively: package.json declares pako 2.1.0 as a direct dependency, in the production implementation branch and not in this round. The version contract is bound to the B3 evidence; changing the pako version requires the B3 Load Boundary regression verification again."
+          },
+          {
+            "id": "H11-B3-4",
+            "topic": "Execution boundary",
+            "decision": "ADOPT a disposable Worker for the M6 processing route",
+            "productionShape": [
+              "Main/UI",
+              "input ArrayBuffer transfer",
+              "disposable Worker",
+              "pre-parse Load Boundary",
+              "PDFDocument.load() on PASS only",
+              "planning",
+              "copy / save",
+              "output ArrayBuffer transfer",
+              "Worker cleanup / terminate"
+            ],
+            "primarySafetyBoundary": "the pre-parse Load Boundary",
+            "worker": "secondary defence in depth; a Worker alone is NOT a safety boundary",
+            "workerContract": [
+              "transferable input",
+              "transferable output",
+              "cancellation",
+              "timeout counted from operation start",
+              "typed worker failures",
+              "no late publish after cancellation",
+              "termination and cleanup"
+            ]
+          },
+          {
+            "id": "H11-B3-5",
+            "topic": "Strict syntax refusal",
+            "decision": "ADOPT for the M6 MVP",
+            "record": "syntax whose safety cannot be proven is not guessed through for compatibility; it fails closed. The user receives a typed refusal whose reason is at least equivalent to 「このPDFは安全に処理できることを確認できなかったため処理しません」. Silent failure is forbidden. The real-drawing compatibility of strict refusal is checked in B4."
+          },
+          {
+            "id": "H11-B3-6",
+            "topic": "Version binding",
+            "decision": "ADOPT",
+            "record": "the B3 architecture proof is bound to pdf-lib 1.17.1, and M6 production implementation assumes that version's behaviour. On any pdf-lib version change the Load Boundary verification is run again, and M6's safety is not treated as inherited until the decode surface, tokenizer and oracle contracts hold for the new version."
+          }
+        ],
+        "historicalNote": "H11 UNKNOWN at adoption (2026-09-14) → B2 PARTIALLY BOUNDABLE (2026-09-15) → B3 discovered and accepted (2026-09-15) → B3 A, hard pre-load boundary proven (2026-09-16) → the Human adopts the production load architecture (2026-09-16) → B4, product load policy, OPEN. This record does not change the B3 research result."
+      },
+      "mergeExecutionDecisions": {
+        "status": "ADOPTED",
+        "decidedBy": "Human",
+        "adoptedOn": "2026-09-17",
+        "authority": "a Human adoption decision on the existing B2 evidence, not a new B2 technical conclusion. The five items below are the M6 production implementation contract for Merge, no longer a research recommendation. B2 evidence and gates are unchanged.",
+        "raisedBy": "the Final Independent Architecture Re-Review of 19411cec8dbaf395c48a20bcbe5cbbf6800ba380, which found merge-contract.md stating this execution shape as current contract while objectGraphMemoryConclusion recorded it only as safeProductionRecommendation",
+        "evidenceBasis": "B2 Object-Graph Memory Sub-Spike — object-graph-memory.md; evidence-object-graph-memory.json",
+        "memoryModel": "PARTIALLY BOUNDABLE",
+        "decisions": [
+          {
+            "id": "H11-MERGE-1",
+            "topic": "no all-source preload",
+            "record": "a Merge does not call PDFDocument.load() on every source together at its start"
+          },
+          {
+            "id": "H11-MERGE-2",
+            "topic": "sequential source processing",
+            "record": "sources are processed one at a time, each in the order Load Boundary → PASS → PDFDocument.load() → post-load structural planning → copy → source release"
+          },
+          {
+            "id": "H11-MERGE-3",
+            "topic": "release each source before the next",
+            "record": "once the pages and objects a source contributes are copied into the destination, and before the next source is loaded, the source document, source bytes and source-owned resources are released as far as possible; no all-source lifetime is created"
+          },
+          {
+            "id": "H11-MERGE-4",
+            "topic": "cumulative structural planning and cap before copy",
+            "record": "before a source is copied, the cumulative totals after adding it are evaluated from terms B2 showed structurally countable — reachable and copied object count, duplicated stream bytes, largest stream, cumulative destination graph growth — together with the adopted output ceiling; a cap that would be exceeded is a typed refusal before the copy starts"
+          },
+          {
+            "id": "H11-MERGE-5",
+            "topic": "page count, file size or a memory preset alone is not safety",
+            "record": "no safety decision rests on page count, source file size, a browser heap estimate, or M5's 512 MiB / 1 GiB / 2 GiB presets alone; M5's presets stay DO NOT ADOPT"
+          }
+        ],
+        "doesNotChange": "B1, B2 and B3 closure evidence; the B3 Human decisions (loadBoundaryDecisions); B4's state; any research numeric value. No cap value is set by this decision."
+      },
+      "extractExecutionDecisions": {
+        "status": "ADOPTED",
+        "decidedBy": "Human",
+        "adoptedOn": "2026-09-17",
+        "authority": "a Human adoption decision on the existing B2 evidence, not a new B2 technical conclusion. The five items below are the M6 production implementation contract for Extract, no longer a research recommendation. B2 evidence and gates are unchanged.",
+        "raisedBy": "the Human Gate, completing on the Extract side the adoption already recorded for Merge in mergeExecutionDecisions; extract-contract.md still carried this execution shape as B2 recommended and not adopted",
+        "evidenceBasis": "B2 Object-Graph Memory Sub-Spike — object-graph-memory.md; evidence-object-graph-memory.json",
+        "memoryModel": "PARTIALLY BOUNDABLE",
+        "decisions": [
+          {
+            "id": "H11-EXTRACT-1",
+            "topic": "post-load exact structural planning before copy",
+            "record": "an Extract runs Load Boundary PASS → PDFDocument.load() → planning of the Extract operation's structural transformation → the exact structural graph plan → cap check → copyPages, in that order. Before copyPages starts, at least the terms B2 proved countable are taken from the graph: objects to be copied, copier entries, duplicated stream bytes, the largest reachable stream, and unselected pages reached. None of them is estimated from page count or file size."
+          },
+          {
+            "id": "H11-EXTRACT-2",
+            "topic": "E2 and sanitization before the graph count",
+            "record": "the E2 destination policy already adopted in M6-H5 is applied before the structural graph is counted, so that the graph counted and the graph handed to copyPages are the same graph. Counting with internal destinations still in place and changing the structure afterwards is forbidden: the Extract plan counts the actual copy graph, after sanitization and reconstruction planning. The existing invariants hold — orphanPageCount === 0, and every surviving destination targets the output page tree. Where unselected page reach remains and cannot be safely explained, the copy does not proceed."
+          },
+          {
+            "id": "H11-EXTRACT-3",
+            "topic": "structural caps checked before copy, with a typed refusal",
+            "record": "the exact structural terms are checked against hard caps before copyPages, and exceeding a cap is a typed refusal raised before copyPages. This decision adopts the mechanism only. No product cap value is adopted here, and no value is back-derived from browser heap, page count, file size, or M5's 512 MiB / 1 GiB / 2 GiB presets — M5's presets stay DO NOT ADOPT. The values are decided in B4."
+          },
+          {
+            "id": "H11-EXTRACT-4",
+            "topic": "release the source before save",
+            "record": "once the copy and reconstruction are complete and the source document is no longer needed, source-side references and source bytes are released before save proceeds, so that the source graph, the destination graph and the output buffer are not held together at save time unnecessarily. The implementation names which holdings are releasable, consistently with RunOwnership and Worker cleanup."
+          },
+          {
+            "id": "H11-EXTRACT-5",
+            "topic": "keep the adopted actual-output ceiling; no memory preset",
+            "record": "the actual-artifact output ceiling stays ADOPTED and unchanged, and no memory preset is adopted. The structural cap and the output ceiling are separate contracts, and both are kept: the structural cap is checked before the copy, the output ceiling before the artifact is published."
+          }
+        ],
+        "productCapValues": {
+          "state": "NOT DECIDED by this adoption",
+          "note": "maximum copied object count, maximum duplicated or reachable stream bytes, and maximum single reachable stream bytes are product choices, not memory MiB presets. They are added to B4's mustDecide and settled pre-Ready / pre-release. Research test values are not promoted to product defaults."
+        },
+        "doesNotChange": "B1, B2 and B3 closure evidence; the B3 Human decisions (loadBoundaryDecisions); the Merge adoption (mergeExecutionDecisions); B4's OPEN state, which stays a pre-Ready blocker and not an implementation blocker; any research numeric value. No cap value is set by this decision."
+      },
+      "why": "M5 RF-L2 forbade a hard budget containing an UNKNOWN that may materially exceed the ceiling. Reusing M5's presets for a differently shaped operation would be exactly that.",
+      "defer": ["whether the adopted output ceiling shares M5's MAX_OUTPUT_BYTES 268435456 or takes an independently gated M6 value — the research recommends sharing"]
+    },
+    {
+      "id": "M6-H12",
+      "question": "Thumbnail strategy",
+      "candidates": [
+        "P1 — every page as a Data URL (current)",
+        "P2 — windowed rendering",
+        "P3 — bounded Blob URLs",
+        "P4 — regenerated cache"
+      ],
+      "measured": "P1 retains 88,616 B of UTF-16 payload per A4 page and 538,997 B per A1 sheet (6.2x), 16.9 MiB for 200 A4 pages, 1,727 ms before anything is shown for 100 pages, with no ceiling anywhere. P2 at a 12-page window retains 1.0 MiB against P1's 8.4 MiB on the same source. P3 moves the image payload out of the JS heap: 0.4 MiB of Blob payload, with the URL strings and their JS objects still held.",
+      "recommended": "P2 with P3's Blob URLs for the retained window, owned by the run",
+      "adopted": "P2 windowed rendering with P3 bounded Blob URLs for the retained window, owned by the run",
+      "basisNote": "Character counts and logical UTF-16 payload bytes are EXACT; what a JS engine allocates to hold a string, and the engine's own bookkeeping, are UNKNOWN. An earlier version of this research called characters × 2 'exact retained heap bytes', which it is not, and called P3 '0 B in the JS heap', which overstates it.",
+      "boundTerms": [
+        "maximum active thumbnail count",
+        "maximum thumbnail pixel dimensions",
+        "maximum retained Blob payload",
+        "canvas pixel ceiling"
+      ],
+      "why": "The problem with P1 is not speed but that it has no bound: the cost is set by whatever document the user opens. The four terms above are quantities the product chooses and can enforce. No claim is made about total browser heap, which still contains UNKNOWN engine, PDF.js and decoded-image-cache terms.",
+      "defer": ["P4 was not separately measured"]
+    },
+    {
+      "id": "M6-H13",
+      "question": "Ownership and cancellation",
+      "candidates": ["generalize M5's RunOwnership", "a Split/Merge-specific contract"],
+      "measured": "Two previews started together finish in the order second then first, so the slower first source overwrites the faster second one. There is no run token in the component. 5 exports created 5 object URLs and revoked 0. A PDF.js document opened for a preview is never destroyed.",
+      "recommended": "generalize M5's RunOwnership, and extend it with preview-cache and object-URL cleanup on supersede",
+      "adopted": "generalize M5's RunOwnership, extended so a superseded run neither publishes nor downloads, revokes its Blob URLs, releases the thumbnail cache and destroys its PDF.js document",
+      "why": "The invariant is identical — a superseded run leaves nothing behind — and two incompatible definitions of ownership across tools would be worse than one shared primitive. What M6 adds is that a superseded run must also release retained thumbnails and revoke URLs.",
+      "defer": []
+    },
+    {
+      "id": "M6-H14",
+      "question": "Output naming",
+      "candidates": ["keep extracted_<source>.pdf and merged_document.pdf", "derive a self-describing name"],
+      "measured": "Every merge is named merged_document.pdf, so a second merge overwrites the first in the download folder; an extract says nothing about which pages it contains.",
+      "recommended": "self-describing and deterministic: <source>_p1,3,5-8.pdf for Extract, merged_<n>files_<firstSource>.pdf for Merge",
+      "adopted": "self-describing and deterministic: <source>_p1,3,5-8.pdf for Extract, merged_<n>files_<firstSource>.pdf for Merge",
+      "why": "A download folder is shared state the product writes into; a fixed filename silently destroys the previous result.",
+      "defer": ["length limits for very large selections"]
+    }
+  ]
+}

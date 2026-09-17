@@ -1,0 +1,3873 @@
+{
+  "provenance": {
+    "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
+    "testedResearchHead": "2c3f841618514887db0667e0bbc1d72eb32ba42e",
+    "workingTreeDirty": true,
+    "researchPackageDirtyBeforeRun": false,
+    "coreCiRunsThisGate": false,
+    "dependencies": {
+      "pdf-lib": "1.17.1"
+    },
+    "node": "v24.15.0",
+    "ranAt": "2026-09-16T08:55:44.789Z"
+  },
+  "corpus": {
+    "mem-a-small-vector": {
+      "name": "mem-a-small-vector",
+      "bytes": 854,
+      "shape": "A",
+      "note": "one page of text and vector, a few objects",
+      "useObjectStreams": false
+    },
+    "mem-b1-many-objects": {
+      "name": "mem-b1-many-objects",
+      "bytes": 1876490,
+      "shape": "B1",
+      "note": "20000 small indirect dictionaries reachable from one page, written plainly",
+      "useObjectStreams": false
+    },
+    "mem-b2-many-objects-objstm": {
+      "name": "mem-b2-many-objects-objstm",
+      "bytes": 336526,
+      "shape": "B2",
+      "note": "20000 small indirect dictionaries reachable from one page, packed into object streams",
+      "useObjectStreams": true
+    },
+    "mem-c-few-large-streams": {
+      "name": "mem-c-few-large-streams",
+      "bytes": 1261446,
+      "shape": "C",
+      "note": "three incompressible image streams, about the file size of B1",
+      "useObjectStreams": false
+    },
+    "mem-d-shared-refs": {
+      "name": "mem-d-shared-refs",
+      "bytes": 427302,
+      "shape": "D",
+      "note": "fifty pages, each drawing the same 400 KB image and the same font",
+      "useObjectStreams": false
+    },
+    "mem-e-deep-cycle": {
+      "name": "mem-e-deep-cycle",
+      "bytes": 36673,
+      "shape": "E",
+      "note": "a chain of 201 form XObjects whose innermost reaches back to the outermost",
+      "useObjectStreams": false
+    },
+    "mem-f-1000-pages": {
+      "name": "mem-f-1000-pages",
+      "bytes": 503388,
+      "shape": "F",
+      "note": "one thousand plain pages of text and vector",
+      "useObjectStreams": false
+    },
+    "mem-g1-large-image-raw": {
+      "name": "mem-g1-large-image-raw",
+      "bytes": 9001068,
+      "shape": "G1",
+      "note": "one 3000 x 3000 gray image, incompressible and stored raw",
+      "useObjectStreams": false
+    },
+    "mem-g2-large-image-flate": {
+      "name": "mem-g2-large-image-flate",
+      "bytes": 9853,
+      "shape": "G2",
+      "note": "one 3000 x 3000 gray image, a flat field under FlateDecode",
+      "useObjectStreams": false
+    },
+    "mem-i-linked-heavy-pages": {
+      "name": "mem-i-linked-heavy-pages",
+      "bytes": 4908863,
+      "shape": "I",
+      "note": "ten pages with a 490 KB image each; page 1 links to pages 2-10, page 10 links to nothing",
+      "useObjectStreams": false
+    },
+    "mem-j-distinct-names": {
+      "name": "mem-j-distinct-names",
+      "bytes": 1896489,
+      "shape": "J",
+      "note": "20000 small dictionaries, each keyed by a name no other uses",
+      "useObjectStreams": false
+    },
+    "mem-k-objstm-inflation": {
+      "name": "mem-k-objstm-inflation",
+      "bytes": 33149,
+      "shape": "K",
+      "useObjectStreams": true,
+      "note": "an object stream of 32654 bytes that inflates to 33554457 bytes at load",
+      "decodedObjectStreamBytes": 33554457
+    }
+  },
+  "cases": {
+    "A-p1": {
+      "fixture": "mem-a-small-vector",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 3,
+        "danglingReferences": 0,
+        "copierEntries": 12,
+        "streams": 1,
+        "streamBytes": 172,
+        "maxStreamBytes": 172,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 3,
+        "streamBytes": 172
+      },
+      "outputBytesMeasuredOnly": 934,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 854
+          },
+          "memory": {
+            "rssMeasuredOnly": 75522048,
+            "heapUsedMeasuredOnly": 8768640,
+            "externalMeasuredOnly": 2325516,
+            "arrayBuffersMeasuredOnly": 487201,
+            "maxRssMeasuredOnly": 75665408
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75558912,
+            "heapUsedMeasuredOnly": 8882328,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 75665408
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 3,
+              "danglingReferences": 0,
+              "copierEntries": 12,
+              "streams": 1,
+              "streamBytes": 172,
+              "maxStreamBytes": 172,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75563008,
+            "heapUsedMeasuredOnly": 8922024,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 75665408
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75563008,
+            "heapUsedMeasuredOnly": 8934792,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 75665408
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75640832,
+            "heapUsedMeasuredOnly": 8992720,
+            "externalMeasuredOnly": 2325046,
+            "arrayBuffersMeasuredOnly": 486691,
+            "maxRssMeasuredOnly": 75665408
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 75640832,
+            "heapUsedMeasuredOnly": 8993168,
+            "externalMeasuredOnly": 2325046,
+            "arrayBuffersMeasuredOnly": 486691,
+            "maxRssMeasuredOnly": 75665408
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "outputBytesMeasuredOnly": 934
+          },
+          "memory": {
+            "rssMeasuredOnly": 75882496,
+            "heapUsedMeasuredOnly": 9191784,
+            "externalMeasuredOnly": 2325980,
+            "arrayBuffersMeasuredOnly": 487625,
+            "maxRssMeasuredOnly": 76582912
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 75911168,
+            "heapUsedMeasuredOnly": 9181424,
+            "externalMeasuredOnly": 2325808,
+            "arrayBuffersMeasuredOnly": 487453,
+            "maxRssMeasuredOnly": 76582912
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 75919360,
+            "heapUsedMeasuredOnly": 9188688,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 76582912
+          }
+        }
+      ]
+    },
+    "B1-p1": {
+      "fixture": "mem-b1-many-objects",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 20003,
+        "danglingReferences": 0,
+        "copierEntries": 40013,
+        "streams": 1,
+        "streamBytes": 173,
+        "maxStreamBytes": 173,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 20003,
+        "streamBytes": 173
+      },
+      "outputBytesMeasuredOnly": 336399,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 1876490
+          },
+          "memory": {
+            "rssMeasuredOnly": 77291520,
+            "heapUsedMeasuredOnly": 8768656,
+            "externalMeasuredOnly": 4201152,
+            "arrayBuffersMeasuredOnly": 2362837,
+            "maxRssMeasuredOnly": 79138816
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 113692672,
+            "heapUsedMeasuredOnly": 22040880,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 116613120
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 20003,
+              "danglingReferences": 0,
+              "copierEntries": 40013,
+              "streams": 1,
+              "streamBytes": 173,
+              "maxStreamBytes": 173,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 116461568,
+            "heapUsedMeasuredOnly": 23591760,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 118116352
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 114126848,
+            "heapUsedMeasuredOnly": 22095904,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 118116352
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 131411968,
+            "heapUsedMeasuredOnly": 29327640,
+            "externalMeasuredOnly": 2325048,
+            "arrayBuffersMeasuredOnly": 486693,
+            "maxRssMeasuredOnly": 136134656
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 130850816,
+            "heapUsedMeasuredOnly": 29332808,
+            "externalMeasuredOnly": 2325048,
+            "arrayBuffersMeasuredOnly": 486693,
+            "maxRssMeasuredOnly": 136134656
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "outputBytesMeasuredOnly": 336399
+          },
+          "memory": {
+            "rssMeasuredOnly": 155451392,
+            "heapUsedMeasuredOnly": 29736808,
+            "externalMeasuredOnly": 2661447,
+            "arrayBuffersMeasuredOnly": 823092,
+            "maxRssMeasuredOnly": 251813888
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 154521600,
+            "heapUsedMeasuredOnly": 22543512,
+            "externalMeasuredOnly": 2661274,
+            "arrayBuffersMeasuredOnly": 822919,
+            "maxRssMeasuredOnly": 251813888
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 153788416,
+            "heapUsedMeasuredOnly": 22544848,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 251813888
+          }
+        }
+      ]
+    },
+    "B2-p1": {
+      "fixture": "mem-b2-many-objects-objstm",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 20003,
+        "danglingReferences": 0,
+        "copierEntries": 40013,
+        "streams": 1,
+        "streamBytes": 173,
+        "maxStreamBytes": 173,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 20003,
+        "streamBytes": 173
+      },
+      "outputBytesMeasuredOnly": 336399,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 336526
+          },
+          "memory": {
+            "rssMeasuredOnly": 75816960,
+            "heapUsedMeasuredOnly": 8768304,
+            "externalMeasuredOnly": 2661188,
+            "arrayBuffersMeasuredOnly": 822873,
+            "maxRssMeasuredOnly": 76251136
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 115335168,
+            "heapUsedMeasuredOnly": 25083888,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 120086528
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 20003,
+              "danglingReferences": 0,
+              "copierEntries": 40013,
+              "streams": 1,
+              "streamBytes": 173,
+              "maxStreamBytes": 173,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 122880000,
+            "heapUsedMeasuredOnly": 26649064,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 125231104
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 120971264,
+            "heapUsedMeasuredOnly": 25137776,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 125231104
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 139665408,
+            "heapUsedMeasuredOnly": 32397016,
+            "externalMeasuredOnly": 2325048,
+            "arrayBuffersMeasuredOnly": 486693,
+            "maxRssMeasuredOnly": 144584704
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 139997184,
+            "heapUsedMeasuredOnly": 32397656,
+            "externalMeasuredOnly": 2325048,
+            "arrayBuffersMeasuredOnly": 486693,
+            "maxRssMeasuredOnly": 144584704
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "outputBytesMeasuredOnly": 336399
+          },
+          "memory": {
+            "rssMeasuredOnly": 168615936,
+            "heapUsedMeasuredOnly": 32766344,
+            "externalMeasuredOnly": 2661447,
+            "arrayBuffersMeasuredOnly": 823092,
+            "maxRssMeasuredOnly": 274161664
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 168067072,
+            "heapUsedMeasuredOnly": 25567136,
+            "externalMeasuredOnly": 2661274,
+            "arrayBuffersMeasuredOnly": 822919,
+            "maxRssMeasuredOnly": 274161664
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 167051264,
+            "heapUsedMeasuredOnly": 25568472,
+            "externalMeasuredOnly": 2324875,
+            "arrayBuffersMeasuredOnly": 486520,
+            "maxRssMeasuredOnly": 274161664
+          }
+        }
+      ]
+    },
+    "C-p1": {
+      "fixture": "mem-c-few-large-streams",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 6,
+        "danglingReferences": 0,
+        "copierEntries": 18,
+        "streams": 4,
+        "streamBytes": 1260199,
+        "maxStreamBytes": 420000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 6,
+        "streamBytes": 1260199
+      },
+      "outputBytesMeasuredOnly": 1261465,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 1261446
+          },
+          "memory": {
+            "rssMeasuredOnly": 76517376,
+            "heapUsedMeasuredOnly": 8768640,
+            "externalMeasuredOnly": 3586108,
+            "arrayBuffersMeasuredOnly": 1747793,
+            "maxRssMeasuredOnly": 77791232
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 9,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 9
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76677120,
+            "heapUsedMeasuredOnly": 8913560,
+            "externalMeasuredOnly": 3584901,
+            "arrayBuffersMeasuredOnly": 1746546,
+            "maxRssMeasuredOnly": 77938688
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 6,
+              "danglingReferences": 0,
+              "copierEntries": 18,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "maxStreamBytes": 420000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76681216,
+            "heapUsedMeasuredOnly": 8950896,
+            "externalMeasuredOnly": 3584901,
+            "arrayBuffersMeasuredOnly": 1746546,
+            "maxRssMeasuredOnly": 77938688
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76693504,
+            "heapUsedMeasuredOnly": 8971840,
+            "externalMeasuredOnly": 3584901,
+            "arrayBuffersMeasuredOnly": 1746546,
+            "maxRssMeasuredOnly": 77938688
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 9,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 9
+            },
+            "destination": {
+              "objects": 9,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 9
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 77983744,
+            "heapUsedMeasuredOnly": 9018936,
+            "externalMeasuredOnly": 4845100,
+            "arrayBuffersMeasuredOnly": 3006745,
+            "maxRssMeasuredOnly": 77983744
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 9,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 9
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 77991936,
+            "heapUsedMeasuredOnly": 9019368,
+            "externalMeasuredOnly": 4845100,
+            "arrayBuffersMeasuredOnly": 3006745,
+            "maxRssMeasuredOnly": 77991936
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 9,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 9
+            },
+            "outputBytesMeasuredOnly": 1261465
+          },
+          "memory": {
+            "rssMeasuredOnly": 79831040,
+            "heapUsedMeasuredOnly": 9232208,
+            "externalMeasuredOnly": 6106565,
+            "arrayBuffersMeasuredOnly": 4268210,
+            "maxRssMeasuredOnly": 80359424
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 78397440,
+            "heapUsedMeasuredOnly": 9219248,
+            "externalMeasuredOnly": 4846366,
+            "arrayBuffersMeasuredOnly": 3008011,
+            "maxRssMeasuredOnly": 80359424
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 77135872,
+            "heapUsedMeasuredOnly": 9226944,
+            "externalMeasuredOnly": 3584901,
+            "arrayBuffersMeasuredOnly": 1746546,
+            "maxRssMeasuredOnly": 80359424
+          }
+        }
+      ]
+    },
+    "D-p1": {
+      "fixture": "mem-d-shared-refs",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 400194,
+        "maxStreamBytes": 400000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 4,
+        "streamBytes": 400194
+      },
+      "outputBytesMeasuredOnly": 401133,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 427302
+          },
+          "memory": {
+            "rssMeasuredOnly": 76001280,
+            "heapUsedMeasuredOnly": 8769080,
+            "externalMeasuredOnly": 2751964,
+            "arrayBuffersMeasuredOnly": 913649,
+            "maxRssMeasuredOnly": 76472320
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76095488,
+            "heapUsedMeasuredOnly": 9114888,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 4,
+              "danglingReferences": 0,
+              "copierEntries": 14,
+              "streams": 2,
+              "streamBytes": 400194,
+              "maxStreamBytes": 400000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75943936,
+            "heapUsedMeasuredOnly": 9167240,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76021760,
+            "heapUsedMeasuredOnly": 9180576,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            },
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 400194,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76582912,
+            "heapUsedMeasuredOnly": 9227872,
+            "externalMeasuredOnly": 3134661,
+            "arrayBuffersMeasuredOnly": 1296306,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 400194,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 76582912,
+            "heapUsedMeasuredOnly": 9228384,
+            "externalMeasuredOnly": 3134661,
+            "arrayBuffersMeasuredOnly": 1296306,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 400194,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "outputBytesMeasuredOnly": 401133
+          },
+          "memory": {
+            "rssMeasuredOnly": 77537280,
+            "heapUsedMeasuredOnly": 9422224,
+            "externalMeasuredOnly": 3535794,
+            "arrayBuffersMeasuredOnly": 1697439,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 76800000,
+            "heapUsedMeasuredOnly": 9274864,
+            "externalMeasuredOnly": 3126029,
+            "arrayBuffersMeasuredOnly": 1287674,
+            "maxRssMeasuredOnly": 78499840
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 76439552,
+            "heapUsedMeasuredOnly": 9282128,
+            "externalMeasuredOnly": 2724896,
+            "arrayBuffersMeasuredOnly": 886541,
+            "maxRssMeasuredOnly": 78499840
+          }
+        }
+      ]
+    },
+    "D-all": {
+      "fixture": "mem-d-shared-refs",
+      "selectedPages": 50,
+      "plan": {
+        "selectedPages": 50,
+        "destinationObjects": 102,
+        "danglingReferences": 0,
+        "copierEntries": 504,
+        "streams": 51,
+        "streamBytes": 409765,
+        "maxStreamBytes": 400000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 102,
+        "streamBytes": 409765
+      },
+      "outputBytesMeasuredOnly": 415762,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 427302
+          },
+          "memory": {
+            "rssMeasuredOnly": 76132352,
+            "heapUsedMeasuredOnly": 8769328,
+            "externalMeasuredOnly": 2751964,
+            "arrayBuffersMeasuredOnly": 913649,
+            "maxRssMeasuredOnly": 76537856
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76365824,
+            "heapUsedMeasuredOnly": 9116560,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78655488
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 50,
+              "destinationObjects": 102,
+              "danglingReferences": 0,
+              "copierEntries": 504,
+              "streams": 51,
+              "streamBytes": 409765,
+              "maxStreamBytes": 400000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76701696,
+            "heapUsedMeasuredOnly": 9214424,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78655488
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76439552,
+            "heapUsedMeasuredOnly": 9210632,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78655488
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            },
+            "destination": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 77508608,
+            "heapUsedMeasuredOnly": 9439528,
+            "externalMeasuredOnly": 3144232,
+            "arrayBuffersMeasuredOnly": 1305877,
+            "maxRssMeasuredOnly": 78655488
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 77221888,
+            "heapUsedMeasuredOnly": 9451088,
+            "externalMeasuredOnly": 3144232,
+            "arrayBuffersMeasuredOnly": 1305877,
+            "maxRssMeasuredOnly": 78655488
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            },
+            "outputBytesMeasuredOnly": 415762
+          },
+          "memory": {
+            "rssMeasuredOnly": 78364672,
+            "heapUsedMeasuredOnly": 9702672,
+            "externalMeasuredOnly": 3559994,
+            "arrayBuffersMeasuredOnly": 1721639,
+            "maxRssMeasuredOnly": 80039936
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 78049280,
+            "heapUsedMeasuredOnly": 9555280,
+            "externalMeasuredOnly": 3150229,
+            "arrayBuffersMeasuredOnly": 1311874,
+            "maxRssMeasuredOnly": 80039936
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 77611008,
+            "heapUsedMeasuredOnly": 9556616,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 80039936
+          }
+        }
+      ]
+    },
+    "E-p1": {
+      "fixture": "mem-e-deep-cycle",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 204,
+        "danglingReferences": 0,
+        "copierEntries": 1017,
+        "streams": 202,
+        "streamBytes": 2395,
+        "maxStreamBytes": 192,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 204,
+        "streamBytes": 2395
+      },
+      "outputBytesMeasuredOnly": 33282,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 36673
+          },
+          "memory": {
+            "rssMeasuredOnly": 75788288,
+            "heapUsedMeasuredOnly": 8769056,
+            "externalMeasuredOnly": 2361335,
+            "arrayBuffersMeasuredOnly": 523020,
+            "maxRssMeasuredOnly": 75792384
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 207,
+              "streams": 202,
+              "streamBytes": 2395,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 207
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76316672,
+            "heapUsedMeasuredOnly": 9302744,
+            "externalMeasuredOnly": 2324894,
+            "arrayBuffersMeasuredOnly": 486539,
+            "maxRssMeasuredOnly": 78503936
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 204,
+              "danglingReferences": 0,
+              "copierEntries": 1017,
+              "streams": 202,
+              "streamBytes": 2395,
+              "maxStreamBytes": 192,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 77152256,
+            "heapUsedMeasuredOnly": 9384872,
+            "externalMeasuredOnly": 2324894,
+            "arrayBuffersMeasuredOnly": 486539,
+            "maxRssMeasuredOnly": 78503936
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76156928,
+            "heapUsedMeasuredOnly": 9599656,
+            "externalMeasuredOnly": 2324894,
+            "arrayBuffersMeasuredOnly": 486539,
+            "maxRssMeasuredOnly": 78503936
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 207,
+              "streams": 202,
+              "streamBytes": 2395,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 207
+            },
+            "destination": {
+              "objects": 207,
+              "streams": 202,
+              "streamBytes": 2395,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 207
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76701696,
+            "heapUsedMeasuredOnly": 9738896,
+            "externalMeasuredOnly": 2325086,
+            "arrayBuffersMeasuredOnly": 486731,
+            "maxRssMeasuredOnly": 78503936
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 207,
+              "streams": 202,
+              "streamBytes": 2395,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 207
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 76734464,
+            "heapUsedMeasuredOnly": 9739408,
+            "externalMeasuredOnly": 2325086,
+            "arrayBuffersMeasuredOnly": 486731,
+            "maxRssMeasuredOnly": 78503936
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 207,
+              "streams": 202,
+              "streamBytes": 2395,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 207
+            },
+            "outputBytesMeasuredOnly": 33282
+          },
+          "memory": {
+            "rssMeasuredOnly": 76914688,
+            "heapUsedMeasuredOnly": 10023704,
+            "externalMeasuredOnly": 2358368,
+            "arrayBuffersMeasuredOnly": 520013,
+            "maxRssMeasuredOnly": 78573568
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 76939264,
+            "heapUsedMeasuredOnly": 9692760,
+            "externalMeasuredOnly": 2358176,
+            "arrayBuffersMeasuredOnly": 519821,
+            "maxRssMeasuredOnly": 78573568
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 76939264,
+            "heapUsedMeasuredOnly": 9701256,
+            "externalMeasuredOnly": 2324894,
+            "arrayBuffersMeasuredOnly": 486539,
+            "maxRssMeasuredOnly": 78573568
+          }
+        }
+      ]
+    },
+    "F-p1": {
+      "fixture": "mem-f-1000-pages",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 3,
+        "danglingReferences": 0,
+        "copierEntries": 12,
+        "streams": 1,
+        "streamBytes": 171,
+        "maxStreamBytes": 171,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 3,
+        "streamBytes": 171
+      },
+      "outputBytesMeasuredOnly": 933,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 503388
+          },
+          "memory": {
+            "rssMeasuredOnly": 75837440,
+            "heapUsedMeasuredOnly": 8768216,
+            "externalMeasuredOnly": 2828050,
+            "arrayBuffersMeasuredOnly": 989735,
+            "maxRssMeasuredOnly": 76447744
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 86941696,
+            "heapUsedMeasuredOnly": 12302816,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 3,
+              "danglingReferences": 0,
+              "copierEntries": 12,
+              "streams": 1,
+              "streamBytes": 171,
+              "maxStreamBytes": 171,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 86781952,
+            "heapUsedMeasuredOnly": 12554792,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 86818816,
+            "heapUsedMeasuredOnly": 12561776,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            },
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 171,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 87797760,
+            "heapUsedMeasuredOnly": 12580624,
+            "externalMeasuredOnly": 2498198,
+            "arrayBuffersMeasuredOnly": 659843,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 171,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 87064576,
+            "heapUsedMeasuredOnly": 12598328,
+            "externalMeasuredOnly": 2498198,
+            "arrayBuffersMeasuredOnly": 659843,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 171,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "outputBytesMeasuredOnly": 933
+          },
+          "memory": {
+            "rssMeasuredOnly": 86728704,
+            "heapUsedMeasuredOnly": 12793944,
+            "externalMeasuredOnly": 2499131,
+            "arrayBuffersMeasuredOnly": 660776,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 86675456,
+            "heapUsedMeasuredOnly": 10024200,
+            "externalMeasuredOnly": 2325806,
+            "arrayBuffersMeasuredOnly": 487451,
+            "maxRssMeasuredOnly": 88150016
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 86761472,
+            "heapUsedMeasuredOnly": 10030896,
+            "externalMeasuredOnly": 2324873,
+            "arrayBuffersMeasuredOnly": 486518,
+            "maxRssMeasuredOnly": 88150016
+          }
+        }
+      ]
+    },
+    "F-all": {
+      "fixture": "mem-f-1000-pages",
+      "selectedPages": 1000,
+      "plan": {
+        "selectedPages": 1000,
+        "destinationObjects": 2001,
+        "danglingReferences": 0,
+        "copierEntries": 10002,
+        "streams": 1000,
+        "streamBytes": 173325,
+        "maxStreamBytes": 175,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 2001,
+        "streamBytes": 173325
+      },
+      "outputBytesMeasuredOnly": 277542,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 503388
+          },
+          "memory": {
+            "rssMeasuredOnly": 76300288,
+            "heapUsedMeasuredOnly": 8780800,
+            "externalMeasuredOnly": 2828050,
+            "arrayBuffersMeasuredOnly": 989735,
+            "maxRssMeasuredOnly": 76869632
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 87183360,
+            "heapUsedMeasuredOnly": 12531328,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 88313856
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1000,
+              "destinationObjects": 2001,
+              "danglingReferences": 0,
+              "copierEntries": 10002,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "maxStreamBytes": 175,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 89264128,
+            "heapUsedMeasuredOnly": 12860280,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 90042368
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 90087424,
+            "heapUsedMeasuredOnly": 12867416,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 90091520
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            },
+            "destination": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 103485440,
+            "heapUsedMeasuredOnly": 15569640,
+            "externalMeasuredOnly": 2671352,
+            "arrayBuffersMeasuredOnly": 832997,
+            "maxRssMeasuredOnly": 104153088
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 102576128,
+            "heapUsedMeasuredOnly": 15553440,
+            "externalMeasuredOnly": 2671352,
+            "arrayBuffersMeasuredOnly": 832997,
+            "maxRssMeasuredOnly": 104153088
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            },
+            "outputBytesMeasuredOnly": 277542
+          },
+          "memory": {
+            "rssMeasuredOnly": 104726528,
+            "heapUsedMeasuredOnly": 15674424,
+            "externalMeasuredOnly": 2948894,
+            "arrayBuffersMeasuredOnly": 1110539,
+            "maxRssMeasuredOnly": 111177728
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 104456192,
+            "heapUsedMeasuredOnly": 12904648,
+            "externalMeasuredOnly": 2775569,
+            "arrayBuffersMeasuredOnly": 937214,
+            "maxRssMeasuredOnly": 111177728
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 103837696,
+            "heapUsedMeasuredOnly": 12905984,
+            "externalMeasuredOnly": 2498027,
+            "arrayBuffersMeasuredOnly": 659672,
+            "maxRssMeasuredOnly": 111177728
+          }
+        }
+      ]
+    },
+    "G1-p1": {
+      "fixture": "mem-g1-large-image-raw",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 9000193,
+        "maxStreamBytes": 9000000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 4,
+        "streamBytes": 9000193
+      },
+      "outputBytesMeasuredOnly": 9001133,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 9001068
+          },
+          "memory": {
+            "rssMeasuredOnly": 84512768,
+            "heapUsedMeasuredOnly": 8768120,
+            "externalMeasuredOnly": 11325730,
+            "arrayBuffersMeasuredOnly": 9487415,
+            "maxRssMeasuredOnly": 93474816
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 9000193,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 84496384,
+            "heapUsedMeasuredOnly": 8899808,
+            "externalMeasuredOnly": 11324895,
+            "arrayBuffersMeasuredOnly": 9486540,
+            "maxRssMeasuredOnly": 93519872
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 4,
+              "danglingReferences": 0,
+              "copierEntries": 14,
+              "streams": 2,
+              "streamBytes": 9000193,
+              "maxStreamBytes": 9000000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 84545536,
+            "heapUsedMeasuredOnly": 8936864,
+            "externalMeasuredOnly": 11324895,
+            "arrayBuffersMeasuredOnly": 9486540,
+            "maxRssMeasuredOnly": 93519872
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 84553728,
+            "heapUsedMeasuredOnly": 8958024,
+            "externalMeasuredOnly": 11324895,
+            "arrayBuffersMeasuredOnly": 9486540,
+            "maxRssMeasuredOnly": 93519872
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 9000193,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 9000193,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 93646848,
+            "heapUsedMeasuredOnly": 9001384,
+            "externalMeasuredOnly": 20325088,
+            "arrayBuffersMeasuredOnly": 18486733,
+            "maxRssMeasuredOnly": 93646848
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 9000193,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 93646848,
+            "heapUsedMeasuredOnly": 9001952,
+            "externalMeasuredOnly": 20325088,
+            "arrayBuffersMeasuredOnly": 18486733,
+            "maxRssMeasuredOnly": 93646848
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 9000193,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "outputBytesMeasuredOnly": 9001133
+          },
+          "memory": {
+            "rssMeasuredOnly": 103211008,
+            "heapUsedMeasuredOnly": 9200688,
+            "externalMeasuredOnly": 29326221,
+            "arrayBuffersMeasuredOnly": 27487866,
+            "maxRssMeasuredOnly": 103522304
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 93962240,
+            "heapUsedMeasuredOnly": 9189408,
+            "externalMeasuredOnly": 20326028,
+            "arrayBuffersMeasuredOnly": 18487673,
+            "maxRssMeasuredOnly": 103522304
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 85024768,
+            "heapUsedMeasuredOnly": 9196672,
+            "externalMeasuredOnly": 11324895,
+            "arrayBuffersMeasuredOnly": 9486540,
+            "maxRssMeasuredOnly": 103522304
+          }
+        }
+      ]
+    },
+    "G2-p1": {
+      "fixture": "mem-g2-large-image-flate",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 8963,
+        "maxStreamBytes": 8770,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 4,
+        "streamBytes": 8963
+      },
+      "outputBytesMeasuredOnly": 9913,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 9853
+          },
+          "memory": {
+            "rssMeasuredOnly": 75247616,
+            "heapUsedMeasuredOnly": 8768072,
+            "externalMeasuredOnly": 2334515,
+            "arrayBuffersMeasuredOnly": 496200,
+            "maxRssMeasuredOnly": 75280384
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 8963,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75382784,
+            "heapUsedMeasuredOnly": 8899760,
+            "externalMeasuredOnly": 2333665,
+            "arrayBuffersMeasuredOnly": 495310,
+            "maxRssMeasuredOnly": 75403264
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 4,
+              "danglingReferences": 0,
+              "copierEntries": 14,
+              "streams": 2,
+              "streamBytes": 8963,
+              "maxStreamBytes": 8770,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75407360,
+            "heapUsedMeasuredOnly": 8936816,
+            "externalMeasuredOnly": 2333665,
+            "arrayBuffersMeasuredOnly": 495310,
+            "maxRssMeasuredOnly": 75407360
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75419648,
+            "heapUsedMeasuredOnly": 8957976,
+            "externalMeasuredOnly": 2333665,
+            "arrayBuffersMeasuredOnly": 495310,
+            "maxRssMeasuredOnly": 75419648
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 8963,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 8963,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75501568,
+            "heapUsedMeasuredOnly": 9001336,
+            "externalMeasuredOnly": 2342628,
+            "arrayBuffersMeasuredOnly": 504273,
+            "maxRssMeasuredOnly": 75501568
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 8963,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 75501568,
+            "heapUsedMeasuredOnly": 9001904,
+            "externalMeasuredOnly": 2342628,
+            "arrayBuffersMeasuredOnly": 504273,
+            "maxRssMeasuredOnly": 75501568
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 8963,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "outputBytesMeasuredOnly": 9913
+          },
+          "memory": {
+            "rssMeasuredOnly": 76374016,
+            "heapUsedMeasuredOnly": 9200640,
+            "externalMeasuredOnly": 2352541,
+            "arrayBuffersMeasuredOnly": 514186,
+            "maxRssMeasuredOnly": 76800000
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 76115968,
+            "heapUsedMeasuredOnly": 9189360,
+            "externalMeasuredOnly": 2343578,
+            "arrayBuffersMeasuredOnly": 505223,
+            "maxRssMeasuredOnly": 76800000
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 76120064,
+            "heapUsedMeasuredOnly": 9196624,
+            "externalMeasuredOnly": 2333665,
+            "arrayBuffersMeasuredOnly": 495310,
+            "maxRssMeasuredOnly": 76800000
+          }
+        }
+      ]
+    },
+    "I-p1": {
+      "fixture": "mem-i-linked-heavy-pages",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 40,
+        "danglingReferences": 0,
+        "copierEntries": 176,
+        "streams": 20,
+        "streamBytes": 4901945,
+        "maxStreamBytes": 490000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 9
+      },
+      "copyAdded": {
+        "objects": 40,
+        "streamBytes": 4901945
+      },
+      "outputBytesMeasuredOnly": 4905458,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 4908863
+          },
+          "memory": {
+            "rssMeasuredOnly": 80424960,
+            "heapUsedMeasuredOnly": 8768968,
+            "externalMeasuredOnly": 7233525,
+            "arrayBuffersMeasuredOnly": 5395210,
+            "maxRssMeasuredOnly": 84910080
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80633856,
+            "heapUsedMeasuredOnly": 8997376,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 86036480
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 40,
+              "danglingReferences": 0,
+              "copierEntries": 176,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "maxStreamBytes": 490000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 9
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80728064,
+            "heapUsedMeasuredOnly": 9063368,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 86036480
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80740352,
+            "heapUsedMeasuredOnly": 9075384,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 86036480
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            },
+            "destination": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 85798912,
+            "heapUsedMeasuredOnly": 9173768,
+            "externalMeasuredOnly": 12128592,
+            "arrayBuffersMeasuredOnly": 10290237,
+            "maxRssMeasuredOnly": 86036480
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 85864448,
+            "heapUsedMeasuredOnly": 9174328,
+            "externalMeasuredOnly": 12128592,
+            "arrayBuffersMeasuredOnly": 10290237,
+            "maxRssMeasuredOnly": 86036480
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            },
+            "outputBytesMeasuredOnly": 4905458
+          },
+          "memory": {
+            "rssMeasuredOnly": 91709440,
+            "heapUsedMeasuredOnly": 9402616,
+            "externalMeasuredOnly": 17034050,
+            "arrayBuffersMeasuredOnly": 15195695,
+            "maxRssMeasuredOnly": 91770880
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 86528000,
+            "heapUsedMeasuredOnly": 9345224,
+            "externalMeasuredOnly": 12132105,
+            "arrayBuffersMeasuredOnly": 10293750,
+            "maxRssMeasuredOnly": 91770880
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 81620992,
+            "heapUsedMeasuredOnly": 9346560,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 91770880
+          }
+        }
+      ]
+    },
+    "I-p10": {
+      "fixture": "mem-i-linked-heavy-pages",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 490196,
+        "maxStreamBytes": 490000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 4,
+        "streamBytes": 490196
+      },
+      "outputBytesMeasuredOnly": 491134,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 4908863
+          },
+          "memory": {
+            "rssMeasuredOnly": 80203776,
+            "heapUsedMeasuredOnly": 8768704,
+            "externalMeasuredOnly": 7233525,
+            "arrayBuffersMeasuredOnly": 5395210,
+            "maxRssMeasuredOnly": 85057536
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80248832,
+            "heapUsedMeasuredOnly": 8997112,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 4,
+              "danglingReferences": 0,
+              "copierEntries": 14,
+              "streams": 2,
+              "streamBytes": 490196,
+              "maxStreamBytes": 490000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80265216,
+            "heapUsedMeasuredOnly": 9041608,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80265216,
+            "heapUsedMeasuredOnly": 9053544,
+            "externalMeasuredOnly": 7226647,
+            "arrayBuffersMeasuredOnly": 5388292,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 43,
+              "streams": 20,
+              "streamBytes": 4901945,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 43
+            },
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 490196,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 80822272,
+            "heapUsedMeasuredOnly": 9102008,
+            "externalMeasuredOnly": 7716843,
+            "arrayBuffersMeasuredOnly": 5878488,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 490196,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 80822272,
+            "heapUsedMeasuredOnly": 9102568,
+            "externalMeasuredOnly": 7716843,
+            "arrayBuffersMeasuredOnly": 5878488,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 7,
+              "streams": 2,
+              "streamBytes": 490196,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 7
+            },
+            "outputBytesMeasuredOnly": 491134
+          },
+          "memory": {
+            "rssMeasuredOnly": 81514496,
+            "heapUsedMeasuredOnly": 9296992,
+            "externalMeasuredOnly": 8207977,
+            "arrayBuffersMeasuredOnly": 6369622,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 76619776,
+            "heapUsedMeasuredOnly": 9239608,
+            "externalMeasuredOnly": 3306032,
+            "arrayBuffersMeasuredOnly": 1467677,
+            "maxRssMeasuredOnly": 85725184
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 76193792,
+            "heapUsedMeasuredOnly": 9246872,
+            "externalMeasuredOnly": 2814898,
+            "arrayBuffersMeasuredOnly": 976543,
+            "maxRssMeasuredOnly": 85725184
+          }
+        }
+      ]
+    },
+    "J-p1": {
+      "fixture": "mem-j-distinct-names",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 20003,
+        "danglingReferences": 0,
+        "copierEntries": 40013,
+        "streams": 1,
+        "streamBytes": 172,
+        "maxStreamBytes": 172,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 20003,
+        "streamBytes": 172
+      },
+      "outputBytesMeasuredOnly": 340554,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 1896489
+          },
+          "memory": {
+            "rssMeasuredOnly": 77676544,
+            "heapUsedMeasuredOnly": 8768736,
+            "externalMeasuredOnly": 4221151,
+            "arrayBuffersMeasuredOnly": 2382836,
+            "maxRssMeasuredOnly": 79822848
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 126345216,
+            "heapUsedMeasuredOnly": 27066296,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 130269184
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 20003,
+              "danglingReferences": 0,
+              "copierEntries": 40013,
+              "streams": 1,
+              "streamBytes": 172,
+              "maxStreamBytes": 172,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 127897600,
+            "heapUsedMeasuredOnly": 28620456,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 130940928
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 126914560,
+            "heapUsedMeasuredOnly": 27120560,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 130940928
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 138518528,
+            "heapUsedMeasuredOnly": 34337272,
+            "externalMeasuredOnly": 2325046,
+            "arrayBuffersMeasuredOnly": 486691,
+            "maxRssMeasuredOnly": 143822848
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 138792960,
+            "heapUsedMeasuredOnly": 34337984,
+            "externalMeasuredOnly": 2325046,
+            "arrayBuffersMeasuredOnly": 486691,
+            "maxRssMeasuredOnly": 143822848
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "outputBytesMeasuredOnly": 340554
+          },
+          "memory": {
+            "rssMeasuredOnly": 165543936,
+            "heapUsedMeasuredOnly": 30794576,
+            "externalMeasuredOnly": 2665600,
+            "arrayBuffersMeasuredOnly": 827245,
+            "maxRssMeasuredOnly": 278986752
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 164724736,
+            "heapUsedMeasuredOnly": 23601360,
+            "externalMeasuredOnly": 2665428,
+            "arrayBuffersMeasuredOnly": 827073,
+            "maxRssMeasuredOnly": 278986752
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 163663872,
+            "heapUsedMeasuredOnly": 23602696,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 278986752
+          }
+        }
+      ]
+    },
+    "K-p1": {
+      "fixture": "mem-k-objstm-inflation",
+      "selectedPages": 1,
+      "plan": {
+        "selectedPages": 1,
+        "destinationObjects": 2,
+        "danglingReferences": 0,
+        "copierEntries": 4,
+        "streams": 0,
+        "streamBytes": 0,
+        "maxStreamBytes": 0,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "copyAdded": {
+        "objects": 2,
+        "streamBytes": 0
+      },
+      "outputBytesMeasuredOnly": 585,
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {
+            "inputBytes": 33149
+          },
+          "memory": {
+            "rssMeasuredOnly": 75841536,
+            "heapUsedMeasuredOnly": 8768808,
+            "externalMeasuredOnly": 2357811,
+            "arrayBuffersMeasuredOnly": 519496,
+            "maxRssMeasuredOnly": 75845632
+          }
+        },
+        {
+          "phase": "1 after source load",
+          "structural": {
+            "source": {
+              "objects": 5,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76222464,
+            "heapUsedMeasuredOnly": 8923992,
+            "externalMeasuredOnly": 2324702,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "2 after graph scan",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 2,
+              "danglingReferences": 0,
+              "copierEntries": 4,
+              "streams": 0,
+              "streamBytes": 0,
+              "maxStreamBytes": 0,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76222464,
+            "heapUsedMeasuredOnly": 8949752,
+            "externalMeasuredOnly": 2324702,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "3 after destination create",
+          "structural": {
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76222464,
+            "heapUsedMeasuredOnly": 8962624,
+            "externalMeasuredOnly": 2324702,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "4 after copyPages",
+          "structural": {
+            "source": {
+              "objects": 5,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "destination": {
+              "objects": 5,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 5
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76304384,
+            "heapUsedMeasuredOnly": 9012384,
+            "externalMeasuredOnly": 2324702,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 5,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 5
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 76316672,
+            "heapUsedMeasuredOnly": 9012872,
+            "externalMeasuredOnly": 2324702,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 5,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 5
+            },
+            "outputBytesMeasuredOnly": 585
+          },
+          "memory": {
+            "rssMeasuredOnly": 76414976,
+            "heapUsedMeasuredOnly": 9192224,
+            "externalMeasuredOnly": 2325287,
+            "arrayBuffersMeasuredOnly": 486932,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "7a source released",
+          "structural": {
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 76435456,
+            "heapUsedMeasuredOnly": 9184168,
+            "externalMeasuredOnly": 2325287,
+            "arrayBuffersMeasuredOnly": 486932,
+            "maxRssMeasuredOnly": 160436224
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 76439552,
+            "heapUsedMeasuredOnly": 9191864,
+            "externalMeasuredOnly": 2324702,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 160436224
+          }
+        }
+      ]
+    },
+    "merge-A-C-B1": {
+      "fixtures": [
+        "mem-a-small-vector",
+        "mem-c-few-large-streams",
+        "mem-b1-many-objects"
+      ],
+      "perSource": [
+        {
+          "name": "mem-a-small-vector",
+          "plan": {
+            "selectedPages": 1,
+            "destinationObjects": 3,
+            "danglingReferences": 0,
+            "copierEntries": 12,
+            "streams": 1,
+            "streamBytes": 172,
+            "maxStreamBytes": 172,
+            "unsizedStreams": 0,
+            "pageLeavesReached": 0
+          }
+        },
+        {
+          "name": "mem-c-few-large-streams",
+          "plan": {
+            "selectedPages": 1,
+            "destinationObjects": 6,
+            "danglingReferences": 0,
+            "copierEntries": 18,
+            "streams": 4,
+            "streamBytes": 1260199,
+            "maxStreamBytes": 420000,
+            "unsizedStreams": 0,
+            "pageLeavesReached": 0
+          }
+        },
+        {
+          "name": "mem-b1-many-objects",
+          "plan": {
+            "selectedPages": 1,
+            "destinationObjects": 20003,
+            "danglingReferences": 0,
+            "copierEntries": 40013,
+            "streams": 1,
+            "streamBytes": 173,
+            "maxStreamBytes": 173,
+            "unsizedStreams": 0,
+            "pageLeavesReached": 0
+          }
+        }
+      ],
+      "planned": {
+        "objects": 20012,
+        "streamBytes": 1260544
+      },
+      "finalDestination": {
+        "objects": 20015,
+        "streams": 6,
+        "streamBytes": 1260544,
+        "unsizedStreams": 0,
+        "largestObjectNumber": 20015
+      },
+      "outputBytesMeasuredOnly": 1599020,
+      "released": [
+        {
+          "name": "mem-a-small-vector",
+          "sourceDocumentCollectableMeasuredOnly": true
+        },
+        {
+          "name": "mem-c-few-large-streams",
+          "sourceDocumentCollectableMeasuredOnly": true
+        },
+        {
+          "name": "mem-b1-many-objects",
+          "sourceDocumentCollectableMeasuredOnly": true
+        }
+      ],
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 75051008,
+            "heapUsedMeasuredOnly": 8767880,
+            "externalMeasuredOnly": 2324662,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 75153408
+          }
+        },
+        {
+          "phase": "1 mem-a-small-vector loaded",
+          "structural": {
+            "source": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75456512,
+            "heapUsedMeasuredOnly": 8899880,
+            "externalMeasuredOnly": 2325728,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 75485184
+          }
+        },
+        {
+          "phase": "4 mem-a-small-vector copied",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 3,
+              "danglingReferences": 0,
+              "copierEntries": 12,
+              "streams": 1,
+              "streamBytes": 172,
+              "maxStreamBytes": 172,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            },
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 75550720,
+            "heapUsedMeasuredOnly": 8976992,
+            "externalMeasuredOnly": 2325046,
+            "arrayBuffersMeasuredOnly": 486691,
+            "maxRssMeasuredOnly": 75591680
+          }
+        },
+        {
+          "phase": "7 mem-a-small-vector released",
+          "structural": {
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            },
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 75554816,
+            "heapUsedMeasuredOnly": 9265120,
+            "externalMeasuredOnly": 2324874,
+            "arrayBuffersMeasuredOnly": 486519,
+            "maxRssMeasuredOnly": 75591680
+          }
+        },
+        {
+          "phase": "1 mem-c-few-large-streams loaded",
+          "structural": {
+            "source": {
+              "objects": 9,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 9
+            },
+            "destination": {
+              "objects": 6,
+              "streams": 1,
+              "streamBytes": 172,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 6
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76853248,
+            "heapUsedMeasuredOnly": 9028712,
+            "externalMeasuredOnly": 4846519,
+            "arrayBuffersMeasuredOnly": 1746718,
+            "maxRssMeasuredOnly": 79376384
+          }
+        },
+        {
+          "phase": "4 mem-c-few-large-streams copied",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 6,
+              "danglingReferences": 0,
+              "copierEntries": 18,
+              "streams": 4,
+              "streamBytes": 1260199,
+              "maxStreamBytes": 420000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            },
+            "destination": {
+              "objects": 12,
+              "streams": 5,
+              "streamBytes": 1260371,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 12
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 78127104,
+            "heapUsedMeasuredOnly": 9062072,
+            "externalMeasuredOnly": 4845272,
+            "arrayBuffersMeasuredOnly": 3006917,
+            "maxRssMeasuredOnly": 79376384
+          }
+        },
+        {
+          "phase": "7 mem-c-few-large-streams released",
+          "structural": {
+            "destination": {
+              "objects": 12,
+              "streams": 5,
+              "streamBytes": 1260371,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 12
+            },
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 76791808,
+            "heapUsedMeasuredOnly": 9047840,
+            "externalMeasuredOnly": 3585073,
+            "arrayBuffersMeasuredOnly": 1746718,
+            "maxRssMeasuredOnly": 79376384
+          }
+        },
+        {
+          "phase": "1 mem-b1-many-objects loaded",
+          "structural": {
+            "source": {
+              "objects": 20006,
+              "streams": 1,
+              "streamBytes": 173,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20006
+            },
+            "destination": {
+              "objects": 12,
+              "streams": 5,
+              "streamBytes": 1260371,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 12
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 116789248,
+            "heapUsedMeasuredOnly": 22161944,
+            "externalMeasuredOnly": 3585246,
+            "arrayBuffersMeasuredOnly": 1746891,
+            "maxRssMeasuredOnly": 118865920
+          }
+        },
+        {
+          "phase": "4 mem-b1-many-objects copied",
+          "structural": {
+            "plan": {
+              "selectedPages": 1,
+              "destinationObjects": 20003,
+              "danglingReferences": 0,
+              "copierEntries": 40013,
+              "streams": 1,
+              "streamBytes": 173,
+              "maxStreamBytes": 173,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            },
+            "destination": {
+              "objects": 20015,
+              "streams": 6,
+              "streamBytes": 1260544,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20015
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 139444224,
+            "heapUsedMeasuredOnly": 29386560,
+            "externalMeasuredOnly": 3585419,
+            "arrayBuffersMeasuredOnly": 1747064,
+            "maxRssMeasuredOnly": 145244160
+          }
+        },
+        {
+          "phase": "7 mem-b1-many-objects released",
+          "structural": {
+            "destination": {
+              "objects": 20015,
+              "streams": 6,
+              "streamBytes": 1260544,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20015
+            },
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 138285056,
+            "heapUsedMeasuredOnly": 22199376,
+            "externalMeasuredOnly": 3585246,
+            "arrayBuffersMeasuredOnly": 1746891,
+            "maxRssMeasuredOnly": 145244160
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 20015,
+              "streams": 6,
+              "streamBytes": 1260544,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20015
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 138584064,
+            "heapUsedMeasuredOnly": 22199672,
+            "externalMeasuredOnly": 3585246,
+            "arrayBuffersMeasuredOnly": 1746891,
+            "maxRssMeasuredOnly": 145244160
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 20015,
+              "streams": 6,
+              "streamBytes": 1260544,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 20015
+            },
+            "outputBytesMeasuredOnly": 1599020
+          },
+          "memory": {
+            "rssMeasuredOnly": 154095616,
+            "heapUsedMeasuredOnly": 22639344,
+            "externalMeasuredOnly": 5184266,
+            "arrayBuffersMeasuredOnly": 3345911,
+            "maxRssMeasuredOnly": 233512960
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 152535040,
+            "heapUsedMeasuredOnly": 22613744,
+            "externalMeasuredOnly": 3585246,
+            "arrayBuffersMeasuredOnly": 1746891,
+            "maxRssMeasuredOnly": 233512960
+          }
+        }
+      ]
+    },
+    "merge-D-F": {
+      "fixtures": [
+        "mem-d-shared-refs",
+        "mem-f-1000-pages"
+      ],
+      "perSource": [
+        {
+          "name": "mem-d-shared-refs",
+          "plan": {
+            "selectedPages": 50,
+            "destinationObjects": 102,
+            "danglingReferences": 0,
+            "copierEntries": 504,
+            "streams": 51,
+            "streamBytes": 409765,
+            "maxStreamBytes": 400000,
+            "unsizedStreams": 0,
+            "pageLeavesReached": 0
+          }
+        },
+        {
+          "name": "mem-f-1000-pages",
+          "plan": {
+            "selectedPages": 1000,
+            "destinationObjects": 2001,
+            "danglingReferences": 0,
+            "copierEntries": 10002,
+            "streams": 1000,
+            "streamBytes": 173325,
+            "maxStreamBytes": 175,
+            "unsizedStreams": 0,
+            "pageLeavesReached": 0
+          }
+        }
+      ],
+      "planned": {
+        "objects": 2103,
+        "streamBytes": 583090
+      },
+      "finalDestination": {
+        "objects": 2106,
+        "streams": 1051,
+        "streamBytes": 583090,
+        "unsizedStreams": 0,
+        "largestObjectNumber": 2106
+      },
+      "outputBytesMeasuredOnly": 692562,
+      "released": [
+        {
+          "name": "mem-d-shared-refs",
+          "sourceDocumentCollectableMeasuredOnly": true
+        },
+        {
+          "name": "mem-f-1000-pages",
+          "sourceDocumentCollectableMeasuredOnly": true
+        }
+      ],
+      "phases": [
+        {
+          "phase": "0 before load",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 76079104,
+            "heapUsedMeasuredOnly": 8768224,
+            "externalMeasuredOnly": 2324662,
+            "arrayBuffersMeasuredOnly": 486347,
+            "maxRssMeasuredOnly": 76222464
+          }
+        },
+        {
+          "phase": "1 mem-d-shared-refs loaded",
+          "structural": {
+            "source": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            },
+            "destination": {
+              "objects": 3,
+              "streams": 0,
+              "streamBytes": 0,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 3
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 76664832,
+            "heapUsedMeasuredOnly": 9129776,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78544896
+          }
+        },
+        {
+          "phase": "4 mem-d-shared-refs copied",
+          "structural": {
+            "plan": {
+              "selectedPages": 50,
+              "destinationObjects": 102,
+              "danglingReferences": 0,
+              "copierEntries": 504,
+              "streams": 51,
+              "streamBytes": 409765,
+              "maxStreamBytes": 400000,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            },
+            "destination": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 77934592,
+            "heapUsedMeasuredOnly": 9432080,
+            "externalMeasuredOnly": 3144232,
+            "arrayBuffersMeasuredOnly": 1305877,
+            "maxRssMeasuredOnly": 78544896
+          }
+        },
+        {
+          "phase": "7 mem-d-shared-refs released",
+          "structural": {
+            "destination": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            },
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 77062144,
+            "heapUsedMeasuredOnly": 9306104,
+            "externalMeasuredOnly": 2734467,
+            "arrayBuffersMeasuredOnly": 896112,
+            "maxRssMeasuredOnly": 78544896
+          }
+        },
+        {
+          "phase": "1 mem-f-1000-pages loaded",
+          "structural": {
+            "source": {
+              "objects": 2004,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2004
+            },
+            "destination": {
+              "objects": 105,
+              "streams": 51,
+              "streamBytes": 409765,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 105
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 90120192,
+            "heapUsedMeasuredOnly": 12870560,
+            "externalMeasuredOnly": 2907792,
+            "arrayBuffersMeasuredOnly": 1069437,
+            "maxRssMeasuredOnly": 90148864
+          }
+        },
+        {
+          "phase": "4 mem-f-1000-pages copied",
+          "structural": {
+            "plan": {
+              "selectedPages": 1000,
+              "destinationObjects": 2001,
+              "danglingReferences": 0,
+              "copierEntries": 10002,
+              "streams": 1000,
+              "streamBytes": 173325,
+              "maxStreamBytes": 175,
+              "unsizedStreams": 0,
+              "pageLeavesReached": 0
+            },
+            "destination": {
+              "objects": 2106,
+              "streams": 1051,
+              "streamBytes": 583090,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2106
+            }
+          },
+          "memory": {
+            "rssMeasuredOnly": 103841792,
+            "heapUsedMeasuredOnly": 15841440,
+            "externalMeasuredOnly": 3081117,
+            "arrayBuffersMeasuredOnly": 1242762,
+            "maxRssMeasuredOnly": 104800256
+          }
+        },
+        {
+          "phase": "7 mem-f-1000-pages released",
+          "structural": {
+            "destination": {
+              "objects": 2106,
+              "streams": 1051,
+              "streamBytes": 583090,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2106
+            },
+            "sourceDocumentCollectableMeasuredOnly": true,
+            "sourceContextCollectableMeasuredOnly": true,
+            "inputBufferCollectableMeasuredOnly": true
+          },
+          "memory": {
+            "rssMeasuredOnly": 103907328,
+            "heapUsedMeasuredOnly": 13070336,
+            "externalMeasuredOnly": 2907792,
+            "arrayBuffersMeasuredOnly": 1069437,
+            "maxRssMeasuredOnly": 104800256
+          }
+        },
+        {
+          "phase": "5 before save",
+          "structural": {
+            "destination": {
+              "objects": 2106,
+              "streams": 1051,
+              "streamBytes": 583090,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2106
+            },
+            "predictedPlainBytesMeasuredOnly": null
+          },
+          "memory": {
+            "rssMeasuredOnly": 103907328,
+            "heapUsedMeasuredOnly": 13078792,
+            "externalMeasuredOnly": 2907792,
+            "arrayBuffersMeasuredOnly": 1069437,
+            "maxRssMeasuredOnly": 104800256
+          }
+        },
+        {
+          "phase": "6 immediately after save",
+          "structural": {
+            "destination": {
+              "objects": 2106,
+              "streams": 1051,
+              "streamBytes": 583090,
+              "unsizedStreams": 0,
+              "largestObjectNumber": 2106
+            },
+            "outputBytesMeasuredOnly": 692562
+          },
+          "memory": {
+            "rssMeasuredOnly": 105844736,
+            "heapUsedMeasuredOnly": 13199864,
+            "externalMeasuredOnly": 3600354,
+            "arrayBuffersMeasuredOnly": 1761999,
+            "maxRssMeasuredOnly": 113152000
+          }
+        },
+        {
+          "phase": "7b everything released",
+          "structural": {},
+          "memory": {
+            "rssMeasuredOnly": 104189952,
+            "heapUsedMeasuredOnly": 13201400,
+            "externalMeasuredOnly": 2907792,
+            "arrayBuffersMeasuredOnly": 1069437,
+            "maxRssMeasuredOnly": 113152000
+          }
+        }
+      ]
+    }
+  },
+  "structural": {
+    "sharedReferences": {
+      "union": {
+        "selectedPages": 50,
+        "destinationObjects": 102,
+        "danglingReferences": 0,
+        "copierEntries": 504,
+        "streams": 51,
+        "streamBytes": 409765,
+        "maxStreamBytes": 400000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "summedPerPage": {
+        "streams": 100,
+        "streamBytes": 20009765
+      },
+      "context": {
+        "objects": 104,
+        "streams": 51,
+        "streamBytes": 409765,
+        "unsizedStreams": 0,
+        "largestObjectNumber": 104
+      }
+    },
+    "pageCount": {
+      "I-p1": {
+        "selectedPages": 1,
+        "destinationObjects": 40,
+        "danglingReferences": 0,
+        "copierEntries": 176,
+        "streams": 20,
+        "streamBytes": 4901945,
+        "maxStreamBytes": 490000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 9
+      },
+      "I-p10": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 490196,
+        "maxStreamBytes": 490000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      }
+    },
+    "fileSizeAgainstObjects": {
+      "B1": {
+        "fileBytes": 1876490,
+        "plan": {
+          "selectedPages": 1,
+          "destinationObjects": 20003,
+          "danglingReferences": 0,
+          "copierEntries": 40013,
+          "streams": 1,
+          "streamBytes": 173,
+          "maxStreamBytes": 173,
+          "unsizedStreams": 0,
+          "pageLeavesReached": 0
+        }
+      },
+      "C": {
+        "fileBytes": 1261446,
+        "plan": {
+          "selectedPages": 1,
+          "destinationObjects": 6,
+          "danglingReferences": 0,
+          "copierEntries": 18,
+          "streams": 4,
+          "streamBytes": 1260199,
+          "maxStreamBytes": 420000,
+          "unsizedStreams": 0,
+          "pageLeavesReached": 0
+        }
+      }
+    },
+    "packing": {
+      "B1": {
+        "fileBytes": 1876490,
+        "plan": {
+          "selectedPages": 1,
+          "destinationObjects": 20003,
+          "danglingReferences": 0,
+          "copierEntries": 40013,
+          "streams": 1,
+          "streamBytes": 173,
+          "maxStreamBytes": 173,
+          "unsizedStreams": 0,
+          "pageLeavesReached": 0
+        }
+      },
+      "B2": {
+        "fileBytes": 336526,
+        "plan": {
+          "selectedPages": 1,
+          "destinationObjects": 20003,
+          "danglingReferences": 0,
+          "copierEntries": 40013,
+          "streams": 1,
+          "streamBytes": 173,
+          "maxStreamBytes": 173,
+          "unsizedStreams": 0,
+          "pageLeavesReached": 0
+        }
+      }
+    },
+    "loadInflation": {
+      "inputBytes": 33149,
+      "decodedObjectStreamBytes": 33554457
+    },
+    "encodedBytes": {
+      "G1": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 9000193,
+        "maxStreamBytes": 9000000,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      },
+      "G2": {
+        "selectedPages": 1,
+        "destinationObjects": 4,
+        "danglingReferences": 0,
+        "copierEntries": 14,
+        "streams": 2,
+        "streamBytes": 8963,
+        "maxStreamBytes": 8770,
+        "unsizedStreams": 0,
+        "pageLeavesReached": 0
+      }
+    },
+    "plainSavePrediction": {
+      "B1-plain": {
+        "predictedEqualsActual": true,
+        "predictedMeasuredOnly": 1877000,
+        "actualMeasuredOnly": 1877000
+      },
+      "C-plain": {
+        "predictedEqualsActual": true,
+        "predictedMeasuredOnly": 1261950,
+        "actualMeasuredOnly": 1261950
+      },
+      "I-p1-plain": {
+        "predictedEqualsActual": true,
+        "predictedMeasuredOnly": 4909178,
+        "actualMeasuredOnly": 4909178
+      }
+    }
+  },
+  "measuredOnly": {
+    "A-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 0,
+      "heapUsedAfterLoadMeasuredOnly": 113688,
+      "heapUsedAfterCopyMeasuredOnly": 224080,
+      "arrayBuffersAfterSaveMeasuredOnly": 424,
+      "peakRssBySaveMeasuredOnly": 917504,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "B1-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 37474304,
+      "heapUsedAfterLoadMeasuredOnly": 13272224,
+      "heapUsedAfterCopyMeasuredOnly": 20558984,
+      "arrayBuffersAfterSaveMeasuredOnly": -1539745,
+      "peakRssBySaveMeasuredOnly": 172675072,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "B2-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 43835392,
+      "heapUsedAfterLoadMeasuredOnly": 16315584,
+      "heapUsedAfterCopyMeasuredOnly": 23628712,
+      "arrayBuffersAfterSaveMeasuredOnly": 219,
+      "peakRssBySaveMeasuredOnly": 197910528,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "C-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 147456,
+      "heapUsedAfterLoadMeasuredOnly": 144920,
+      "heapUsedAfterCopyMeasuredOnly": 250296,
+      "arrayBuffersAfterSaveMeasuredOnly": 2520417,
+      "peakRssBySaveMeasuredOnly": 2568192,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "D-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 2027520,
+      "heapUsedAfterLoadMeasuredOnly": 345808,
+      "heapUsedAfterCopyMeasuredOnly": 458792,
+      "arrayBuffersAfterSaveMeasuredOnly": 783790,
+      "peakRssBySaveMeasuredOnly": 2027520,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "D-all": {
+      "loadPeakRssGrowthMeasuredOnly": 2117632,
+      "heapUsedAfterLoadMeasuredOnly": 347232,
+      "heapUsedAfterCopyMeasuredOnly": 670200,
+      "arrayBuffersAfterSaveMeasuredOnly": 807990,
+      "peakRssBySaveMeasuredOnly": 3502080,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "E-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 2711552,
+      "heapUsedAfterLoadMeasuredOnly": 533688,
+      "heapUsedAfterCopyMeasuredOnly": 969840,
+      "arrayBuffersAfterSaveMeasuredOnly": -3007,
+      "peakRssBySaveMeasuredOnly": 2781184,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "F-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 11702272,
+      "heapUsedAfterLoadMeasuredOnly": 3534600,
+      "heapUsedAfterCopyMeasuredOnly": 3812408,
+      "arrayBuffersAfterSaveMeasuredOnly": -328959,
+      "peakRssBySaveMeasuredOnly": 11702272,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "F-all": {
+      "loadPeakRssGrowthMeasuredOnly": 11444224,
+      "heapUsedAfterLoadMeasuredOnly": 3750528,
+      "heapUsedAfterCopyMeasuredOnly": 6788840,
+      "arrayBuffersAfterSaveMeasuredOnly": 120804,
+      "peakRssBySaveMeasuredOnly": 34308096,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "G1-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 45056,
+      "heapUsedAfterLoadMeasuredOnly": 131688,
+      "heapUsedAfterCopyMeasuredOnly": 233264,
+      "arrayBuffersAfterSaveMeasuredOnly": 18000451,
+      "peakRssBySaveMeasuredOnly": 10047488,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "G2-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 122880,
+      "heapUsedAfterLoadMeasuredOnly": 131688,
+      "heapUsedAfterCopyMeasuredOnly": 233264,
+      "arrayBuffersAfterSaveMeasuredOnly": 17986,
+      "peakRssBySaveMeasuredOnly": 1519616,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "I-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 1126400,
+      "heapUsedAfterLoadMeasuredOnly": 228408,
+      "heapUsedAfterCopyMeasuredOnly": 404800,
+      "arrayBuffersAfterSaveMeasuredOnly": 9800485,
+      "peakRssBySaveMeasuredOnly": 6860800,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "I-p10": {
+      "loadPeakRssGrowthMeasuredOnly": 667648,
+      "heapUsedAfterLoadMeasuredOnly": 228408,
+      "heapUsedAfterCopyMeasuredOnly": 333304,
+      "arrayBuffersAfterSaveMeasuredOnly": 974412,
+      "peakRssBySaveMeasuredOnly": 667648,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "J-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 50446336,
+      "heapUsedAfterLoadMeasuredOnly": 18297560,
+      "heapUsedAfterCopyMeasuredOnly": 25568536,
+      "arrayBuffersAfterSaveMeasuredOnly": -1555591,
+      "peakRssBySaveMeasuredOnly": 199163904,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "K-p1": {
+      "loadPeakRssGrowthMeasuredOnly": 84590592,
+      "heapUsedAfterLoadMeasuredOnly": 155184,
+      "heapUsedAfterCopyMeasuredOnly": 243576,
+      "arrayBuffersAfterSaveMeasuredOnly": -32564,
+      "peakRssBySaveMeasuredOnly": 84590592,
+      "sourceDocumentCollectableMeasuredOnly": true,
+      "inputBufferCollectableMeasuredOnly": true
+    },
+    "retainedAfterReleaseMeasuredOnly": {
+      "B1": 13776192,
+      "J": 14833960
+    }
+  }
+}

@@ -1,0 +1,3078 @@
+{
+  "provenance": {
+    "productionBase": "544a3baf6c7dcee02090dc90058735e377a08ea8",
+    "researchBranchAtRun": "research/m6-split-merge-reliability-architecture",
+    "testedResearchHead": "2c3f841618514887db0667e0bbc1d72eb32ba42e",
+    "researchPackageDirtyBeforeRun": false,
+    "coreCiRunsThisGate": false,
+    "dependencies": {
+      "pdf-lib": "1.17.1",
+      "pako": "2.1.0"
+    },
+    "node": "v24.15.0",
+    "ranAt": "2026-09-16T08:54:00.389Z"
+  },
+  "limits": {
+    "maxInputBytes": 67108864,
+    "maxDecodedBytesPerStream": 4194304,
+    "maxDecodedBytesTotal": 8388608,
+    "maxDecodeStreams": 64,
+    "maxXrefEntries": 100000,
+    "maxObjectsPerObjectStream": 10000,
+    "maxNestingDepth": 64,
+    "inflateChunkBytes": 16384
+  },
+  "fixtureCount": {
+    "declared": 35,
+    "listed": 35,
+    "present": 35
+  },
+  "fixtures": {
+    "lb-l1-objstm-inflation": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "ObjStm 9 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 33216,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4210688,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4210688,
+          "chunks": 257,
+          "consumedInputBytes": 4125,
+          "inputBytes": 32654
+        }
+      }
+    },
+    "lb-l2-xref-stream-inflation": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "XRef 9 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 32953,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 26,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 1,
+        "xrefEntriesDeclared": 10,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4210688,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4210688,
+          "chunks": 257,
+          "consumedInputBytes": 4096,
+          "inputBytes": 32623
+        }
+      }
+    },
+    "lb-l2b-xref-declared-entries": {
+      "expect": "REFUSE",
+      "expectedCode": "XREF_ENTRY_CAP",
+      "expectedStage": "declared-values",
+      "verdict": "REFUSE",
+      "code": "XREF_ENTRY_CAP",
+      "stage": "declared-values",
+      "reason": "XRef 9 0 brings declared entries to 1000000, over 100000",
+      "stats": {
+        "inputBytes": 343,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 26,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 1,
+        "xrefEntriesDeclared": 1000000,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l3-cumulative-decode": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_TOTAL",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_TOTAL",
+      "stage": "decode",
+      "reason": "ObjStm 12 0 decodes past 2097152 bytes",
+      "stats": {
+        "inputBytes": 10111,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 3,
+        "attributedDecodeTypeNames": 3,
+        "parsedValues": 40,
+        "indirectObjects": 6,
+        "streams": 3,
+        "decodeStreams": 2,
+        "objectStreams": 3,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 2,
+        "decodedBytesTotal": 6291456,
+        "maxStreamDecodedBytes": 3145728,
+        "maxMaterializedDecodedBytes": 3145728,
+        "maxRetainedDecodedBytes": 3145728,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 2097152,
+          "materialized": 2113536,
+          "chunks": 129,
+          "consumedInputBytes": 2089,
+          "inputBytes": 3095
+        }
+      }
+    },
+    "lb-l4-incremental-update": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "ObjStm 10 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 17084,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 27,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4210688,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4210688,
+          "chunks": 257,
+          "consumedInputBytes": 4126,
+          "inputBytes": 16347
+        }
+      }
+    },
+    "lb-l4b-prev-cycle": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 548,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 23,
+        "indirectObjects": 4,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l5-hybrid-clean": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 598,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 29,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 1,
+        "objectStreams": 0,
+        "xrefStreams": 1,
+        "xrefEntriesDeclared": 10,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 40,
+        "maxStreamDecodedBytes": 40,
+        "maxMaterializedDecodedBytes": 40,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 40,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l5b-hybrid-inflation": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "XRef 9 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 33211,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 29,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 1,
+        "xrefEntriesDeclared": 10,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4210688,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4210688,
+          "chunks": 257,
+          "consumedInputBytes": 4096,
+          "inputBytes": 32623
+        }
+      }
+    },
+    "lb-l6-objstm-wrong-length": {
+      "expect": "REFUSE",
+      "expectedCode": "AMBIGUOUS_STREAM_LENGTH",
+      "expectedStage": "declared-values",
+      "verdict": "REFUSE",
+      "code": "AMBIGUOUS_STREAM_LENGTH",
+      "stage": "declared-values",
+      "reason": "ObjStm 10 0 has no direct /Length that reaches endstream",
+      "stats": {
+        "inputBytes": 33241,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l6b-content-wrong-length": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 462,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 21,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l7-objstm-indirect-length": {
+      "expect": "REFUSE",
+      "expectedCode": "AMBIGUOUS_STREAM_LENGTH",
+      "expectedStage": "declared-values",
+      "verdict": "REFUSE",
+      "code": "AMBIGUOUS_STREAM_LENGTH",
+      "stage": "declared-values",
+      "reason": "ObjStm 10 0 has no direct /Length that reaches endstream",
+      "stats": {
+        "inputBytes": 33265,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 25,
+        "indirectObjects": 5,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l7b-content-indirect-length": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 504,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 22,
+        "indirectObjects": 5,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l8-filter-chain": {
+      "expect": "REFUSE",
+      "expectedCode": "UNSUPPORTED_FILTER",
+      "expectedStage": "declared-values",
+      "verdict": "REFUSE",
+      "code": "UNSUPPORTED_FILTER",
+      "stage": "declared-values",
+      "reason": "ObjStm 10 0 uses a filter the boundary does not decode",
+      "stats": {
+        "inputBytes": 2738,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 26,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l8b-lzw": {
+      "expect": "REFUSE",
+      "expectedCode": "UNSUPPORTED_FILTER",
+      "expectedStage": "declared-values",
+      "verdict": "REFUSE",
+      "code": "UNSUPPORTED_FILTER",
+      "stage": "declared-values",
+      "reason": "ObjStm 10 0 uses a filter the boundary does not decode",
+      "stats": {
+        "inputBytes": 584,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l9-clean-objstm": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 1176,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 2,
+        "attributedDecodeTypeNames": 2,
+        "parsedValues": 91,
+        "indirectObjects": 5,
+        "streams": 5,
+        "decodeStreams": 2,
+        "objectStreams": 1,
+        "xrefStreams": 1,
+        "xrefEntriesDeclared": 12,
+        "objectStreamObjects": 6,
+        "decodedBytesTotal": 801,
+        "maxStreamDecodedBytes": 741,
+        "maxMaterializedDecodedBytes": 741,
+        "maxRetainedDecodedBytes": 741,
+        "maxInflateChunkBytes": 741,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l10-clean-classic": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 1668,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 74,
+        "indirectObjects": 9,
+        "streams": 3,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l11-per-stream-exact": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 4701,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 26,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 1,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 1,
+        "decodedBytesTotal": 4194304,
+        "maxStreamDecodedBytes": 4194304,
+        "maxMaterializedDecodedBytes": 4194304,
+        "maxRetainedDecodedBytes": 4194304,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l12-per-stream-plus-one": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "ObjStm 10 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 4701,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4194305,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4194305,
+          "chunks": 257,
+          "consumedInputBytes": 4120,
+          "inputBytes": 4120
+        }
+      }
+    },
+    "lb-l11c-total-exact": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 8920,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 2,
+        "attributedDecodeTypeNames": 2,
+        "parsedValues": 34,
+        "indirectObjects": 5,
+        "streams": 2,
+        "decodeStreams": 2,
+        "objectStreams": 2,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 2,
+        "decodedBytesTotal": 8388608,
+        "maxStreamDecodedBytes": 4194304,
+        "maxMaterializedDecodedBytes": 4194304,
+        "maxRetainedDecodedBytes": 4194304,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l12c-total-plus-one": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_TOTAL",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_TOTAL",
+      "stage": "decode",
+      "reason": "ObjStm 12 0 decodes past 40 bytes",
+      "stats": {
+        "inputBytes": 9070,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 3,
+        "attributedDecodeTypeNames": 3,
+        "parsedValues": 40,
+        "indirectObjects": 6,
+        "streams": 3,
+        "decodeStreams": 2,
+        "objectStreams": 3,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 2,
+        "decodedBytesTotal": 8388568,
+        "maxStreamDecodedBytes": 4194304,
+        "maxMaterializedDecodedBytes": 4194304,
+        "maxRetainedDecodedBytes": 4194304,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 40,
+          "materialized": 41,
+          "chunks": 1,
+          "consumedInputBytes": 29,
+          "inputBytes": 29
+        }
+      }
+    },
+    "lb-l13-slow-parse": {
+      "expect": "PASS",
+      "expectedCode": null,
+      "expectedStage": null,
+      "verdict": "PASS",
+      "code": null,
+      "stage": null,
+      "reason": null,
+      "stats": {
+        "inputBytes": 7867100,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution",
+          "declared-values",
+          "decode",
+          "decoded-content"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 400020,
+        "indirectObjects": 100003,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l14-indirect-type": {
+      "expect": "REFUSE",
+      "expectedCode": "INDIRECT_TYPE_ON_STREAM",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "INDIRECT_TYPE_ON_STREAM",
+      "stage": "walk",
+      "reason": "object 10 0 has an indirect /Type",
+      "stats": {
+        "inputBytes": 33265,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 23,
+        "indirectObjects": 5,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l15-escaped-name": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "ObjStm 10 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 33244,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4210688,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4210688,
+          "chunks": 257,
+          "consumedInputBytes": 4131,
+          "inputBytes": 32659
+        }
+      }
+    },
+    "lb-l16-type-inside-objstm": {
+      "expect": "REFUSE",
+      "expectedCode": "INDIRECT_TYPE_ON_STREAM",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "INDIRECT_TYPE_ON_STREAM",
+      "stage": "walk",
+      "reason": "object 10 0 has an indirect /Type",
+      "stats": {
+        "inputBytes": 33359,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 28,
+        "indirectObjects": 5,
+        "streams": 2,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l16b-name-inside-objstm": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODE_TYPE_NAME_IN_DECODED_CONTENT",
+      "expectedStage": "decoded-content",
+      "verdict": "REFUSE",
+      "code": "DECODE_TYPE_NAME_IN_DECODED_CONTENT",
+      "stage": "decoded-content",
+      "reason": "ObjStm 9 0 decodes to bytes naming /ObjStm",
+      "stats": {
+        "inputBytes": 577,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 1,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 12,
+        "maxStreamDecodedBytes": 12,
+        "maxMaterializedDecodedBytes": 12,
+        "maxRetainedDecodedBytes": 12,
+        "maxInflateChunkBytes": 12,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l17-overlapping-offsets": {
+      "expect": "REFUSE",
+      "expectedCode": "OVERLAPPING_OBJECT_STREAM_OFFSETS",
+      "expectedStage": "decoded-content",
+      "verdict": "REFUSE",
+      "code": "OVERLAPPING_OBJECT_STREAM_OFFSETS",
+      "stage": "decoded-content",
+      "reason": "ObjStm 10 0 object 0 starts at 240, not after the previous one",
+      "stats": {
+        "inputBytes": 785,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 24,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 1,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 100242,
+        "maxStreamDecodedBytes": 100242,
+        "maxMaterializedDecodedBytes": 100242,
+        "maxRetainedDecodedBytes": 100242,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l18-encrypted-objstm": {
+      "expect": "REFUSE",
+      "expectedCode": "ENCRYPTED",
+      "expectedStage": "raw-name-scan",
+      "verdict": "REFUSE",
+      "code": "ENCRYPTED",
+      "stage": "raw-name-scan",
+      "reason": "the bytes name /Encrypt",
+      "stats": {
+        "inputBytes": 33323,
+        "stagesCompleted": [
+          "input"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 0,
+        "indirectObjects": 0,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l19-name-in-string": {
+      "expect": "REFUSE",
+      "expectedCode": "UNATTRIBUTED_DECODE_TYPE_NAME",
+      "expectedStage": "attribution",
+      "verdict": "REFUSE",
+      "code": "UNATTRIBUTED_DECODE_TYPE_NAME",
+      "stage": "attribution",
+      "reason": "/ObjStm appears where no stream's direct /Type is",
+      "stats": {
+        "inputBytes": 464,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk"
+        ],
+        "rawDecodeTypeNames": 2,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 21,
+        "indirectObjects": 4,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l20-junk-then-objstm": {
+      "expect": "REFUSE",
+      "expectedCode": "UNEXPECTED_BYTES",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "UNEXPECTED_BYTES",
+      "stage": "walk",
+      "reason": "bytes that are not an object, xref, trailer or startxref — pdf-lib would skip them and keep parsing",
+      "stats": {
+        "inputBytes": 33274,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 16,
+        "indirectObjects": 3,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l21-lowercase-escape-filter": {
+      "expect": "REFUSE",
+      "expectedCode": "AMBIGUOUS_NAME_ESCAPE",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "AMBIGUOUS_NAME_ESCAPE",
+      "stage": "walk",
+      "reason": "object 10 0 is a decode candidate with a name pdf-lib reads as \"Fi#6cter\" and a case-blind decode as \"Filter\"",
+      "stats": {
+        "inputBytes": 626,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 22,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l22-truncated-in-stream": {
+      "expect": "REFUSE",
+      "expectedCode": "MALFORMED_SYNTAX",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "MALFORMED_SYNTAX",
+      "stage": "walk",
+      "reason": "a stream with no endstream",
+      "stats": {
+        "inputBytes": 811,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 22,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l23-deep-nesting": {
+      "expect": "REFUSE",
+      "expectedCode": "NESTING_DEPTH",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "NESTING_DEPTH",
+      "stage": "walk",
+      "reason": "nested deeper than 64",
+      "stats": {
+        "inputBytes": 587,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 0,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 81,
+        "indirectObjects": 3,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l24-duplicate-type": {
+      "expect": "REFUSE",
+      "expectedCode": "DUPLICATE_KEY_ON_DECODE_STREAM",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "DUPLICATE_KEY_ON_DECODE_STREAM",
+      "stage": "walk",
+      "reason": "object 10 0 declares /Type more than once",
+      "stats": {
+        "inputBytes": 33261,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 23,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l25-indirect-declared-n": {
+      "expect": "REFUSE",
+      "expectedCode": "AMBIGUOUS_DECLARED_VALUE",
+      "expectedStage": "declared-values",
+      "verdict": "REFUSE",
+      "code": "AMBIGUOUS_DECLARED_VALUE",
+      "stage": "declared-values",
+      "reason": "ObjStm 10 0 has no direct integer /N and /First",
+      "stats": {
+        "inputBytes": 33260,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 25,
+        "indirectObjects": 5,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "lb-l26-missing-endobj": {
+      "expect": "REFUSE",
+      "expectedCode": "MALFORMED_SYNTAX",
+      "expectedStage": "walk",
+      "verdict": "REFUSE",
+      "code": "MALFORMED_SYNTAX",
+      "stage": "walk",
+      "reason": "object 2 0 has no endobj",
+      "stats": {
+        "inputBytes": 33233,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 0,
+        "parsedValues": 8,
+        "indirectObjects": 2,
+        "streams": 0,
+        "decodeStreams": 0,
+        "objectStreams": 0,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 0,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 0,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": null
+      }
+    },
+    "mem-k-objstm-inflation": {
+      "expect": "REFUSE",
+      "expectedCode": "DECODED_BYTES_PER_STREAM",
+      "expectedStage": "decode",
+      "verdict": "REFUSE",
+      "code": "DECODED_BYTES_PER_STREAM",
+      "stage": "decode",
+      "reason": "ObjStm 1 0 decodes past 4194304 bytes",
+      "stats": {
+        "inputBytes": 33149,
+        "stagesCompleted": [
+          "input",
+          "raw-name-scan",
+          "walk",
+          "attribution"
+        ],
+        "rawDecodeTypeNames": 1,
+        "attributedDecodeTypeNames": 1,
+        "parsedValues": 25,
+        "indirectObjects": 4,
+        "streams": 1,
+        "decodeStreams": 0,
+        "objectStreams": 1,
+        "xrefStreams": 0,
+        "xrefEntriesDeclared": 0,
+        "objectStreamObjects": 0,
+        "decodedBytesTotal": 0,
+        "maxStreamDecodedBytes": 0,
+        "maxMaterializedDecodedBytes": 4210688,
+        "maxRetainedDecodedBytes": 0,
+        "maxInflateChunkBytes": 16384,
+        "inflateChunkBytes": 16384,
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4210688,
+          "chunks": 257,
+          "consumedInputBytes": 4127,
+          "inputBytes": 32654
+        }
+      }
+    }
+  },
+  "stageRules": {
+    "l16": {
+      "code": "INDIRECT_TYPE_ON_STREAM",
+      "stage": "walk",
+      "stagesCompleted": [
+        "input",
+        "raw-name-scan"
+      ],
+      "decodeStreams": 0
+    },
+    "l16b": {
+      "code": "DECODE_TYPE_NAME_IN_DECODED_CONTENT",
+      "stage": "decoded-content",
+      "stagesCompleted": [
+        "input",
+        "raw-name-scan",
+        "walk",
+        "attribution"
+      ],
+      "rawDecodeTypeNames": 1,
+      "attributedDecodeTypeNames": 1,
+      "decodeStreams": 1
+    }
+  },
+  "decodeBound": {
+    "inflate": {
+      "atCap": {
+        "decoded": 4194304,
+        "materialized": 4194304,
+        "maxChunk": 16384,
+        "chunks": 256,
+        "consumedInputBytes": 4087,
+        "inputBytes": 4087
+      },
+      "overCap": {
+        "exceeded": true,
+        "materialized": 4194305,
+        "maxChunk": 16384,
+        "chunks": 257,
+        "consumedInputBytes": 4087,
+        "inputBytes": 4087
+      },
+      "bomb32MiB": {
+        "exceeded": true,
+        "materialized": 4210688,
+        "maxChunk": 16384,
+        "chunks": 257,
+        "consumedInputBytes": 4097,
+        "inputBytes": 32624
+      }
+    },
+    "documents": {
+      "perStreamExact": {
+        "verdict": "PASS",
+        "maxStreamDecodedBytes": 4194304
+      },
+      "perStreamPlusOne": {
+        "code": "DECODED_BYTES_PER_STREAM",
+        "stage": "decode",
+        "refusedDecode": {
+          "limit": 4194304,
+          "materialized": 4194305,
+          "chunks": 257,
+          "consumedInputBytes": 4120,
+          "inputBytes": 4120
+        }
+      },
+      "totalExact": {
+        "verdict": "PASS",
+        "decodedBytesTotal": 8388608,
+        "maxStreamDecodedBytes": 4194304
+      },
+      "totalPlusOne": {
+        "code": "DECODED_BYTES_TOTAL",
+        "stage": "decode",
+        "decodedBytesTotal": 8388568,
+        "refusedDecode": {
+          "limit": 40,
+          "materialized": 41,
+          "chunks": 1,
+          "consumedInputBytes": 29,
+          "inputBytes": 29
+        }
+      }
+    }
+  },
+  "ownBounds": {
+    "fixtures": {
+      "maxMaterializedDecodedBytes": 4210688,
+      "maxInflateChunkBytes": 16384,
+      "maxRetainedDecodedBytes": 4194304,
+      "parseWorkOverBytes": 0
+    },
+    "corpus": {
+      "maxMaterializedDecodedBytes": 4210688,
+      "maxInflateChunkBytes": 16384,
+      "maxRetainedDecodedBytes": 64881,
+      "parseWorkOverBytes": 0
+    }
+  },
+  "oracle": {
+    "lb-l1-objstm-inflation": {
+      "file": "test-fixtures/m6-load-boundary/lb-l1-objstm-inflation.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 59953152,
+      "elapsedMsMeasuredOnly": 88.068
+    },
+    "lb-l2-xref-stream-inflation": {
+      "file": "test-fixtures/m6-load-boundary/lb-l2-xref-stream-inflation.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 10,
+      "peakRssGrowthMeasuredOnly": 51384320,
+      "elapsedMsMeasuredOnly": 58.6118
+    },
+    "lb-l2b-xref-declared-entries": {
+      "file": "test-fixtures/m6-load-boundary/lb-l2b-xref-declared-entries.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 512,
+      "decodedBytesTotal": 8,
+      "maxDecodedBytes": 8,
+      "xrefEntries": 1000000,
+      "peakRssGrowthMeasuredOnly": 255369216,
+      "elapsedMsMeasuredOnly": 530.9107
+    },
+    "lb-l3-cumulative-decode": {
+      "file": "test-fixtures/m6-load-boundary/lb-l3-cumulative-decode.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 3,
+      "decodeCalls": 3,
+      "filterDecodeCalls": 3,
+      "maxDecodeBufferBytes": 4194304,
+      "decodedBytesTotal": 9437184,
+      "maxDecodedBytes": 3145728,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 22626304,
+      "elapsedMsMeasuredOnly": 34.689
+    },
+    "lb-l4-incremental-update": {
+      "file": "test-fixtures/m6-load-boundary/lb-l4-incremental-update.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 16777216,
+      "decodedBytesTotal": 16777216,
+      "maxDecodedBytes": 16777216,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 34742272,
+      "elapsedMsMeasuredOnly": 48.3549
+    },
+    "lb-l4b-prev-cycle": {
+      "file": "test-fixtures/m6-load-boundary/lb-l4b-prev-cycle.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 573440,
+      "elapsedMsMeasuredOnly": 2.7575
+    },
+    "lb-l5-hybrid-clean": {
+      "file": "test-fixtures/m6-load-boundary/lb-l5-hybrid-clean.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 512,
+      "decodedBytesTotal": 40,
+      "maxDecodedBytes": 40,
+      "xrefEntries": 10,
+      "peakRssGrowthMeasuredOnly": 430080,
+      "elapsedMsMeasuredOnly": 3.7265
+    },
+    "lb-l5b-hybrid-inflation": {
+      "file": "test-fixtures/m6-load-boundary/lb-l5b-hybrid-inflation.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 10,
+      "peakRssGrowthMeasuredOnly": 59695104,
+      "elapsedMsMeasuredOnly": 56.6665
+    },
+    "lb-l6-objstm-wrong-length": {
+      "file": "test-fixtures/m6-load-boundary/lb-l6-objstm-wrong-length.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 52105216,
+      "elapsedMsMeasuredOnly": 93.7511
+    },
+    "lb-l6b-content-wrong-length": {
+      "file": "test-fixtures/m6-load-boundary/lb-l6b-content-wrong-length.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 585728,
+      "elapsedMsMeasuredOnly": 2.7517
+    },
+    "lb-l7-objstm-indirect-length": {
+      "file": "test-fixtures/m6-load-boundary/lb-l7-objstm-indirect-length.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51986432,
+      "elapsedMsMeasuredOnly": 91.0405
+    },
+    "lb-l7b-content-indirect-length": {
+      "file": "test-fixtures/m6-load-boundary/lb-l7b-content-indirect-length.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 540672,
+      "elapsedMsMeasuredOnly": 2.6903
+    },
+    "lb-l8-filter-chain": {
+      "file": "test-fixtures/m6-load-boundary/lb-l8-filter-chain.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 1048576,
+      "decodedBytesTotal": 1048576,
+      "maxDecodedBytes": 1048576,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 4296704,
+      "elapsedMsMeasuredOnly": 8.4621
+    },
+    "lb-l8b-lzw": {
+      "file": "test-fixtures/m6-load-boundary/lb-l8b-lzw.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 1024,
+      "decodedBytesTotal": 10,
+      "maxDecodedBytes": 10,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 458752,
+      "elapsedMsMeasuredOnly": 3.8386
+    },
+    "lb-l9-clean-objstm": {
+      "file": "test-fixtures/m6-load-boundary/lb-l9-clean-objstm.pdf",
+      "loaded": true,
+      "pages": 3,
+      "loadDecodeCalls": 2,
+      "decodeCalls": 2,
+      "filterDecodeCalls": 2,
+      "maxDecodeBufferBytes": 1024,
+      "decodedBytesTotal": 801,
+      "maxDecodedBytes": 741,
+      "xrefEntries": 12,
+      "peakRssGrowthMeasuredOnly": 638976,
+      "elapsedMsMeasuredOnly": 4.0269
+    },
+    "lb-l10-clean-classic": {
+      "file": "test-fixtures/m6-load-boundary/lb-l10-clean-classic.pdf",
+      "loaded": true,
+      "pages": 3,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 688128,
+      "elapsedMsMeasuredOnly": 2.9512
+    },
+    "lb-l11-per-stream-exact": {
+      "file": "test-fixtures/m6-load-boundary/lb-l11-per-stream-exact.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 4194304,
+      "decodedBytesTotal": 4194304,
+      "maxDecodedBytes": 4194304,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 9924608,
+      "elapsedMsMeasuredOnly": 17.353
+    },
+    "lb-l12-per-stream-plus-one": {
+      "file": "test-fixtures/m6-load-boundary/lb-l12-per-stream-plus-one.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 8388608,
+      "decodedBytesTotal": 4194305,
+      "maxDecodedBytes": 4194305,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 13963264,
+      "elapsedMsMeasuredOnly": 17.8138
+    },
+    "lb-l11c-total-exact": {
+      "file": "test-fixtures/m6-load-boundary/lb-l11c-total-exact.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 2,
+      "decodeCalls": 2,
+      "filterDecodeCalls": 2,
+      "maxDecodeBufferBytes": 4194304,
+      "decodedBytesTotal": 8388608,
+      "maxDecodedBytes": 4194304,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 17760256,
+      "elapsedMsMeasuredOnly": 28.9238
+    },
+    "lb-l12c-total-plus-one": {
+      "file": "test-fixtures/m6-load-boundary/lb-l12c-total-plus-one.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 3,
+      "decodeCalls": 3,
+      "filterDecodeCalls": 3,
+      "maxDecodeBufferBytes": 4194304,
+      "decodedBytesTotal": 8388609,
+      "maxDecodedBytes": 4194304,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 17858560,
+      "elapsedMsMeasuredOnly": 30.546
+    },
+    "lb-l13-slow-parse": {
+      "file": "test-fixtures/m6-load-boundary/lb-l13-slow-parse.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 170348544,
+      "elapsedMsMeasuredOnly": 15277.4013
+    },
+    "lb-l14-indirect-type": {
+      "file": "test-fixtures/m6-load-boundary/lb-l14-indirect-type.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 60231680,
+      "elapsedMsMeasuredOnly": 86.99
+    },
+    "lb-l15-escaped-name": {
+      "file": "test-fixtures/m6-load-boundary/lb-l15-escaped-name.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51625984,
+      "elapsedMsMeasuredOnly": 88.4027
+    },
+    "lb-l16-type-inside-objstm": {
+      "file": "test-fixtures/m6-load-boundary/lb-l16-type-inside-objstm.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 2,
+      "decodeCalls": 2,
+      "filterDecodeCalls": 2,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554444,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51974144,
+      "elapsedMsMeasuredOnly": 90.4758
+    },
+    "lb-l16b-name-inside-objstm": {
+      "file": "test-fixtures/m6-load-boundary/lb-l16b-name-inside-objstm.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 512,
+      "decodedBytesTotal": 12,
+      "maxDecodedBytes": 12,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 520192,
+      "elapsedMsMeasuredOnly": 3.2934
+    },
+    "lb-l17-overlapping-offsets": {
+      "file": "test-fixtures/m6-load-boundary/lb-l17-overlapping-offsets.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 131072,
+      "decodedBytesTotal": 100242,
+      "maxDecodedBytes": 100242,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 191000576,
+      "elapsedMsMeasuredOnly": 259.6596
+    },
+    "lb-l18-encrypted-objstm": {
+      "file": "test-fixtures/m6-load-boundary/lb-l18-encrypted-objstm.pdf",
+      "loaded": false,
+      "error": "Error",
+      "errorKind": "ENCRYPTED_PDF",
+      "message": "Input document to `PDFDocument.load` is encrypted. You can use `PDFDocument.load(..., { ignoreEncryption: true })` if you wish to load the document anyways.",
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51982336,
+      "elapsedMsMeasuredOnly": 90.0087
+    },
+    "lb-l19-name-in-string": {
+      "file": "test-fixtures/m6-load-boundary/lb-l19-name-in-string.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 466944,
+      "elapsedMsMeasuredOnly": 2.6832
+    },
+    "lb-l20-junk-then-objstm": {
+      "file": "test-fixtures/m6-load-boundary/lb-l20-junk-then-objstm.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 60506112,
+      "elapsedMsMeasuredOnly": 90.6782
+    },
+    "lb-l21-lowercase-escape-filter": {
+      "file": "test-fixtures/m6-load-boundary/lb-l21-lowercase-escape-filter.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 46,
+      "maxDecodedBytes": 46,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 647168,
+      "elapsedMsMeasuredOnly": 3.669
+    },
+    "lb-l22-truncated-in-stream": {
+      "file": "test-fixtures/m6-load-boundary/lb-l22-truncated-in-stream.pdf",
+      "loaded": false,
+      "error": "Error",
+      "errorKind": "LOAD_ERROR",
+      "message": "Failed to parse PDF document (line:17 col:3213 offset=192): Failed to parse invalid PDF object",
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 446464,
+      "elapsedMsMeasuredOnly": 3.0467
+    },
+    "lb-l23-deep-nesting": {
+      "file": "test-fixtures/m6-load-boundary/lb-l23-deep-nesting.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 0,
+      "decodeCalls": 0,
+      "filterDecodeCalls": 0,
+      "maxDecodeBufferBytes": 0,
+      "decodedBytesTotal": 0,
+      "maxDecodedBytes": 0,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 495616,
+      "elapsedMsMeasuredOnly": 3.0558
+    },
+    "lb-l24-duplicate-type": {
+      "file": "test-fixtures/m6-load-boundary/lb-l24-duplicate-type.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51908608,
+      "elapsedMsMeasuredOnly": 90.3988
+    },
+    "lb-l25-indirect-declared-n": {
+      "file": "test-fixtures/m6-load-boundary/lb-l25-indirect-declared-n.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51654656,
+      "elapsedMsMeasuredOnly": 89.6784
+    },
+    "lb-l26-missing-endobj": {
+      "file": "test-fixtures/m6-load-boundary/lb-l26-missing-endobj.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 33554432,
+      "decodedBytesTotal": 33554432,
+      "maxDecodedBytes": 33554432,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 51556352,
+      "elapsedMsMeasuredOnly": 88.178
+    },
+    "mem-k-objstm-inflation": {
+      "file": "test-fixtures/m6-object-graph-memory/mem-k-objstm-inflation.pdf",
+      "loaded": true,
+      "pages": 1,
+      "loadDecodeCalls": 1,
+      "decodeCalls": 1,
+      "filterDecodeCalls": 1,
+      "maxDecodeBufferBytes": 67108864,
+      "decodedBytesTotal": 33554457,
+      "maxDecodedBytes": 33554457,
+      "xrefEntries": 0,
+      "peakRssGrowthMeasuredOnly": 93655040,
+      "elapsedMsMeasuredOnly": 99.6784
+    }
+  },
+  "differential": {
+    "fixtures": {
+      "passed": [
+        "lb-l4b-prev-cycle",
+        "lb-l5-hybrid-clean",
+        "lb-l6b-content-wrong-length",
+        "lb-l7b-content-indirect-length",
+        "lb-l9-clean-objstm",
+        "lb-l10-clean-classic",
+        "lb-l11-per-stream-exact",
+        "lb-l11c-total-exact",
+        "lb-l13-slow-parse"
+      ],
+      "undercounted": [],
+      "expectedRefusalsPassed": []
+    },
+    "conservativeFixtureRefusals": [
+      "lb-l8-filter-chain: UNSUPPORTED_FILTER@declared-values",
+      "lb-l8b-lzw: UNSUPPORTED_FILTER@declared-values",
+      "lb-l12-per-stream-plus-one: DECODED_BYTES_PER_STREAM@decode",
+      "lb-l16b-name-inside-objstm: DECODE_TYPE_NAME_IN_DECODED_CONTENT@decoded-content",
+      "lb-l19-name-in-string: UNATTRIBUTED_DECODE_TYPE_NAME@attribution",
+      "lb-l21-lowercase-escape-filter: AMBIGUOUS_NAME_ESCAPE@walk",
+      "lb-l23-deep-nesting: NESTING_DEPTH@walk"
+    ]
+  },
+  "sweep": {
+    "sources": [
+      "lb-l9-clean-objstm",
+      "lb-l5-hybrid-clean",
+      "lb-l4b-prev-cycle"
+    ],
+    "mutants": 576,
+    "byOutcome": {
+      "MALFORMED_SYNTAX@walk": 340,
+      "DECODE_ERROR@decode": 28,
+      "PASS": 135,
+      "UNEXPECTED_BYTES@walk": 49,
+      "UNSUPPORTED_FILTER@declared-values": 3,
+      "AMBIGUOUS_STREAM_LENGTH@declared-values": 15,
+      "NO_HEADER@walk": 4,
+      "AMBIGUOUS_DECLARED_VALUE@declared-values": 1,
+      "UNATTRIBUTED_DECODE_TYPE_NAME@attribution": 1
+    },
+    "passed": 135,
+    "oracleResults": 135,
+    "oracleFailed": [],
+    "undercounted": [],
+    "offRoute": [],
+    "passedButPdfLibFailed": 12
+  },
+  "compatibility": {
+    "documents": 419,
+    "oracleSingleProcessDocuments": 417,
+    "oracleIsolatedDocuments": [
+      "test-fixtures/m6-object-graph-memory/mem-b2-many-objects-objstm.pdf",
+      "test-fixtures/m6-object-graph-memory/mem-k-objstm-inflation.pdf"
+    ],
+    "byVerdict": {
+      "PASS": 411,
+      "MALFORMED_SYNTAX@walk": 2,
+      "UNEXPECTED_BYTES@walk": 1,
+      "TOO_MANY_DECODE_STREAMS@walk": 1,
+      "DECODED_BYTES_PER_STREAM@decode": 1,
+      "ENCRYPTED@raw-name-scan": 1,
+      "NO_HEADER@walk": 2
+    },
+    "byDirectory": {
+      "annotator-save": {
+        "pass": 9,
+        "refuse": 1
+      },
+      "comparator": {
+        "pass": 51,
+        "refuse": 0
+      },
+      "drawing-register": {
+        "pass": 1,
+        "refuse": 0
+      },
+      "excel": {
+        "pass": 18,
+        "refuse": 0
+      },
+      "m2-4": {
+        "pass": 25,
+        "refuse": 0
+      },
+      "m2-5": {
+        "pass": 1,
+        "refuse": 0
+      },
+      "m3": {
+        "pass": 9,
+        "refuse": 1
+      },
+      "m4-comparator": {
+        "pass": 42,
+        "refuse": 0
+      },
+      "m5-encoder": {
+        "pass": 10,
+        "refuse": 0
+      },
+      "m5-processor": {
+        "pass": 38,
+        "refuse": 1
+      },
+      "m6-object-graph-memory": {
+        "pass": 10,
+        "refuse": 2
+      },
+      "m6-split-merge": {
+        "pass": 107,
+        "refuse": 2
+      },
+      ".": {
+        "pass": 52,
+        "refuse": 0
+      },
+      "processor": {
+        "pass": 38,
+        "refuse": 1
+      }
+    },
+    "refused": {
+      "test-fixtures/annotator-save/damaged.pdf": "MALFORMED_SYNTAX@walk: expected an integer for an xref field",
+      "test-fixtures/m3/damaged.pdf": "MALFORMED_SYNTAX@walk: a stream with no endstream",
+      "test-fixtures/m5-processor/invalid.pdf": "UNEXPECTED_BYTES@walk: bytes that are not an object, xref, trailer or startxref — pdf-lib would skip them and keep parsing",
+      "test-fixtures/m6-object-graph-memory/mem-b2-many-objects-objstm.pdf": "TOO_MANY_DECODE_STREAMS@walk: more than 64 object or cross-reference streams",
+      "test-fixtures/m6-object-graph-memory/mem-k-objstm-inflation.pdf": "DECODED_BYTES_PER_STREAM@decode: ObjStm 1 0 decodes past 4194304 bytes",
+      "test-fixtures/m6-split-merge/encrypted.pdf": "ENCRYPTED@raw-name-scan: the bytes name /Encrypt",
+      "test-fixtures/m6-split-merge/invalid.pdf": "NO_HEADER@walk: no %PDF- header",
+      "test-fixtures/processor/invalid.pdf": "NO_HEADER@walk: no %PDF- header"
+    },
+    "oracleResults": 419,
+    "oracleFailed": [],
+    "passedButPdfLibFailed": [],
+    "refusedPdfLibLoads": 2,
+    "refusedPdfLibLoadsWithinCaps": 1,
+    "refusedPdfLibFails": 6,
+    "undercounted": [],
+    "offRoute": []
+  },
+  "composed": {
+    "lb-l9-clean-objstm": {
+      "stage1": "PASS",
+      "stage1Code": null,
+      "loadCalled": true,
+      "stage3PlannedObjects": 3,
+      "stage4CopiedObjects": 3,
+      "stage6OutputUnderCeiling": true
+    },
+    "lb-l10-clean-classic": {
+      "stage1": "PASS",
+      "stage1Code": null,
+      "loadCalled": true,
+      "stage3PlannedObjects": 3,
+      "stage4CopiedObjects": 3,
+      "stage6OutputUnderCeiling": true
+    },
+    "lb-l11c-total-exact": {
+      "stage1": "PASS",
+      "stage1Code": null,
+      "loadCalled": true,
+      "stage3PlannedObjects": 1,
+      "stage4CopiedObjects": 1,
+      "stage6OutputUnderCeiling": true
+    },
+    "mem-k-objstm-inflation": {
+      "stage1": "REFUSE",
+      "stage1Code": "DECODED_BYTES_PER_STREAM",
+      "loadCalled": false
+    }
+  },
+  "worker": {
+    "transfer": {
+      "sentBytes": 1668,
+      "mainSideInputAfterPost": 0,
+      "receivedBytes": 1668,
+      "outputByteLength": 797,
+      "workerSideOutputAfterTransfer": 0,
+      "answeredAfterTerminate": 0,
+      "errors": [],
+      "elapsedMsMeasuredOnly": 2.899999998509884
+    },
+    "cancel": {
+      "loadStarted": true,
+      "endedBeforeTerminate": false,
+      "afterTerminate": 0,
+      "outcome": "CANCELLED"
+    },
+    "timeout": {
+      "outcome": "TIMEOUT",
+      "loadStarted": true,
+      "lateMessages": 0
+    },
+    "errors": {
+      "caught": "LOAD_FAILED",
+      "uncaughtAsErrorEvent": "WORKER_ERROR",
+      "uncaughtMessages": 0,
+      "rejected": "UNHANDLED_REJECTION",
+      "rejectedErrorEvents": 0
+    },
+    "preflight": {
+      "l1": {
+        "outcome": "REFUSED",
+        "code": "DECODED_BYTES_PER_STREAM",
+        "stage": "decode",
+        "loaded": false,
+        "errors": []
+      },
+      "l16b": {
+        "outcome": "REFUSED",
+        "code": "DECODE_TYPE_NAME_IN_DECODED_CONTENT",
+        "stage": "decoded-content",
+        "loaded": false,
+        "errors": []
+      },
+      "l10": {
+        "outcome": "DONE",
+        "code": null,
+        "stage": null,
+        "loaded": true,
+        "errors": []
+      }
+    },
+    "memoryApi": {
+      "measureUserAgentSpecificMemory": "undefined",
+      "crossOriginIsolated": false,
+      "deviceMemoryMeasuredOnly": 8
+    },
+    "externalRequests": [],
+    "pageErrors": []
+  },
+  "closureCriteria": {
+    "pre-load-refusal": {
+      "what": "every dangerous shape is refused before PDFDocument.load is called",
+      "rows": 18,
+      "met": true
+    },
+    "own-bounds": {
+      "what": "the boundary is itself bounded: decode, chunk, retention and parse work",
+      "rows": 9,
+      "met": true
+    },
+    "decode-surface-coverage": {
+      "what": "every load-time decode passes through what the oracle observes, and the oracle is not blind",
+      "rows": 6,
+      "met": true
+    },
+    "differential-zero-false-negatives": {
+      "what": "no known document the boundary passes makes pdf-lib decode more than the boundary counted",
+      "rows": 4,
+      "met": true
+    },
+    "exact-boundary": {
+      "what": "exactly a cap is allowed and one byte over is refused, per stream and cumulatively",
+      "rows": 6,
+      "met": true
+    },
+    "ambiguity-fail-closed": {
+      "what": "ambiguous or unsupported syntax is refused, never guessed at",
+      "rows": 11,
+      "met": true
+    }
+  },
+  "workerRowsCountTowardClosure": false,
+  "rows": [
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "production base",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "research head",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "this gate is local research evidence, not something Core CI runs",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "the pdf-lib whose load is being bounded is the pinned 1.17.1",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "decoder the boundary uses",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "test limits (research values, not product values)",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "every generated load-boundary fixture is present",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "load-boundary fixtures generated",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l1-objstm-inflation: refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l2-xref-stream-inflation: refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l2b-xref-declared-entries: refused before load as XREF_ENTRY_CAP at declared-values",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l3-cumulative-decode: refused before load as DECODED_BYTES_TOTAL at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l4-incremental-update: refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l4b-prev-cycle: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l5-hybrid-clean: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l5b-hybrid-inflation: refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l6-objstm-wrong-length: refused before load as AMBIGUOUS_STREAM_LENGTH at declared-values",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l6b-content-wrong-length: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l7-objstm-indirect-length: refused before load as AMBIGUOUS_STREAM_LENGTH at declared-values",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l7b-content-indirect-length: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l8-filter-chain: refused before load as UNSUPPORTED_FILTER at declared-values",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l8b-lzw: refused before load as UNSUPPORTED_FILTER at declared-values",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l9-clean-objstm: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l10-clean-classic: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l11-per-stream-exact: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l12-per-stream-plus-one: refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l11c-total-exact: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l12c-total-plus-one: refused before load as DECODED_BYTES_TOTAL at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l13-slow-parse: passes every stage",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l14-indirect-type: refused before load as INDIRECT_TYPE_ON_STREAM at walk",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l15-escaped-name: refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l16-type-inside-objstm: refused before load as INDIRECT_TYPE_ON_STREAM at walk",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l16b-name-inside-objstm: refused before load as DECODE_TYPE_NAME_IN_DECODED_CONTENT at decoded-content",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l17-overlapping-offsets: refused before load as OVERLAPPING_OBJECT_STREAM_OFFSETS at decoded-content",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l18-encrypted-objstm: refused before load as ENCRYPTED at raw-name-scan",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l19-name-in-string: refused before load as UNATTRIBUTED_DECODE_TYPE_NAME at attribution",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l20-junk-then-objstm: refused before load as UNEXPECTED_BYTES at walk",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l21-lowercase-escape-filter: refused before load as AMBIGUOUS_NAME_ESCAPE at walk",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l22-truncated-in-stream: refused before load as MALFORMED_SYNTAX at walk",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l23-deep-nesting: refused before load as NESTING_DEPTH at walk",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l24-duplicate-type: refused before load as DUPLICATE_KEY_ON_DECODE_STREAM at walk",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l25-indirect-declared-n: refused before load as AMBIGUOUS_DECLARED_VALUE at declared-values",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "lb-l26-missing-endobj: refused before load as MALFORMED_SYNTAX at walk",
+      "ok": true,
+      "criterion": "ambiguity-fail-closed"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "mem-k-objstm-inflation (B2 K regression): refused before load as DECODED_BYTES_PER_STREAM at decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "L16: refused at the walk by the indirect-/Type rule — before attribution, before any decode",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "L16b: the walk and name attribution let it through; only the decoded-content scan refuses it",
+      "ok": true,
+      "criterion": "pre-load-refusal"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "decoder, per-stream cap exactly: allowed, every byte decoded",
+      "ok": true,
+      "criterion": "exact-boundary"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "decoder, per-stream cap + 1: refused, with no more than the cap plus one chunk ever decoded",
+      "ok": true,
+      "criterion": "exact-boundary"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "decoder, a 32 MiB stream against the cap: stopped mid-stream, not decoded then measured",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "per-stream cap, whole document: a stream of exactly the cap passes",
+      "ok": true,
+      "criterion": "exact-boundary"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "per-stream cap + 1, whole document: refused at decode, stopped within the cap plus one chunk",
+      "ok": true,
+      "criterion": "exact-boundary"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "cumulative cap, whole document: streams totalling exactly the cap pass, each under the per-stream cap",
+      "ok": true,
+      "criterion": "exact-boundary"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "cumulative cap + 1, whole document: refused at decode by the cumulative cap, the last stream stopped at what remained",
+      "ok": true,
+      "criterion": "exact-boundary"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "every refusal at the decode stage stopped within its limit plus one chunk",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "every 32 MiB-class stream was abandoned before its input was read to the end",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "no decode materialised more than the per-stream cap plus one inflate chunk",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "no inflate chunk exceeded the configured chunk size",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "no decoded object stream was kept beyond the per-stream cap",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "parse work is linear: no document made the boundary parse more values than it has raw plus decoded bytes",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "the boundary's own recursion stops at its depth limit, with a typed refusal",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "the oracle returned a result for every fixture, each in its own process — none failed or hung",
+      "ok": true,
+      "criterion": "decode-surface-coverage"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "the oracle is not blind: it sees an ordinary object-stream decode, a 32 MiB decode, and a million declared entries",
+      "ok": true,
+      "criterion": "decode-surface-coverage"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "during every fixture load, every filter decode went through the load decode the oracle counts",
+      "ok": true,
+      "criterion": "decode-surface-coverage"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "every fixture the boundary passes: pdf-lib decoded no more than the boundary counted, within the caps",
+      "ok": true,
+      "criterion": "differential-zero-false-negatives"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "no fixture that must be refused was passed",
+      "ok": true,
+      "criterion": "differential-zero-false-negatives"
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l1-objstm-inflation",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l2-xref-stream-inflation",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l2b-xref-declared-entries",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l3-cumulative-decode",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l4-incremental-update",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l5b-hybrid-inflation",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l6-objstm-wrong-length",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l7-objstm-indirect-length",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l14-indirect-type",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l15-escaped-name",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l16-type-inside-objstm",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l17-overlapping-offsets",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l18-encrypted-objstm",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l20-junk-then-objstm",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l24-duplicate-type",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l25-indirect-declared-n",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: lb-l26-missing-endobj",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "BASELINE-FAIL",
+      "half": "node",
+      "name": "today's route: mem-k-objstm-inflation",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "pdf-lib decodes an encrypted document's object stream before its encryption check refuses it",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "a lowercase #xx escape really is read two ways: pdf-lib takes the stored bytes as they are, more than they inflate to",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "fixtures refused that pdf-lib loads within the caps (conservative refusals, compatibility cost)",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "mutants inspected, and what the boundary answered",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "every mutant the boundary passes: pdf-lib decoded no more than the boundary counted",
+      "ok": true,
+      "criterion": "differential-zero-false-negatives"
+    },
+    {
+      "kind": "PROBE",
+      "half": "node",
+      "name": "during every passed mutant's load, every filter decode went through the counted load decode",
+      "ok": true,
+      "criterion": "decode-surface-coverage"
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "documents inspected across the repository's other fixture corpora",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "boundary verdicts by code and stage",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "conservative refusals: refused, yet pdf-lib loads them within the caps (compatibility cost)",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "node",
+      "name": "boundary and oracle time over the corpus (MEASURED_ONLY)",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "the oracle returned a result for every corpus document — none failed or hung",
+      "ok": true,
+      "criterion": "decode-surface-coverage"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "every corpus document the boundary passes: pdf-lib decoded no more than the boundary counted, within the caps",
+      "ok": true,
+      "criterion": "differential-zero-false-negatives"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "during every corpus load, every filter decode went through the counted load decode",
+      "ok": true,
+      "criterion": "decode-surface-coverage"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "over the corpus too, the boundary stayed within its own decode, chunk, retention and parse-work bounds",
+      "ok": true,
+      "criterion": "own-bounds"
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l9-clean-objstm: boundary passes, then load, plan, copy and write each stay within the term before them",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l10-clean-classic: boundary passes, then load, plan, copy and write each stay within the term before them",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "lb-l11c-total-exact: boundary passes, then load, plan, copy and write each stay within the term before them",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "node",
+      "name": "K: refused at the first stage, so pdf-lib's load is never called",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "the input is transferred, not copied: the page's buffer is detached once posted",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "the output comes back transferred, and the Worker's copy is detached",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "a terminated Worker answers nothing afterwards",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "cancelling a load in progress — started, not ended — terminates it, and no result arrives after",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "a load that outlives its budget, counted from its start, becomes a typed TIMEOUT, and nothing arrives late",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "a caught failure, a synchronous uncaught throw and an unhandled rejection each reach the page as a typed outcome",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "browser",
+      "name": "what an unhandled rejection raises on the Worker object by itself",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "inside the Worker, the boundary refuses L1 and L16b with their codes and stages before pdf-lib loads them, and lets a clean document through",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "browser",
+      "name": "longest gap in the page's own timer during a slow load (MEASURED_ONLY)",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "MEASURE",
+      "half": "browser",
+      "name": "whether this page can measure or cap a Worker's memory",
+      "ok": null,
+      "criterion": null
+    },
+    {
+      "kind": "ASSERT",
+      "half": "browser",
+      "name": "no external HTTP(S) request from the page or its Workers",
+      "ok": true,
+      "criterion": null
+    },
+    {
+      "kind": "HUMAN-OPEN",
+      "half": "node",
+      "name": "M6-H11 / B3 production load-boundary architecture",
+      "ok": null,
+      "criterion": null
+    }
+  ],
+  "measuredOnly": {
+    "preParserMsMeasuredOnly": {
+      "lb-l1-objstm-inflation": 13.3548,
+      "lb-l2-xref-stream-inflation": 9.2201,
+      "lb-l2b-xref-declared-entries": 0.171,
+      "lb-l3-cumulative-decode": 34.2185,
+      "lb-l4-incremental-update": 9.021,
+      "lb-l4b-prev-cycle": 0.1342,
+      "lb-l5-hybrid-clean": 0.5496,
+      "lb-l5b-hybrid-inflation": 10.6899,
+      "lb-l6-objstm-wrong-length": 1.3576,
+      "lb-l6b-content-wrong-length": 0.0605,
+      "lb-l7-objstm-indirect-length": 1.9238,
+      "lb-l7b-content-indirect-length": 0.0687,
+      "lb-l8-filter-chain": 0.2498,
+      "lb-l8b-lzw": 0.1314,
+      "lb-l9-clean-objstm": 0.3006,
+      "lb-l10-clean-classic": 0.0632,
+      "lb-l11-per-stream-exact": 20.042,
+      "lb-l12-per-stream-plus-one": 8.3141,
+      "lb-l11c-total-exact": 39.9301,
+      "lb-l12c-total-plus-one": 39.2912,
+      "lb-l13-slow-parse": 120.8439,
+      "lb-l14-indirect-type": 0.1858,
+      "lb-l15-escaped-name": 8.2873,
+      "lb-l16-type-inside-objstm": 0.1295,
+      "lb-l16b-name-inside-objstm": 0.1216,
+      "lb-l17-overlapping-offsets": 0.4378,
+      "lb-l18-encrypted-objstm": 0.063,
+      "lb-l19-name-in-string": 0.0855,
+      "lb-l20-junk-then-objstm": 0.0646,
+      "lb-l21-lowercase-escape-filter": 0.0525,
+      "lb-l22-truncated-in-stream": 0.0668,
+      "lb-l23-deep-nesting": 0.0842,
+      "lb-l24-duplicate-type": 0.0731,
+      "lb-l25-indirect-declared-n": 0.1092,
+      "lb-l26-missing-endobj": 0.0706,
+      "mem-k-objstm-inflation": 9.3394
+    },
+    "corpusInspectMsMeasuredOnly": 848.4717,
+    "corpusOracleMsMeasuredOnly": 10785.1849,
+    "responsiveness": {
+      "main": {
+        "where": "main",
+        "worstTimerGapMsMeasuredOnly": 167.70000000298023,
+        "elapsedMsMeasuredOnly": 24701.89999999851
+      },
+      "worker": {
+        "where": "worker",
+        "worstTimerGapMsMeasuredOnly": 12,
+        "elapsedMsMeasuredOnly": 24334
+      }
+    }
+  }
+}

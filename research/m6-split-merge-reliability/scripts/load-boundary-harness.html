@@ -1,0 +1,232 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M6 B3 — load boundary and Worker containment harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * The browser half of the B3 Load Boundary Sub-Spike.
+ *
+ * Driven by `load-boundary-gate.mjs`. It asks a disposable Worker the questions
+ * B3 needs answered in a real browser — transfer, termination, cancellation,
+ * timeout, typed failure, and whether a refusal can happen inside the Worker
+ * before `PDFDocument.load` — and it measures, without deciding anything, how
+ * responsive the page stays while a slow load runs on the main thread and in a
+ * Worker.
+ *
+ * Structural answers (a detached buffer's length, a message count, a refusal
+ * code) are EXACT. Timings and responsiveness are MEASURED_ONLY.
+ *
+ * Nothing here is production code and nothing under `src/` imports it.
+ */
+import { PDFDocument } from 'pdf-lib';
+import { inspectLoadBoundary } from '/research/m6-split-merge-reliability/prototype/load-boundary.mjs';
+
+const FIXTURES = '/test-fixtures/m6-load-boundary';
+const WORKER_URL = new URL('./load-boundary-worker.mjs', import.meta.url);
+
+async function fetchBytes(name) {
+    const response = await fetch(`${FIXTURES}/${name}.pdf`);
+    if (!response.ok) throw new Error(`fixture ${name}: HTTP ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+const spawn = () => new Worker(WORKER_URL, { type: 'module' });
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Post one job and collect every message until `settleMs` passes with none. */
+function run(worker, message, transfer, settleMs) {
+    return new Promise((resolve) => {
+        const messages = [];
+        const errors = [];
+        let timer = null;
+        const arm = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => resolve({ messages, errors }), settleMs);
+        };
+        worker.onmessage = (event) => { messages.push(event.data); arm(); };
+        worker.onerror = (event) => { event.preventDefault(); errors.push(String(event.message ?? 'worker error')); arm(); };
+        worker.postMessage(message, transfer);
+        arm();
+    });
+}
+
+window.__b3 = {
+    /** Input in by transfer, output back by transfer, then terminate. */
+    async transfer(name) {
+        const bytes = await fetchBytes(name);
+        const sentBytes = bytes.byteLength;
+        const worker = spawn();
+        const pending = run(worker, { id: 1, op: 'split', bytes: bytes.buffer, pages: [0] }, [bytes.buffer], 1500);
+        const mainSideInputAfterPost = bytes.byteLength;
+        const { messages, errors } = await pending;
+        worker.terminate();
+        const done = messages.find((m) => m.type === 'done');
+        const after = messages.find((m) => m.type === 'after-transfer');
+        // A second job after terminate: a terminated Worker answers nothing.
+        let answeredAfterTerminate = null;
+        try {
+            const again = new Uint8Array([1, 2, 3]);
+            const late = await run(worker, { id: 2, op: 'split', bytes: again.buffer }, [again.buffer], 500);
+            answeredAfterTerminate = late.messages.length + late.errors.length;
+        } catch (error) {
+            answeredAfterTerminate = `post threw: ${String(error?.message ?? error)}`;
+        }
+        return {
+            sentBytes,
+            mainSideInputAfterPost,
+            receivedBytes: done?.receivedBytes ?? null,
+            outputByteLength: done?.outputByteLength ?? null,
+            workerSideOutputAfterTransfer: after?.workerSideOutputByteLength ?? null,
+            answeredAfterTerminate,
+            errors,
+            elapsedMsMeasuredOnly: done?.elapsedMsMeasuredOnly ?? null,
+        };
+    },
+
+    /**
+     * Terminate while a slow load is in progress — after the Worker has said the
+     * load started, and before it has said the load ended. Nothing may arrive
+     * afterwards.
+     */
+    async cancel(name, cancelAfterStartMs) {
+        const bytes = await fetchBytes(name);
+        const worker = spawn();
+        const messages = [];
+        const started = new Promise((resolve) => {
+            worker.onmessage = (event) => {
+                messages.push(event.data);
+                if (event.data.type === 'started') resolve(true);
+            };
+            setTimeout(() => resolve(false), 60000);
+        });
+        worker.postMessage({ id: 1, op: 'split', bytes: bytes.buffer, pages: [0] }, [bytes.buffer]);
+        const loadStarted = await started;
+        await wait(cancelAfterStartMs);
+        const endedBeforeTerminate = messages.some((m) => m.type === 'done' || m.type === 'failed');
+        const beforeTerminate = messages.length;
+        worker.terminate();
+        await wait(2000);
+        return { loadStarted, endedBeforeTerminate, afterTerminate: messages.length - beforeTerminate, outcome: 'CANCELLED' };
+    },
+
+    /**
+     * A budget, counted from the moment the load starts, that expires before the
+     * load ends becomes a typed TIMEOUT and a termination.
+     */
+    async timeout(name, budgetMs) {
+        const bytes = await fetchBytes(name);
+        const worker = spawn();
+        const messages = [];
+        const result = await new Promise((resolve) => {
+            let timer = setTimeout(() => { worker.terminate(); resolve({ outcome: 'NEVER_STARTED' }); }, 60000);
+            worker.onmessage = (event) => {
+                messages.push(event.data);
+                if (event.data.type === 'started') {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => { worker.terminate(); resolve({ outcome: 'TIMEOUT', loadStarted: true }); }, budgetMs);
+                }
+                if (event.data.type === 'done' || event.data.type === 'failed') {
+                    clearTimeout(timer);
+                    resolve({ outcome: event.data.type.toUpperCase() });
+                }
+            };
+            worker.postMessage({ id: 1, op: 'split', bytes: bytes.buffer, pages: [0] }, [bytes.buffer]);
+        });
+        const atResolve = messages.length;
+        await wait(2000);
+        return { ...result, lateMessages: messages.length - atResolve };
+    },
+
+    /** A caught failure and an uncaught one, both as typed outcomes. */
+    async errors() {
+        const junk = new TextEncoder().encode('not a pdf at all');
+        const caughtWorker = spawn();
+        const caught = await run(caughtWorker, { id: 1, op: 'split', bytes: junk.buffer }, [junk.buffer], 1500);
+        caughtWorker.terminate();
+        const uncaughtWorker = spawn();
+        const uncaught = await run(uncaughtWorker, { id: 2, op: 'throw' }, [], 1500);
+        uncaughtWorker.terminate();
+        const rejectWorker = spawn();
+        const rejected = await run(rejectWorker, { id: 3, op: 'reject' }, [], 1500);
+        rejectWorker.terminate();
+        return {
+            caught: caught.messages.find((m) => m.type === 'failed')?.code ?? null,
+            uncaughtAsErrorEvent: uncaught.errors.length > 0 ? 'WORKER_ERROR' : null,
+            uncaughtMessages: uncaught.messages.length,
+            rejected: rejected.messages.find((m) => m.type === 'failed')?.code ?? null,
+            rejectedErrorEvents: rejected.errors.length,
+        };
+    },
+
+    /** The preflight inside the Worker: refuse before load, or pass and load. */
+    async preflightInWorker(name, limits) {
+        const bytes = await fetchBytes(name);
+        const worker = spawn();
+        const { messages, errors } = await run(
+            worker, { id: 1, op: 'split', bytes: bytes.buffer, pages: [0], preflight: true, limits }, [bytes.buffer], 1500,
+        );
+        worker.terminate();
+        const refused = messages.find((m) => m.type === 'refused');
+        return {
+            outcome: refused ? 'REFUSED' : (messages.some((m) => m.type === 'done') ? 'DONE' : 'NONE'),
+            code: refused?.boundary?.code ?? null,
+            stage: refused?.boundary?.stage ?? null,
+            loaded: messages.some((m) => m.type === 'started'),
+            errors,
+        };
+    },
+
+    /**
+     * How long the page's own timer is held off while a slow load runs, on the
+     * main thread and in a Worker. MEASURED_ONLY: a responsiveness reading, not
+     * a memory bound, and not a safety property.
+     */
+    async responsiveness(name, where) {
+        const bytes = await fetchBytes(name);
+        let last = performance.now();
+        let worstGap = 0;
+        const tick = setInterval(() => {
+            const now = performance.now();
+            worstGap = Math.max(worstGap, now - last);
+            last = now;
+        }, 10);
+        await wait(50);
+        const started = performance.now();
+        if (where === 'main') {
+            const source = await PDFDocument.load(bytes, { updateMetadata: false });
+            const output = await PDFDocument.create({ updateMetadata: false });
+            (await output.copyPages(source, [0])).forEach((p) => output.addPage(p));
+            await output.save({ useObjectStreams: false });
+        } else {
+            const worker = spawn();
+            await new Promise((resolve) => {
+                worker.onmessage = (event) => { if (event.data.type === 'done' || event.data.type === 'failed') resolve(); };
+                worker.postMessage({ id: 1, op: 'split', bytes: bytes.buffer, pages: [0] }, [bytes.buffer]);
+            });
+            worker.terminate();
+        }
+        const elapsed = performance.now() - started;
+        await wait(50);
+        clearInterval(tick);
+        return { where, worstTimerGapMsMeasuredOnly: worstGap, elapsedMsMeasuredOnly: elapsed };
+    },
+
+    /** Whether this page can even ask how much memory a Worker uses. */
+    memoryApi() {
+        return {
+            measureUserAgentSpecificMemory: typeof performance.measureUserAgentSpecificMemory,
+            crossOriginIsolated: self.crossOriginIsolated === true,
+            deviceMemoryMeasuredOnly: navigator.deviceMemory ?? null,
+        };
+    },
+
+    /** The preflight on the main thread, for the same fixtures. */
+    async preflight(name, limits) {
+        return inspectLoadBoundary(await fetchBytes(name), limits);
+    },
+};
+
+document.getElementById('state').textContent = 'ready';
+window.__b3Ready = true;
+</script>
