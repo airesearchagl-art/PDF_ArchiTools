@@ -21,6 +21,7 @@ import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import type { M6SourceFacts } from './contracts';
 import { MECHANISM_BOUNDS } from './policy';
+import { censusAttachments } from './prune';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -197,8 +198,25 @@ function pagesWithStructParents(doc: PDFDocument): number[] {
     return out;
 }
 
-/** `/Names /EmbeddedFiles`, or any `/Filespec` carrying an `/EF`. M6-H9d. */
-function readAttachments(doc: PDFDocument): { present: boolean; names: string[] } {
+/**
+ * Whether this document carries an attachment, and what it is called. M6-H9d.
+ *
+ * **Semantic, not declared, and complete-or-refused.** This reader used to walk
+ * the object table asking for `/Type /Filespec`, which is the question BLK-2R
+ * ruled out: `/EF` is what makes a payload an embedded file and `/Type` is a
+ * label. The removal path had already been corrected; this one had not, and it
+ * is the one that feeds `requiresConfirmation` — so a typeless `/EF` carrier
+ * was deleted by a Merge that never asked, because the detector that decides
+ * whether to ask could not see it.
+ *
+ * Both paths now share one basis: {@link censusAttachments}, which enumerates
+ * every indirect object and walks its direct contents, and which answers
+ * COMPLETE or REFUSED rather than handing back a count it could not stand
+ * behind.
+ */
+function readAttachments(
+    doc: PDFDocument,
+): { complete: boolean; reason?: string; present: boolean; names: string[] } {
     const names: string[] = [];
     let present = false;
 
@@ -217,17 +235,14 @@ function readAttachments(doc: PDFDocument): { present: boolean; names: string[] 
         }
     }
 
-    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
-        if (!(obj instanceof PDFDict)) continue;
-        if (nameOf(obj.get(PDFName.of('Type'))) !== '/Filespec') continue;
-        if (obj.get(PDFName.of('EF')) === undefined) continue;
-        present = true;
-        const label = textOf(look(doc, obj.get(PDFName.of('F'))))
-            ?? textOf(look(doc, obj.get(PDFName.of('UF'))));
-        if (label && !names.includes(label)) names.push(label);
+    const census = censusAttachments(doc);
+    if (!census.complete) return { complete: false, reason: census.reason, present, names };
+    if (census.value.efCarriers > 0 || census.value.fileAttachmentAnnots > 0) present = true;
+    for (const label of census.value.names) {
+        if (!names.includes(label)) names.push(label);
     }
 
-    return { present, names };
+    return { complete: true, present, names };
 }
 
 /**
@@ -252,6 +267,7 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         pagesWithStructParents: [],
         hasAttachments: false,
         attachmentNames: [],
+        attachmentsComplete: false,
         hasOptionalContent: false,
     };
 
@@ -285,6 +301,8 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         const attachments = readAttachments(doc);
         facts.hasAttachments = attachments.present;
         facts.attachmentNames = attachments.names;
+        facts.attachmentsComplete = attachments.complete;
+        if (!attachments.complete) facts.attachmentsRefusal = attachments.reason;
 
         facts.hasOptionalContent = doc.catalog.get(PDFName.of('OCProperties')) !== undefined;
     } catch (error) {

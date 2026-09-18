@@ -92,6 +92,15 @@ export const HANDLED_D_KEYS = ['Order', 'ON', 'OFF', 'Name', 'BaseState'];
 /** The only `/BaseState` this reader reproduces. Others are refused. */
 export const SUPPORTED_BASE_STATE = '/ON';
 
+/** The same group listed by two sources is one group, not two. */
+const dedupeRefs = (refs: PDFRef[]): PDFRef[] => {
+    const out: PDFRef[] = [];
+    for (const ref of refs) {
+        if (!out.some((r) => r.tag === ref.tag)) out.push(ref);
+    }
+    return out;
+};
+
 const refsOf = (arr: unknown): PDFRef[] => {
     const out: PDFRef[] = [];
     if (!(arr instanceof PDFArray)) return out;
@@ -863,10 +872,30 @@ export function carryOptionalContent(
         if (previousD instanceof PDFDict) {
             const previousOn = refsOf(previousD.lookup(PDFName.of('ON')));
             const previousOff = refsOf(previousD.lookup(PDFName.of('OFF')));
-            const combinedOn = [...previousOn, ...on];
-            const combinedOff = [...previousOff, ...off];
+            const combinedOn = dedupeRefs([...previousOn, ...on]);
+            const combinedOff = dedupeRefs([...previousOff, ...off]);
             if (combinedOn.length > 0) mergedD.ON = combinedOn;
             if (combinedOff.length > 0) mergedD.OFF = combinedOff;
+            /**
+             * RF-R3-1 — the configuration's own semantics travel with it.
+             *
+             * This branch rebuilt `/D` from `/ON`, `/OFF` and `/Order` alone,
+             * so the second accepted source dropped `/Name` and `/BaseState`
+             * — both the previous source's and its own. Measured: two sources
+             * that agree on `/D /Name (Config A)` merged to a `/D` with no
+             * `/Name` at all, READY, no loss reported. There was not even a
+             * silent winner; both were discarded.
+             *
+             * `runMerge` has already refused a disagreement on either key
+             * before the carry reaches here, so a value that exists is one
+             * every accepted source agrees with.
+             */
+            const previousName = previousD.lookup(PDFName.of('Name'));
+            const name = previousName !== undefined ? previousName : d.Name;
+            if (name !== undefined) mergedD.Name = name;
+            const previousBase = previousD.lookup(PDFName.of('BaseState'));
+            const baseState = previousBase !== undefined ? previousBase : d.BaseState;
+            if (baseState !== undefined) mergedD.BaseState = baseState;
             const previousOrder = previousD.lookup(PDFName.of('Order'));
             const thisOrder = d.Order;
             if (previousOrder instanceof PDFArray || thisOrder !== undefined) {

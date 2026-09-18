@@ -109,6 +109,16 @@ export const M6_STATUS = {
     PLAN_RUNTIME_MISMATCH: 'PLAN_RUNTIME_MISMATCH',
     /** A loss requiring confirmation was not confirmed. */
     CONFIRMATION_REQUIRED: 'CONFIRMATION_REQUIRED',
+    /**
+     * A destination structure is present and could not be read completely.
+     *
+     * The adopted Human clarification, applied to semantic readers: a reader
+     * whose output controls preservation ends COMPLETE, EXPLICIT LOSS or
+     * REFUSED. A `/Names` tree this reader cannot walk is not a document
+     * without named destinations — it is one whose navigation cannot be
+     * described, and describing it as empty is how it disappeared silently.
+     */
+    UNREADABLE_DESTINATIONS: 'UNREADABLE_DESTINATIONS',
 } as const;
 
 export type M6Status = typeof M6_STATUS[keyof typeof M6_STATUS];
@@ -297,6 +307,19 @@ export interface M6SourceFacts {
     pagesWithStructParents: number[];
     hasAttachments: boolean;
     attachmentNames: string[];
+    /**
+     * Whether the attachment census proved it covered this document.
+     *
+     * `hasAttachments: false` is only a fact about the document when this is
+     * true. The Round-3 defect wearing its last disguise: intake asked a
+     * `/Type`-gated reader whether there were attachments, the reader did not
+     * recognise a typeless `/EF` carrier, and "not recognised" reached the
+     * confirmation as "not there" — so a Merge deleted an attachment nobody
+     * had been asked about.
+     */
+    attachmentsComplete: boolean;
+    /** Why the attachment census could not prove completeness. */
+    attachmentsRefusal?: string;
     hasOptionalContent: boolean;
     /** Why the facts could not be read, when `readable` is false. */
     reason?: string;
@@ -438,6 +461,13 @@ export const INTAKE_RESULT = {
     WORKER_ERROR: 'WORKER_ERROR',
     WORKER_TIMEOUT: 'WORKER_TIMEOUT',
     CANCELLED: 'CANCELLED',
+    /**
+     * A safety census over this source could not prove it covered the document.
+     *
+     * Intake's answer feeds the confirmation a person is asked for, so an
+     * incomplete census here has to be a refusal rather than "nothing found".
+     */
+    CENSUS_INCOMPLETE: 'CENSUS_INCOMPLETE',
     /** Requested, and never decided. Always a refusal, never an omission. */
     NOT_DECIDED: 'NOT_DECIDED',
 } as const;
@@ -457,6 +487,7 @@ export const INTAKE_LABEL_JA: Record<IntakeResultCode, string> = {
     WORKER_ERROR: '確認処理が失敗しました',
     WORKER_TIMEOUT: '確認処理が時間内に終わりませんでした',
     CANCELLED: '中止されました',
+    CENSUS_INCOMPLETE: '内容を完全に確認できませんでした',
     NOT_DECIDED: '確認できていません',
 };
 

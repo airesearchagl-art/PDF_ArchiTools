@@ -109,6 +109,7 @@ async function handle(request: WorkerRequest): Promise<void> {
                 metadataPolicy: request.metadataPolicy,
                 collisionPolicy: request.collisionPolicy,
                 confirmedLosses: request.confirmedLosses,
+                confirmedFingerprint: request.confirmedFingerprint,
                 policy,
                 stillOurs,
             });

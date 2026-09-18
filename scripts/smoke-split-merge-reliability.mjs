@@ -1018,6 +1018,215 @@ try {
         && confirmed.independent?.efCarriers === 0,
         `${confirmed.status}, carriers ${confirmed.independent?.efCarriers}`);
 
+    // ---- 35. RF-R3-5: the named-destination reader ends COMPLETE or REFUSED --
+    //
+    // Two standard shapes were invisible to it, and invisible read as absent:
+    // a `/Kids` name tree, which is how any document with more than a handful
+    // of names is written, and a `<< /D [...] >>` destination dictionary. With
+    // the target page still in the selection, both disappeared from the output
+    // with no loss recorded and the operation READY.
+    console.log('\n=== 35. RF-R3-5 named destinations ===');
+
+    const ndAll = [0, 1, 2];
+    for (const shape of ['flat', 'dict', 'kids', 'kids-deep']) {
+        const kept = await call('extractNamedDestinations', `r4-nd-${shape}`, ndAll);
+        const names = (kept.names ?? []).map((n) => n.name);
+        check(`r4-nd-${shape}: the named destination survives when its target does`,
+            kept.status === 'READY'
+            && names.includes('M6R4_SEC')
+            && (kept.names ?? []).some((n) => n.name === 'M6R4_SEC' && n.targetIndex === 2),
+            `${kept.status}, ${JSON.stringify(kept.names)}`);
+        check(`r4-nd-${shape}: and it is not reported as a loss`,
+            (kept.losses ?? []).every((l) => l.kind !== 'named-destinations'),
+            JSON.stringify((kept.losses ?? []).map((l) => l.kind)));
+    }
+
+    // Both names in the two-level tree, so the walk reaches the second branch.
+    const ndDeep = await call('extractNamedDestinations', 'r4-nd-kids-deep', ndAll);
+    check('r4-nd-kids-deep: every leaf of the tree was read',
+        (ndDeep.names ?? []).map((n) => n.name).sort().join(',') === 'M6R4_SEC,M6R4_TAIL',
+        JSON.stringify((ndDeep.names ?? []).map((n) => n.name)));
+
+    for (const shape of ['flat', 'dict', 'kids', 'kids-deep']) {
+        const dropped = await call('extractNamedDestinations', `r4-nd-${shape}`, [0]);
+        check(`r4-nd-${shape}: an excluded target is an explicit loss, not an absence`,
+            dropped.status === 'READY'
+            && (dropped.losses ?? []).some(
+                (l) => l.kind === 'named-destinations' && l.what === 'M6R4_SEC',
+            ),
+            `${dropped.status}, ${JSON.stringify((dropped.losses ?? []).map((l) => `${l.kind}:${l.what}`))}`);
+    }
+
+    for (const shape of ['kids-cycle', 'kids-malformed', 'names-malformed', 'dict-invalid']) {
+        const refused = await call('extractNamedDestinations', `r4-nd-${shape}`, ndAll);
+        check(`r4-nd-${shape}: a tree that cannot be read is refused, never empty`,
+            refused.status === 'UNREADABLE_DESTINATIONS',
+            `${refused.status}: ${refused.reason}`);
+    }
+    // The refusals have to be about structures that are there. A `null` slot is
+    // the specification's way of writing an empty one, and an ordinary document
+    // that uses it must still go through.
+    const nullSlots = await call('extractNamedDestinations', 'r4-nd-null-slots', ndAll);
+    check('a null /Annots slot and a null /Kids entry are empty, not unreadable',
+        nullSlots.status === 'READY'
+        && (nullSlots.names ?? []).some((n) => n.name === 'M6R4_SEC' && n.targetIndex === 2),
+        `${nullSlots.status}, ${JSON.stringify(nullSlots.names ?? nullSlots.reason)}`);
+
+    const annotsMalformed = await call('extractNamedDestinations', 'r4-annots-malformed', [0, 1]);
+    check('r4-annots-malformed: an /Annots that is present and unreadable is refused',
+        annotsMalformed.status === 'UNREADABLE_DESTINATIONS',
+        `${annotsMalformed.status}: ${annotsMalformed.reason}`);
+    // On the Merge route a source this contract cannot handle is excluded and
+    // named rather than failing the whole run (M6-H10, RF-G). What must not
+    // happen is the third thing: merging it as though it had no annotations.
+    const annotsMerge = await call('mergeNamedDestinations', ['r4-annots-malformed', 'merge-b']);
+    const annotsExcluded = (annotsMerge.intake ?? [])
+        .some((r) => r.name === 'r4-annots-malformed.pdf' && r.result !== 'ACCEPTED');
+    check('and a Merge excludes it by name rather than merging it as annotation-free',
+        annotsMerge.status !== 'READY'
+        || (annotsExcluded
+            && (annotsMerge.losses ?? []).some(
+                (l) => l.kind === 'excluded-source' && l.what === 'r4-annots-malformed.pdf',
+            )),
+        `${annotsMerge.status}, intake `
+        + `${JSON.stringify((annotsMerge.intake ?? []).map((r) => `${r.name}:${r.result}`))}, `
+        + `losses ${JSON.stringify((annotsMerge.losses ?? []).map((l) => `${l.kind}:${l.what}`))}`);
+
+    const ndMerge = await call('mergeNamedDestinations', ['r4-nd-kids', 'merge-b']);
+    check('a Merge carries a name-tree destination into the output',
+        ndMerge.status === 'READY'
+        && (ndMerge.names ?? []).some((n) => n.name === 'M6R4_SEC' && n.targetIndex === 2),
+        `${ndMerge.status}, ${JSON.stringify(ndMerge.names)}`);
+    const ndMergeRefused = await call('mergeNamedDestinations', ['r4-nd-kids-cycle', 'merge-b']);
+    check('and a Merge refuses a name tree it cannot read',
+        ndMergeRefused.status === 'UNREADABLE_DESTINATIONS',
+        `${ndMergeRefused.status}: ${ndMergeRefused.reason}`);
+
+    // The other half of the reconstruction contract: what it does when it
+    // cannot apply what it planned. Every fixture produces an empty list, so
+    // this drives it past that on purpose.
+    const unapplied = await call('rebuildUnapplied');
+    check('a reconstruction that cannot be applied says so rather than counting it',
+        unapplied.rebuilt === 0
+        && unapplied.unapplied.length === 2
+        && unapplied.controlUnapplied.length === 0,
+        `rebuilt ${unapplied.rebuilt}, unapplied ${JSON.stringify(unapplied.unapplied)}, `
+        + `control ${JSON.stringify(unapplied.controlUnapplied)}`);
+
+    // ---- 36. RF-R3-1: optional-content configuration survives a Merge -------
+    //
+    // Measured before the fix: two sources agreeing on `/D /Name (Config A)`
+    // merged to a `/D` holding neither name. Not a silent winner — both were
+    // discarded, READY, with nothing reported.
+    console.log('\n=== 36. RF-R3-1 optional-content configuration ===');
+
+    const ocSourceA = await call('sourceOptionalContentConfig', 'r3-oc-name-a');
+    check('the sources really do declare the configuration under test',
+        ocSourceA.name === 'Config A' && ocSourceA.order === 1,
+        JSON.stringify(ocSourceA));
+
+    const ocOne = await call('mergeOptionalContentConfig', ['r3-oc-name-a']);
+    check('one source keeps its /D /Name',
+        ocOne.status === 'READY' && ocOne.config?.name === 'Config A',
+        `${ocOne.status}, ${JSON.stringify(ocOne.config)}`);
+
+    const ocTwo = await call('mergeOptionalContentConfig', ['r3-oc-name-a', 'r3-oc-name-same']);
+    check('two sources that agree on /D /Name keep it',
+        ocTwo.status === 'READY' && ocTwo.config?.name === 'Config A',
+        `${ocTwo.status}, ${JSON.stringify(ocTwo.config)}`);
+    check('and both groups are still listed and ordered',
+        (ocTwo.config?.groups ?? []).includes('M6-OC-A')
+        && (ocTwo.config?.groups ?? []).includes('M6-OC-C')
+        && ocTwo.config?.order === 2,
+        JSON.stringify(ocTwo.config));
+
+    const ocThree = await call('mergeOptionalContentConfig',
+        ['r3-oc-name-a', 'r3-oc-name-same', 'r4-oc-name-c']);
+    check('three agreeing sources keep it too',
+        ocThree.status === 'READY'
+        && ocThree.config?.name === 'Config A'
+        && (ocThree.config?.groups ?? []).length === 3,
+        `${ocThree.status}, ${JSON.stringify(ocThree.config)}`);
+
+    const ocBaseMerged = await call('mergeOptionalContentConfig',
+        ['r3-oc-basestate-on', 'r4-oc-basestate-b']);
+    check('an agreed /BaseState is carried into the output, not dropped',
+        ocBaseMerged.status === 'READY' && ocBaseMerged.config?.baseState === '/ON',
+        `${ocBaseMerged.status}, ${JSON.stringify(ocBaseMerged.config)}`);
+
+    const ocNameOnly = await call('mergeOptionalContentConfig',
+        ['r3-oc-name-a', 'r4-oc-plain']);
+    check('a named source merged with an unnamed one keeps the name',
+        ocNameOnly.status === 'READY' && ocNameOnly.config?.name === 'Config A',
+        `${ocNameOnly.status}, ${JSON.stringify(ocNameOnly.config)}`);
+
+    const ocConflict = await call('mergeOptionalContentConfig', ['r3-oc-name-a', 'r3-oc-name-b']);
+    check('a disagreeing /D /Name is still refused rather than resolved',
+        ocConflict.status === 'UNSUPPORTED_OPTIONAL_CONTENT', `${ocConflict.status}`);
+    const ocOrderMix = await call('mergeOptionalContentConfig', ['r3-oc-order', 'r3-oc-no-order']);
+    check('and an ordered source plus an unordered one is still refused',
+        ocOrderMix.status === 'UNSUPPORTED_OPTIONAL_CONTENT', `${ocOrderMix.status}`);
+
+    // ---- 37. RF-R3-2: the confirmation sees a typeless /EF ------------------
+    //
+    // The removal path found these; the path that decides whether to ask did
+    // not, because it asked about `/Type`. So a Merge deleted an attachment
+    // nobody had been asked about and named it afterwards.
+    console.log('\n=== 37. RF-R3-2 typeless attachment confirmation ===');
+
+    for (const fixture of ['r4-typeless-ef', 'r4-typeless-ef-deep', 'r3-typeless-ef']) {
+        const facts = await call('attachmentFacts', fixture);
+        check(`${fixture}: intake sees the attachment the artifact really holds`,
+            facts.hasAttachments === true
+            && facts.attachmentsComplete === true
+            && facts.independent?.efCarriers > 0,
+            `hasAttachments ${facts.hasAttachments}, complete ${facts.attachmentsComplete}, `
+            + `independent /EF ${facts.independent?.efCarriers}`);
+        const unconfirmed = await call('mergeUnconfirmed', [fixture, 'merge-b']);
+        check(`${fixture}: a Merge will not proceed without the confirmation`,
+            (unconfirmed.requiresConfirmation ?? []).includes('attachments')
+            && unconfirmed.status === 'CONFIRMATION_REQUIRED'
+            && unconfirmed.bytes === null,
+            `requires ${JSON.stringify(unconfirmed.requiresConfirmation)}, `
+            + `${unconfirmed.status}, bytes ${unconfirmed.bytes}`);
+        check(`${fixture}: and the refusal names the file it is asking about`,
+            (unconfirmed.losses ?? []).some((l) => l.kind === 'attachments'),
+            JSON.stringify((unconfirmed.losses ?? []).map((l) => `${l.kind}:${l.what}`)));
+    }
+    const typelessConfirmed = await call('mergeAndInspect',
+        ['r4-typeless-ef', 'merge-b'], 'M6R4_TYPELESS_SHALLOW');
+    check('once confirmed, the payload is gone from the bytes',
+        typelessConfirmed.status === 'READY'
+        && typelessConfirmed.independent?.efCarriers === 0
+        && typelessConfirmed.markerInBytes === false,
+        `${typelessConfirmed.status}, carriers ${typelessConfirmed.independent?.efCarriers}, `
+        + `marker ${typelessConfirmed.markerInBytes}`);
+
+    // ---- 38. RF-R3-3: a confirmation belongs to the plan it was given for ---
+    //
+    // A bare list of agreed loss kinds outlived the plan: confirm A and B, add
+    // C, click once, and C's attachment was deleted having never been shown.
+    console.log('\n=== 38. RF-R3-3 confirmation is bound to its plan ===');
+
+    const stale = {};
+    for (const mutate of ['none', 'add', 'remove', 'reorder']) {
+        stale[mutate] = await call('mergeStaleConfirmation',
+            ['r3-explicit-filespec', 'merge-b'], mutate);
+    }
+    check('an unchanged plan honours its own confirmation',
+        stale.none.fingerprintChanged === false && stale.none.status === 'READY',
+        `${stale.none.status}, changed ${stale.none.fingerprintChanged}`);
+    for (const mutate of ['add', 'remove', 'reorder']) {
+        const r = stale[mutate];
+        check(`a confirmation does not survive ${mutate}`,
+            r.fingerprintChanged === true
+            && (r.requiresConfirmation.length === 0
+                ? r.status === 'READY'
+                : r.status === 'CONFIRMATION_REQUIRED' && r.bytes === null),
+            `changed ${r.fingerprintChanged}, requires `
+            + `${JSON.stringify(r.requiresConfirmation)}, ${r.status}, bytes ${r.bytes}`);
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));

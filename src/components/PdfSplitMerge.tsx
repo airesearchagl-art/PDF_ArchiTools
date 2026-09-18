@@ -47,6 +47,7 @@ import {
     M6_STATUS,
     M6_LOSS_LABEL_JA,
     requiresConfirmation,
+    mergeConfirmationFingerprint,
     GENERIC_REFUSAL_JA,
     inspectLoadBoundary,
     INTAKE_LABEL_JA,
@@ -153,7 +154,16 @@ export const PdfSplitMerge: React.FC = () => {
     const [mergeFiles, setMergeFiles] = useState<MergeFileEntry[]>([]);
     const [mergeBusy, setMergeBusy] = useState(false);
     const [mergeNotice, setMergeNotice] = useState<Notice | null>(null);
-    const [mergeConfirmed, setMergeConfirmed] = useState<string[]>([]);
+    /**
+     * The confirmation, and the plan it was given for. RF-R3-3.
+     *
+     * A bare `string[]` of agreed loss kinds outlived the plan: confirm a Merge
+     * of A and B, add C, click once, and C's attachment was deleted having
+     * never been shown. The fingerprint is what makes "this confirmation" mean
+     * one particular set of files and losses.
+     */
+    const [mergeConfirmation, setMergeConfirmation] =
+        useState<{ fingerprint: string; kinds: string[] } | null>(null);
 
     // --- Ownership (M6-H13) ------------------------------------------------
     const ownership = useRef(
@@ -431,6 +441,9 @@ export const PdfSplitMerge: React.FC = () => {
         if (files.length === 0) return;
         supersede();
         setMergeNotice(null);
+        // A new file makes a new plan, and a confirmation belongs to the plan
+        // it was given for.
+        setMergeConfirmation(null);
         setMergeBusy(true);
 
         // The token is taken before the first `await`, so the reads below belong
@@ -581,7 +594,7 @@ export const PdfSplitMerge: React.FC = () => {
 
     const moveFile = (index: number, direction: 'up' | 'down') => {
         supersede();
-        setMergeConfirmed([]);
+        setMergeConfirmation(null);
         setMergeFiles((prev) => {
             const next = [...prev];
             const target = direction === 'up' ? index - 1 : index + 1;
@@ -593,7 +606,7 @@ export const PdfSplitMerge: React.FC = () => {
 
     const removeFile = (id: string) => {
         supersede();
-        setMergeConfirmed([]);
+        setMergeConfirmation(null);
         setMergeFiles((prev) => prev.filter((f) => f.id !== id));
     };
 
@@ -674,11 +687,14 @@ export const PdfSplitMerge: React.FC = () => {
              * confirmation. If the plan says something needs agreeing to, the
              * losses are shown and the run waits for a second click.
              */
-            const outstanding = plan.requiresConfirmation.filter(
-                (k) => !mergeConfirmed.includes(k),
-            );
+            const fingerprint = mergeConfirmationFingerprint(plan);
+            const agreed = mergeConfirmation?.fingerprint === fingerprint
+                ? mergeConfirmation.kinds
+                : [];
+            const outstanding = plan.requiresConfirmation.filter((k) => !agreed.includes(k));
             if (outstanding.length > 0) {
-                setMergeConfirmed(plan.requiresConfirmation);
+                setMergeConfirmation({ fingerprint, kinds: plan.requiresConfirmation });
+                setLossesExpanded(false);
                 setMergeNotice({
                     tone: 'warn',
                     code: M6_STATUS.CONFIRMATION_REQUIRED,
@@ -692,7 +708,8 @@ export const PdfSplitMerge: React.FC = () => {
                     const handle = mergeInWorker(inputs, plan, {
                         metadataPolicy: 'M4',
                         collisionPolicy: 'rename',
-                        confirmedLosses: mergeConfirmed,
+                        confirmedLosses: agreed,
+                        confirmedFingerprint: fingerprint,
                     });
 
                     inFlight.current = handle;
@@ -702,7 +719,8 @@ export const PdfSplitMerge: React.FC = () => {
                 : await runMerge(inputs, plan, {
                     metadataPolicy: 'M4',
                     collisionPolicy: 'rename',
-                    confirmedLosses: mergeConfirmed,
+                    confirmedLosses: agreed,
+                    confirmedFingerprint: fingerprint,
                     stillOurs: () => token.isCurrent(),
                 });
 

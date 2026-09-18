@@ -31,9 +31,10 @@
  * no link annotations at all can still drag one in. A contract that enumerated
  * annotations would have been wrong and would have looked right.
  */
-import { PDFArray, PDFDict, PDFName, PDFRef, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFNull, PDFRef, PDFString } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import type { LossRecord } from './contracts';
+import { MECHANISM_BOUNDS } from './policy';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -52,6 +53,62 @@ function look(doc: PDFDocument, value: unknown): unknown {
     } catch {
         return undefined;
     }
+}
+
+/**
+ * Resolve, keeping "not there" apart from "there and unreadable".
+ *
+ * {@link look} answers `undefined` for a dangling reference and for a key that
+ * was never written, and a reader that cannot tell those apart reports a
+ * missing object as an absent one. Every branch that decides whether a
+ * destination exists uses this instead.
+ */
+type Resolved = { ok: true; value: unknown } | { ok: false; reason: string };
+
+/**
+ * Whether a slot is empty.
+ *
+ * `null` is not a malformed value in a PDF: the specification says a null
+ * object is equivalent to an absent one, so a producer that leaves a hole in
+ * `/Annots` or `/Kids` writes `null` into it. Refusing those would refuse
+ * ordinary documents for being ordinary — the point of the refusals below is
+ * structures that are *there* and cannot be read.
+ */
+const isEmptySlot = (value: unknown): boolean => value === undefined || value === PDFNull;
+
+function resolve(doc: PDFDocument, raw: unknown): Resolved {
+    if (!(raw instanceof PDFRef)) return { ok: true, value: raw };
+    let value: unknown;
+    try {
+        value = doc.context.lookup(raw);
+    } catch (error) {
+        return { ok: false, reason: `could not be read: ${String((error as Error)?.message ?? error)}` };
+    }
+    if (value === undefined) {
+        return { ok: false, reason: `points at ${raw.tag}, which is not in the document` };
+    }
+    return { ok: true, value };
+}
+
+/**
+ * The destination array behind a named destination's value.
+ *
+ * Two forms are standard and both are in the field: the array itself, and a
+ * dictionary wrapping it under `/D`. Only the array shape is reproduced, so the
+ * wrapper is unwrapped rather than supported as a shape of its own — and a
+ * wrapper whose `/D` is missing or is not an array is `null`, which the caller
+ * turns into a refusal. It is never silently skipped.
+ */
+function destinationArrayOf(doc: PDFDocument, value: unknown): PDFArray | null {
+    if (value instanceof PDFArray) return value;
+    if (value instanceof PDFDict) {
+        const inner = value.get(PDFName.of('D'));
+        if (inner === undefined) return null;
+        const read = resolve(doc, inner);
+        if (!read.ok || !(read.value instanceof PDFArray)) return null;
+        return read.value;
+    }
+    return null;
 }
 
 /**
@@ -130,6 +187,14 @@ export interface DestinationPlan {
     otherSites: { fromIndex: number; key: string }[];
     /** How many links would break under E1. */
     wouldBreak: number;
+    /**
+     * Destination structures that are present and could not be read.
+     *
+     * A refusal, not an absence. Empty means every destination in this document
+     * was understood — which is the only state in which the lists above are a
+     * complete description of it.
+     */
+    unreadable: string[];
 }
 
 /** Every destination on a page, with enough context to remove or rebuild it. */
@@ -137,16 +202,37 @@ function destinationsOnPage(
     doc: PDFDocument,
     pageIndex: number,
     pageIndexOf: (ref: PDFRef) => number | null,
+    unreadable: string[],
 ): FoundLink[] {
     const found: FoundLink[] = [];
     const page = doc.getPages()[pageIndex];
-    const annots = look(doc, page.node.get(PDFName.of('Annots')));
-    if (!(annots instanceof PDFArray)) return found;
+    const annotsRaw = page.node.get(PDFName.of('Annots'));
+    if (isEmptySlot(annotsRaw)) return found;
+    const annotsRead = resolve(doc, annotsRaw);
+    if (!annotsRead.ok) {
+        unreadable.push(`page ${pageIndex} /Annots ${annotsRead.reason}`);
+        return found;
+    }
+    const annots = annotsRead.value;
+    if (!(annots instanceof PDFArray)) {
+        unreadable.push(`page ${pageIndex} /Annots is not an array`);
+        return found;
+    }
 
     for (let i = 0; i < annots.size(); i += 1) {
         const annotRaw = annots.get(i);
-        const annot = look(doc, annotRaw);
-        if (!(annot instanceof PDFDict)) continue;
+        if (isEmptySlot(annotRaw)) continue;
+        const annotRead = resolve(doc, annotRaw);
+        if (!annotRead.ok) {
+            unreadable.push(`page ${pageIndex} /Annots[${i}] ${annotRead.reason}`);
+            continue;
+        }
+        const annot = annotRead.value;
+        if (isEmptySlot(annot)) continue;
+        if (!(annot instanceof PDFDict)) {
+            unreadable.push(`page ${pageIndex} /Annots[${i}] is not a dictionary`);
+            continue;
+        }
 
         const record = (holder: PDFDict, key: 'Dest' | 'D', raw: unknown): void => {
             const dest = look(doc, raw);
@@ -165,6 +251,17 @@ function destinationsOnPage(
                     tail,
                 });
             } else if (dest !== undefined) {
+                // A name reference: a string, or a name object. Anything else
+                // is a destination that is present and cannot be read, which
+                // is a refusal rather than a link with an empty name.
+                const named = textOf(dest) ?? (nameOf(dest) || null);
+                if (named === null) {
+                    unreadable.push(
+                        `page ${pageIndex} /Annots[${i}] /${key} is neither a destination `
+                        + 'array nor a name',
+                    );
+                    return;
+                }
                 found.push({
                     fromIndex: pageIndex,
                     annotIndex: i,
@@ -174,7 +271,7 @@ function destinationsOnPage(
                     kind: 'named',
                     targetIndex: null,
                     tail: [],
-                    name: textOf(dest) ?? nameOf(dest),
+                    name: named,
                 });
             }
         };
@@ -190,32 +287,128 @@ function destinationsOnPage(
     return found;
 }
 
-/** Named destinations, resolved to page indices. */
+/**
+ * What a named-destination read can end as. RF-R3-5.
+ *
+ * The semantic-reader form of the adopted census clarification: COMPLETE with
+ * the entries, or REFUSED with a reason. There is no third state in which the
+ * tree was not understood and the answer is an empty list.
+ *
+ * The reader this replaces handled exactly one shape — a flat `/Names` array
+ * whose values were arrays — and answered `[]` for everything else. Measured:
+ * a `/Kids` name tree, which is how any document with more than a handful of
+ * names is written, and a `<< /D [...] >>` destination dictionary both
+ * vanished from the output with the target page still in the selection, no
+ * loss recorded and the operation READY.
+ */
+export type NamedDestinationRead =
+    | { complete: true; entries: NamedDestination[] }
+    | { complete: false; reason: string };
+
+/**
+ * Named destinations, resolved to page indices, read through the whole tree.
+ *
+ * Bounded by {@link MECHANISM_BOUNDS} in depth and in nodes, cycle-aware by
+ * reference tag. Reaching a bound, meeting a malformed node, or meeting a
+ * destination shape this reader does not reproduce is a refusal — the tree is
+ * there, so "no named destinations" would be false.
+ */
 function namedDestinations(
     doc: PDFDocument,
     pageIndexOf: (ref: PDFRef) => number | null,
-): NamedDestination[] {
-    const out: NamedDestination[] = [];
-    const names = look(doc, doc.catalog.get(PDFName.of('Names')));
-    if (!(names instanceof PDFDict)) return out;
-    const dests = look(doc, names.get(PDFName.of('Dests')));
-    if (!(dests instanceof PDFDict)) return out;
-    const arr = look(doc, dests.get(PDFName.of('Names')));
-    if (!(arr instanceof PDFArray)) return out;
-    for (let i = 0; i + 1 < arr.size(); i += 2) {
-        const name = textOf(look(doc, arr.get(i)));
-        const dest = look(doc, arr.get(i + 1));
-        if (!(dest instanceof PDFArray) || name === null) continue;
-        const first = dest.get(0);
-        const tail: unknown[] = [];
-        for (let k = 1; k < dest.size(); k += 1) tail.push(dest.get(k));
-        out.push({
-            name,
-            targetIndex: first instanceof PDFRef ? pageIndexOf(first) : null,
-            tail,
-        });
+): NamedDestinationRead {
+    const entries: NamedDestination[] = [];
+
+    const namesRaw = doc.catalog.get(PDFName.of('Names'));
+    if (isEmptySlot(namesRaw)) return { complete: true, entries };
+    const namesRead = resolve(doc, namesRaw);
+    if (!namesRead.ok) return { complete: false, reason: `catalog /Names ${namesRead.reason}` };
+    if (!(namesRead.value instanceof PDFDict)) {
+        return { complete: false, reason: 'catalog /Names is not a dictionary' };
     }
-    return out;
+
+    const destsRaw = namesRead.value.get(PDFName.of('Dests'));
+    if (isEmptySlot(destsRaw)) return { complete: true, entries };
+
+    const seen = new Set<string>();
+    let nodes = 0;
+
+    /** Walk one name-tree node. Returns a refusal reason, or null. */
+    const walk = (raw: unknown, depth: number, where: string): string | null => {
+        if (depth > MECHANISM_BOUNDS.maxNameTreeDepth) {
+            return `${where} is nested deeper than ${MECHANISM_BOUNDS.maxNameTreeDepth}`;
+        }
+        nodes += 1;
+        if (nodes > MECHANISM_BOUNDS.maxNameTreeNodes) {
+            return `the name tree holds more than ${MECHANISM_BOUNDS.maxNameTreeNodes} nodes`;
+        }
+        if (raw instanceof PDFRef) {
+            if (seen.has(raw.tag)) return `${where} is reached twice: the name tree cycles`;
+            seen.add(raw.tag);
+        }
+        const node = resolve(doc, raw);
+        if (!node.ok) return `${where} ${node.reason}`;
+        if (!(node.value instanceof PDFDict)) return `${where} is not a dictionary`;
+        const dict = node.value;
+
+        const leafRaw = isEmptySlot(dict.get(PDFName.of('Names')))
+            ? undefined
+            : dict.get(PDFName.of('Names'));
+        const kidsRaw = isEmptySlot(dict.get(PDFName.of('Kids')))
+            ? undefined
+            : dict.get(PDFName.of('Kids'));
+        if (leafRaw === undefined && kidsRaw === undefined) {
+            return `${where} has neither /Names nor /Kids`;
+        }
+
+        if (leafRaw !== undefined) {
+            const leaf = resolve(doc, leafRaw);
+            if (!leaf.ok) return `${where} /Names ${leaf.reason}`;
+            if (!(leaf.value instanceof PDFArray)) return `${where} /Names is not an array`;
+            const list = leaf.value;
+            if (list.size() % 2 !== 0) {
+                return `${where} /Names holds ${list.size()} entries, which is not name/value pairs`;
+            }
+            for (let i = 0; i + 1 < list.size(); i += 2) {
+                const keyRead = resolve(doc, list.get(i));
+                if (!keyRead.ok) return `${where} /Names[${i}] ${keyRead.reason}`;
+                const name = textOf(keyRead.value);
+                if (name === null) return `${where} /Names[${i}] is not a name string`;
+                const valueRead = resolve(doc, list.get(i + 1));
+                if (!valueRead.ok) return `${where} /Names (${name}) ${valueRead.reason}`;
+                const dest = destinationArrayOf(doc, valueRead.value);
+                if (dest === null) {
+                    return `${where} /Names (${name}) is not a destination this reader reproduces`;
+                }
+                const first = dest.get(0);
+                const tail: unknown[] = [];
+                for (let k = 1; k < dest.size(); k += 1) tail.push(dest.get(k));
+                entries.push({
+                    name,
+                    targetIndex: first instanceof PDFRef ? pageIndexOf(first) : null,
+                    tail,
+                });
+            }
+        }
+
+        if (kidsRaw !== undefined) {
+            const kids = resolve(doc, kidsRaw);
+            if (!kids.ok) return `${where} /Kids ${kids.reason}`;
+            if (!(kids.value instanceof PDFArray)) return `${where} /Kids is not an array`;
+            for (let i = 0; i < kids.value.size(); i += 1) {
+                const kid = kids.value.get(i);
+                if (isEmptySlot(kid)) continue;
+                const reason = walk(kid, depth + 1, `${where} /Kids[${i}]`);
+                if (reason !== null) return reason;
+            }
+        }
+
+        return null;
+    };
+
+    const reason = walk(destsRaw, 0, '/Names /Dests');
+    if (reason !== null) return { complete: false, reason };
+    return { complete: true, entries };
 }
 
 /**
@@ -231,13 +424,18 @@ export function planDestinations(doc: PDFDocument, selection: number[]): Destina
     const pageIndexOf = (ref: PDFRef): number | null => byTag.get(ref.tag) ?? null;
     const kept = new Set(selection);
 
+    const unreadable: string[] = [];
     const links: FoundLink[] = [];
     for (const index of selection) {
         if (!pages[index]) continue;
-        links.push(...destinationsOnPage(doc, index, pageIndexOf));
+        links.push(...destinationsOnPage(doc, index, pageIndexOf, unreadable));
     }
 
-    const named = namedDestinations(doc, pageIndexOf);
+    // RF-R3-5: COMPLETE or REFUSED. A tree that could not be walked is carried
+    // as a refusal rather than collapsing into "this document has none".
+    const read = namedDestinations(doc, pageIndexOf);
+    const named = read.complete ? read.entries : [];
+    if (!read.complete) unreadable.push(read.reason);
     const namedByName = new Map(named.map((n) => [n.name, n]));
 
     const otherSites: { fromIndex: number; key: string }[] = [];
@@ -264,6 +462,7 @@ export function planDestinations(doc: PDFDocument, selection: number[]): Destina
         named,
         otherSites,
         wouldBreak: breaks.length,
+        unreadable,
     };
 }
 
@@ -289,6 +488,8 @@ export interface StripOutcome {
     /** Named destinations whose target survived, to be written to the output. */
     survivingNames: SurvivingName[];
     losses: LossRecord[];
+    /** Destination structures present and unreadable. A refusal, not an absence. */
+    unreadable: string[];
 }
 
 /**
@@ -386,7 +587,7 @@ export function stripInternalDestinations(
         }
     }
 
-    return { rebuild, survivingNames, losses };
+    return { rebuild, survivingNames, losses, unreadable: plan.unreadable };
 }
 
 /**
@@ -396,12 +597,27 @@ export function stripInternalDestinations(
  * order of `/Annots`, so the annotation that carried the destination is the same
  * one in the copy.
  */
+/**
+ * What a reconstruction managed, and what it planned and could not do.
+ *
+ * `unapplied` is empty on every document this contract handles: each entry was
+ * planned against a page that is in the selection and an annotation that was
+ * read off that page. It exists because the alternative is the shape this
+ * milestone keeps finding — a `continue` that abandons a planned rebuild and
+ * returns a count that looks like success.
+ */
+export interface RebuildOutcome {
+    rebuilt: number;
+    unapplied: string[];
+}
+
 export function rebuildDestinations(
     out: PDFDocument,
     outcome: StripOutcome,
     selection: number[],
-): number {
+): RebuildOutcome {
     const outPages = out.getPages();
+    const unapplied: string[] = [];
     const outRefOf = (sourceIndex: number): PDFRef | null => {
         const position = selection.indexOf(sourceIndex);
         return position >= 0 && outPages[position] ? outPages[position].ref : null;
@@ -410,16 +626,29 @@ export function rebuildDestinations(
     let rebuilt = 0;
 
     for (const item of outcome.rebuild) {
+        const where = `page ${item.fromIndex} /Annots[${item.annotIndex}]`;
         const position = selection.indexOf(item.fromIndex);
         const outPage = outPages[position];
-        if (!outPage) continue;
+        if (!outPage) {
+            unapplied.push(`${where}: the page it belongs to is not in the output`);
+            continue;
+        }
         const annots = outPage.node.lookup(PDFName.of('Annots'));
-        if (!(annots instanceof PDFArray)) continue;
+        if (!(annots instanceof PDFArray)) {
+            unapplied.push(`${where}: the copied page has no /Annots array`);
+            continue;
+        }
         const annot = out.context.lookup(annots.get(item.annotIndex));
-        if (!(annot instanceof PDFDict)) continue;
+        if (!(annot instanceof PDFDict)) {
+            unapplied.push(`${where}: the copied annotation is not there`);
+            continue;
+        }
 
         const target = outRefOf(item.targetIndex);
-        if (!target) continue;
+        if (!target) {
+            unapplied.push(`${where}: its target page is not in the output`);
+            continue;
+        }
 
         const dest = out.context.obj([target, ...materializeTail(out, item.tail)] as never[]);
         if (item.holderIsAction) {
@@ -437,10 +666,22 @@ export function rebuildDestinations(
     // these and deferred outlines and page labels.
     if (outcome.survivingNames.length > 0) {
         const flat: unknown[] = [];
-        for (const n of outcome.survivingNames) {
-            if (n.targetIndex === null) continue;
+        // Sorted by name: a name tree's `/Names` array is required to be, and a
+        // reader that binary-searches an unsorted one finds nothing. The entries
+        // now arrive from a whole tree rather than from one flat array, so the
+        // order they were met in is not the order they belong in.
+        const ordered = [...outcome.survivingNames]
+            .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        for (const n of ordered) {
+            if (n.targetIndex === null) {
+                unapplied.push(`named destination ${n.name}: it resolved to no page`);
+                continue;
+            }
             const target = outRefOf(n.targetIndex);
-            if (!target) continue;
+            if (!target) {
+                unapplied.push(`named destination ${n.name}: its target is not in the output`);
+                continue;
+            }
             flat.push(
                 PDFString.of(n.name),
                 out.context.obj([target, ...materializeTail(out, n.tail)] as never[]),
@@ -454,7 +695,7 @@ export function rebuildDestinations(
         }
     }
 
-    return rebuilt;
+    return { rebuilt, unapplied };
 }
 
 /**
@@ -686,9 +927,17 @@ export function sanitizeDestinations(
 export function wouldBreakNavigation(
     doc: PDFDocument,
     selection: number[],
-): { wouldBreak: number; otherSites: { fromIndex: number; key: string }[] } {
+): {
+    wouldBreak: number;
+    otherSites: { fromIndex: number; key: string }[];
+    unreadable: string[];
+} {
     const plan = planDestinations(doc, selection);
-    return { wouldBreak: plan.wouldBreak, otherSites: plan.otherSites };
+    return {
+        wouldBreak: plan.wouldBreak,
+        otherSites: plan.otherSites,
+        unreadable: plan.unreadable,
+    };
 }
 
 /** What M6-H5A's second pass removed, and what has to go back. */
@@ -751,6 +1000,14 @@ export function closeSourcePageRefs(
                     pagePath: 'annot-P',
                     targetIndex: site.fromIndex,
                 });
+            } else {
+                // Removed with nowhere to put it back. Never reached on a
+                // document this contract handles — the site was found by
+                // walking a page that is in the selection — so if it is, the
+                // structure is not what this reader believes it is.
+                unreadable.push(
+                    `${site.where}: /P was removed and cannot be restored`,
+                );
             }
             site.holder.delete(PDFName.of('P'));
             continue;
@@ -778,21 +1035,32 @@ export function rebuildSourcePageRefs(
     out: PDFDocument,
     closure: PageRefClosure,
     selection: number[],
-): number {
+): RebuildOutcome {
     const outPages = out.getPages();
+    const unapplied: string[] = [];
     let rebuilt = 0;
     for (const item of closure.rebuild) {
+        const where = `page ${item.targetIndex} /Annots[${item.annotIndex}] /P`;
         const position = selection.indexOf(item.targetIndex);
         const page = outPages[position];
-        if (!page || item.annotIndex === null) continue;
+        if (!page || item.annotIndex === null) {
+            unapplied.push(`${where}: the page it belongs to is not in the output`);
+            continue;
+        }
         const annots = page.node.lookup(PDFName.of('Annots'));
-        if (!(annots instanceof PDFArray)) continue;
+        if (!(annots instanceof PDFArray)) {
+            unapplied.push(`${where}: the copied page has no /Annots array`);
+            continue;
+        }
         const annot = out.context.lookup(annots.get(item.annotIndex));
-        if (!(annot instanceof PDFDict)) continue;
+        if (!(annot instanceof PDFDict)) {
+            unapplied.push(`${where}: the copied annotation is not there`);
+            continue;
+        }
         annot.set(PDFName.of('P'), page.ref);
         rebuilt += 1;
     }
-    return rebuilt;
+    return { rebuilt, unapplied };
 }
 
 /**

@@ -29,6 +29,7 @@ import {
     intakeSources,
     planMerge,
     runMerge,
+    mergeConfirmationFingerprint,
     planStructuralGraph,
     reachableGraph,
     comparePlanWithActual,
@@ -41,6 +42,7 @@ import {
     censusJavaScript,
     readSourceFacts,
     measureDestinationInvariants,
+    rebuildDestinations,
     extractOutputName,
     mergeOutputName,
     describeSelection,
@@ -499,6 +501,85 @@ function walkEverything(doc) {
     return out;
 }
 
+/**
+ * The gate's own `/Names /Dests` reader: `/Kids` and `<< /D [...] >>` included.
+ *
+ * Written here rather than imported, for the same reason `walkEverything` is.
+ * RF-R3-5 was a production reader that could not see two standard shapes, and a
+ * gate that asked that reader whether they survived would have agreed with it.
+ */
+function gateReadNames(doc) {
+    const out = [];
+    const names = doc.catalog.lookup(PDFName.of('Names'));
+    if (!(names instanceof PDFDict)) return out;
+    const pageTags = doc.getPages().map((page) => page.ref.tag);
+    const walk = (node, depth) => {
+        if (depth > 64) return;
+        const dict = node instanceof PDFRef ? doc.context.lookup(node) : node;
+        if (!(dict instanceof PDFDict)) return;
+        const leaf = dict.lookup(PDFName.of('Names'));
+        if (leaf instanceof PDFArray) {
+            for (let i = 0; i + 1 < leaf.size(); i += 2) {
+                const key = leaf.lookup(i);
+                const label = typeof key?.decodeText === 'function' ? key.decodeText() : String(key);
+                let value = leaf.lookup(i + 1);
+                if (value instanceof PDFDict) value = value.lookup(PDFName.of('D'));
+                let targetIndex = null;
+                if (value instanceof PDFArray) {
+                    const first = value.get(0);
+                    if (first instanceof PDFRef) targetIndex = pageTags.indexOf(first.tag);
+                }
+                out.push({ name: label, targetIndex });
+            }
+        }
+        const kids = dict.lookup(PDFName.of('Kids'));
+        if (kids instanceof PDFArray) {
+            for (let i = 0; i < kids.size(); i += 1) walk(kids.get(i), depth + 1);
+        }
+    };
+    walk(names.lookup(PDFName.of('Dests')), 0);
+    return out;
+}
+
+/** The gate's own read of `/OCProperties`, field by field. */
+function gateReadOcConfig(doc) {
+    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    if (!(oc instanceof PDFDict)) return { present: false };
+    const d = oc.lookup(PDFName.of('D'));
+    const ocgs = oc.lookup(PDFName.of('OCGs'));
+    const groups = [];
+    if (ocgs instanceof PDFArray) {
+        for (let i = 0; i < ocgs.size(); i += 1) {
+            const g = ocgs.lookup(i);
+            if (g instanceof PDFDict) {
+                const n = g.lookup(PDFName.of('Name'));
+                groups.push(typeof n?.decodeText === 'function' ? n.decodeText() : String(n));
+            }
+        }
+    }
+    if (!(d instanceof PDFDict)) return { present: true, hasD: false, groups };
+    const nameValue = d.lookup(PDFName.of('Name'));
+    const baseValue = d.lookup(PDFName.of('BaseState'));
+    const orderValue = d.lookup(PDFName.of('Order'));
+    const onValue = d.lookup(PDFName.of('ON'));
+    const offValue = d.lookup(PDFName.of('OFF'));
+    return {
+        present: true,
+        hasD: true,
+        groups,
+        keys: [...d.entries()].map((entry) => entry[0].asString()),
+        name: nameValue === undefined || nameValue === null
+            ? null
+            : (typeof nameValue.decodeText === 'function' ? nameValue.decodeText() : String(nameValue)),
+        baseState: baseValue === undefined || baseValue === null
+            ? null
+            : String(baseValue.asString ? baseValue.asString() : baseValue),
+        order: orderValue instanceof PDFArray ? orderValue.size() : null,
+        on: onValue instanceof PDFArray ? onValue.size() : null,
+        off: offValue instanceof PDFArray ? offValue.size() : null,
+    };
+}
+
 /** Whether a literal marker appears in the serialized bytes. */
 function bytesContain(bytes, marker) {
     const needle = new TextEncoder().encode(marker);
@@ -542,7 +623,13 @@ Object.assign(window.__m6, {
         }
         const intake = await intakeSources(inputs);
         const plan = planMerge(intake, options);
-        const result = await runMerge(inputs, plan, { confirmedLosses: plan.requiresConfirmation, ...options });
+        // A confirmation is bound to the plan it was given for (RF-R3-3), so
+        // the gate confirms the way the app does rather than by passing kinds.
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+            ...options,
+        });
         if (!result.bytes) {
             return plainly({
                 status: result.status,
@@ -662,6 +749,159 @@ Object.assign(window.__m6, {
     },
 
     /** A Merge run WITHOUT confirming what the plan says needs confirming. */
+    /** Extract, then read the artifact's named destinations independently. */
+    extractNamedDestinations: async (name, selection) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        const base = {
+            status: result.status,
+            reason: result.reason ?? null,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        };
+        if (!result.bytes) return plainly(base);
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({ ...base, names: gateReadNames(doc) });
+    },
+
+    /** Merge, then read the artifact's named destinations independently. */
+    mergeNamedDestinations: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        const base = {
+            status: result.status,
+            reason: result.reason ?? null,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        };
+        if (!result.bytes) return plainly(base);
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({ ...base, names: gateReadNames(doc) });
+    },
+
+    /**
+     * The merged artifact's `/OCProperties /D`, read field by field.
+     *
+     * RF-R3-1 passed every existing check because they counted groups. The
+     * configuration those groups are shown under was gone.
+     */
+    mergeOptionalContentConfig: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        if (!result.bytes) {
+            return plainly({ status: result.status, reason: result.reason ?? null, config: null });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({ status: result.status, config: gateReadOcConfig(doc) });
+    },
+
+    /** The same, read off a source, so the gate can compare like with like. */
+    sourceOptionalContentConfig: async (name) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        return plainly(gateReadOcConfig(doc));
+    },
+
+    /**
+     * What a Merge does with a confirmation that was given for a different plan.
+     *
+     * `mutate` names how the input set changes after the confirmation: the
+     * fingerprint is taken from the first plan and offered to the second.
+     */
+    mergeStaleConfirmation: async (names, mutate) => {
+        const build = async (list) => {
+            const inputs = [];
+            for (const name of list) {
+                inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+            }
+            const intake = await intakeSources(inputs);
+            return { inputs, plan: planMerge(intake, {}) };
+        };
+        const first = await build(names);
+        const firstFingerprint = mergeConfirmationFingerprint(first.plan);
+
+        let secondNames = names;
+        if (mutate === 'add') secondNames = [...names, 'merge-a'];
+        else if (mutate === 'remove') secondNames = names.slice(0, names.length - 1);
+        else if (mutate === 'reorder') secondNames = [...names].reverse();
+        const second = await build(secondNames);
+        const secondFingerprint = mergeConfirmationFingerprint(second.plan);
+
+        const result = await runMerge(second.inputs, second.plan, {
+            confirmedLosses: first.plan.requiresConfirmation,
+            confirmedFingerprint: firstFingerprint,
+        });
+        return plainly({
+            mutate,
+            fingerprintChanged: firstFingerprint !== secondFingerprint,
+            requiresConfirmation: second.plan.requiresConfirmation,
+            status: result.status,
+            bytes: result.bytes ? result.bytes.length : null,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        });
+    },
+
+    /** What intake says about a source's attachments, and what is really there. */
+    attachmentFacts: async (name) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const facts = readSourceFacts(doc, 0);
+        return plainly({
+            hasAttachments: facts.hasAttachments,
+            attachmentNames: facts.attachmentNames,
+            attachmentsComplete: facts.attachmentsComplete,
+            independent: walkEverything(doc),
+        });
+    },
+
+    /**
+     * What a reconstruction does when it is handed something it cannot apply.
+     *
+     * The same half of the contract the census-refusal probe exists for: every
+     * document in the corpus produces an empty `unapplied`, so asserting on
+     * them proves only that the happy path works. This drives the reconstruction
+     * with a plan that names a page the output does not have, which is the
+     * state the old `continue` turned into a successful count.
+     */
+    rebuildUnapplied: async () => {
+        const out = await PDFDocument.create({ updateMetadata: false });
+        out.addPage();
+        const impossible = {
+            rebuild: [{
+                fromIndex: 0, annotIndex: 0, holderIsAction: false,
+                targetIndex: 7, tail: [],
+            }],
+            survivingNames: [{ name: 'M6_NOWHERE', targetIndex: 9, tail: [] }],
+            losses: [],
+            unreadable: [],
+        };
+        const outcome = rebuildDestinations(out, impossible, [0]);
+        const control = rebuildDestinations(
+            out,
+            { rebuild: [], survivingNames: [], losses: [], unreadable: [] },
+            [0],
+        );
+        return plainly({
+            rebuilt: outcome.rebuilt,
+            unapplied: outcome.unapplied,
+            controlUnapplied: control.unapplied,
+        });
+    },
+
     mergeUnconfirmed: async (names) => {
         const inputs = [];
         for (const name of names) {

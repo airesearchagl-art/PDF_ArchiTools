@@ -92,7 +92,11 @@ export { readSourceFacts, classifyLoadError } from './source-facts';
 export { describeOptionalContent, planOptionalContent } from './optional-content';
 export { scanJavaScript, sanitizeJavaScript } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
-export { measureDestinationInvariants, planDestinations } from './destinations';
+export {
+    measureDestinationInvariants,
+    planDestinations,
+    rebuildDestinations,
+} from './destinations';
 export { readbackArtifact, checkArtifactInvariants } from './readback';
 export {
     censusIndirectObjects,
@@ -124,7 +128,12 @@ export { extractOutputName, mergeOutputName, describeSelection } from './naming'
 
 export { planExtract, runExtract } from './extract';
 export type { ExtractOptions } from './extract';
-export { intakeSources, planMerge, runMerge } from './merge';
+export {
+    intakeSources,
+    planMerge,
+    runMerge,
+    mergeConfirmationFingerprint,
+} from './merge';
 export type { MergeInput, MergeOptions } from './merge';
 
 export { extractInWorker, intakeInWorker, mergeInWorker, workerAvailable } from './worker/client';

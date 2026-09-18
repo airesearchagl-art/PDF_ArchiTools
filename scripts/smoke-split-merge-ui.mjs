@@ -462,6 +462,123 @@ try {
         && informationalShown.includes('ページラベル'),
         'outlines and page labels named');
 
+    // ---- 8. RF-R3-2: the confirmation can see a typeless /EF ---------------
+    //
+    // The removal path found these; the path that decides whether to ask did
+    // not, because it asked about `/Type`. Driven through the real app a
+    // single click produced the file, and the attachment it had just deleted
+    // was named in the success notice.
+    console.log('\n=== 8. RF-R3-2 a typeless attachment is confirmed, not assumed ===');
+
+    const mergeNotice = () => page.evaluate(
+        () => document.querySelector('[data-usage-target="m6-notice"]')?.textContent ?? '');
+    const gatedItems = () => page.evaluate(
+        () => [...document.querySelectorAll('[data-usage-target="m6-confirm-losses"] li')]
+            .map((li) => li.textContent ?? ''));
+    const downloadedNames = () => fs.readdirSync(downloads).filter((f) => f.endsWith('.pdf'));
+    const clickMergeExport = () => page.evaluate(() => {
+        document.querySelector('[data-usage-target="merge-export"]')?.click();
+    });
+
+    await openMerge();
+    let typelessInput = await page.$('input[type="file"]');
+    await typelessInput.uploadFile(fixture('r4-typeless-ef'), fixture('merge-b'));
+    await settle(4000);
+    const downloadsBeforeTypeless = downloadedNames().length;
+    await clickMergeExport();
+    await settle(3000);
+    const typelessFirst = await mergeNotice();
+    const typelessGated = await gatedItems();
+    check('a typeless /EF source stops the first click',
+        typelessFirst.includes('CONFIRMATION_REQUIRED')
+        && downloadedNames().length === downloadsBeforeTypeless,
+        `${typelessFirst.slice(0, 80)} · ${downloadedNames().length - downloadsBeforeTypeless} new file(s)`);
+    check('and the attachment is named before anything is written',
+        typelessGated.some((t) => t.includes('r4-typeless-ef.pdf')),
+        JSON.stringify(typelessGated));
+
+    await clickMergeExport();
+    await settle(6000);
+    check('the second click produces the file',
+        downloadedNames().length === downloadsBeforeTypeless + 1,
+        `${downloadedNames().length - downloadsBeforeTypeless} new file(s)`);
+    const typelessOut = downloadedNames()
+        .map((f) => path.join(downloads, f))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    const typelessBytes = fs.readFileSync(typelessOut);
+    check('and the payload is not in the bytes it handed over',
+        !typelessBytes.includes('M6R4_TYPELESS_SHALLOW'),
+        `${path.basename(typelessOut)}, ${typelessBytes.length} bytes`);
+
+    // ---- 9. RF-R3-3: a confirmation belongs to the plan it was given for ---
+    //
+    // Measured: confirm a Merge of A and B, add C, click once, and C's
+    // attachment was deleted having never been shown. The agreement was a
+    // boolean about loss kinds, and it outlived the plan it was given for.
+    console.log('\n=== 9. RF-R3-3 a confirmation does not outlive its plan ===');
+
+    /** Confirm a two-source Merge, then disturb the input set and click once. */
+    const afterDisturbance = async (label, disturb) => {
+        await openMerge();
+        const input = await page.$('input[type="file"]');
+        await input.uploadFile(fixture('with-attachment'), fixture('merge-b'));
+        await settle(4000);
+        const before = downloadedNames().length;
+        await clickMergeExport();
+        await settle(2500);
+        const confirmed = (await mergeNotice()).includes('CONFIRMATION_REQUIRED');
+
+        await disturb();
+        await settle(4000);
+        await clickMergeExport();
+        await settle(6000);
+        const notice = await mergeNotice();
+        const produced = downloadedNames().length - before;
+        check(`${label}: the first click asked for a confirmation`,
+            confirmed, confirmed ? 'asked' : 'did not ask');
+        check(`${label}: and the confirmation did not survive it`,
+            notice.includes('CONFIRMATION_REQUIRED') && produced === 0,
+            `${notice.slice(0, 90)} · ${produced} new file(s)`);
+    };
+
+    await afterDisturbance('a third file is added', async () => {
+        const input = await page.$('input[type="file"]');
+        await input.uploadFile(fixture('r4-typeless-ef'));
+    });
+
+    await afterDisturbance('a file is removed', async () => {
+        await page.evaluate(() => {
+            document.querySelectorAll('[data-usage-target="merge-row"]')[1]
+                ?.querySelector('button[title="Remove"]')?.click();
+        });
+    });
+
+    await afterDisturbance('the list is reordered', async () => {
+        await page.evaluate(() => {
+            document.querySelectorAll('[data-usage-target="merge-row"]')[1]
+                ?.querySelector('button[title="Move Up"]')?.click();
+        });
+    });
+
+    await afterDisturbance('the same file is uploaded again', async () => {
+        const input = await page.$('input[type="file"]');
+        await input.uploadFile(fixture('with-attachment'));
+    });
+
+    // And the control: nothing changes, so the confirmation is honoured.
+    await openMerge();
+    const steadyInput = await page.$('input[type="file"]');
+    await steadyInput.uploadFile(fixture('with-attachment'), fixture('merge-b'));
+    await settle(4000);
+    const steadyBefore = downloadedNames().length;
+    await clickMergeExport();
+    await settle(2500);
+    await clickMergeExport();
+    await settle(6000);
+    check('an unchanged plan is merged on the second click',
+        downloadedNames().length === steadyBefore + 1,
+        `${downloadedNames().length - steadyBefore} new file(s)`);
+
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));
 

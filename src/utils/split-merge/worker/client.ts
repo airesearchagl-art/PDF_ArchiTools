@@ -313,6 +313,7 @@ export function mergeInWorker(
         metadataPolicy: MergeMetadataPolicy;
         collisionPolicy: FieldCollisionPolicy;
         confirmedLosses?: string[];
+        confirmedFingerprint?: string;
         policy?: M6PolicyOverrides;
     },
 ): RunHandle<MergeResult> {
@@ -329,6 +330,7 @@ export function mergeInWorker(
             metadataPolicy: options.metadataPolicy,
             collisionPolicy: options.collisionPolicy,
             confirmedLosses: options.confirmedLosses,
+            confirmedFingerprint: options.confirmedFingerprint,
             policy: options.policy,
         },
         copies.map((c) => c.bytes),

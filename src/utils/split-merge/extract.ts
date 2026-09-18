@@ -126,6 +126,7 @@ const emptyFacts = (sourceBytes: number): M6SourceFacts => ({
     pagesWithStructParents: [],
     hasAttachments: false,
     attachmentNames: [],
+    attachmentsComplete: false,
     hasOptionalContent: false,
 });
 
@@ -217,6 +218,20 @@ export async function planExtract(
             destinationPolicy,
         );
     }
+    if (!facts.attachmentsComplete) {
+        // RF-R3-2: `hasAttachments: false` is only a fact about the document
+        // when the census that produced it was complete. An incomplete one is
+        // a refusal, because the answer feeds what the person is asked to
+        // agree to.
+        return refusedPlan(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            '添付ファイルの有無を完全に確認できなかったため処理しません。',
+            selection,
+            facts,
+            destinationPolicy,
+            { reason: facts.attachmentsRefusal },
+        );
+    }
     if (selection.length === 0) {
         // Refused in planning, never after `save()`: pdf-lib adds a blank A4 to
         // a document with no pages, so an unplanned empty extract would ship a
@@ -236,6 +251,29 @@ export async function planExtract(
             selection,
             facts,
             destinationPolicy,
+        );
+    }
+
+    /**
+     * Whether this document's destinations can be read at all, asked before
+     * the readers that walk the same pages for something else.
+     *
+     * A malformed `/Annots` is visible to the optional-content resource walk
+     * too, and reporting it as an optional-content problem is the vaguer of
+     * two true answers — the same mistake XFA-behind-a-malformed-`/Fields`
+     * was. RF-R3-5: present and unreadable is a refusal, and it is named for
+     * what it is.
+     */
+    const destinations = wouldBreakNavigation(doc, selection);
+    if (destinations.unreadable.length > 0) {
+        return refusedPlan(
+            M6_STATUS.UNREADABLE_DESTINATIONS,
+            'このPDFのジャンプ先の構造を完全に読み取れなかったため処理しません: '
+            + destinations.unreadable.join(', '),
+            selection,
+            facts,
+            destinationPolicy,
+            { unreadable: destinations.unreadable },
         );
     }
 
@@ -271,7 +309,6 @@ export async function planExtract(
         );
     }
 
-    const destinations = wouldBreakNavigation(doc, selection);
     if (destinationPolicy === 'E1'
         && (destinations.wouldBreak > 0 || destinations.otherSites.length > 0)) {
         const parts: string[] = [];
@@ -300,6 +337,17 @@ export async function planExtract(
     // never hands the caller a mutated document.
     const working = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     const strip = sanitizeDestinations(working, selection);
+    if (strip.unreadable.length > 0) {
+        return refusedPlan(
+            M6_STATUS.UNREADABLE_DESTINATIONS,
+            'このPDFのジャンプ先の構造を完全に読み取れなかったため処理しません: '
+            + strip.unreadable.join(', '),
+            selection,
+            facts,
+            destinationPolicy,
+            { unreadable: strip.unreadable },
+        );
+    }
     // M6-H5A: the routes `/Dest` never covered, closed before the graph is
     // counted so the count describes a graph with no source-page reference in
     // it. A route the walk could not finish is a refusal, not an absence.
@@ -526,6 +574,15 @@ export async function runExtract(
 
     let working: PDFDocument | null = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     const strip = sanitizeDestinations(working, selection);
+    if (strip.unreadable.length > 0) {
+        return refusedResult(
+            M6_STATUS.UNREADABLE_DESTINATIONS,
+            'このPDFのジャンプ先の構造を完全に読み取れなかったため処理しません: '
+            + strip.unreadable.join(', '),
+            outputName,
+            { unreadable: strip.unreadable },
+        );
+    }
     const closure = closeSourcePageRefs(working, selection);
     if (closure.unreadable.length > 0) {
         return refusedResult(
@@ -592,8 +649,19 @@ export async function runExtract(
     const actual = await graphOfWholeDocument(out);
 
     // ---- 8. reconstruction ---------------------------------------------------
-    rebuildDestinations(out, strip, selection);
-    rebuildSourcePageRefs(out, closure, selection);
+    const rebuiltDestinations = rebuildDestinations(out, strip, selection);
+    const rebuiltPageRefs = rebuildSourcePageRefs(out, closure, selection);
+    const unapplied = [...rebuiltDestinations.unapplied, ...rebuiltPageRefs.unapplied];
+    if (unapplied.length > 0) {
+        // A reconstruction that was planned and did not happen is a link the
+        // person had and the artifact does not, with nothing said about it.
+        return refusedResult(
+            M6_STATUS.PLAN_ACTUAL_MISMATCH,
+            '事前に計画したリンクの復元ができませんでした。安全のため書き出しません。',
+            outputName,
+            { unapplied },
+        );
+    }
 
     if (ocDescription.present && ocDescription.unsupported.length === 0) {
         const carried = carryOptionalContent(working, ocDescription, out);

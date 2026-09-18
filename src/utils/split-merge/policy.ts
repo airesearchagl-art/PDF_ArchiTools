@@ -237,4 +237,15 @@ export const MECHANISM_BOUNDS = {
     maxOrderDepth: 32,
     /** How far a `/Parent` chain is resolved when reading an inheritable key. */
     maxInheritanceDepth: 32,
+    /**
+     * M6-H6: how deep a `/Names` tree is followed, and how many of its nodes
+     * are visited, before the reader stops claiming to have read it.
+     *
+     * Same shape and same reason as the two above: reaching either is a typed
+     * refusal from the named-destination reader, never an empty list. A name
+     * tree that cannot be read completely is a document whose navigation this
+     * tool cannot describe, not a document with no named destinations.
+     */
+    maxNameTreeDepth: 32,
+    maxNameTreeNodes: 100_000,
 } as const;

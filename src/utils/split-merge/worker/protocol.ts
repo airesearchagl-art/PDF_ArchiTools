@@ -42,6 +42,8 @@ export type WorkerRequest =
         metadataPolicy: MergeMetadataPolicy;
         collisionPolicy: FieldCollisionPolicy;
         confirmedLosses?: string[];
+        /** The plan those losses were agreed to for. RF-R3-3. */
+        confirmedFingerprint?: string;
         policy?: M6PolicyOverrides;
     }
     | { kind: 'cancel'; runId: string };

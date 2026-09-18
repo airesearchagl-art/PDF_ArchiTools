@@ -98,6 +98,14 @@ export interface MergeOptions {
     excluded?: string[];
     /** Losses the person has already agreed to, for this exact job. */
     confirmedLosses?: string[];
+    /**
+     * The plan those losses were agreed to for. RF-R3-3.
+     *
+     * A confirmation without one is a confirmation of nothing in particular,
+     * and is not honoured: `confirmedLosses` only counts when this matches
+     * {@link mergeConfirmationFingerprint} of the plan being run.
+     */
+    confirmedFingerprint?: string;
     stillOurs?: () => boolean;
 }
 
@@ -188,6 +196,20 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
                 intake: INTAKE_RESULT.UNSUPPORTED_FORM,
                 status: M6_STATUS.UNSUPPORTED_FORM,
                 reason: 'フォーム構造を読み取れないため統合できません。',
+            },
+        };
+    }
+    if (!facts.attachmentsComplete) {
+        // RF-R3-2: intake's answer is what decides whether the person is asked
+        // about an attachment, so a census that could not prove it covered the
+        // document is a refusal here rather than a quiet "none".
+        return {
+            ...base,
+            refusal: {
+                intake: INTAKE_RESULT.CENSUS_INCOMPLETE,
+                status: M6_STATUS.CENSUS_INCOMPLETE,
+                reason: '添付ファイルの有無を完全に確認できなかったため統合できません。',
+                detail: { reason: facts.attachmentsRefusal },
             },
         };
     }
@@ -434,6 +456,37 @@ export function planMerge(intake: IntakeRecord[], options: MergeOptions = {}): M
     };
 }
 
+/**
+ * What a confirmation is a confirmation **of**. RF-R3-3.
+ *
+ * A confirmation used to be a set of loss kinds held in the UI, which outlived
+ * the plan it was given for: confirm a Merge of A and B, add C, click once, and
+ * C's attachment was deleted having never been shown. "Attachments may be
+ * removed" is not something a person agrees to in general — they agree to the
+ * losses they were shown, for the files they were shown them for.
+ *
+ * So the agreement is bound to everything that decides what those losses are:
+ * which sources were requested and how each was decided, the order they merge
+ * in, the exact gated losses by kind and by name, and the policies that shape
+ * them. Any of those changing produces a different fingerprint, and a
+ * fingerprint that does not match is not a confirmation.
+ */
+export function mergeConfirmationFingerprint(plan: MergePlan): string {
+    const gated = plan.losses
+        .filter((l) => requiresConfirmation(l.kind))
+        .map((l) => `${l.kind}|${l.what ?? ''}`)
+        .sort();
+    return JSON.stringify({
+        order: plan.order,
+        // Every requested source, not only the accepted ones: a file that was
+        // refused is part of what the person was looking at when they agreed.
+        intake: plan.intake.map((r) => `${r.id}|${r.result}`),
+        gated,
+        metadataPolicy: plan.metadataPolicy,
+        collisionPolicy: plan.collisionPolicy,
+    });
+}
+
 const refusedMerge = (
     status: MergeResult['status'],
     reason: string,
@@ -477,7 +530,6 @@ export async function runMerge(
     const policy = options.policy ?? PROVISIONAL_POLICY;
     assertEnforceablePolicy(policy);
     const stillOurs = options.stillOurs ?? (() => true);
-    const confirmed = new Set(options.confirmedLosses ?? []);
     const byId = new Map(inputs.map((i) => [i.id, i]));
     const ordered = plan.order
         .map((id) => byId.get(id))
@@ -509,7 +561,14 @@ export async function runMerge(
      * A confirmation flag that is computed and then ignored is not a
      * confirmation. If the plan says a loss needs agreeing to, the Merge does
      * not proceed and disclose it afterwards.
+     *
+     * And a confirmation given for a different plan is not one either: it only
+     * counts when it was given for this exact set of sources and losses.
      */
+    const fingerprint = mergeConfirmationFingerprint(plan);
+    const confirmed = new Set(
+        options.confirmedFingerprint === fingerprint ? (options.confirmedLosses ?? []) : [],
+    );
     const outstanding = plan.requiresConfirmation.filter((k) => !confirmed.has(k));
     if (outstanding.length > 0) {
         return refusedMerge(
@@ -517,7 +576,7 @@ export async function runMerge(
             'この統合では次の内容が失われます。内容を確認してから実行してください。',
             plan.intake,
             outputName,
-            { requiresConfirmation: outstanding },
+            { requiresConfirmation: outstanding, fingerprint },
             plan.losses,
         );
     }
@@ -691,6 +750,17 @@ export async function runMerge(
         removeSignatureWidgets(source);
 
         const strip = sanitizeDestinations(source, indices);
+        if (strip.unreadable.length > 0) {
+            return refusedMerge(
+                M6_STATUS.UNREADABLE_DESTINATIONS,
+                `${input.name}: ジャンプ先の構造を完全に読み取れなかったため統合できません: `
+                + strip.unreadable.join(', '),
+                plan.intake,
+                outputName,
+                { source: input.name, unreadable: strip.unreadable },
+                losses,
+            );
+        }
         const closure = closeSourcePageRefs(source, indices);
         if (closure.unreadable.length > 0) {
             return refusedMerge(
@@ -783,9 +853,10 @@ export async function runMerge(
             })),
             survivingNames: [],
             losses: [],
+            unreadable: [],
         };
-        rebuildDestinations(out, shiftedStrip, mergedSelection);
-        rebuildSourcePageRefs(
+        const rebuiltDestinations = rebuildDestinations(out, shiftedStrip, mergedSelection);
+        const rebuiltPageRefs = rebuildSourcePageRefs(
             out,
             {
                 ...closure,
@@ -796,6 +867,17 @@ export async function runMerge(
             },
             mergedSelection,
         );
+        const unapplied = [...rebuiltDestinations.unapplied, ...rebuiltPageRefs.unapplied];
+        if (unapplied.length > 0) {
+            return refusedMerge(
+                M6_STATUS.PLAN_ACTUAL_MISMATCH,
+                `${input.name}: 事前に計画したリンクの復元ができませんでした。安全のため書き出しません。`,
+                plan.intake,
+                outputName,
+                { source: input.name, unapplied },
+                losses,
+            );
+        }
 
         for (const surviving of strip.survivingNames) {
             const clash = mergedNames.find(
@@ -887,7 +969,7 @@ export async function runMerge(
 
     // The named destinations that survived, written once against the output.
     if (mergedNames.length > 0) {
-        rebuildDestinations(
+        const written = rebuildDestinations(
             out,
             {
                 rebuild: [],
@@ -897,9 +979,20 @@ export async function runMerge(
                     tail: n.tail,
                 })),
                 losses: [],
+                unreadable: [],
             },
             Array.from({ length: out.getPageCount() }, (_v, i) => i),
         );
+        if (written.unapplied.length > 0) {
+            return refusedMerge(
+                M6_STATUS.PLAN_ACTUAL_MISMATCH,
+                '事前に計画した名前付きジャンプ先を書き出せませんでした。安全のため中止します。',
+                plan.intake,
+                outputName,
+                { unapplied: written.unapplied },
+                losses,
+            );
+        }
     }
 
     const strippedTagging = stripTaggingEverywhere(out);
