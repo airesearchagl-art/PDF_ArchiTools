@@ -301,6 +301,15 @@ export interface M6SourceFacts {
     hasSignatureField: boolean;
     hasAppliedSignature: boolean;
     signatureFieldNames: string[];
+    /**
+     * The two kinds of signature field, named apart. RF-R4-4.
+     *
+     * A document can carry both, and naming only one kind — or labelling an
+     * applied signature "unsigned" because its value sat behind an unreadable
+     * parent — tells the person the wrong thing about what was removed.
+     */
+    appliedSignatureFieldNames: string[];
+    emptySignatureFieldNames: string[];
     hasXfa: boolean;
     hasAcroForm: boolean;
     hasStructTree: boolean;
@@ -423,6 +432,11 @@ export interface ReadbackFacts {
     embeddedFileStreams: number;
     /** Tagging remnants of every defined kind, summed. Must be 0 when stripped. */
     taggingRemnants: number;
+    /**
+     * Signature fields, signature or timestamp values, and byte ranges. Must be
+     * 0: no M6 output presents itself as signed (M6-H1, M6-H2, RF-R4-4).
+     */
+    signatureRemnants: number;
     /** Indirect objects nothing reachable points at. Must be 0 after the sweep. */
     unreachableObjects: number;
     /** Whether the reachable action scan completed. */
@@ -516,6 +530,21 @@ export interface IntakeRecord {
     hasOptionalContent: boolean;
     hasStructTree: boolean;
     hasAttachments: boolean;
+    /**
+     * One label per attachment, as the confirmation shows it. RF-R4-6.
+     *
+     * The filename where the document gives one (`/UF`, then `/F`), and an
+     * explicit unnamed label where it does not — never invented.
+     */
+    attachments: string[];
+    /**
+     * SHA-256 of the bytes intake read. RF-R4-5.
+     *
+     * Intake's facts are UX facts; this is what makes them facts about a
+     * particular file. The run recomputes it over the bytes it loads, and a
+     * record that does not match describes some other content.
+     */
+    contentDigest: string;
     /** The source's Info dictionary, for M1 metadata. */
     info: Record<string, string>;
 }

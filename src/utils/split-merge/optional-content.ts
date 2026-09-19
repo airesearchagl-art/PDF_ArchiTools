@@ -33,19 +33,19 @@
  * reference, a structure of the wrong type and a graph deeper than the bound are
  * each a refusal.
  */
-import { PDFArray, PDFDict, PDFName, PDFRef, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNull, PDFRef, PDFString } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import { MECHANISM_BOUNDS } from './policy';
+import { pdfTextObject, pdfTextOf, readPdfText } from './pdf-text';
+import type { PdfText } from './pdf-text';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
     return typeof asString === 'function' ? asString.call(v) : '';
 };
 
-const textOf = (v: unknown): string | null => {
-    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
-    return typeof decode === 'function' ? decode.call(v) : null;
-};
+/** Whether a value is a string object — a label — as opposed to anything else. */
+const isStringObject = (v: unknown): boolean => v instanceof PDFString || v instanceof PDFHexString;
 
 function look(doc: PDFDocument, value: unknown): unknown {
     try {
@@ -125,7 +125,10 @@ export interface OptionalContentDescription {
     groups: { ref: PDFRef; name: string | null }[];
     on: (string | null)[];
     off: (string | null)[];
+    /** `/D /Name`, as the text a reader shows. Compared across Merge sources. */
     dName: string | null;
+    /** The same value as bytes and token, to be written back as it was. BLK-R4-1. */
+    dNameValue: PdfText | null;
     baseState: string | null;
     orderPresent: boolean;
     orderShape: unknown;
@@ -173,8 +176,16 @@ function orderShapeOf(
         }
         return nameOfGroup(node);
     }
-    const label = textOf(value);
-    if (label !== null) {
+    if (isStringObject(value)) {
+        // BLK-R4-1: a label is text a reader shows, so it is read the way a
+        // reader reads it. One that is there and cannot be read is not a label
+        // this reader can reproduce.
+        const read = readPdfText(value);
+        if (!read.ok) {
+            unsupported.push(`/D /Order holds a text label that cannot be read: it ${read.reason}`);
+            return '(unreadable label)';
+        }
+        const label = read.value.text;
         if (!labelAllowed) {
             unsupported.push(
                 depth === 0
@@ -535,6 +546,7 @@ export function describeOptionalContent(
         on: [],
         off: [],
         dName: null,
+        dNameValue: null,
         baseState: null,
         orderPresent: false,
         orderShape: null,
@@ -576,7 +588,7 @@ export function describeOptionalContent(
 
     const nameOfGroup = (ref: unknown): string | null => {
         const g = look(doc, ref);
-        return g instanceof PDFDict ? textOf(look(doc, g.get(PDFName.of('Name')))) : null;
+        return g instanceof PDFDict ? pdfTextOf(look(doc, g.get(PDFName.of('Name')))) : null;
     };
 
     // `/OCGs` and `/D` are both required. Refusing only a key of the wrong
@@ -648,7 +660,19 @@ export function describeOptionalContent(
         }
         out.on = refsOf(look(doc, d.get(PDFName.of('ON')))).map(nameOfGroup);
         out.off = refsOf(look(doc, d.get(PDFName.of('OFF')))).map(nameOfGroup);
-        out.dName = textOf(look(doc, d.get(PDFName.of('Name'))));
+        // BLK-R4-1: the configuration's name is text a reader shows, carried as
+        // the token it was. Present and not a readable text string used to
+        // read as "no name", and the name was dropped without a word.
+        const dNameRaw = look(doc, d.get(PDFName.of('Name')));
+        if (dNameRaw !== undefined && dNameRaw !== PDFNull) {
+            const read = readPdfText(dNameRaw);
+            if (read.ok) {
+                out.dName = read.value.text;
+                out.dNameValue = read.value;
+            } else {
+                out.unsupported.push(`/D /Name ${read.reason}`);
+            }
+        }
         const base = d.get(PDFName.of('BaseState'));
         if (base !== undefined) {
             out.baseState = nameOf(base);
@@ -705,7 +729,7 @@ export function describeOptionalContent(
                 pageIndex: position,
                 key: key.asString(),
                 ref: raw instanceof PDFRef ? raw : null,
-                name: textOf(look(doc, value.get(PDFName.of('Name')))),
+                name: pdfTextOf(look(doc, value.get(PDFName.of('Name')))),
             });
         }
     });
@@ -809,12 +833,15 @@ export function carryOptionalContent(
             if (!target) throw new Error('/D /Order names a group no kept page uses');
             return target;
         }
-        const label = textOf(value);
-        if (label !== null) {
+        if (isStringObject(value)) {
+            const read = readPdfText(value);
+            if (!read.ok) throw new Error(`/D /Order holds a text label that cannot be read: it ${read.reason}`);
             if (!labelAllowed) {
                 throw new Error('/D /Order holds a text label in a position this reader cannot reproduce');
             }
-            return PDFString.of(label);
+            // BLK-R4-1: the label as it was written, not its decoded text
+            // re-wrapped in a literal that drops high bytes and escapes nothing.
+            return pdfTextObject(read.value);
         }
         throw new Error('/D /Order holds an entry that cannot be reproduced');
     };
@@ -849,7 +876,7 @@ export function carryOptionalContent(
     }
     if (on.length > 0) d.ON = on;
     if (off.length > 0) d.OFF = off;
-    if (description.dName !== null) d.Name = PDFString.of(description.dName);
+    if (description.dNameValue !== null) d.Name = pdfTextObject(description.dNameValue);
     if (description.baseState === SUPPORTED_BASE_STATE) d.BaseState = PDFName.of('ON');
 
     /**

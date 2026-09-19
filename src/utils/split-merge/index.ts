@@ -108,6 +108,7 @@ export type { CensusNode, CensusOutcome } from './census';
 export {
     censusAttachments,
     censusJavaScript,
+    censusSignatures,
     censusTagging,
     countUnreachable,
     pruneUnreachable,
@@ -116,7 +117,10 @@ export {
     stripTaggingEverywhere,
     carriesJavaScript,
     carriesEmbeddedFile,
+    UNNAMED_ATTACHMENT_LABEL,
+    UNREADABLE_ATTACHMENT_LABEL,
 } from './prune';
+export { contentDigest, contentDigestJs } from './digest';
 export {
     snapshotMetadata,
     applyMetadataSnapshot,

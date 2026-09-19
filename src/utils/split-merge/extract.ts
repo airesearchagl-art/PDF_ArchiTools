@@ -61,6 +61,7 @@ import {
     planStructuralGraph,
 } from './structural-graph';
 import {
+    attachmentLosses,
     describeStructuralLosses,
     dropOpenAction,
     hasOutlines,
@@ -120,6 +121,8 @@ const emptyFacts = (sourceBytes: number): M6SourceFacts => ({
     hasSignatureField: false,
     hasAppliedSignature: false,
     signatureFieldNames: [],
+    appliedSignatureFieldNames: [],
+    emptySignatureFieldNames: [],
     hasXfa: false,
     hasAcroForm: false,
     hasStructTree: false,
@@ -216,6 +219,7 @@ export async function planExtract(
             selection,
             facts,
             destinationPolicy,
+            facts.reason ? { reason: facts.reason } : undefined,
         );
     }
     if (!facts.attachmentsComplete) {
@@ -265,6 +269,19 @@ export async function planExtract(
      * what it is.
      */
     const destinations = wouldBreakNavigation(doc, selection);
+    if (destinations.duplicateNames.length > 0) {
+        // RF-R4-3: a name defined twice has no single target to preserve, and
+        // no adopted policy chooses one.
+        return refusedPlan(
+            M6_STATUS.DUPLICATE_NAMED_DESTINATIONS,
+            '同じ名前の名前付きジャンプ先が複数定義されているため処理しません: '
+            + destinations.duplicateNames.join(', '),
+            selection,
+            facts,
+            destinationPolicy,
+            { duplicates: destinations.duplicateNames },
+        );
+    }
     if (destinations.unreadable.length > 0) {
         return refusedPlan(
             M6_STATUS.UNREADABLE_DESTINATIONS,
@@ -337,6 +354,17 @@ export async function planExtract(
     // never hands the caller a mutated document.
     const working = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     const strip = sanitizeDestinations(working, selection);
+    if (strip.duplicateNames.length > 0) {
+        return refusedPlan(
+            M6_STATUS.DUPLICATE_NAMED_DESTINATIONS,
+            '同じ名前の名前付きジャンプ先が複数定義されているため処理しません: '
+            + strip.duplicateNames.join(', '),
+            selection,
+            facts,
+            destinationPolicy,
+            { duplicates: strip.duplicateNames },
+        );
+    }
     if (strip.unreadable.length > 0) {
         return refusedPlan(
             M6_STATUS.UNREADABLE_DESTINATIONS,
@@ -382,7 +410,21 @@ export async function planExtract(
     // rebuild signature fields (M6-H3 defers that), and a widget left behind
     // would be an orphan in the artifact. An applied signature is additionally a
     // disclosed loss; an empty field is a form control that is simply not carried.
-    if (facts.hasSignatureField) removeSignatureWidgets(working);
+    if (facts.hasSignatureField) {
+        const removal = removeSignatureWidgets(working);
+        if (removal.unclassified.length > 0) {
+            // RF-R4-4: a widget that cannot be told apart from a signature is
+            // not assumed to be an ordinary one.
+            return refusedPlan(
+                M6_STATUS.UNSUPPORTED_FORM,
+                'フォームの継承関係を読み取れず、署名欄かどうかを判定できないため処理しません。',
+                selection,
+                facts,
+                destinationPolicy,
+                { unclassified: removal.unclassified },
+            );
+        }
+    }
 
     const structural = await planStructuralGraph(working, selection);
 
@@ -444,12 +486,10 @@ export async function planExtract(
     if (hasPageLabels(doc)) {
         addPlanned({ kind: 'page-labels', why: 'ページラベルは引き継がれません（今回の対応範囲外）。' });
     }
-    if (plannedAttachments.names.length > 0) {
-        addPlanned({
-            kind: 'attachments',
-            what: plannedAttachments.names.join(', '),
-            why: '添付ファイルは抽出後のPDFに引き継がれません。',
-        });
+    // RF-R4-6: one entry per attachment, named, by the same labels the facts
+    // were read with — so the planned removal and the disclosed one agree.
+    for (const loss of attachmentLosses(plannedAttachments.names, '添付ファイルは引き継がれません。')) {
+        addPlanned(loss);
     }
     for (const kind of plannedAttachments.removedActions) {
         addPlanned({
@@ -458,12 +498,15 @@ export async function planExtract(
             why: '対応範囲外のアクションに添付が含まれていたため、そのアクションごと削除しました。',
         });
     }
-    if (facts.hasSignatureField && !facts.hasAppliedSignature) {
+    if (facts.emptySignatureFieldNames.length > 0) {
         // RF-F: an unsigned field is not an applied signature, and saying so
-        // told people their document had been signed when it had not.
+        // told people their document had been signed when it had not. And the
+        // reverse (ADV-9, RF-R4-4): the unsigned ones are named as unsigned
+        // even when an applied one sits beside them, and an applied signature
+        // whose value was unreadable is refused upstream, never listed here.
         addPlanned({
             kind: 'empty-signature-field',
-            what: facts.signatureFieldNames.join(', '),
+            what: facts.emptySignatureFieldNames.join(', '),
             why: '未署名の署名欄は抽出後のPDFには引き継がれないため削除しました。',
         });
     }
@@ -574,6 +617,15 @@ export async function runExtract(
 
     let working: PDFDocument | null = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     const strip = sanitizeDestinations(working, selection);
+    if (strip.duplicateNames.length > 0) {
+        return refusedResult(
+            M6_STATUS.DUPLICATE_NAMED_DESTINATIONS,
+            '同じ名前の名前付きジャンプ先が複数定義されているため処理しません: '
+            + strip.duplicateNames.join(', '),
+            outputName,
+            { duplicates: strip.duplicateNames },
+        );
+    }
     if (strip.unreadable.length > 0) {
         return refusedResult(
             M6_STATUS.UNREADABLE_DESTINATIONS,
@@ -592,7 +644,17 @@ export async function runExtract(
             { unreadable: closure.unreadable },
         );
     }
-    if (plan.facts.hasSignatureField) removeSignatureWidgets(working);
+    if (plan.facts.hasSignatureField) {
+        const removal = removeSignatureWidgets(working);
+        if (removal.unclassified.length > 0) {
+            return refusedResult(
+                M6_STATUS.UNSUPPORTED_FORM,
+                'フォームの継承関係を読み取れず、署名欄かどうかを判定できないため処理しません。',
+                outputName,
+                { unclassified: removal.unclassified },
+            );
+        }
+    }
     const removedAttachments = removeAttachmentsEverywhere(working);
     if (!removedAttachments.complete) {
         return refusedResult(
@@ -677,7 +739,20 @@ export async function runExtract(
 
     if (formPlan.status === 'CARRY') {
         const carriedFields = form.fields.filter((f) => formPlan.carried.includes(f.name));
-        if (carriedFields.length > 0) rebuildAcroForm(out, carriedFields, { da: form.da });
+        if (carriedFields.length > 0) {
+            const rebuilt = rebuildAcroForm(out, carriedFields, { da: form.da });
+            if (rebuilt.unwritable.length > 0) {
+                // Never reached on text read from a document — it decoded, so
+                // it encodes — and a field written with another name is a field
+                // the person did not have.
+                return refusedResult(
+                    M6_STATUS.PLAN_ACTUAL_MISMATCH,
+                    'フォームのフィールド名を安全に書き出せませんでした。安全のため書き出しません。',
+                    outputName,
+                    { unwritable: rebuilt.unwritable },
+                );
+            }
+        }
     }
 
     // Every tagging remnant, not just the catalog keys: an annotation's
@@ -799,6 +874,12 @@ export async function runExtract(
     const seenLoss = new Set(losses.map((l) => `${l.kind}|${l.what ?? ''}|${l.fromIndex ?? ''}`));
     for (const loss of [...strip.losses, ...closure.losses, ...describeStructuralLosses(plan.facts)]) {
         const key = `${loss.kind}|${loss.what ?? ''}|${loss.fromIndex ?? ''}`;
+        if (seenLoss.has(key)) continue;
+        seenLoss.add(key);
+        losses.push(loss);
+    }
+    for (const loss of attachmentLosses(removedAttachments.names, '添付ファイルは引き継がれません。')) {
+        const key = `${loss.kind}|${loss.what ?? ''}|`;
         if (seenLoss.has(key)) continue;
         seenLoss.add(key);
         losses.push(loss);

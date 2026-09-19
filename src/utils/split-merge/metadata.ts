@@ -30,6 +30,7 @@ import {
     decodePDFRawStream,
 } from 'pdf-lib';
 import type { PDFDocument, PDFRawStream } from 'pdf-lib';
+import { pdfTextFromString, pdfTextObject } from './pdf-text';
 
 /** One Info entry, described in plain values. */
 export type InfoValue =
@@ -144,13 +145,20 @@ export function snapshotMetadata(doc: PDFDocument): MetadataSnapshot {
     return { info, xmp, hadXmp };
 }
 
+/**
+ * An Info value, written back.
+ *
+ * A string goes back as the token it was parsed as, through the one text writer
+ * M6 has (BLK-R4-1): the snapshot holds the characters between the delimiters,
+ * never a decoded string, so nothing is re-encoded and nothing can end early.
+ */
 const materialize = (out: PDFDocument, value: InfoValue): unknown => {
     switch (value.kind) {
-        case 'hex': return PDFHexString.of(value.value);
+        case 'hex': return pdfTextObject({ bytes: new Uint8Array(), token: { kind: 'hex', raw: value.value } });
         case 'name': return PDFName.of(value.value);
         case 'number': return out.context.obj(value.value as never);
         case 'bool': return out.context.obj(value.value as never);
-        default: return PDFString.of(value.value);
+        default: return pdfTextObject({ bytes: new Uint8Array(), token: { kind: 'literal', raw: value.value } });
     }
 };
 
@@ -203,8 +211,14 @@ export function applyMetadataSnapshot(
     }
 
     if (!carried.includes('Title')) {
-        out.setTitle(fallbackTitle);
-        carried.push('Title');
+        // The source's filename: the person's text, so the one text writer.
+        const title = pdfTextFromString(fallbackTitle);
+        if (title.ok) {
+            (outDict as PDFDict).set(PDFName.of('Title'), pdfTextObject(title.value));
+            carried.push('Title');
+        } else {
+            dropped.push('Title');
+        }
     }
 
     let xmp = false;

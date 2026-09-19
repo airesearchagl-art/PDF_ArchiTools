@@ -19,6 +19,7 @@ import { countOrphanWidgets } from './forms';
 import {
     censusAttachments,
     censusJavaScript,
+    censusSignatures,
     censusTagging,
     countUnreachable,
 } from './prune';
@@ -38,8 +39,9 @@ export async function readbackArtifact(bytes: Uint8Array): Promise<ReadbackFacts
     const js = censusJavaScript(doc);
     const attachments = censusAttachments(doc);
     const tagging = censusTagging(doc);
+    const signatures = censusSignatures(doc);
 
-    const refusals = [js, attachments, tagging]
+    const refusals = [js, attachments, tagging, signatures]
         .filter((c) => !c.complete)
         .map((c) => (c as { reason: string }).reason);
 
@@ -62,6 +64,7 @@ export async function readbackArtifact(bytes: Uint8Array): Promise<ReadbackFacts
         filespecsWithEF: attachments.complete ? attachments.value.efCarriers : Number.NaN,
         embeddedFileStreams: attachments.complete ? attachments.value.payloadStreams : Number.NaN,
         taggingRemnants: tagging.complete ? tagging.value.total : Number.NaN,
+        signatureRemnants: signatures.complete ? signatures.value : Number.NaN,
         unreachableObjects: countUnreachable(doc),
         complete: reachable.complete,
         censusComplete: refusals.length === 0,
@@ -171,6 +174,15 @@ export function checkArtifactInvariants(
             invariant: 'taggingRemnants === 0',
             value: facts.taggingRemnants,
             reason: `書き出したPDFにタグ構造の残骸が ${facts.taggingRemnants} 件残っていました。`,
+        };
+    }
+    if (facts.signatureRemnants !== 0) {
+        // RF-R4-4: a derivative that still carries a signature field, value or
+        // byte range presents itself as signed. None may.
+        return {
+            invariant: 'signatureRemnants === 0',
+            value: facts.signatureRemnants,
+            reason: `書き出したPDFに電子署名の要素が ${facts.signatureRemnants} 件残っていました。`,
         };
     }
     if (facts.unreachableObjects !== 0) {

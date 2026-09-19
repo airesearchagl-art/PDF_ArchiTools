@@ -73,11 +73,15 @@ import type { FormField } from './forms';
 import { checkCumulativeCaps, planStructuralGraph } from './structural-graph';
 import {
     applyMergeMetadata,
+    attachmentLosses,
     dropOpenAction,
     hasOutlines,
     hasPageLabels,
     readInfo,
+    readInfoTexts,
 } from './structure';
+import type { PdfText } from './pdf-text';
+import { contentDigest } from './digest';
 import { mergeOutputName } from './naming';
 import { checkArtifactInvariants, readbackArtifact } from './readback';
 
@@ -121,6 +125,8 @@ const emptyIntake = (input: MergeInput): IntakeRecord => ({
     hasOptionalContent: false,
     hasStructTree: false,
     hasAttachments: false,
+    attachments: [],
+    contentDigest: '',
     info: {},
 });
 
@@ -196,6 +202,7 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
                 intake: INTAKE_RESULT.UNSUPPORTED_FORM,
                 status: M6_STATUS.UNSUPPORTED_FORM,
                 reason: 'フォーム構造を読み取れないため統合できません。',
+                detail: facts.reason ? { reason: facts.reason } : undefined,
             },
         };
     }
@@ -265,6 +272,9 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
 /** Inspect one source and let it go. */
 async function intakeOne(input: MergeInput, policy: M6Policy): Promise<IntakeRecord> {
     const record = emptyIntake(input);
+    // RF-R4-5: what these facts are facts about. Taken first, over exactly the
+    // bytes every question below is asked of.
+    record.contentDigest = await contentDigest(input.bytes);
 
     // A file the picker did not call a PDF is still reported, by name and with a
     // reason. It is not silently dropped from the list.
@@ -300,6 +310,7 @@ async function intakeOne(input: MergeInput, policy: M6Policy): Promise<IntakeRec
     record.hasOptionalContent = safety.facts.hasOptionalContent;
     record.hasStructTree = safety.facts.hasStructTree;
     record.hasAttachments = safety.facts.hasAttachments;
+    record.attachments = [...safety.facts.attachmentNames];
     record.info = readInfo(doc);
     record.fieldNames = safety.form.fields.map((f) => f.name);
 
@@ -396,11 +407,15 @@ export function planMerge(intake: IntakeRecord[], options: MergeOptions = {}): M
             });
         }
         if (record.hasAttachments) {
-            losses.push({
-                kind: 'attachments',
-                what: record.name,
-                why: '添付ファイルは統合後のPDFに引き継がれません。',
-            });
+            // RF-R4-6: the confirmation names the attachment, not only the
+            // file it is in — "source.pdf — secret-notes.txt", one entry per
+            // attachment, and an explicit unnamed entry where the document
+            // gives no name.
+            const why = '添付ファイルは統合後のPDFに引き継がれません。';
+            const named = attachmentLosses(record.attachments ?? [], why, record.name);
+            losses.push(...(named.length > 0
+                ? named
+                : [{ kind: 'attachments' as const, what: record.name, why }]));
         }
     }
 
@@ -480,7 +495,9 @@ export function mergeConfirmationFingerprint(plan: MergePlan): string {
         order: plan.order,
         // Every requested source, not only the accepted ones: a file that was
         // refused is part of what the person was looking at when they agreed.
-        intake: plan.intake.map((r) => `${r.id}|${r.result}`),
+        // And its content (RF-R4-5): the same id over different bytes is a
+        // different plan, whatever its facts claim.
+        intake: plan.intake.map((r) => `${r.id}|${r.result}|${r.contentDigest ?? ''}`),
         gated,
         metadataPolicy: plan.metadataPolicy,
         collisionPolicy: plan.collisionPolicy,
@@ -510,6 +527,8 @@ const refusedMerge = (
 /** A named destination surviving into the merged output. */
 interface MergedName {
     name: string;
+    /** The key as it was written in its source. BLK-R4-1. */
+    key: PdfText;
     source: string;
     /** Output page index. */
     targetIndex: number;
@@ -593,7 +612,7 @@ export async function runMerge(
     };
 
     const renamedFields: { from: string; to: string; source: string }[] = [];
-    const metadataSources: { name: string; info: Record<string, string> }[] = [];
+    const metadataSources: { name: string; info: Record<string, PdfText> }[] = [];
     const mergedNames: MergedName[] = [];
     let cumulative: StructuralPlan = { ...EMPTY_STRUCTURAL_PLAN };
 
@@ -632,7 +651,7 @@ export async function runMerge(
             updateMetadata: false,
         });
         const indices = source.getPageIndices();
-        metadataSources.push({ name: input.name, info: readInfo(source) });
+        metadataSources.push({ name: input.name, info: readInfoTexts(source) });
 
         // ---- inspect, on the UNMODIFIED document, and decide -----------------
         const safety = inspectSource(source, input.bytes.length);
@@ -647,12 +666,68 @@ export async function runMerge(
             );
         }
 
+        const intakeRecord = plan.intake.find((r) => r.id === input.id);
+
+        /**
+         * RF-R4-5 — the confirmation's authority is the bytes, not the message.
+         *
+         * Intake's facts reach a Worker as a message, and the plan and its
+         * confirmation are built from them. A caller could keep a source's id
+         * and change its bytes, and the run would sanitize what the new bytes
+         * held under a confirmation given for the old ones: an attachment
+         * nobody was shown, removed, READY.
+         *
+         * So the run re-derives, from the document it just loaded, everything
+         * a confirmation is about — the content itself, by digest, and each
+         * confirmation-gated fact by value — and a plan that does not describe
+         * these bytes is refused. The confirmation fingerprint covers the
+         * digest and the named losses, so a confirmation that matches this plan
+         * is a confirmation of exactly this content.
+         */
+        const actualDigest = await contentDigest(input.bytes);
+        const actualAttachments = [...safety.facts.attachmentNames].sort();
+        const plannedAttachments = [...(intakeRecord?.attachments ?? [])].sort();
+        const mismatches: string[] = [];
+        if (!intakeRecord || !intakeRecord.contentDigest || intakeRecord.contentDigest !== actualDigest) {
+            mismatches.push('content digest');
+        }
+        if ((intakeRecord?.hasAttachments ?? false) !== safety.facts.hasAttachments
+            || plannedAttachments.join('\u0000') !== actualAttachments.join('\u0000')) {
+            mismatches.push('attachments');
+        }
+        if ((intakeRecord?.hasStructTree ?? false) !== safety.facts.hasStructTree) {
+            mismatches.push('tagging');
+        }
+        if (mismatches.length > 0) {
+            return refusedMerge(
+                M6_STATUS.PLAN_RUNTIME_MISMATCH,
+                `${input.name}: 事前に確認した内容と実際の内容が一致しませんでした。`
+                + 'ファイルを読み込み直してから実行してください。',
+                plan.intake,
+                outputName,
+                {
+                    source: input.name,
+                    mismatches,
+                    planned: {
+                        hasAttachments: intakeRecord?.hasAttachments ?? false,
+                        attachments: plannedAttachments,
+                        hasStructTree: intakeRecord?.hasStructTree ?? false,
+                    },
+                    actual: {
+                        hasAttachments: safety.facts.hasAttachments,
+                        attachments: actualAttachments,
+                        hasStructTree: safety.facts.hasStructTree,
+                    },
+                },
+                losses,
+            );
+        }
+
         /**
          * The plan said this source's optional content was carryable. If the
          * bytes disagree, that is a refusal — never a reason to skip the carry
          * and continue, which would lose the configuration silently.
          */
-        const intakeRecord = plan.intake.find((r) => r.id === input.id);
         const plannedOc = intakeRecord?.hasOptionalContent ?? false;
         if (plannedOc !== safety.optionalContent.present) {
             return refusedMerge(
@@ -747,9 +822,31 @@ export async function runMerge(
         const formDa = safety.form.da;
 
         // ---- only now: sanitize ---------------------------------------------
-        removeSignatureWidgets(source);
+        const signatureRemoval = removeSignatureWidgets(source);
+        if (signatureRemoval.unclassified.length > 0) {
+            return refusedMerge(
+                M6_STATUS.UNSUPPORTED_FORM,
+                `${input.name}: フォームの継承関係を読み取れず、署名欄かどうかを判定できないため統合できません。`,
+                plan.intake,
+                outputName,
+                { source: input.name, unclassified: signatureRemoval.unclassified },
+                losses,
+            );
+        }
 
         const strip = sanitizeDestinations(source, indices);
+        if (strip.duplicateNames.length > 0) {
+            // RF-R4-3: within one source, before any cross-source comparison.
+            return refusedMerge(
+                M6_STATUS.DUPLICATE_NAMED_DESTINATIONS,
+                `${input.name}: 同じ名前の名前付きジャンプ先が複数定義されているため統合できません: `
+                + strip.duplicateNames.join(', '),
+                plan.intake,
+                outputName,
+                { source: input.name, duplicates: strip.duplicateNames },
+                losses,
+            );
+        }
         if (strip.unreadable.length > 0) {
             return refusedMerge(
                 M6_STATUS.UNREADABLE_DESTINATIONS,
@@ -788,13 +885,13 @@ export async function runMerge(
                 losses,
             );
         }
-        if (strippedAttachments.names.length > 0) {
-            addLoss({
-                kind: 'attachments',
-                what: `${input.name}: ${strippedAttachments.names.join(', ')}`,
-                why: '添付ファイルは統合後のPDFに引き継がれません。',
-            });
-        }
+        // In the plan's own words, so what was removed and what was confirmed
+        // are the same entries rather than two descriptions of one thing.
+        for (const loss of attachmentLosses(
+            strippedAttachments.names,
+            '添付ファイルは統合後のPDFに引き継がれません。',
+            input.name,
+        )) addLoss(loss);
         for (const kind of strippedAttachments.removedActions) {
             addLoss({
                 kind: 'internal-links',
@@ -854,6 +951,7 @@ export async function runMerge(
             survivingNames: [],
             losses: [],
             unreadable: [],
+            duplicateNames: [],
         };
         const rebuiltDestinations = rebuildDestinations(out, shiftedStrip, mergedSelection);
         const rebuiltPageRefs = rebuildSourcePageRefs(
@@ -901,6 +999,7 @@ export async function runMerge(
             if (!mergedNames.some((n) => n.name === surviving.name)) {
                 mergedNames.push({
                     name: surviving.name,
+                    key: surviving.key,
                     source: input.name,
                     targetIndex: surviving.targetIndex + firstNewPage,
                     tail: surviving.tail,
@@ -949,6 +1048,16 @@ export async function runMerge(
                     ? `source${index + 1}.${name}`
                     : name),
             });
+            if (rebuilt.unwritable.length > 0) {
+                return refusedMerge(
+                    M6_STATUS.PLAN_ACTUAL_MISMATCH,
+                    `${input.name}: フォームのフィールド名を安全に書き出せませんでした。安全のため書き出しません。`,
+                    plan.intake,
+                    outputName,
+                    { source: input.name, unwritable: rebuilt.unwritable },
+                    losses,
+                );
+            }
             for (const r of rebuilt.renamed) renamedFields.push({ ...r, source: input.name });
         }
 
@@ -975,11 +1084,13 @@ export async function runMerge(
                 rebuild: [],
                 survivingNames: mergedNames.map((n) => ({
                     name: n.name,
+                    key: n.key,
                     targetIndex: n.targetIndex,
                     tail: n.tail,
                 })),
                 losses: [],
                 unreadable: [],
+                duplicateNames: [],
             },
             Array.from({ length: out.getPageCount() }, (_v, i) => i),
         );

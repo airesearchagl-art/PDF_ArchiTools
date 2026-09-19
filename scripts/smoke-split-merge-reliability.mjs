@@ -1227,6 +1227,380 @@ try {
             + `${JSON.stringify(r.requiresConfirmation)}, ${r.status}, bytes ${r.bytes}`);
     }
 
+    // =========================================================================
+    // Round 5. Every text assertion below is made by PDF.js — which shares no
+    // code with the writer — on the source and on the artifact, against the
+    // text the fixture meant. The fourth review's point was that a pdf-lib
+    // writer read back by pdf-lib hid its own defect.
+    // =========================================================================
+
+    const FORM_TEXT = {
+        '氏名': '山田 太郎',
+        '〨〩ぜ名': '〨〩ぜ値',
+        '(1) first': '(1) first',
+        'close)paren': 'a)b',
+        'open(paren': 'a(b',
+        'back\\slash': 'C:\\dir\\file',
+        'Größe': '•ﬁ€é',
+        '𠮷野家': '𠮷野家 定食',
+        'ctl\u0007name': 'a\tb\u0001c',
+        multiline: 'l1\r\nl2',
+        empty: '',
+        utf8bom: '日本語',
+        octA_x: 'v01',
+    };
+    const ND_TEXT = {
+        M6R5_ASCII: 1, 'a(b)c\\d': 2, '•A': 3, '目次': 1, '〨ぜ': 2, M6R5_P: 3,
+        M6R5_PA: 1, M6R5_PB: 2, '目次2': 3, M6R5_ESC: 1, M6R5OCT: 2, M6R5_HEX: 3,
+    };
+    const valuesOf = (fields) => Object.fromEntries(
+        Object.entries(fields ?? {}).map(([name, widgets]) => [name, widgets.map((w) => w.value)]),
+    );
+    const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    /** The syntax contract every READY round-5 artifact is held to (2.6). */
+    const syntaxHolds = (r) => r.status === 'READY'
+        && r.boundary === 'PASS'
+        && r.pdfjsError === null
+        && r.output !== null;
+    const syntaxDetail = (r) => `${r.status}, boundary ${r.boundary} ${r.boundaryCode ?? ''}, `
+        + `pdf.js ${r.pdfjsError ?? 'opened'}`;
+
+    // ---- 39. BLK-R4-1: the oracle can see the defect ------------------------
+    console.log('\n=== 39. BLK-R4-1 the oracle, fed the old writer ===');
+    const oracle = await call('oracleProbe');
+    const oracleFields = valuesOf(oracle.fields);
+    probe('PDF.js does not read the old writer\'s output as what was meant',
+        !(oracleFields['〨〩ぜ名'] && oracleFields['〨〩ぜ名'][0] === 'a)b'),
+        JSON.stringify(oracle.fields ?? oracle.error));
+
+    // ---- 40. BLK-R4-1: form text --------------------------------------------
+    console.log('\n=== 40. BLK-R4-1 form text ===');
+    const formSource = await call('fidelityExtract', 'r5-form-text', [0]);
+    const sourceFields = valuesOf(formSource.sources[0].fields);
+    check('the source really holds every case, as PDF.js reads it',
+        Object.entries(FORM_TEXT).every(([t, v]) => sameJson(sourceFields[t], [v])),
+        JSON.stringify(sourceFields));
+    check('Extract: the artifact is a document (READY, Load Boundary PASS, PDF.js opens it)',
+        syntaxHolds(formSource), syntaxDetail(formSource));
+    const extractFields = valuesOf(formSource.output?.fields);
+    for (const [t, v] of Object.entries(FORM_TEXT)) {
+        check(`Extract: field ${JSON.stringify(t)} keeps its name and value ${JSON.stringify(v)}`,
+            sameJson(extractFields[t], [v]),
+            `got ${JSON.stringify(extractFields[t])}`);
+    }
+    check('Extract: no field appears that the source did not have',
+        Object.keys(extractFields).sort().join('|') === Object.keys(FORM_TEXT).sort().join('|'),
+        JSON.stringify(Object.keys(extractFields)));
+
+    const formMerge = await call('fidelityMerge', ['r5-form-text', 'merge-b']);
+    check('Merge: the artifact is a document', syntaxHolds(formMerge), syntaxDetail(formMerge));
+    const mergeFields = valuesOf(formMerge.output?.fields);
+    check('Merge: every name and value is the text the source showed',
+        Object.entries(FORM_TEXT).every(([t, v]) => sameJson(mergeFields[t], [v])),
+        JSON.stringify(mergeFields));
+
+    // The constructed path: the same form twice. Every name collides, and the
+    // adopted rename policy prefixes each copy's colliding names with its
+    // position — so all of them are rebuilt from their text as
+    // `source1.<name>` and `source2.<name>`.
+    const formTwice = await call('fidelityMerge', ['r5-form-text', 'r5-form-text']);
+    const twiceFields = valuesOf(formTwice.output?.fields);
+    check('Merge rename: the artifact is a document', syntaxHolds(formTwice), syntaxDetail(formTwice));
+    for (const prefix of ['source1', 'source2']) {
+        check(`Merge rename: every ${prefix} field is its source name, prefixed, with its value`,
+            Object.entries(FORM_TEXT).every(([t, v]) => sameJson(twiceFields[`${prefix}.${t}`], [v])),
+            JSON.stringify(Object.keys(twiceFields).filter((k) => k.startsWith(`${prefix}.`))));
+    }
+    check('Merge rename: nothing else appears, and every rename is reported',
+        Object.keys(twiceFields).length === 2 * Object.keys(FORM_TEXT).length
+        && (formTwice.renamedFields ?? []).length === 2 * Object.keys(FORM_TEXT).length,
+        `${Object.keys(twiceFields).length} fields, ${(formTwice.renamedFields ?? []).length} renamed`);
+
+    for (const [fixture, label] of [
+        ['r5-form-bad-utf16', 'a value that is malformed UTF-16'],
+        ['r5-form-v-stream', 'a value that is a stream'],
+    ]) {
+        const r = await call('extract', fixture, [0]);
+        check(`Extract refuses ${label} rather than rebuilding it empty`,
+            r.status === 'UNSUPPORTED_FORM' && r.outputBytes === null,
+            `${r.status}: ${(r.reason ?? '').slice(0, 90)}`);
+        const m = await call('fidelityMerge', [fixture, 'merge-b']);
+        check(`Merge excludes a source with ${label}, by name`,
+            (m.intake ?? []).some((i) => i.name === `${fixture}.pdf` && i.result === 'UNSUPPORTED_FORM'),
+            JSON.stringify(m.intake));
+    }
+
+    // ---- 41. BLK-R4-1: named-destination text and order ---------------------
+    console.log('\n=== 41. BLK-R4-1 named-destination text and name-tree order ===');
+    const ndSource = await call('fidelityExtract', 'r5-nd-text', [0, 1, 2, 3]);
+    check('the source really defines every key, as PDF.js reads it',
+        Object.entries(ND_TEXT).every(([name, page]) => ndSource.sources[0].destinations[name] === page),
+        JSON.stringify(ndSource.sources[0].destinations));
+    check('Extract: the artifact is a document', syntaxHolds(ndSource), syntaxDetail(ndSource));
+    check('Extract: every name resolves, by its text, to its page',
+        Object.entries(ND_TEXT).every(([name, page]) => ndSource.output?.destinations[name] === page)
+        && Object.keys(ndSource.output?.destinations ?? {}).length === Object.keys(ND_TEXT).length,
+        JSON.stringify(ndSource.output?.destinations));
+    check('Extract: the rebuilt /Names is in byte order (read by this gate)',
+        ndSource.leavesAscending === true && ndSource.keyCount === Object.keys(ND_TEXT).length,
+        `ascending ${ndSource.leavesAscending}, ${ndSource.keyCount} keys`);
+    check('Extract: PDF.js finds every key by its RAW BYTES — its binary search, not its fallback',
+        ndSource.rawLookups.length === Object.keys(ND_TEXT).length
+        && ndSource.rawLookups.every((l) => l.page !== null),
+        JSON.stringify(ndSource.rawLookups.filter((l) => l.page === null).map((l) => l.raw)));
+    check('Extract: every link reaches the page its name named',
+        sameJson(ndSource.output?.links.map((l) => l.target), [1, 1, 2, 1]),
+        JSON.stringify(ndSource.output?.links));
+
+    const ndPartial = await call('fidelityExtract', 'r5-nd-text', [0, 1]);
+    const keptNames = Object.entries(ND_TEXT).filter(([, p]) => p === 1).map(([n]) => n).sort();
+    const lostNames = Object.entries(ND_TEXT).filter(([, p]) => p !== 1).map(([n]) => n).sort();
+    check('Extract of pages 1–2: the names targeting kept pages survive by their text',
+        syntaxHolds(ndPartial)
+        && sameJson(Object.keys(ndPartial.output?.destinations ?? {}).sort(), keptNames),
+        JSON.stringify(ndPartial.output?.destinations));
+    check('and every other name is an explicit loss, named by its text',
+        sameJson(ndPartial.losses.filter((l) => l.kind === 'named-destinations').map((l) => l.what).sort(),
+            lostNames),
+        JSON.stringify(ndPartial.losses.filter((l) => l.kind === 'named-destinations')));
+
+    const ndTextMerge = await call('fidelityMerge', ['merge-b', 'r5-nd-text']);
+    check('Merge after a 2-page source: every name resolves to its shifted page',
+        syntaxHolds(ndTextMerge)
+        && Object.entries(ND_TEXT).every(([name, page]) => ndTextMerge.output?.destinations[name] === page + 2),
+        JSON.stringify(ndTextMerge.output?.destinations));
+    check('Merge: /Names in byte order, every key found by raw bytes',
+        ndTextMerge.leavesAscending === true
+        && ndTextMerge.rawLookups.length === Object.keys(ND_TEXT).length
+        && ndTextMerge.rawLookups.every((l) => l.page !== null),
+        `ascending ${ndTextMerge.leavesAscending}, `
+        + JSON.stringify(ndTextMerge.rawLookups.filter((l) => l.page === null).map((l) => l.raw)));
+
+    // ---- 42. BLK-R4-1: optional-content configuration name -------------------
+    console.log('\n=== 42. BLK-R4-1 optional-content /D /Name and /Order labels ===');
+    const OC_NAMES = {
+        'r5-oc-name-jp': 'レイヤー設定',
+        'r5-oc-name-parens': '(A) cfg',
+        'r5-oc-name-backslash': 'C:\\cfg',
+        'r5-oc-name-highbyte': '•Cfg',
+        'r5-oc-name-ascii': 'Config Plain',
+        'r5-oc-name-utf16lit': '〨〩ぜ',
+    };
+    for (const [fixture, text] of Object.entries(OC_NAMES)) {
+        const e = await call('fidelityExtract', fixture, [0]);
+        check(`${fixture}: Extract keeps /D /Name ${JSON.stringify(text)} (source reads the same)`,
+            syntaxHolds(e) && e.sources[0].oc?.name === text && e.output?.oc?.name === text,
+            `${syntaxDetail(e)}, source ${JSON.stringify(e.sources[0].oc?.name)}, `
+            + `output ${JSON.stringify(e.output?.oc?.name)}`);
+        const m = await call('fidelityMerge', [fixture, fixture]);
+        check(`${fixture}: a Merge of two agreeing copies keeps it`,
+            syntaxHolds(m) && m.output?.oc?.name === text,
+            `${syntaxDetail(m)}, ${JSON.stringify(m.output?.oc?.name)}`);
+    }
+    const orderLabel = await call('fidelityExtract', 'r5-oc-order-label', [0]);
+    const labelOf = (order) => (order ?? []).find((e) => e && typeof e === 'object' && 'name' in e)?.name ?? null;
+    check('an /Order label is carried as the text it was',
+        syntaxHolds(orderLabel)
+        && labelOf(orderLabel.sources[0].oc?.order) === '設計図'
+        && labelOf(orderLabel.output?.oc?.order) === '設計図',
+        `${syntaxDetail(orderLabel)}, ${JSON.stringify(orderLabel.output?.oc?.order)}`);
+    for (const fixture of ['r5-oc-name-bad', 'r5-oc-name-notstring']) {
+        const r = await call('extract', fixture, [0]);
+        check(`${fixture}: a /D /Name that is there and unreadable is refused, not dropped`,
+            r.status === 'UNSUPPORTED_OPTIONAL_CONTENT' && r.outputBytes === null,
+            `${r.status}: ${(r.reason ?? '').slice(0, 90)}`);
+    }
+
+    // ---- 43. RF-R4-2: the catalog's own /Dests -------------------------------
+    console.log('\n=== 43. RF-R4-2 legacy catalog /Dests ===');
+    const LEGACY = {
+        'r5-legacy-array': { names: { M6R5_LEG: 2 }, links: [2] },
+        'r5-legacy-dict': { names: { M6R5_LEGD: 2 }, links: [2] },
+        'r5-legacy-escaped': { names: { 'M6R5 LEG': 2 }, links: [2] },
+        'r5-legacy-plus-tree': { names: { M6R5_L1: 1, M6R5_T1: 2 }, links: [1, 2] },
+    };
+    for (const [fixture, want] of Object.entries(LEGACY)) {
+        const e = await call('fidelityExtract', fixture, [0, 1, 2]);
+        check(`${fixture}: PDF.js reads the source's names`,
+            Object.entries(want.names).every(([n, p]) => e.sources[0].destinations[n] === p),
+            JSON.stringify(e.sources[0].destinations));
+        check(`${fixture}: Extract keeps every name at its page, and its links`,
+            syntaxHolds(e)
+            && Object.entries(want.names).every(([n, p]) => e.output?.destinations[n] === p)
+            && sameJson(e.output?.links.map((l) => l.target), want.links)
+            && e.rawLookups.every((l) => l.page !== null),
+            `${syntaxDetail(e)}, ${JSON.stringify(e.output?.destinations)}, `
+            + `links ${JSON.stringify(e.output?.links)}`);
+        const dropped = await call('fidelityExtract', fixture, [0]);
+        const lostHere = Object.keys(want.names).sort();
+        check(`${fixture}: an excluded target is an explicit loss, named`,
+            dropped.status === 'READY'
+            && sameJson(dropped.losses.filter((l) => l.kind === 'named-destinations').map((l) => l.what).sort(),
+                lostHere),
+            JSON.stringify(dropped.losses));
+        const m = await call('fidelityMerge', [fixture, 'merge-b']);
+        check(`${fixture}: Merge keeps every name at its page`,
+            syntaxHolds(m) && Object.entries(want.names).every(([n, p]) => m.output?.destinations[n] === p),
+            `${syntaxDetail(m)}, ${JSON.stringify(m.output?.destinations)}`);
+    }
+    for (const fixture of ['r5-legacy-malformed', 'r5-legacy-bad-value', 'r5-legacy-hash-lower', 'r5-legacy-nonascii']) {
+        const e = await call('extract', fixture, [0, 1, 2]);
+        check(`${fixture}: Extract refuses rather than reading it as none`,
+            e.status === 'UNREADABLE_DESTINATIONS', `${e.status}: ${(e.reason ?? '').slice(0, 90)}`);
+        const m = await call('fidelityMerge', [fixture, 'merge-b']);
+        check(`${fixture}: and so does Merge`,
+            m.status === 'UNREADABLE_DESTINATIONS', `${m.status}: ${(m.reason ?? '').slice(0, 90)}`);
+    }
+
+    // ---- 44. RF-R4-3: one name, two definitions -----------------------------
+    console.log('\n=== 44. RF-R4-3 duplicate named destinations ===');
+    for (const shape of ['same-leaf', 'same-target', 'kids', 'legacy-tree', 'encoding', 'hex-literal', 'dict-wrapped']) {
+        const e = await call('extract', `r5-dup-${shape}`, [0, 1, 2]);
+        check(`r5-dup-${shape}: Extract refuses the duplicate`,
+            e.status === 'DUPLICATE_NAMED_DESTINATIONS' && e.outputBytes === null,
+            `${e.status}: ${(e.reason ?? '').slice(0, 90)}`);
+        const m = await call('fidelityMerge', [`r5-dup-${shape}`, 'merge-b']);
+        check(`r5-dup-${shape}: Merge refuses it too`,
+            m.status === 'DUPLICATE_NAMED_DESTINATIONS', `${m.status}: ${(m.reason ?? '').slice(0, 90)}`);
+    }
+
+    // ---- 45. RF-R4-4: signatures behind unreadable ancestry ------------------
+    console.log('\n=== 45. RF-R4-4 signature classification ===');
+    const invariantProbe = await call('signatureInvariantProbe', 'r5-sig-direct-v');
+    probe('the readback invariant fires on a signed document',
+        invariantProbe.signatureRemnants > 0 && invariantProbe.invariant === 'signatureRemnants === 0',
+        JSON.stringify(invariantProbe));
+
+    const SIG = {
+        'r5-sig-inherited': { extract: 'READY', merge: 'SIGNATURE_UNSAFE', applied: true },
+        'r5-sig-inherited-kid-field': { extract: 'UNSUPPORTED_FORM', merge: 'SIGNATURE_UNSAFE' },
+        'r5-sig-direct-v': { extract: 'READY', merge: 'SIGNATURE_UNSAFE', applied: true },
+        'r5-sig-parent-cycle': { extract: 'UNSUPPORTED_FORM', merge: 'SIGNATURE_UNSAFE' },
+        'r5-sig-parent-dangling': { extract: 'UNSUPPORTED_FORM', merge: 'SIGNATURE_UNSAFE' },
+        'r5-sig-parent-wrong-type': { extract: 'UNSUPPORTED_FORM', merge: 'SIGNATURE_UNSAFE' },
+        'r5-sig-missing-ft': { extract: 'UNSUPPORTED_FORM', merge: 'SIGNATURE_UNSAFE' },
+        'r5-sig-orphan-widget': { extract: 'READY', merge: 'SIGNATURE_UNSAFE', applied: true },
+        'r5-sig-unclassifiable': { extract: 'UNSUPPORTED_FORM', merge: 'UNSUPPORTED_FORM' },
+        'r5-sig-empty': { extract: 'READY', merge: 'ACCEPTED', empty: true },
+        'r5-tx-control': { extract: 'READY', merge: 'ACCEPTED' },
+    };
+    const zeroSignature = (g) => g && g.byteRange === 0 && g.typeSig === 0 && g.ftSig === 0
+        && g.dictValues === 0 && g.appearanceMarker === false && g.payloadMarker === false;
+    for (const [fixture, want] of Object.entries(SIG)) {
+        const facts = await call('signatureFacts', fixture);
+        if (want.applied || want.merge === 'SIGNATURE_UNSAFE') {
+            check(`${fixture}: the facts see an applied signature`,
+                facts.hasAppliedSignature === true, JSON.stringify(facts));
+        }
+        const e = await call('signatureExtract', fixture);
+        check(`${fixture}: Extract is ${want.extract}`,
+            e.status === want.extract, `${e.status}: ${(e.reason ?? '').slice(0, 90)}`);
+        if (e.status === 'READY') {
+            check(`${fixture}: the derivative carries no signature field, value, byte range or appearance`,
+                e.production === 0 && zeroSignature(e.gate) && e.boundary === 'PASS',
+                `production ${e.production}, gate ${JSON.stringify(e.gate)}, boundary ${e.boundary}`);
+        }
+        if (want.applied) {
+            check(`${fixture}: and says the applied signature was removed, never "unsigned"`,
+                e.losses.some((l) => l.kind === 'applied-signature')
+                && !e.losses.some((l) => l.kind === 'empty-signature-field'),
+                JSON.stringify(e.losses.map((l) => `${l.kind}:${l.what}`)));
+        }
+        if (want.empty) {
+            check(`${fixture}: an unsigned field is disclosed as unsigned`,
+                e.losses.some((l) => l.kind === 'empty-signature-field')
+                && !e.losses.some((l) => l.kind === 'applied-signature'),
+                JSON.stringify(e.losses.map((l) => `${l.kind}:${l.what}`)));
+        }
+        const m = await call('signatureMerge', fixture);
+        const sourceResult = m.intake.find((i) => i.name === `${fixture}.pdf`)?.result;
+        check(`${fixture}: Merge intake is ${want.merge}`,
+            sourceResult === want.merge, JSON.stringify(m.intake));
+        if (want.merge !== 'ACCEPTED') {
+            check(`${fixture}: and a forged ACCEPTED record is refused by the run`,
+                m.forgedStatus === want.merge && m.forgedBytes === null,
+                `${m.forgedStatus}, bytes ${m.forgedBytes}`);
+        }
+        if (m.status === 'READY') {
+            check(`${fixture}: the merged artifact carries no signature remnant`,
+                m.production === 0 && zeroSignature(m.gate),
+                `production ${m.production}, gate ${JSON.stringify(m.gate)}`);
+        }
+    }
+
+    // ---- 46. RF-R4-5: the bytes, not the message, decide ---------------------
+    console.log('\n=== 46. RF-R4-5 worker actual-byte confirmation authority ===');
+    const parity = await call('digestParity');
+    check('the content digest agrees with Web Crypto on every sample, in both implementations',
+        parity.disagreements.length === 0, `${parity.samples} samples, ${JSON.stringify(parity.disagreements)}`);
+    for (const viaWorker of [false, true]) {
+        const where = viaWorker ? 'worker' : 'module';
+        for (const scenario of ['attachment-appears', 'attachment-forged', 'tagging-appears', 'tagging-forged', 'content-swap']) {
+            const r = await call('runtimeAuthority', scenario, viaWorker);
+            check(`${where}: ${scenario} cannot run under the stale plan`,
+                r.status === 'PLAN_RUNTIME_MISMATCH' && r.bytes === null,
+                `${r.status}, bytes ${r.bytes}, mismatches ${JSON.stringify(r.mismatches)}`);
+        }
+        const control = await call('runtimeAuthority', 'unchanged', viaWorker);
+        check(`${where}: unchanged bytes still merge under their own confirmation`,
+            control.status === 'READY' && control.payloadA === false,
+            `${control.status}, payload ${control.payloadA}`);
+    }
+
+    // ---- 47. RF-R4-6: the confirmation names the attachment ------------------
+    console.log('\n=== 47. RF-R4-6 attachment identity before confirmation ===');
+    const DISCLOSE = [
+        [['r5-att-secret', 'merge-b'], ['r5-att-secret.pdf — secret-notes.txt'], ['M6R5_SECRET_PAYLOAD']],
+        [['r5-att-unicode', 'merge-b'], ['r5-att-unicode.pdf — 図面メモ.txt'], ['M6R5_UNICODE_PAYLOAD']],
+        [['r5-att-multi', 'merge-b'],
+            ['r5-att-multi.pdf — a.txt', 'r5-att-multi.pdf — b.txt', 'r5-att-multi.pdf — c.txt'],
+            ['M6R5_MULTI_A', 'M6R5_MULTI_B', 'M6R5_MULTI_C']],
+        [['r5-att-unnamed', 'merge-b'], ['r5-att-unnamed.pdf — 名前のない添付ファイル'], ['M6R5_UNNAMED_PAYLOAD']],
+    ];
+    for (const [names, expected, markers] of DISCLOSE) {
+        const d = await call('mergeDisclosure', names, markers);
+        check(`${names[0]}: the confirmation names source and attachment before consent`,
+            d.requires.includes('attachments') && sameJson([...d.gated].sort(), [...expected].sort()),
+            JSON.stringify(d.gated));
+        check(`${names[0]}: after consent the payload is gone`,
+            d.status === 'READY' && Object.values(d.markers).every((present) => present === false),
+            `${d.status}, ${JSON.stringify(d.markers)}`);
+    }
+    const unicodePlan = await call('plan', 'r5-att-unicode', [0]);
+    check('Extract names the Unicode filename (/UF before /F) too',
+        (unicodePlan.losses ?? []).some((l) => l.kind === 'attachments' && l.what === '図面メモ.txt'),
+        JSON.stringify(unicodePlan.losses));
+
+    // ---- 48. BLK-R4-1: Info strings, carried and constructed -----------------
+    //
+    // The same class, on the metadata path: M1 decoded the first source's Info
+    // with pdf-lib, which reads a PDF 2.0 UTF-8 string as PDFDocEncoding, and
+    // wrote the mojibake back through a setter. M4 and Extract's fallback title
+    // write the person's filenames, and now go through the one text writer.
+    console.log('\n=== 48. BLK-R4-1 Info strings ===');
+    const INFO = { Title: '図面タイトル', Author: '(A) b\\c', Subject: '件名テスト', Creator: '•C' };
+    const infoExtract = await call('fidelityExtract', 'r5-info-text', [0]);
+    check('the source really holds the Info strings, as PDF.js reads them',
+        sameJson(infoExtract.sources[0].info, INFO), JSON.stringify(infoExtract.sources[0].info));
+    check('Extract carries every Info string as the text it was',
+        syntaxHolds(infoExtract) && sameJson(infoExtract.output?.info, INFO),
+        `${syntaxDetail(infoExtract)}, ${JSON.stringify(infoExtract.output?.info)}`);
+    const infoM1 = await call('fidelityMerge', ['r5-info-text', 'merge-b'], { metadataPolicy: 'M1' });
+    check('Merge M1 carries the first source\'s Info strings as the text they were',
+        syntaxHolds(infoM1) && sameJson(infoM1.output?.info, INFO),
+        `${syntaxDetail(infoM1)}, ${JSON.stringify(infoM1.output?.info)}`);
+    const infoM1Fallback = await call('fidelityMerge', ['merge-b', 'r5-info-text'], { metadataPolicy: 'M1' });
+    check('Merge M1 with an untitled first source titles it by its filename',
+        syntaxHolds(infoM1Fallback) && infoM1Fallback.output?.info?.Title === 'merge-b.pdf',
+        `${syntaxDetail(infoM1Fallback)}, ${JSON.stringify(infoM1Fallback.output?.info)}`);
+    const infoM4 = await call('fidelityMerge', ['r5-info-text', 'merge-b'], { metadataPolicy: 'M4' });
+    check('Merge M4 writes its provenance as the text it means',
+        syntaxHolds(infoM4)
+        && infoM4.output?.info?.Title === '2件のPDFを統合'
+        && infoM4.output?.info?.Subject === '統合元: r5-info-text.pdf / merge-b.pdf'
+        && infoM4.output?.info?.Creator === 'PDF ArchiTools — PDF統合',
+        `${syntaxDetail(infoM4)}, ${JSON.stringify(infoM4.output?.info)}`);
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));

@@ -490,6 +490,8 @@ export const PdfSplitMerge: React.FC = () => {
                     hasOptionalContent: false,
                     hasStructTree: false,
                     hasAttachments: false,
+                    attachments: [],
+                    contentDigest: '',
                     info: {},
                 },
             });
@@ -570,6 +572,8 @@ export const PdfSplitMerge: React.FC = () => {
                     hasOptionalContent: false,
                     hasStructTree: false,
                     hasAttachments: false,
+                    attachments: [],
+                    contentDigest: '',
                     info: {},
                 },
             }));

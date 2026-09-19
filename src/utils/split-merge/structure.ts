@@ -14,19 +14,11 @@
  * library; the product's mistake was presenting page copying as document
  * splitting and reporting success.
  */
-import { PDFArray, PDFDict, PDFName, PDFRef, PDFString } from 'pdf-lib';
+import { PDFDict, PDFName, PDFRef } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import type { LossRecord, MergeMetadataPolicy } from './contracts';
-
-const nameOf = (v: unknown): string => {
-    const asString = (v as { asString?: () => string } | null)?.asString;
-    return typeof asString === 'function' ? asString.call(v) : '';
-};
-
-const textOf = (v: unknown): string | null => {
-    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
-    return typeof decode === 'function' ? decode.call(v) : null;
-};
+import { pdfTextFromString, pdfTextObject, readPdfText } from './pdf-text';
+import type { PdfText } from './pdf-text';
 
 /**
  * Strip every tagging remnant, `/StructParents` included, and say so.
@@ -60,120 +52,6 @@ export function stripTagging(doc: PDFDocument): { stripped: boolean; pages: numb
 }
 
 /**
- * Remove embedded files. Adopted M6-H9d for Extract, with explicit confirmation
- * naming the files.
- *
- * Both routes are taken: the catalog's `/Names /EmbeddedFiles` tree, and any
- * `/Filespec` carrying an `/EF` wherever it sits. A detector that checked only
- * the name tree would miss a file attachment annotation.
- */
-export function removeAttachments(doc: PDFDocument): { removed: number; names: string[] } {
-    const names: string[] = [];
-    let removed = 0;
-    const doomed = new Map<string, PDFRef>();
-
-    const condemn = (raw: unknown): void => {
-        if (raw instanceof PDFRef) doomed.set(raw.tag, raw);
-    };
-
-    const noteName = (spec: PDFDict): void => {
-        const label = textOf(doc.context.lookup(spec.get(PDFName.of('F')) as never))
-            ?? textOf(doc.context.lookup(spec.get(PDFName.of('UF')) as never))
-            ?? textOf(spec.get(PDFName.of('F')));
-        if (label && !names.includes(label)) names.push(label);
-    };
-
-    /**
-     * A `/Filespec` and everything hanging off its `/EF`.
-     *
-     * Deleting the `/Filespec` alone leaves the payload stream registered, and
-     * pdf-lib writes everything registered — measured, the embedded bytes were
-     * still in the artifact after the attachment was reported removed.
-     */
-    const condemnFilespec = (raw: unknown): void => {
-        const spec = raw instanceof PDFRef ? doc.context.lookup(raw) : raw;
-        if (!(spec instanceof PDFDict)) return;
-        noteName(spec);
-        const ef = doc.context.lookup(spec.get(PDFName.of('EF')) as never) ?? spec.get(PDFName.of('EF'));
-        if (ef instanceof PDFDict) {
-            for (const [, streamRef] of ef.entries()) condemn(streamRef);
-            for (const [key] of [...ef.entries()]) ef.delete(key);
-        }
-        spec.delete(PDFName.of('EF'));
-        condemn(raw);
-    };
-
-    // Route 1 — the catalog's embedded-files name tree.
-    const namesDict = doc.catalog.lookup(PDFName.of('Names'));
-    if (namesDict instanceof PDFDict && namesDict.get(PDFName.of('EmbeddedFiles')) !== undefined) {
-        const embedded = namesDict.lookup(PDFName.of('EmbeddedFiles'));
-        if (embedded instanceof PDFDict) {
-            const list = embedded.lookup(PDFName.of('Names'));
-            if (list instanceof PDFArray) {
-                for (let i = 0; i + 1 < list.size(); i += 2) {
-                    const label = textOf(doc.context.lookup(list.get(i)));
-                    if (label && !names.includes(label)) names.push(label);
-                    condemnFilespec(list.get(i + 1));
-                }
-            }
-        }
-        namesDict.delete(PDFName.of('EmbeddedFiles'));
-        removed += 1;
-    }
-
-    // Route 2 — a `/FileAttachment` annotation on a page. The annotation, its
-    // `/FS` filespec and the payload behind it all go; the annotation object
-    // itself is condemned, not merely taken out of `/Annots`.
-    for (const page of doc.getPages()) {
-        const annots = page.node.lookup(PDFName.of('Annots'));
-        if (!(annots instanceof PDFArray)) continue;
-        for (let i = annots.size() - 1; i >= 0; i -= 1) {
-            const raw = annots.get(i);
-            const annot = doc.context.lookup(raw);
-            if (!(annot instanceof PDFDict)) continue;
-            if (nameOf(annot.get(PDFName.of('Subtype'))) !== '/FileAttachment') continue;
-            condemnFilespec(annot.get(PDFName.of('FS')));
-            annot.delete(PDFName.of('FS'));
-            annots.remove(i);
-            condemn(raw);
-            removed += 1;
-        }
-    }
-
-    // Route 3 — any remaining `/Filespec` with an `/EF`, wherever it sits.
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        if (!(obj instanceof PDFDict)) continue;
-        if (nameOf(obj.get(PDFName.of('Type'))) !== '/Filespec') continue;
-        if (obj.get(PDFName.of('EF')) === undefined) continue;
-        condemnFilespec(ref);
-    }
-
-    // Route 4 — any `/EmbeddedFile` stream, whatever reached it.
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        const inner = (obj as unknown as { dict?: unknown })?.dict;
-        const dict = obj instanceof PDFDict
-            ? obj
-            : (inner instanceof PDFDict ? inner : null);
-        if (!dict) continue;
-        if (nameOf(dict.get(PDFName.of('Type'))) !== '/EmbeddedFile') continue;
-        condemn(ref);
-    }
-
-    for (const ref of doomed.values()) {
-        const obj = doc.context.lookup(ref);
-        // Scrubbed before deletion: if some route this contract has not modelled
-        // still holds the reference, what it finds is empty rather than the file.
-        if (obj instanceof PDFDict) {
-            for (const [key] of [...obj.entries()]) obj.delete(key);
-        }
-        doc.context.delete(ref);
-        removed += 1;
-    }
-
-    return { removed, names };
-}
-
-/**
  * Retarget or drop `/OpenAction`.
  *
  * Nothing carries it across a copy, so the only question is whether the output
@@ -186,17 +64,44 @@ export function dropOpenAction(doc: PDFDocument): boolean {
     return true;
 }
 
-/** The trailer's Info dictionary, read as plain strings. */
+/** The trailer's Info dictionary, read as plain strings, for display. */
 export function readInfo(doc: PDFDocument): Record<string, string> {
     const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(readInfoTexts(doc))) out[key] = value.text;
+    return out;
+}
+
+/**
+ * The trailer's Info strings as text, bytes and token.
+ *
+ * What M1 carries into a merged output. Holding the token, not the decoded
+ * text, is what lets it be written back as it was — the M1 path decoded with
+ * pdf-lib, which reads a PDF 2.0 UTF-8 string as PDFDocEncoding, and wrote the
+ * resulting mojibake through a setter. Plain values only: nothing here refers to
+ * the source. A value whose text cannot be read is left out, and M1 then says
+ * nothing rather than something false.
+ */
+export function readInfoTexts(doc: PDFDocument): Record<string, PdfText> {
+    const out: Record<string, PdfText> = {};
     const infoRef = doc.context.trailerInfo.Info;
     const info = infoRef ? doc.context.lookup(infoRef) : undefined;
     if (!(info instanceof PDFDict)) return out;
     for (const [key, value] of info.entries()) {
-        const text = textOf(doc.context.lookup(value)) ?? textOf(value);
-        if (text !== null) out[key.asString().replace(/^\//, '')] = text;
+        const resolved = value instanceof PDFRef ? doc.context.lookup(value) : value;
+        const read = readPdfText(resolved);
+        if (read.ok) out[key.asString().replace(/^\//, '')] = read.value;
     }
     return out;
+}
+
+/** The output's Info dictionary, created if the output has none yet. */
+function infoDictOf(out: PDFDocument): PDFDict {
+    const ref = out.context.trailerInfo.Info;
+    const existing = ref ? out.context.lookup(ref) : undefined;
+    if (existing instanceof PDFDict) return existing;
+    const created = out.context.obj({});
+    out.context.trailerInfo.Info = out.context.register(created);
+    return created;
 }
 
 /**
@@ -211,24 +116,59 @@ export function readInfo(doc: PDFDocument): Record<string, string> {
 export function applyMergeMetadata(
     out: PDFDocument,
     policy: MergeMetadataPolicy,
-    sources: { name: string; info: Record<string, string> }[],
+    sources: { name: string; info: Record<string, PdfText> }[],
 ): void {
     if (policy === 'M1' && sources.length > 0) {
+        // BLK-R4-1: the first source's strings, written back as they were.
         const first = sources[0];
-        if (first.info.Title) out.setTitle(first.info.Title);
-        else out.setTitle(first.name);
-        if (first.info.Author) out.setAuthor(first.info.Author);
-        if (first.info.Subject) out.setSubject(first.info.Subject);
-        if (first.info.Creator) out.setCreator(first.info.Creator);
+        const info = infoDictOf(out);
+        for (const key of ['Title', 'Author', 'Subject', 'Creator']) {
+            const value = first.info[key];
+            if (value && value.text) info.set(PDFName.of(key), pdfTextObject(value));
+        }
+        if (!(first.info.Title && first.info.Title.text)) {
+            const fallback = pdfTextFromString(first.name);
+            if (fallback.ok) info.set(PDFName.of('Title'), pdfTextObject(fallback.value));
+        }
         return;
     }
 
-    // M4 — provenance that names what the document was built from.
+    // M4 — provenance that names what the document was built from. The
+    // filenames are the person's, so they go through the one text writer.
     const names = sources.map((s) => s.name);
-    out.setTitle(`${names.length}件のPDFを統合`);
-    out.setSubject(`統合元: ${names.join(' / ')}`);
-    out.setCreator('PDF ArchiTools — PDF統合');
-    out.setKeywords(names);
+    const info = infoDictOf(out);
+    const entries: [string, string][] = [
+        ['Title', `${names.length}件のPDFを統合`],
+        ['Subject', `統合元: ${names.join(' / ')}`],
+        ['Creator', 'PDF ArchiTools — PDF統合'],
+        ['Keywords', names.join(' ')],
+    ];
+    for (const [key, text] of entries) {
+        const encoded = pdfTextFromString(text);
+        if (encoded.ok) info.set(PDFName.of(key), pdfTextObject(encoded.value));
+    }
+}
+
+/**
+ * One loss per distinct attachment label, each naming what is removed. RF-R4-6.
+ *
+ * A confirmation is only a confirmation of what it showed, so every attachment
+ * is named — by its filename where the document gives one, by an explicit
+ * unnamed label where it does not — and, for a Merge, together with the source
+ * it belongs to. Two attachments with the same label stay two: the count is
+ * part of the name rather than lost to a de-duplication.
+ */
+export function attachmentLosses(
+    labels: string[],
+    why: string,
+    source?: string,
+): LossRecord[] {
+    const counts = new Map<string, number>();
+    for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1);
+    return [...counts.entries()].map(([label, count]) => {
+        const named = count > 1 ? `${label} ×${count}` : label;
+        return { kind: 'attachments', what: source ? `${source} — ${named}` : named, why };
+    });
 }
 
 /**
@@ -241,6 +181,7 @@ export function describeStructuralLosses(facts: {
     hasAttachments: boolean;
     attachmentNames: string[];
     hasAppliedSignature: boolean;
+    appliedSignatureFieldNames: string[];
 }): LossRecord[] {
     const losses: LossRecord[] = [];
     if (facts.hasStructTree || facts.pagesWithStructParents.length > 0) {
@@ -251,15 +192,14 @@ export function describeStructuralLosses(facts: {
         });
     }
     if (facts.hasAttachments) {
-        losses.push({
-            kind: 'attachments',
-            what: facts.attachmentNames.join(', ') || undefined,
-            why: '添付ファイルは引き継がれません。',
-        });
+        const why = '添付ファイルは引き継がれません。';
+        const named = attachmentLosses(facts.attachmentNames, why);
+        losses.push(...(named.length > 0 ? named : [{ kind: 'attachments' as const, why }]));
     }
     if (facts.hasAppliedSignature) {
         losses.push({
             kind: 'applied-signature',
+            what: facts.appliedSignatureFieldNames.join(', ') || undefined,
             why: '抽出後のPDFは新しい別の文書になるため、元の電子署名は有効になりません。'
                 + '署名欄と見た目も削除します。',
         });
@@ -275,15 +215,6 @@ export function hasPageLabels(doc: PDFDocument): boolean {
 /** An outline tree, read only so its absence can be reported honestly. */
 export function hasOutlines(doc: PDFDocument): boolean {
     return doc.catalog.get(PDFName.of('Outlines')) !== undefined;
-}
-
-/** Write a marker a gate can read back, without changing what a reader sees. */
-export function markProvisionalPolicy(out: PDFDocument, origin: string): void {
-    const info = out.context.trailerInfo.Info;
-    const dict = info ? out.context.lookup(info) : undefined;
-    if (dict instanceof PDFDict) {
-        dict.set(PDFName.of('M6PolicyOrigin'), PDFString.of(origin));
-    }
 }
 
 /** Whether the source carries an XMP packet, so its absence can be detected. */

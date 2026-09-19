@@ -110,6 +110,7 @@ jobs:
           node scripts/make-m6-remediation-fixtures.mjs
           node scripts/make-m6-round3-fixtures.mjs
           node scripts/make-m6-round4-fixtures.mjs
+          node scripts/make-m6-round5-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.

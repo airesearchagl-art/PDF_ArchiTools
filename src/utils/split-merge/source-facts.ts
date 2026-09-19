@@ -22,15 +22,12 @@ import type { PDFDocument } from 'pdf-lib';
 import type { M6SourceFacts } from './contracts';
 import { MECHANISM_BOUNDS } from './policy';
 import { censusAttachments } from './prune';
+import { classifyField } from './field-semantics';
+import { pdfTextOf } from './pdf-text';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
     return typeof asString === 'function' ? asString.call(v) : '';
-};
-
-const textOf = (v: unknown): string | null => {
-    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
-    return typeof decode === 'function' ? decode.call(v) : null;
 };
 
 /**
@@ -108,33 +105,6 @@ function walkPageTree(doc: PDFDocument): { leaves: number; consistent: boolean }
     return { leaves, consistent };
 }
 
-/**
- * An inheritable field attribute, resolved up the `/Parent` chain.
- *
- * `/FT` and `/V` are inheritable, so a terminal field may carry neither and
- * still be a signature field holding an applied signature. Reading only what
- * sits on the field itself made an inherited applied signature invisible, and
- * the document went on to be refused as `UNSUPPORTED_FORM` — or, worse for a
- * Merge, accepted — instead of being recognised as signed.
- */
-function inheritedField(doc: PDFDocument, field: PDFDict, key: string): unknown {
-    const seen = new Set<string>();
-    let current: PDFDict | null = field;
-    for (let depth = 0; current && depth <= MECHANISM_BOUNDS.maxInheritanceDepth; depth += 1) {
-        const own = current.get(PDFName.of(key));
-        if (own !== undefined) return look(doc, own);
-        const parentRaw: unknown = current.get(PDFName.of('Parent'));
-        if (parentRaw === undefined) return undefined;
-        if (parentRaw instanceof PDFRef) {
-            if (seen.has(parentRaw.tag)) return undefined;
-            seen.add(parentRaw.tag);
-        }
-        const parent = look(doc, parentRaw);
-        current = parent instanceof PDFDict ? parent : null;
-    }
-    return undefined;
-}
-
 /** Every terminal AcroForm field, walked through `/Kids` with a bound. */
 function walkFields(
     doc: PDFDocument,
@@ -153,7 +123,7 @@ function walkFields(
                 readable = false;
                 continue;
             }
-            const partial = textOf(look(doc, field.get(PDFName.of('T'))));
+            const partial = pdfTextOf(look(doc, field.get(PDFName.of('T'))));
             const full = inheritedName && partial
                 ? `${inheritedName}.${partial}`
                 : (partial ?? inheritedName);
@@ -217,32 +187,43 @@ function pagesWithStructParents(doc: PDFDocument): number[] {
 function readAttachments(
     doc: PDFDocument,
 ): { complete: boolean; reason?: string; present: boolean; names: string[] } {
-    const names: string[] = [];
     let present = false;
 
     const namesDict = look(doc, doc.catalog.get(PDFName.of('Names')));
     if (namesDict instanceof PDFDict) {
         const embedded = look(doc, namesDict.get(PDFName.of('EmbeddedFiles')));
         if (embedded !== undefined) present = true;
-        if (embedded instanceof PDFDict) {
-            const list = look(doc, embedded.get(PDFName.of('Names')));
-            if (list instanceof PDFArray) {
-                for (let i = 0; i + 1 < list.size(); i += 2) {
-                    const label = textOf(look(doc, list.get(i)));
-                    if (label) names.push(label);
-                }
-            }
+    }
+
+    // RF-R4-6: one label per attachment, by the census's rule — `/UF` before
+    // `/F`, the embedded-files key for a specification that names nothing, and
+    // an explicit unnamed label rather than silence when there is no name.
+    const census = censusAttachments(doc);
+    if (!census.complete) return { complete: false, reason: census.reason, present, names: [] };
+    if (census.value.efCarriers > 0 || census.value.fileAttachmentAnnots > 0) present = true;
+
+    return { complete: true, present, names: [...census.value.names] };
+}
+
+/**
+ * Every widget annotation on every page, as dictionaries.
+ *
+ * The field tree is not the only place a signature can sit: a widget that no
+ * `/Fields` entry reaches is still drawn, still removed as a signature widget,
+ * and still a signature. So the facts are taken from the pages as well.
+ */
+function pageWidgets(doc: PDFDocument): PDFDict[] {
+    const widgets: PDFDict[] = [];
+    for (const page of doc.getPages()) {
+        const annots = look(doc, page.node.get(PDFName.of('Annots')));
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            const annot = look(doc, annots.get(i));
+            if (!(annot instanceof PDFDict)) continue;
+            if (nameOf(annot.get(PDFName.of('Subtype'))) === '/Widget') widgets.push(annot);
         }
     }
-
-    const census = censusAttachments(doc);
-    if (!census.complete) return { complete: false, reason: census.reason, present, names };
-    if (census.value.efCarriers > 0 || census.value.fileAttachmentAnnots > 0) present = true;
-    for (const label of census.value.names) {
-        if (!names.includes(label)) names.push(label);
-    }
-
-    return { complete: true, present, names };
+    return widgets;
 }
 
 /**
@@ -261,6 +242,8 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         hasSignatureField: false,
         hasAppliedSignature: false,
         signatureFieldNames: [],
+        appliedSignatureFieldNames: [],
+        emptySignatureFieldNames: [],
         hasXfa: false,
         hasAcroForm: false,
         hasStructTree: false,
@@ -276,23 +259,50 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         const tree = walkPageTree(doc);
         facts.pageTreeWalks = tree.consistent && tree.leaves === facts.pageCount;
 
+        /**
+         * RF-R4-4: one classification, from the shared resolver, for every
+         * terminal field and every widget. A signature value is recognised by
+         * what it holds before any ancestry is consulted, and a field whose
+         * type or value sits behind an ancestry that cannot be read is a
+         * refusal — never "no signature". The distinction M5 H7 drew still
+         * holds: a value that is a dictionary is an applied signature, and an
+         * empty field is a form control.
+         */
+        const classified = new Set<PDFDict>();
+        const classify = (field: PDFDict, name: string): void => {
+            if (classified.has(field)) return;
+            classified.add(field);
+            const kind = classifyField(doc, field);
+            if (kind.kind === 'unreadable') {
+                facts.readable = false;
+                facts.reason = `${name || '(no name)'}: ${kind.reason}`;
+                return;
+            }
+            if (kind.kind !== 'signature') return;
+            facts.hasSignatureField = true;
+            facts.signatureFieldNames.push(name || '(no name)');
+            if (kind.applied) {
+                facts.hasAppliedSignature = true;
+                facts.appliedSignatureFieldNames.push(name || '(no name)');
+            } else {
+                facts.emptySignatureFieldNames.push(name || '(no name)');
+            }
+        };
+
         const acro = look(doc, doc.catalog.get(PDFName.of('AcroForm')));
         if (acro instanceof PDFDict) {
             facts.hasAcroForm = true;
             facts.hasXfa = acro.get(PDFName.of('XFA')) !== undefined;
-            const readable = walkFields(doc, acro, (field, name) => {
-                // Resolved through `/Parent`, because both keys are inheritable.
-                const ft = nameOf(field.get(PDFName.of('FT')))
-                    || nameOf(inheritedField(doc, field, 'FT'));
-                if (ft !== '/Sig') return;
-                facts.hasSignatureField = true;
-                facts.signatureFieldNames.push(name || '(no name)');
-                // The distinction that matters: a value that is a dictionary is
-                // an applied signature. An empty field is a form control.
-                const value = inheritedField(doc, field, 'V');
-                if (value instanceof PDFDict) facts.hasAppliedSignature = true;
-            });
+            const readable = walkFields(doc, acro, classify);
             if (!readable) facts.readable = false;
+        }
+        // Widgets the field tree does not reach. A widget that is its field
+        // was decided with it, and so was a bare widget whose parent is a
+        // decided field; counting either again would name one field twice.
+        for (const widget of pageWidgets(doc)) {
+            const parent = look(doc, widget.get(PDFName.of('Parent')));
+            if (parent instanceof PDFDict && classified.has(parent)) continue;
+            classify(widget, pdfTextOf(look(doc, widget.get(PDFName.of('T')))) ?? '');
         }
 
         facts.hasStructTree = doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined;

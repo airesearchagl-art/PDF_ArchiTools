@@ -19,6 +19,8 @@
  *       node scripts/make-m6-split-merge-fixtures.mjs
  *       node scripts/make-m6-remediation-fixtures.mjs
  *       node scripts/make-m6-round3-fixtures.mjs
+ *       node scripts/make-m6-round4-fixtures.mjs
+ *       node scripts/make-m6-round5-fixtures.mjs
  *       node scripts/smoke-split-merge-ui.mjs
  */
 import fs from 'node:fs';
@@ -578,6 +580,59 @@ try {
     check('an unchanged plan is merged on the second click',
         downloadedNames().length === steadyBefore + 1,
         `${downloadedNames().length - steadyBefore} new file(s)`);
+
+    // ---- 10. RF-R4-6: the confirmation names the attachment ------------------
+    //
+    // Promoted from the fourth review's advisories. The earlier gate asked
+    // only that the SOURCE file be named, and a confirmation reading
+    // "attachment (drawing.pdf)" asks someone to agree to deleting something
+    // they cannot see. Every gated entry is read off the rendered list BEFORE
+    // the consenting click, and the artifact is then opened for the payload.
+    console.log('\n=== 10. RF-R4-6 the attachment is named before consent ===');
+
+    const disclosureCases = [
+        ['r5-att-secret', ['r5-att-secret.pdf — secret-notes.txt'], ['M6R5_SECRET_PAYLOAD']],
+        ['r5-att-unicode', ['r5-att-unicode.pdf — 図面メモ.txt'], ['M6R5_UNICODE_PAYLOAD']],
+        ['r5-att-multi', [
+            'r5-att-multi.pdf — a.txt', 'r5-att-multi.pdf — b.txt', 'r5-att-multi.pdf — c.txt',
+        ], ['M6R5_MULTI_A', 'M6R5_MULTI_B', 'M6R5_MULTI_C']],
+        ['r5-att-unnamed', ['r5-att-unnamed.pdf — 名前のない添付ファイル'], ['M6R5_UNNAMED_PAYLOAD']],
+    ];
+    for (const [name, expected, markers] of disclosureCases) {
+        await openMerge();
+        const input = await page.$('input[type="file"]');
+        await input.uploadFile(fixture(name), fixture('merge-b'));
+        await settle(4000);
+        const before = downloadedNames().length;
+        await clickMergeExport();
+        await settle(3000);
+        const gated = await gatedItems();
+        const produced = downloadedNames().length - before;
+        check(`${name}: the first click asks, and writes nothing`,
+            (await mergeNotice()).includes('CONFIRMATION_REQUIRED') && produced === 0,
+            `${produced} new file(s)`);
+        for (const entry of expected) {
+            check(`${name}: "${entry}" is on screen before consent`,
+                gated.some((text) => text.includes(entry)),
+                JSON.stringify(gated));
+        }
+        check(`${name}: and every gated attachment has its own entry`,
+            gated.filter((text) => text.startsWith('添付ファイル')).length === expected.length,
+            JSON.stringify(gated));
+
+        await clickMergeExport();
+        await settle(6000);
+        check(`${name}: the second click writes the file`,
+            downloadedNames().length === before + 1,
+            `${downloadedNames().length - before} new file(s)`);
+        const out = downloadedNames()
+            .map((f) => path.join(downloads, f))
+            .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+        const bytes = fs.readFileSync(out);
+        check(`${name}: and no payload it asked about is in the bytes`,
+            markers.every((m) => !bytes.includes(m)),
+            `${path.basename(out)}, ${bytes.length} bytes`);
+    }
 
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));

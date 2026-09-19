@@ -17,18 +17,23 @@
  * widget that renders while bound to nothing is exactly the state this contract
  * exists to forbid.
  */
-import { PDFArray, PDFDict, PDFName, PDFRef, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import { MECHANISM_BOUNDS } from './policy';
+import { classifyField, readInheritedField } from './field-semantics';
+import {
+    latin1,
+    pdfTextFromString,
+    pdfTextObject,
+    pdfTextOf,
+    readPdfBytes,
+    readPdfText,
+} from './pdf-text';
+import type { PdfBytes, PdfText } from './pdf-text';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
     return typeof asString === 'function' ? asString.call(v) : '';
-};
-
-const textOf = (v: unknown): string | null => {
-    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
-    return typeof decode === 'function' ? decode.call(v) : null;
 };
 
 function look(doc: PDFDocument, value: unknown): unknown {
@@ -68,10 +73,15 @@ export const DISQUALIFYING = ['AA', 'CO'];
 
 export interface FormField {
     ref: PDFRef | null;
+    /** The fully qualified name, as the text a reader shows. */
     name: string;
     ft: string;
     merged: boolean;
-    value: string | null;
+    /**
+     * `/V` as read — its text, its bytes, and the token it was written as —
+     * so it goes back into the output as the value it was. BLK-R4-1.
+     */
+    value: PdfText | null;
     widgetRefs: PDFRef[];
     widgetPages: (number | null)[];
 }
@@ -81,7 +91,8 @@ export interface FormDescription {
     xfa: boolean;
     dr: boolean;
     drFonts: string[];
-    da: string | null;
+    /** AcroForm `/DA`: content-stream syntax, so bytes, not text. */
+    da: PdfBytes | null;
     fields: FormField[];
     /**
      * `/Sig` fields, kept apart from the rest.
@@ -96,25 +107,6 @@ export interface FormDescription {
     signatureFields: string[];
     outsideSubset: string[];
     readable: boolean;
-}
-
-/** An inheritable attribute, resolved up `/Parent` with a bound and a cycle set. */
-function inherited(doc: PDFDocument, field: PDFDict, key: string): unknown {
-    const seen = new Set<string>();
-    let current: PDFDict | null = field;
-    for (let depth = 0; current && depth <= MECHANISM_BOUNDS.maxInheritanceDepth; depth += 1) {
-        const own = current.get(PDFName.of(key));
-        if (own !== undefined) return look(doc, own);
-        const parentRaw = current.get(PDFName.of('Parent'));
-        if (parentRaw === undefined) return undefined;
-        if (parentRaw instanceof PDFRef) {
-            if (seen.has(parentRaw.tag)) return undefined;
-            seen.add(parentRaw.tag);
-        }
-        const parent = look(doc, parentRaw);
-        current = parent instanceof PDFDict ? parent : null;
-    }
-    return undefined;
 }
 
 /**
@@ -148,13 +140,22 @@ export function readForm(doc: PDFDocument): FormDescription {
         xfa: acro instanceof PDFDict && acro.get(PDFName.of('XFA')) !== undefined,
         dr: acro instanceof PDFDict && acro.get(PDFName.of('DR')) !== undefined,
         drFonts: [],
-        da: acro instanceof PDFDict ? textOf(look(doc, acro.get(PDFName.of('DA')))) : null,
+        da: null,
         fields: [],
         signatureFields: [],
         outsideSubset: [],
         readable: true,
     };
     if (!(acro instanceof PDFDict)) return out;
+
+    // The form-wide default appearance is carried as the bytes it is. One that
+    // is present and is not a string was being dropped without a word.
+    const daRaw = look(doc, acro.get(PDFName.of('DA')));
+    if (daRaw !== undefined) {
+        const da = readPdfBytes(daRaw);
+        if (da.ok) out.da = da.value;
+        else out.outsideSubset.push(`AcroForm /DA ${da.reason}`);
+    }
 
     // Which resource names `/DR` actually supplies, so a field's `/DA` can be
     // checked against them rather than against the presence of `/DR` alone.
@@ -186,10 +187,16 @@ export function readForm(doc: PDFDocument): FormDescription {
                 out.readable = false;
                 continue;
             }
-            const partial = textOf(look(doc, field.get(PDFName.of('T'))));
+            // BLK-R4-1: the partial name is read as the text a reader shows.
+            // One that is present and cannot be read is a field whose name
+            // this reconstruction could only guess at.
+            const tRaw = look(doc, field.get(PDFName.of('T')));
+            const tRead = tRaw === undefined ? null : readPdfText(tRaw);
+            const partial = tRead?.ok ? tRead.value.text : null;
             const full = inheritedName && partial
                 ? `${inheritedName}.${partial}`
                 : (partial ?? inheritedName);
+            if (tRead && !tRead.ok) out.outsideSubset.push(`${full || '(field)'} /T ${tRead.reason}`);
 
             for (const key of DISQUALIFYING) {
                 if (field.get(PDFName.of(key)) !== undefined) out.outsideSubset.push(`${full} /${key}`);
@@ -216,19 +223,27 @@ export function readForm(doc: PDFDocument): FormDescription {
 
             const widgetRefs = widgets.length > 0 ? widgets : (ref ? [ref] : []);
 
+            /**
+             * RF-R4-4: what this field is, from the one shared resolver. A
+             * field whose type or value sits behind an ancestry that cannot be
+             * read is not a field with no type — it is a form this reader
+             * cannot describe, and describing it as one would be guessing.
+             */
+            const kind = classifyField(doc, field);
+            if (kind.kind === 'unreadable') {
+                out.readable = false;
+                continue;
+            }
+            const ftRead = readInheritedField(doc, field, 'FT');
+            const valueRead = readInheritedField(doc, field, 'V');
+
             // `/FT` and `/V` are inheritable, so a terminal field may carry
             // neither. The proven shape carries both on itself; anything relying
             // on inheritance is outside it, and saying so is cheaper than a
             // reconstruction that guesses.
             const ownFt = nameOf(field.get(PDFName.of('FT')));
-            const inheritedFt = ownFt || nameOf(inherited(doc, field, 'FT'));
             const ownValue = field.get(PDFName.of('V')) !== undefined;
-            if (!ownFt && inheritedFt) out.outsideSubset.push(`${full} inherits /FT`);
-            if (!ownValue && inherited(doc, field, 'V') !== undefined) {
-                out.outsideSubset.push(`${full} inherits /V`);
-            }
-
-            const ft = inheritedFt;
+            const ft = kind.kind === 'signature' ? '/Sig' : kind.ft;
 
             /**
              * A signature field leaves the subset conversation entirely.
@@ -237,8 +252,29 @@ export function readForm(doc: PDFDocument): FormDescription {
              * against a reconstruction that was never going to run on it. Its
              * widgets are still recorded, because the straddle check and the
              * orphan-widget invariant both need to know where they are.
+             *
+             * "Signature field" here is the shared classification, so a value
+             * that carries a signature is one even when no `/FT` says so. What
+             * the removal can be proven complete for is the shape it always
+             * handled — a field that declares `/Sig` itself, on an ancestry
+             * that reads. A signature recognised by its value while its
+             * ancestry cannot be read, or declared only by an ancestor, is
+             * outside that shape: removing the widget may leave the rest of the
+             * field behind, so Extract refuses it rather than guessing
+             * (RF-R4-4). Merge refuses every applied one before this matters.
              */
-            if (ft === '/Sig') {
+            if (kind.kind === 'signature') {
+                const unread = !ftRead.complete ? ftRead : !valueRead.complete ? valueRead : null;
+                if (unread) {
+                    out.outsideSubset.push(
+                        `${full || '(field)'} is a signature field whose ancestry cannot be read (${unread.reason})`,
+                    );
+                } else if (!ownFt) {
+                    const declared = ftRead.complete ? nameOf(ftRead.value) : '';
+                    out.outsideSubset.push(declared
+                        ? `${full} inherits /FT`
+                        : `${full || '(field)'} carries a signature value and declares no /FT`);
+                }
                 out.signatureFields.push(full);
                 out.fields.push({
                     ref,
@@ -252,7 +288,28 @@ export function readForm(doc: PDFDocument): FormDescription {
                 continue;
             }
 
+            if (!ownFt && ft) out.outsideSubset.push(`${full} inherits /FT`);
+            if (!ownValue && valueRead.complete && valueRead.value !== undefined) {
+                out.outsideSubset.push(`${full} inherits /V`);
+            }
+            // A terminal field with no type anywhere is not a `/Tx` the
+            // reconstruction can rebuild; it was being carried with no `/FT`.
+            if (!ft) out.outsideSubset.push(`${full || '(field)'} declares no /FT`);
             if (ft && !SUPPORTED_FIELD_TYPES.includes(ft)) out.outsideSubset.push(`${full} ${ft}`);
+
+            /**
+             * BLK-R4-1: `/V` is read as the text it is and kept as the token it
+             * was. A text field's value that is not a readable text string — a
+             * text stream, a name, malformed UTF-16 — was read as "no value"
+             * and the field was rebuilt empty, READY. Now it is outside the
+             * proven shape and said so.
+             */
+            let value: PdfText | null = null;
+            if (ownValue && ft === '/Tx') {
+                const read = readPdfText(look(doc, field.get(PDFName.of('V'))));
+                if (read.ok) value = read.value;
+                else out.outsideSubset.push(`${full} /V ${read.reason}`);
+            }
 
             for (const key of UNRESTORED_FIELD_KEYS) {
                 if (field.get(PDFName.of(key)) !== undefined) out.outsideSubset.push(`${full} /${key}`);
@@ -264,7 +321,8 @@ export function readForm(doc: PDFDocument): FormDescription {
 
             // A `/DA` naming a font that lives in AcroForm `/DR` needs `/DR`
             // carried, which this reconstruction does not do.
-            const da = textOf(look(doc, field.get(PDFName.of('DA'))));
+            const daRead = readPdfBytes(look(doc, field.get(PDFName.of('DA'))));
+            const da = daRead.ok ? latin1(daRead.value.bytes) : null;
             if (da && out.dr) {
                 const named = /\/([A-Za-z0-9_.+-]+)\s+[\d.]+\s+Tf/.exec(da)?.[1];
                 if (named && out.drFonts.includes(named)) {
@@ -277,7 +335,7 @@ export function readForm(doc: PDFDocument): FormDescription {
                 name: full,
                 ft,
                 merged: widgets.length === 0,
-                value: textOf(look(doc, field.get(PDFName.of('V')))),
+                value,
                 widgetRefs,
                 widgetPages: widgetRefs.map((w) => pageOf(w)),
             });
@@ -391,10 +449,17 @@ export function planFormForExtract(form: FormDescription, selection: number[]): 
 export function rebuildAcroForm(
     out: PDFDocument,
     sourceFields: FormField[],
-    options: { da?: string | null; rename?: (name: string) => string; startPage?: number } = {},
-): { rebuiltFields: number; fieldRefs: PDFRef[]; renamed: { from: string; to: string }[] } {
+    options: { da?: PdfBytes | null; rename?: (name: string) => string; startPage?: number } = {},
+): {
+    rebuiltFields: number;
+    fieldRefs: PDFRef[];
+    renamed: { from: string; to: string }[];
+    /** Names that could not be encoded. Empty on every document this reads. */
+    unwritable: string[];
+} {
     const fieldRefs: PDFRef[] = [];
     const renamed: { from: string; to: string }[] = [];
+    const unwritable: string[] = [];
     const byName = new Map(sourceFields.map((f) => [f.name, f]));
     const outPages = out.getPages();
     const startPage = options.startPage ?? 0;
@@ -409,7 +474,7 @@ export function rebuildAcroForm(
             if (!(annot instanceof PDFDict)) continue;
             if (nameOf(annot.get(PDFName.of('Subtype'))) !== '/Widget') continue;
 
-            const own = textOf(look(out, annot.get(PDFName.of('T'))));
+            const own = pdfTextOf(look(out, annot.get(PDFName.of('T'))));
             const source = (own !== null ? byName.get(own) : undefined)
                 ?? sourceFields[Math.min(cursor, sourceFields.length - 1)];
             if (!source) continue;
@@ -417,10 +482,23 @@ export function rebuildAcroForm(
             const finalName = options.rename ? options.rename(source.name) : source.name;
             if (finalName !== source.name) renamed.push({ from: source.name, to: finalName });
 
-            annot.set(PDFName.of('T'), PDFString.of(finalName));
+            /**
+             * BLK-R4-1. The name is constructed — a flattened dotted name, or
+             * a renamed one — so it is encoded from its text: printable ASCII
+             * with its delimiters escaped, anything else as UTF-16BE. The
+             * value is not constructed, so it goes back as the token it came
+             * as. `PDFString.of(decodedText)` here wrote every Japanese name
+             * with its high bytes dropped and ended a value at its first `)`.
+             */
+            const encodedName = pdfTextFromString(finalName);
+            if (!encodedName.ok) {
+                unwritable.push(`${finalName}: ${encodedName.reason}`);
+                continue;
+            }
+            annot.set(PDFName.of('T'), pdfTextObject(encodedName.value));
             if (source.ft) annot.set(PDFName.of('FT'), PDFName.of(source.ft.replace(/^\//, '')));
             if (source.value !== null && source.value !== undefined) {
-                annot.set(PDFName.of('V'), PDFString.of(source.value));
+                annot.set(PDFName.of('V'), pdfTextObject(source.value));
             }
             // A merged field/widget must not keep a `/Parent` pointing into a
             // field tree that no longer exists.
@@ -443,11 +521,11 @@ export function rebuildAcroForm(
             }
         }
         const acro: Record<string, unknown> = { Fields: allRefs, NeedAppearances: true };
-        if (options.da) acro.DA = PDFString.of(options.da);
+        if (options.da) acro.DA = pdfTextObject(options.da);
         out.catalog.set(PDFName.of('AcroForm'), out.context.register(out.context.obj(acro as never)));
     }
 
-    return { rebuiltFields: fieldRefs.length, fieldRefs, renamed };
+    return { rebuiltFields: fieldRefs.length, fieldRefs, renamed, unwritable };
 }
 
 /**
@@ -503,9 +581,10 @@ export function countOrphanWidgets(doc: PDFDocument): number {
  * reader opening the derived file saw a signed-looking document carrying no
  * signature. So the appearance goes with the field.
  */
-export function removeSignatureWidgets(doc: PDFDocument): number {
+export function removeSignatureWidgets(doc: PDFDocument): { removed: number; unclassified: string[] } {
     let removed = 0;
     const removedTags = new Set<string>();
+    const unclassified: string[] = [];
 
     for (const page of doc.getPages()) {
         const annots = page.node.lookup(PDFName.of('Annots'));
@@ -514,10 +593,17 @@ export function removeSignatureWidgets(doc: PDFDocument): number {
             const raw = annots.get(i);
             const annot = doc.context.lookup(raw);
             if (!(annot instanceof PDFDict)) continue;
-            const isWidget = nameOf(annot.get(PDFName.of('Subtype'))) === '/Widget';
-            const ft = nameOf(annot.get(PDFName.of('FT')))
-                || nameOf(inherited(doc, annot, 'FT'));
-            if (!isWidget || ft !== '/Sig') continue;
+            if (nameOf(annot.get(PDFName.of('Subtype'))) !== '/Widget') continue;
+            // RF-R4-4: the same classification the facts were read with. A
+            // widget whose ancestry hid `/FT /Sig` was not removed, and its
+            // signature appearance went into the artifact; one that cannot be
+            // classified at all is reported, never assumed to be ordinary.
+            const kind = classifyField(doc, annot);
+            if (kind.kind === 'unreadable') {
+                unclassified.push(kind.reason);
+                continue;
+            }
+            if (kind.kind !== 'signature') continue;
             // The appearance goes with the field. Measured: removing the
             // signature and leaving the widget produced an extract that rendered
             // 4,325 non-white pixels of 24,300 — pixel for pixel identical to
@@ -547,7 +633,7 @@ export function removeSignatureWidgets(doc: PDFDocument): number {
                     continue;
                 }
                 const field = doc.context.lookup(raw);
-                if (field instanceof PDFDict && nameOf(field.get(PDFName.of('FT'))) === '/Sig') {
+                if (field instanceof PDFDict && classifyField(doc, field).kind === 'signature') {
                     fields.remove(i);
                     if (raw instanceof PDFRef) doc.context.delete(raw);
                     removed += 1;
@@ -563,5 +649,5 @@ export function removeSignatureWidgets(doc: PDFDocument): number {
         }
     }
 
-    return removed;
+    return { removed, unclassified };
 }

@@ -31,6 +31,7 @@ import {
 import type { PDFDocument } from 'pdf-lib';
 import { censusIndirectObjects, collectByCensus, dictOf } from './census';
 import type { CensusNode, CensusOutcome } from './census';
+import { readPdfText } from './pdf-text';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -239,14 +240,124 @@ export interface AttachmentCensus {
     fileAttachmentAnnots: number;
     /** Streams reachable through an `/EF`, whatever their `/Type`. */
     payloadStreams: number;
-    /** Names found, for disclosure. */
+    /**
+     * One label per attachment, for disclosure. RF-R4-6.
+     *
+     * Not de-duplicated: two attachments both called `notes.txt` are two
+     * attachments, and a confirmation that listed one name for them would be
+     * asking about one.
+     */
     names: string[];
 }
 
-const textOf = (v: unknown): string | null => {
-    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
-    return typeof decode === 'function' ? decode.call(v) : null;
+/** Shown for an attachment that carries no filename at all. Never invented. */
+export const UNNAMED_ATTACHMENT_LABEL = '名前のない添付ファイル';
+/** Shown for an attachment whose filename is there and cannot be read. */
+export const UNREADABLE_ATTACHMENT_LABEL = '名前を読み取れない添付ファイル';
+
+const lookupQuietly = (doc: PDFDocument, value: unknown): unknown => {
+    if (!(value instanceof PDFRef)) return value;
+    try {
+        return doc.context.lookup(value);
+    } catch {
+        return undefined;
+    }
 };
+
+/**
+ * The filename a file specification shows, `/UF` first. RF-R4-6.
+ *
+ * `/UF` is the Unicode filename and `/F` the portable one, so `/UF` is the name
+ * a person gave the file; the reader this replaces asked for `/F` first and
+ * showed `memo.txt` for a file called `図面メモ.txt`. A file specification may
+ * also be a bare string. Either key being unreadable is recorded, so a name
+ * that is there and cannot be decoded is not presented as no name.
+ */
+function filespecLabel(doc: PDFDocument, spec: unknown): { label: string | null; unreadable: boolean } {
+    const resolved = lookupQuietly(doc, spec);
+    if (!(resolved instanceof PDFDict)) {
+        if (resolved === undefined) return { label: null, unreadable: false };
+        const read = readPdfText(resolved);
+        if (read.ok) return { label: read.value.text || null, unreadable: false };
+        return { label: null, unreadable: true };
+    }
+    let unreadable = false;
+    for (const key of ['UF', 'F']) {
+        const raw = resolved.get(PDFName.of(key));
+        if (raw === undefined) continue;
+        const read = readPdfText(lookupQuietly(doc, raw));
+        if (read.ok && read.value.text !== '') return { label: read.value.text, unreadable: false };
+        if (!read.ok) unreadable = true;
+    }
+    return { label: null, unreadable };
+}
+
+/**
+ * `/Names /EmbeddedFiles` keys by the file specification they point at.
+ *
+ * Used only to name an attachment whose file specification names nothing: the
+ * tree key is the name the document gave it. Best effort by design — a tree
+ * that cannot be walked leaves the attachment disclosed as unnamed, never
+ * undisclosed, because presence is decided by the census, not by this.
+ */
+function embeddedFileKeys(doc: PDFDocument): Map<string, string> {
+    const keys = new Map<string, string>();
+    const names = lookupQuietly(doc, doc.catalog.get(PDFName.of('Names')));
+    if (!(names instanceof PDFDict)) return keys;
+    const seen = new Set<string>();
+    const walk = (raw: unknown, depth: number): void => {
+        if (depth > 32 || keys.size > 100_000) return;
+        if (raw instanceof PDFRef) {
+            if (seen.has(raw.tag)) return;
+            seen.add(raw.tag);
+        }
+        const node = lookupQuietly(doc, raw);
+        if (!(node instanceof PDFDict)) return;
+        const leaf = lookupQuietly(doc, node.get(PDFName.of('Names')));
+        if (leaf instanceof PDFArray) {
+            for (let i = 0; i + 1 < leaf.size(); i += 2) {
+                const target = leaf.get(i + 1);
+                const key = readPdfText(lookupQuietly(doc, leaf.get(i)));
+                if (target instanceof PDFRef && key.ok && key.value.text !== '') {
+                    keys.set(target.tag, key.value.text);
+                }
+            }
+        }
+        const kids = lookupQuietly(doc, node.get(PDFName.of('Kids')));
+        if (kids instanceof PDFArray) {
+            for (let i = 0; i < kids.size(); i += 1) walk(kids.get(i), depth + 1);
+        }
+    };
+    walk(names.get(PDFName.of('EmbeddedFiles')), 0);
+    return keys;
+}
+
+/**
+ * One label per attachment the census found. RF-R4-6.
+ *
+ * Every `/EF` carrier is an attachment. A `/FileAttachment` annotation is one
+ * more only when its `/FS` is not itself a carrier — otherwise the same file
+ * would be listed twice.
+ */
+function attachmentLabels(doc: PDFDocument, carriers: CensusNode[], annots: CensusNode[]): string[] {
+    const treeKeys = embeddedFileKeys(doc);
+    const labels: string[] = [];
+    const fallback = (unreadable: boolean): string =>
+        (unreadable ? UNREADABLE_ATTACHMENT_LABEL : UNNAMED_ATTACHMENT_LABEL);
+    for (const node of carriers) {
+        const own = filespecLabel(doc, node.dict);
+        const fromTree = node.depth === 0 ? treeKeys.get(node.rootTag) ?? null : null;
+        labels.push(own.label ?? fromTree ?? fallback(own.unreadable));
+    }
+    for (const node of annots) {
+        const fs = node.dict.get(PDFName.of('FS'));
+        const spec = lookupQuietly(doc, fs);
+        if (spec instanceof PDFDict && carriesEmbeddedFile(spec)) continue;
+        const own = filespecLabel(doc, fs);
+        labels.push(own.label ?? fallback(own.unreadable));
+    }
+    return labels;
+}
 
 /** The attachment census, or a refusal. */
 export function censusAttachments(doc: PDFDocument): CensusOutcome<AttachmentCensus> {
@@ -257,16 +368,18 @@ export function censusAttachments(doc: PDFDocument): CensusOutcome<AttachmentCen
         names: [],
     };
     const payloadTags = new Set<string>();
+    const carrierNodes: CensusNode[] = [];
+    const annotNodes: CensusNode[] = [];
 
     const outcome = censusIndirectObjects(doc, (node) => {
         const { dict } = node;
-        if (isFileAttachmentAnnot(dict)) result.fileAttachmentAnnots += 1;
+        if (isFileAttachmentAnnot(dict)) {
+            result.fileAttachmentAnnots += 1;
+            annotNodes.push(node);
+        }
         if (!carriesEmbeddedFile(dict)) return;
         result.efCarriers += 1;
-        const label = textOf(dict.get(PDFName.of('F')))
-            ?? textOf(dict.get(PDFName.of('UF')))
-            ?? textOf(doc.context.lookup(dict.get(PDFName.of('F')) as never));
-        if (label && !result.names.includes(label)) result.names.push(label);
+        carrierNodes.push(node);
 
         const ef = dict.get(PDFName.of('EF'));
         const efDict = ef instanceof PDFRef ? doc.context.lookup(ef) : ef;
@@ -284,6 +397,7 @@ export function censusAttachments(doc: PDFDocument): CensusOutcome<AttachmentCen
     });
 
     if (!outcome.complete) return outcome;
+    result.names = attachmentLabels(doc, carrierNodes, annotNodes);
     return { complete: true, value: result, nodes: outcome.nodes, roots: outcome.roots };
 }
 
@@ -324,13 +438,12 @@ export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval
     if (!carriers.complete) return { complete: false, reason: carriers.reason };
     const annots = collectByCensus(doc, (node) => isFileAttachmentAnnot(node.dict));
     if (!annots.complete) return { complete: false, reason: annots.reason };
+    // Named before anything is taken apart, by the same rule the facts reader
+    // uses, so what the run reports removing is what the person was shown.
+    names.push(...attachmentLabels(doc, carriers.value, annots.value));
 
     for (const node of carriers.value) {
         const { dict, parent, depth, rootTag } = node;
-        const label = textOf(dict.get(PDFName.of('F')))
-            ?? textOf(dict.get(PDFName.of('UF')))
-            ?? textOf(doc.context.lookup(dict.get(PDFName.of('F')) as never));
-        if (label && !names.includes(label)) names.push(label);
 
         const ef = dict.get(PDFName.of('EF'));
         const efDict = ef instanceof PDFRef ? doc.context.lookup(ef) : ef;
@@ -416,6 +529,38 @@ export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval
     }
 
     return { complete: true, removed, names, removedActions };
+}
+
+// ---------------------------------------------------------------------------
+// Signatures
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a dictionary would present an artifact as signed. RF-R4-4.
+ *
+ * A signature field (`/FT /Sig`), a signature or timestamp value (`/Type /Sig`,
+ * `/Type /DocTimeStamp`), or the byte range only a signature carries. No M6
+ * output carries any of them: Extract removes every signature field under
+ * M6-H1, and Merge refuses an applied one under M6-H2 and removes the empty
+ * ones. So this is a count that must be zero, measured on the bytes — the
+ * backstop for a signature an upstream reader failed to classify.
+ */
+export const isSignatureRemnant = (dict: PDFDict): boolean => {
+    const type = nameOf(dict.get(PDFName.of('Type')));
+    return nameOf(dict.get(PDFName.of('FT'))) === '/Sig'
+        || type === '/Sig'
+        || type === '/DocTimeStamp'
+        || dict.get(PDFName.of('ByteRange')) !== undefined;
+};
+
+/** Every signature remnant in the artifact, or a refusal. */
+export function censusSignatures(doc: PDFDocument): CensusOutcome<number> {
+    let count = 0;
+    const outcome = censusIndirectObjects(doc, ({ dict }) => {
+        if (isSignatureRemnant(dict)) count += 1;
+    });
+    if (!outcome.complete) return outcome;
+    return { complete: true, value: count, nodes: outcome.nodes, roots: outcome.roots };
 }
 
 // ---------------------------------------------------------------------------

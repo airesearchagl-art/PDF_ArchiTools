@@ -31,20 +31,31 @@
  * no link annotations at all can still drag one in. A contract that enumerated
  * annotations would have been wrong and would have looked right.
  */
-import { PDFArray, PDFDict, PDFName, PDFNull, PDFRef, PDFString } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNull, PDFRef, PDFString } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import type { LossRecord } from './contracts';
 import { MECHANISM_BOUNDS } from './policy';
+import { comparePdfBytes, pdfTextObject, readNameIdentifier, readPdfText } from './pdf-text';
+import type { PdfRead, PdfText } from './pdf-text';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
     return typeof asString === 'function' ? asString.call(v) : '';
 };
 
-const textOf = (v: unknown): string | null => {
-    const decode = (v as { decodeText?: () => string } | null)?.decodeText;
-    return typeof decode === 'function' ? decode.call(v) : null;
-};
+/**
+ * A destination's identity, from a string or a name object. BLK-R4-1.
+ *
+ * A link names its destination with a string (a name-tree key) or with a name
+ * object (a catalog `/Dests` key). Both are matched by the text a reader shows
+ * for them — PDF.js resolves either kind against either store that way — and a
+ * string whose text cannot be read, or a name whose text depends on the reader,
+ * is a destination that cannot be identified: a refusal, not a link to nothing.
+ */
+function readDestinationName(value: unknown): PdfRead<PdfText> {
+    if (value instanceof PDFName) return readNameIdentifier(value);
+    return readPdfText(value);
+}
 
 function look(doc: PDFDocument, value: unknown): unknown {
     try {
@@ -173,7 +184,10 @@ interface FoundLink {
 }
 
 interface NamedDestination {
+    /** The text a reader shows for the key: the destination's identity. */
     name: string;
+    /** The key as bytes and token, so it is written back as what it was. */
+    key: PdfText;
     targetIndex: number | null;
     tail: unknown[];
 }
@@ -195,6 +209,13 @@ export interface DestinationPlan {
      * complete description of it.
      */
     unreadable: string[];
+    /**
+     * Destination names defined more than once. RF-R4-3.
+     *
+     * A refusal too: which definition a reader follows is up to the reader, and
+     * no adopted policy picks one.
+     */
+    duplicateNames: string[];
 }
 
 /** Every destination on a page, with enough context to remove or rebuild it. */
@@ -254,12 +275,19 @@ function destinationsOnPage(
                 // A name reference: a string, or a name object. Anything else
                 // is a destination that is present and cannot be read, which
                 // is a refusal rather than a link with an empty name.
-                const named = textOf(dest) ?? (nameOf(dest) || null);
-                if (named === null) {
+                const isNameShaped = dest instanceof PDFName
+                    || dest instanceof PDFString
+                    || dest instanceof PDFHexString;
+                if (!isNameShaped) {
                     unreadable.push(
                         `page ${pageIndex} /Annots[${i}] /${key} is neither a destination `
                         + 'array nor a name',
                     );
+                    return;
+                }
+                const named = readDestinationName(dest);
+                if (!named.ok) {
+                    unreadable.push(`page ${pageIndex} /Annots[${i}] /${key} ${named.reason}`);
                     return;
                 }
                 found.push({
@@ -271,7 +299,7 @@ function destinationsOnPage(
                     kind: 'named',
                     targetIndex: null,
                     tail: [],
-                    name: named,
+                    name: named.value.text,
                 });
             }
         };
@@ -303,17 +331,113 @@ function destinationsOnPage(
  */
 export type NamedDestinationRead =
     | { complete: true; entries: NamedDestination[] }
-    | { complete: false; reason: string };
+    | { complete: false; reason: string; duplicates?: string[] };
 
 /**
- * Named destinations, resolved to page indices, read through the whole tree.
+ * Named destinations, resolved to page indices, from every place PDF keeps them.
  *
- * Bounded by {@link MECHANISM_BOUNDS} in depth and in nodes, cycle-aware by
- * reference tag. Reaching a bound, meeting a malformed node, or meeting a
- * destination shape this reader does not reproduce is a refusal — the tree is
- * there, so "no named destinations" would be false.
+ * Two stores, one model. `/Names /Dests` is a name tree keyed by strings; the
+ * catalog's own `/Dests` is the older dictionary keyed by names (RF-R4-2). A
+ * reader that looked at the first only answered "none" for a document written
+ * the second way, and the names were gone from the output with nothing said.
+ * Both are read here into the same descriptor, and nothing downstream knows
+ * which store an entry came from — there is one preservation path, not two.
+ *
+ * The name tree is bounded by {@link MECHANISM_BOUNDS} in depth and in nodes,
+ * cycle-aware by reference tag. Reaching a bound, meeting a malformed node, a
+ * key whose text cannot be read, or a destination shape this reader does not
+ * reproduce is a refusal — the structure is there, so "no named destinations"
+ * would be false.
+ *
+ * And a name is one destination (RF-R4-3). Two definitions with the same text
+ * — in one leaf or two, in either store, spelt in different encodings — leave
+ * the target up to whichever the reader meets first, and no adopted policy says
+ * which should win. Duplicates are found here, before anything is rebuilt, and
+ * the read refuses rather than keeping the first, keeping the last, writing both
+ * or renaming one.
  */
 function namedDestinations(
+    doc: PDFDocument,
+    pageIndexOf: (ref: PDFRef) => number | null,
+): NamedDestinationRead {
+    const treeRead = namedDestinationsInTree(doc, pageIndexOf);
+    if (!treeRead.complete) return treeRead;
+    const legacyRead = namedDestinationsInCatalog(doc, pageIndexOf);
+    if (!legacyRead.complete) return legacyRead;
+    const entries = [...treeRead.entries, ...legacyRead.entries];
+
+    const counts = new Map<string, number>();
+    for (const entry of entries) counts.set(entry.name, (counts.get(entry.name) ?? 0) + 1);
+    const duplicates = [...counts.entries()].filter(([, count]) => count > 1).map(([name]) => name);
+    if (duplicates.length > 0) {
+        return {
+            complete: false,
+            reason: `named destination(s) defined more than once: ${duplicates.join(', ')}`,
+            duplicates,
+        };
+    }
+    return { complete: true, entries };
+}
+
+/** One destination value: the target page and the tail, or why it cannot be read. */
+function readNamedValue(
+    doc: PDFDocument,
+    raw: unknown,
+    pageIndexOf: (ref: PDFRef) => number | null,
+): PdfRead<{ targetIndex: number | null; tail: unknown[] }> {
+    const valueRead = resolve(doc, raw);
+    if (!valueRead.ok) return { ok: false, reason: valueRead.reason };
+    const dest = destinationArrayOf(doc, valueRead.value);
+    if (dest === null) return { ok: false, reason: 'is not a destination this reader reproduces' };
+    const first = dest.get(0);
+    const tail: unknown[] = [];
+    for (let k = 1; k < dest.size(); k += 1) tail.push(dest.get(k));
+    return {
+        ok: true,
+        value: { targetIndex: first instanceof PDFRef ? pageIndexOf(first) : null, tail },
+    };
+}
+
+/**
+ * The catalog's `/Dests` dictionary. RF-R4-2.
+ *
+ * The PDF 1.1 form: keys are names, values are the same two destination shapes
+ * the name tree holds. A key is a name, so its text is only read where readers
+ * agree on it — see {@link readNameIdentifier}; one that cannot be normalised
+ * refuses the read.
+ */
+function namedDestinationsInCatalog(
+    doc: PDFDocument,
+    pageIndexOf: (ref: PDFRef) => number | null,
+): NamedDestinationRead {
+    const entries: NamedDestination[] = [];
+    const destsRaw = doc.catalog.get(PDFName.of('Dests'));
+    if (isEmptySlot(destsRaw)) return { complete: true, entries };
+    const destsRead = resolve(doc, destsRaw);
+    if (!destsRead.ok) return { complete: false, reason: `catalog /Dests ${destsRead.reason}` };
+    if (!(destsRead.value instanceof PDFDict)) {
+        return { complete: false, reason: 'catalog /Dests is not a dictionary' };
+    }
+    const dict = destsRead.value;
+    if (dict.entries().length > MECHANISM_BOUNDS.maxNameTreeNodes) {
+        return {
+            complete: false,
+            reason: `catalog /Dests holds more than ${MECHANISM_BOUNDS.maxNameTreeNodes} entries`,
+        };
+    }
+    for (const [key, raw] of dict.entries()) {
+        const where = `catalog /Dests ${key.asString()}`;
+        const name = readNameIdentifier(key);
+        if (!name.ok) return { complete: false, reason: `${where} ${name.reason}` };
+        const value = readNamedValue(doc, raw, pageIndexOf);
+        if (!value.ok) return { complete: false, reason: `${where} ${value.reason}` };
+        entries.push({ name: name.value.text, key: name.value, ...value.value });
+    }
+    return { complete: true, entries };
+}
+
+/** The `/Names /Dests` name tree, read through every leaf. */
+function namedDestinationsInTree(
     doc: PDFDocument,
     pageIndexOf: (ref: PDFRef) => number | null,
 ): NamedDestinationRead {
@@ -372,22 +496,16 @@ function namedDestinations(
             for (let i = 0; i + 1 < list.size(); i += 2) {
                 const keyRead = resolve(doc, list.get(i));
                 if (!keyRead.ok) return `${where} /Names[${i}] ${keyRead.reason}`;
-                const name = textOf(keyRead.value);
-                if (name === null) return `${where} /Names[${i}] is not a name string`;
-                const valueRead = resolve(doc, list.get(i + 1));
-                if (!valueRead.ok) return `${where} /Names (${name}) ${valueRead.reason}`;
-                const dest = destinationArrayOf(doc, valueRead.value);
-                if (dest === null) {
-                    return `${where} /Names (${name}) is not a destination this reader reproduces`;
-                }
-                const first = dest.get(0);
-                const tail: unknown[] = [];
-                for (let k = 1; k < dest.size(); k += 1) tail.push(dest.get(k));
-                entries.push({
-                    name,
-                    targetIndex: first instanceof PDFRef ? pageIndexOf(first) : null,
-                    tail,
-                });
+                // BLK-R4-1: the key is read as the bytes a reader compares and
+                // the text it shows, and kept as the token it was written as.
+                // A key that is not a string, or whose text cannot be read, is
+                // a key nobody can look up the same way twice.
+                const key = readPdfText(keyRead.value);
+                if (!key.ok) return `${where} /Names[${i}] ${key.reason}`;
+                const name = key.value.text;
+                const value = readNamedValue(doc, list.get(i + 1), pageIndexOf);
+                if (!value.ok) return `${where} /Names (${name}) ${value.reason}`;
+                entries.push({ name, key: key.value, ...value.value });
             }
         }
 
@@ -432,10 +550,12 @@ export function planDestinations(doc: PDFDocument, selection: number[]): Destina
     }
 
     // RF-R3-5: COMPLETE or REFUSED. A tree that could not be walked is carried
-    // as a refusal rather than collapsing into "this document has none".
+    // as a refusal rather than collapsing into "this document has none". A
+    // duplicate is its own refusal, so it can be named for what it is.
     const read = namedDestinations(doc, pageIndexOf);
     const named = read.complete ? read.entries : [];
-    if (!read.complete) unreadable.push(read.reason);
+    const duplicateNames = !read.complete && read.duplicates ? read.duplicates : [];
+    if (!read.complete && duplicateNames.length === 0) unreadable.push(read.reason);
     const namedByName = new Map(named.map((n) => [n.name, n]));
 
     const otherSites: { fromIndex: number; key: string }[] = [];
@@ -463,6 +583,7 @@ export function planDestinations(doc: PDFDocument, selection: number[]): Destina
         otherSites,
         wouldBreak: breaks.length,
         unreadable,
+        duplicateNames,
     };
 }
 
@@ -478,7 +599,13 @@ export interface DestinationRebuild {
 
 /** A named destination that survived, described in plain values. */
 export interface SurvivingName {
+    /** Its identity: the text a reader shows for the key. */
     name: string;
+    /**
+     * Its key as bytes and token — plain values, no source object — so it is
+     * written back as the key it was and sorted by the bytes readers compare.
+     */
+    key: PdfText;
     targetIndex: number;
     tail: DestParam[];
 }
@@ -490,6 +617,8 @@ export interface StripOutcome {
     losses: LossRecord[];
     /** Destination structures present and unreadable. A refusal, not an absence. */
     unreadable: string[];
+    /** Names defined more than once. A refusal. RF-R4-3. */
+    duplicateNames: string[];
 }
 
 /**
@@ -574,6 +703,7 @@ export function stripInternalDestinations(
         .filter((n) => n.targetIndex !== null && kept.has(n.targetIndex))
         .map((n) => ({
             name: n.name,
+            key: n.key,
             targetIndex: n.targetIndex as number,
             tail: describeTail(n.tail),
         }));
@@ -587,7 +717,13 @@ export function stripInternalDestinations(
         }
     }
 
-    return { rebuild, survivingNames, losses, unreadable: plan.unreadable };
+    return {
+        rebuild,
+        survivingNames,
+        losses,
+        unreadable: plan.unreadable,
+        duplicateNames: plan.duplicateNames,
+    };
 }
 
 /**
@@ -663,15 +799,19 @@ export function rebuildDestinations(
     }
 
     // Named destinations whose target survived. M6-H6 adopted reconstructing
-    // these and deferred outlines and page labels.
+    // these and deferred outlines and page labels. Whichever store a name came
+    // from, it is written into the name tree: a catalog `/Dests` key becomes a
+    // string key with the same bytes, which is where the name tree is looked up.
     if (outcome.survivingNames.length > 0) {
         const flat: unknown[] = [];
-        // Sorted by name: a name tree's `/Names` array is required to be, and a
-        // reader that binary-searches an unsorted one finds nothing. The entries
-        // now arrive from a whole tree rather than from one flat array, so the
-        // order they were met in is not the order they belong in.
+        // Sorted by the key's BYTES: a name tree's `/Names` array is required to
+        // be, and a reader binary-searches it comparing bytes. Sorting by the
+        // decoded text put a UTF-16 key where its spelling belongs rather than
+        // where its bytes do, and the lookup for it looked in the wrong place.
+        // The entries arrive from a whole tree and from the catalog, so the
+        // order they were met in is not the order they belong in either.
         const ordered = [...outcome.survivingNames]
-            .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+            .sort((a, b) => comparePdfBytes(a.key.bytes, b.key.bytes));
         for (const n of ordered) {
             if (n.targetIndex === null) {
                 unapplied.push(`named destination ${n.name}: it resolved to no page`);
@@ -683,7 +823,10 @@ export function rebuildDestinations(
                 continue;
             }
             flat.push(
-                PDFString.of(n.name),
+                // BLK-R4-1: the key as it was written, never the decoded text
+                // put through `PDFString.of`, which dropped every high byte and
+                // escaped no delimiter.
+                pdfTextObject(n.key),
                 out.context.obj([target, ...materializeTail(out, n.tail)] as never[]),
             );
         }
@@ -931,12 +1074,14 @@ export function wouldBreakNavigation(
     wouldBreak: number;
     otherSites: { fromIndex: number; key: string }[];
     unreadable: string[];
+    duplicateNames: string[];
 } {
     const plan = planDestinations(doc, selection);
     return {
         wouldBreak: plan.wouldBreak,
         otherSites: plan.otherSites,
         unreadable: plan.unreadable,
+        duplicateNames: plan.duplicateNames,
     };
 }
 

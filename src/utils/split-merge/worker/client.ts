@@ -251,6 +251,9 @@ const undecided = (
     hasOptionalContent: false,
     hasStructTree: false,
     hasAttachments: false,
+    attachments: [],
+    // Never decided, so bound to no content: a run refuses it either way.
+    contentDigest: '',
     info: {},
 }));
 
