@@ -80,6 +80,16 @@ async function bytesOf(name) {
     if (!cache.has(name)) {
         const response = await fetch(`${FIXTURES}/${name}.pdf`);
         if (!response.ok) throw new Error(`fixture ${name} missing (${response.status})`);
+        // The dev server answers an unknown path with index.html at status 200,
+        // so `ok` does not mean the fixture is there. A gate that reads that
+        // HTML as a document refuses it as malformed and reports a defect in
+        // the product instead of a missing input. The type is the tell: a
+        // fixture is served as a PDF even when its bytes are deliberately not
+        // one, which is why this cannot check for a `%PDF-` header.
+        const type = response.headers.get('content-type') || '';
+        if (type.includes('text/html')) {
+            throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+        }
         cache.set(name, new Uint8Array(await response.arrayBuffer()));
     }
     // A fresh copy each time: several of these get transferred to a worker.
@@ -1933,7 +1943,16 @@ Object.assign(window.__m6, {
             selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
         });
         if (!result.bytes) {
-            return plainly({ status: result.status, reason: result.reason ?? null, bytes: null });
+            return plainly({
+                status: result.status,
+                reason: result.reason ?? null,
+                unreachable: null,
+                pageCount: null,
+                serialized: { objects: 0, streams: 0, indirectLengths: -1, lengthMismatches: -1 },
+                sourceSerialized: serializedStreams(source),
+                pdfjs: { ok: false, pages: 0 },
+                userUnitLive: false,
+            });
         }
         const readback = await readbackArtifact(result.bytes);
         // `r7-len-shared` points a second, legitimate key at the same number.
