@@ -1773,6 +1773,156 @@ try {
             + `readback=${refused.readbackRemnants} censusComplete=${refused.readbackCensusComplete}`);
     }
 
+    // ---- 52. R7-1 indirect stream /Length ------------------------------------
+    //
+    // A real published drawing reached readback with 18 unreachable objects,
+    // every one of them a number a copied stream's `/Length` pointed at before
+    // `save()` rewrote the key direct. The oracle below reads the written bytes
+    // itself rather than believing the writer.
+    console.log('\n=== 52. R7-1 indirect stream /Length ===');
+    {
+        const cases = [
+            ['r7-len-indirect', [0], 1],
+            ['r7-len-indirect-many', [0, 1, 2, 3, 4], 5],
+            ['r7-len-mixed', [0, 1, 2, 3], 4],
+            ['r7-len-stale', [0], 1],
+            ['r7-len-shared', [0], 1],
+        ];
+        for (const [fixture, selection, pages] of cases) {
+            const r = await call('r7Length', fixture, selection);
+            check(`${fixture}: the fixture really declares /Length by reference`,
+                r.sourceSerialized.indirectLengths > 0,
+                `source indirect /Length ${r.sourceSerialized.indirectLengths}`);
+            check(`${fixture}: READY with nothing left unreferenced`,
+                r.status === 'READY' && r.unreachable === 0 && r.pageCount === pages,
+                `${r.status} unreachable=${r.unreachable} pages=${r.pageCount}`);
+            check(`${fixture}: no /Length survives as a reference in the artifact`,
+                r.serialized.indirectLengths === 0, `${r.serialized.indirectLengths}`);
+            check(`${fixture}: every serialized /Length equals its own stream bytes`,
+                r.serialized.lengthMismatches === 0,
+                `${r.serialized.lengthMismatches} mismatch(es) over ${r.serialized.streams} stream(s)`);
+            check(`${fixture}: pdf.js opens the artifact`,
+                r.pdfjs.ok && r.pdfjs.pages === pages, `${r.pdfjs.ok} pages=${r.pdfjs.pages}`);
+        }
+
+        // The direct control: unchanged behaviour, and it never had the defect.
+        const direct = await call('r7Length', 'r7-len-direct', [0]);
+        check('r7-len-direct: a direct /Length is unchanged and still READY',
+            direct.status === 'READY' && direct.unreachable === 0
+            && direct.sourceSerialized.indirectLengths === 0
+            && direct.serialized.lengthMismatches === 0,
+            `${direct.status} unreachable=${direct.unreachable}`);
+
+        // The safety control: a number a second legitimate key still points at
+        // must survive the sweep through that other reference.
+        const shared = await call('r7Length', 'r7-len-shared', [0]);
+        check('r7-len-shared: a length object another key still needs is kept',
+            shared.userUnitLive === true, `userUnit live=${shared.userUnitLive}`);
+
+        const merged = await call('r7MergeLength', ['r7-len-indirect', 'r7-len-indirect-many']);
+        check('Merge: indirect lengths across sources leave no orphan either',
+            merged.run === 'READY' && merged.unreachable === 0
+            && merged.serialized.indirectLengths === 0
+            && merged.serialized.lengthMismatches === 0,
+            `${merged.run} unreachable=${merged.unreachable} pages=${merged.pageCount}`);
+    }
+
+    // ---- 53. R7-2 the narrow optional-content envelope -----------------------
+    //
+    // Adopted OC-A (a form XObject's `/OC` naming a registered group), OC-B (a
+    // one-group `/OCMD`, canonicalized to that group), OC-C (`/D /AS`) and
+    // OC-D (an empty `/D /RBGroups`). Every supported shape here has a refused
+    // neighbour, and the artifact is asked what it says about itself.
+    console.log('\n=== 53. R7-2 optional content: OC-A / OC-B / OC-C / OC-D ===');
+    {
+        const supported = [
+            ['r7-oc-form-on', 'OC-A: a form /OC naming a registered group is carried'],
+            ['r7-oc-form-off', 'OC-A: and carried when the group is off by default'],
+            ['r7-oc-form-nested', 'OC-A: a nested form /OC is found and carried'],
+            ['r7-ocmd-simple', 'OC-B: a one-group /OCMD with no /P and no /VE is carried'],
+            ['r7-as-view', 'OC-C: /AS /View is preserved'],
+            ['r7-as-print', 'OC-C: /AS /Print is preserved'],
+            ['r7-as-export', 'OC-C: /AS /Export is preserved'],
+            ['r7-as-multi', 'OC-C: several valid /AS entries are preserved'],
+            ['r7-rb-empty', 'OC-D: an empty /RBGroups is preserved as empty'],
+        ];
+        for (const [fixture, what] of supported) {
+            const r = await call('r7Oc', fixture, [0]);
+            check(`${what}`,
+                r.plan === 'READY' && r.run === 'READY' && r.unreachable === 0,
+                `plan=${r.plan} run=${r.run} unreachable=${r.unreachable} `
+                + `${r.reason ?? ''}${r.runReason ?? ''}${(r.unsupported || []).join(' | ')}`);
+            if (r.output) {
+                check(`${fixture}: the artifact registers the group its /OC names`,
+                    r.output.ocProperties === true && r.output.outGroups >= 1
+                    && r.output.danglingOc === 0,
+                    `groups=${r.output.outGroups} ocOnForms=${r.output.ocOnForms} `
+                    + `dangling=${r.output.danglingOc}`);
+                check(`${fixture}: no /AS entry names a group the artifact lacks`,
+                    r.output.asDangling === 0, `${r.output.asDangling}`);
+                check(`${fixture}: pdf.js opens the artifact`,
+                    r.pdfjs.ok === true, `${r.pdfjs.error ?? 'ok'}`);
+            }
+        }
+
+        // OC-B specifically: the membership dictionary is gone, replaced by the
+        // group, so the output's supported shapes stay the ones this reader can
+        // prove rather than gaining an OCMD envelope.
+        const ocmd = await call('r7Oc', 'r7-ocmd-simple', [0]);
+        check('OC-B: the /OCMD is canonicalized away, leaving the group itself',
+            ocmd.viaOcmd === 1 && ocmd.output.ocmdSurvivors === 0 && ocmd.output.outGroups === 1,
+            `viaOcmd=${ocmd.viaOcmd} survivors=${ocmd.output.ocmdSurvivors} groups=${ocmd.output.outGroups}`);
+
+        const asMulti = await call('r7Oc', 'r7-as-multi', [0]);
+        check('OC-C: both /AS entries reach the artifact, order kept',
+            asMulti.output.asEntries === 2, `${asMulti.output.asEntries}`);
+        const rbEmpty = await call('r7Oc', 'r7-rb-empty', [0]);
+        check('OC-D: /RBGroups is written back as the empty array, not omitted',
+            rbEmpty.output.rbGroups === 0, `rbGroups=${rbEmpty.output.rbGroups}`);
+
+        const refused = [
+            ['r7-oc-unregistered', 'does not register', 'OC-A: an unregistered group stays refused'],
+            ['r7-oc-dangling', 'which is not in the document', 'OC-A: a dangling /OC stays refused'],
+            ['r7-oc-image', '/Image', 'OC-A: /OC on a non-form XObject stays refused'],
+            ['r7-oc-annot', 'annotation 0 /OC', 'an annotation /OC stays refused'],
+            ['r7-ocmd-ve', '/VE', 'OC-B: an /OCMD with /VE stays refused'],
+            ['r7-ocmd-p', '/P', 'OC-B: an /OCMD with /P stays refused'],
+            ['r7-ocmd-two', 'naming 2 groups', 'OC-B: an /OCMD with two groups stays refused'],
+            ['r7-ocmd-malformed', 'not a reference to a group', 'OC-B: a malformed /OCGs stays refused'],
+            ['r7-as-unmapped', 'no selected page uses', 'OC-C: /AS naming an unused group is refused'],
+            ['r7-as-bad-category', '/Category', 'OC-C: a malformed /Category is refused'],
+            ['r7-as-bad-event', '/Event', 'OC-C: an unsupported /Event is refused'],
+            ['r7-as-extra-key', '/Intent', 'OC-C: an extra semantic key is refused'],
+            ['r7-rb-nonempty', '/RBGroups with', 'OC-D: a non-empty /RBGroups stays refused'],
+        ];
+        for (const [fixture, fragment, what] of refused) {
+            const r = await call('r7Oc', fixture, [0]);
+            const said = (r.unsupported || []).join(' | ');
+            check(what,
+                r.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && said.includes(fragment),
+                `${r.plan}: ${said.slice(0, 120)}`);
+        }
+
+        // The visibility oracle. This is the one that matters: the measured
+        // failure was a copied `/OC` surviving into an artifact with no
+        // `/OCProperties`, so pdf.js knew no groups, answered "visible" to
+        // everything, and drew a layer the author had turned off.
+        const on = await call('r7Visibility', 'r7-oc-form-on', [0]);
+        check('visibility: a default-ON layer is painted in source and artifact alike',
+            on.before.painted === true && on.after.painted === true
+            && on.after.groupCount === 1,
+            `before=${on.before.painted} after=${on.after.painted} groups=${on.after.groupCount}`);
+        const off = await call('r7Visibility', 'r7-oc-form-off', [0]);
+        check('visibility: a default-OFF layer stays hidden in the artifact',
+            off.before.painted === false && off.after.painted === false
+            && off.after.groupCount === 1,
+            `before=${off.before.painted} after=${off.after.painted} `
+            + `groups=${off.after.groupCount} pixel=${JSON.stringify(off.after.pixel)}`);
+        probe('the OFF fixture would show the defect if /OCProperties were dropped',
+            off.before.painted === false && off.after.groupCount > 0,
+            `pdf.js sees ${off.after.groupCount} group(s) in the artifact`);
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));

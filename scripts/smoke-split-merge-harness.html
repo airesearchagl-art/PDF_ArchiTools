@@ -1745,6 +1745,293 @@ Object.assign(window.__m6, {
     },
 });
 
+// ---------------------------------------------------------------------------
+// Round 7 — indirect stream /Length, and the narrow optional-content envelope
+// ---------------------------------------------------------------------------
+
+/** The written bytes as text, so the oracle can read them as a reader would. */
+const r7Latin1 = (bytes) => {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += String.fromCharCode(bytes[i]);
+    return out;
+};
+
+/**
+ * An oracle over the written bytes, sharing no code with the writer.
+ *
+ * It reads the serialized objects itself: every `stream` keyword is found, the
+ * `/Length` in the dictionary just above it is read, and the bytes actually
+ * between `stream` and `endstream` are counted. A `/Length` still written as a
+ * reference, or one that disagrees with the bytes, is reported rather than
+ * inferred from anything the production readback says.
+ */
+function serializedStreams(bytes) {
+    const text = r7Latin1(bytes);
+    const objects = [...text.matchAll(/(\d+)\s+(\d+)\s+obj\b/g)].map((m) => ({
+        num: Number(m[1]), at: m.index, end: m.index + m[0].length,
+    }));
+    let streams = 0;
+    let indirectLengths = 0;
+    let lengthMismatches = 0;
+    for (let i = 0; i < objects.length; i += 1) {
+        const from = objects[i].end;
+        const to = i + 1 < objects.length ? objects[i + 1].at : text.length;
+        const body = text.slice(from, to);
+        const sm = body.match(/\bstream\r?\n/);
+        if (!sm) continue;
+        streams += 1;
+        const header = body.slice(0, sm.index);
+        if (/\/Length\s+\d+\s+\d+\s+R/.test(header)) {
+            indirectLengths += 1;
+            continue;
+        }
+        const lm = header.match(/\/Length\s+(\d+)/);
+        const declared = lm ? Number(lm[1]) : -1;
+        const start = sm.index + sm[0].length;
+        const endIndex = body.indexOf('endstream', start);
+        if (endIndex < 0) { lengthMismatches += 1; continue; }
+        // `endstream` is preceded by an EOL that is not part of the data.
+        let stop = endIndex;
+        if (body[stop - 1] === '\n') stop -= 1;
+        if (body[stop - 1] === '\r') stop -= 1;
+        if (declared !== stop - start) lengthMismatches += 1;
+    }
+    return { objects: objects.length, streams, indirectLengths, lengthMismatches };
+}
+
+/** Whether pdf.js — a different parser entirely — can open the artifact. */
+async function pdfjsOpens(bytes) {
+    try {
+        const copy = new Uint8Array(bytes.length);
+        copy.set(bytes);
+        const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+        const pages = doc.numPages;
+        await doc.destroy();
+        return { ok: true, pages };
+    } catch (error) {
+        return { ok: false, pages: 0, error: String(error && error.message ? error.message : error) };
+    }
+}
+
+/** What the artifact itself says about its optional content, read with pdf-lib. */
+async function ocOutputFacts(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    if (!(oc instanceof PDFDict)) {
+        return { ocProperties: false, outGroups: 0, forms: 0, ocOnForms: 0, danglingOc: 0, ocmdSurvivors: 0 };
+    }
+    const groups = oc.lookup(PDFName.of('OCGs'));
+    const registered = new Set();
+    if (groups instanceof PDFArray) {
+        for (let i = 0; i < groups.size(); i += 1) {
+            const r = groups.get(i);
+            if (r instanceof PDFRef) registered.add(r.tag);
+        }
+    }
+    const d = oc.lookup(PDFName.of('D'));
+    const dDict = d instanceof PDFDict ? d : null;
+    const as = dDict ? dDict.lookup(PDFName.of('AS')) : undefined;
+    const rb = dDict ? dDict.lookup(PDFName.of('RBGroups')) : undefined;
+
+    let forms = 0;
+    let ocOnForms = 0;
+    let danglingOc = 0;
+    let ocmdSurvivors = 0;
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+        if (!(obj instanceof PDFRawStream)) continue;
+        const sub = obj.dict.get(PDFName.of('Subtype'));
+        if (!(sub instanceof PDFName) || sub.asString() !== '/Form') continue;
+        forms += 1;
+        const ref = obj.dict.get(PDFName.of('OC'));
+        if (ref === undefined) continue;
+        ocOnForms += 1;
+        if (!(ref instanceof PDFRef) || !registered.has(ref.tag)) danglingOc += 1;
+        const target = ref instanceof PDFRef ? doc.context.lookup(ref) : undefined;
+        if (target instanceof PDFDict) {
+            const t = target.get(PDFName.of('Type'));
+            if (t instanceof PDFName && t.asString() === '/OCMD') ocmdSurvivors += 1;
+        }
+    }
+    // Every group /AS names must be one the artifact registers.
+    let asEntries = 0;
+    let asDangling = 0;
+    if (as instanceof PDFArray) {
+        asEntries = as.size();
+        for (let i = 0; i < as.size(); i += 1) {
+            const entry = as.lookup(i);
+            if (!(entry instanceof PDFDict)) { asDangling += 1; continue; }
+            const list = entry.lookup(PDFName.of('OCGs'));
+            if (!(list instanceof PDFArray)) { asDangling += 1; continue; }
+            for (let j = 0; j < list.size(); j += 1) {
+                const r = list.get(j);
+                if (!(r instanceof PDFRef) || !registered.has(r.tag)) asDangling += 1;
+            }
+        }
+    }
+    return {
+        ocProperties: true,
+        outGroups: registered.size,
+        dKeys: dDict ? dDict.keys().map((k) => k.asString()).sort() : [],
+        asPresent: as !== undefined,
+        asEntries,
+        asDangling,
+        rbGroups: rb instanceof PDFArray ? rb.size() : (rb === undefined ? -1 : -2),
+        forms,
+        ocOnForms,
+        danglingOc,
+        ocmdSurvivors,
+    };
+}
+
+/**
+ * The independent visibility oracle.
+ *
+ * pdf.js decides what a layer shows from the document's own `/OCProperties`.
+ * The failure this expansion exists to prevent is an artifact whose `/OC`
+ * survived while `/OCProperties` did not: pdf.js then knows no groups at all,
+ * `isVisible` answers true for everything, and a layer the author turned off is
+ * drawn. So the groups pdf.js finds, and what it says about each, are read from
+ * the source and from the artifact and compared.
+ */
+async function pdfjsVisibility(bytes) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const config = await doc.getOptionalContentConfig();
+    // pdfjs-dist 5.4.449 exposes the configuration as `getOrder()` +
+    // `getGroup(id)`; with no `/Order` the former is simply the group ids.
+    const order = (config.getOrder() || []).filter((id) => typeof id === 'string');
+    const states = {};
+    for (const id of order) {
+        const group = config.getGroup(id);
+        states[(group && group.name) || id] = config.isVisible({ type: 'OCG', id });
+    }
+    // A pixel from the middle of the square the fixture's form draws.
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport, optionalContentConfigPromise: Promise.resolve(config) }).promise;
+    const px = context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
+    await doc.destroy();
+    return {
+        groupCount: order.length,
+        states,
+        pixel: [px[0], px[1], px[2]],
+        painted: !(px[0] > 240 && px[1] > 240 && px[2] > 240),
+    };
+}
+
+Object.assign(window.__m6, {
+    async r7Length(name, selection) {
+        const source = await bytesOf(name);
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        if (!result.bytes) {
+            return plainly({ status: result.status, reason: result.reason ?? null, bytes: null });
+        }
+        const readback = await readbackArtifact(result.bytes);
+        // `r7-len-shared` points a second, legitimate key at the same number.
+        // Canonicalizing `/Length` must not take that number with it.
+        const outDoc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const firstPage = outDoc.getPages()[0];
+        const userUnit = firstPage ? firstPage.node.lookup(PDFName.of('UserUnit')) : undefined;
+        return plainly({
+            status: result.status,
+            unreachable: readback.unreachableObjects,
+            pageCount: readback.pageCount,
+            complete: readback.complete,
+            serialized: serializedStreams(result.bytes),
+            sourceSerialized: serializedStreams(source),
+            pdfjs: await pdfjsOpens(result.bytes),
+            outputBytes: result.bytes.length,
+            userUnitLive: userUnit !== undefined && userUnit !== null,
+        });
+    },
+
+    async r7MergeLength(names) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        if (plan.status !== M6_STATUS.READY) {
+            return plainly({ plan: plan.status, reason: plan.reason ?? null, run: null });
+        }
+        const result = await runMerge(inputs, plan, { policy: PROVISIONAL_POLICY });
+        if (!result.bytes) {
+            return plainly({ plan: plan.status, run: result.status, reason: result.reason ?? null });
+        }
+        const readback = await readbackArtifact(result.bytes);
+        return plainly({
+            plan: plan.status,
+            run: result.status,
+            unreachable: readback.unreachableObjects,
+            pageCount: readback.pageCount,
+            serialized: serializedStreams(result.bytes),
+            pdfjs: await pdfjsOpens(result.bytes),
+            output: await ocOutputFacts(result.bytes),
+        });
+    },
+
+    async r7Oc(name, selection) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        const described = describeOptionalContent(
+            await PDFDocument.load(source, { updateMetadata: false }),
+            selection,
+        );
+        if (plan.status !== M6_STATUS.READY) {
+            return plainly({
+                plan: plan.status,
+                reason: plan.reason ?? null,
+                unsupported: described.unsupported,
+                usages: described.xobjectUsages.length,
+                run: null,
+            });
+        }
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        const out = result.bytes ? await ocOutputFacts(result.bytes) : null;
+        const readback = result.bytes ? await readbackArtifact(result.bytes) : null;
+        return plainly({
+            plan: plan.status,
+            reason: null,
+            unsupported: described.unsupported,
+            usages: described.xobjectUsages.length,
+            viaOcmd: described.xobjectUsages.filter((u) => u.viaOcmd).length,
+            autoStates: described.autoStates.length,
+            emptyRbGroups: described.emptyRbGroups,
+            run: result.status,
+            runReason: result.reason ?? null,
+            unreachable: readback ? readback.unreachableObjects : null,
+            output: out,
+            pdfjs: result.bytes ? await pdfjsOpens(result.bytes) : null,
+        });
+    },
+
+    async r7Visibility(name, selection) {
+        const source = await bytesOf(name);
+        const before = await pdfjsVisibility(source);
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        if (!result.bytes) return plainly({ status: result.status, before, after: null });
+        const after = await pdfjsVisibility(result.bytes);
+        return plainly({ status: result.status, before, after });
+    },
+});
+
+
 document.getElementById('state').textContent = 'ready';
 window.__m6Ready = true;
 </script>

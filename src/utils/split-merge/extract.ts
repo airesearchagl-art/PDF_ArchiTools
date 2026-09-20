@@ -74,6 +74,7 @@ import {
     snapshotMetadata,
 } from './metadata';
 import {
+    canonicalizeStreamLengthsForSave,
     pruneUnreachable,
     removeAttachmentsEverywhere,
     scrubAllJavaScript,
@@ -830,6 +831,19 @@ export async function runExtract(
 
     if (!stillOurs()) {
         return refusedResult(M6_STATUS.CANCELLED, '操作が変更されたため、この処理は中止しました。', outputName);
+    }
+
+    // Before anything is swept: put `/Length` into the direct form `save()`
+    // will write, so a copied indirect length object is unreachable now rather
+    // than orphaned in the bytes afterwards.
+    const lengths = canonicalizeStreamLengthsForSave(out);
+    if (lengths.undescribable.length > 0) {
+        return refusedResult(
+            M6_STATUS.INVARIANT_VIOLATED,
+            `書き出す前に、${lengths.undescribable.length} 件のストリームの長さを確認できませんでした。安全のため書き出しません。`,
+            outputName,
+            { undescribableStreams: lengths.undescribable.length },
+        );
     }
 
     // Nothing points at it, so nothing writes it. pdf-lib serialises every

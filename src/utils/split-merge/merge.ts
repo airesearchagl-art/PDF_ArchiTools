@@ -63,6 +63,7 @@ import {
 } from './destinations';
 import type { StripOutcome } from './destinations';
 import {
+    canonicalizeStreamLengthsForSave,
     pruneUnreachable,
     removeAttachmentsEverywhere,
     scrubAllJavaScript,
@@ -777,7 +778,7 @@ export async function runMerge(
                 }
                 configBaseState = configBaseState ?? { source: input.name, value: oc.baseState };
             }
-            if (oc.pageProperties.length > 0) {
+            if (oc.pageProperties.length > 0 || oc.xobjectUsages.length > 0) {
                 if (orderPresence && orderPresence.present !== oc.orderPresent) {
                     // One source draws its panel from an `/Order` tree and
                     // another does not. Combining them would leave the groups
@@ -1018,8 +1019,9 @@ export async function runMerge(
         }
 
         if (oc.present && oc.unsupported.length === 0) {
-            if (oc.pageProperties.length === 0) {
-                // The source declares optional content that no page of it uses.
+            if (oc.pageProperties.length === 0 && oc.xobjectUsages.length === 0) {
+                // The source declares optional content that no page of it uses
+                // — through `/Properties` or through a form XObject's `/OC`.
                 // Carrying nothing would drop the configuration silently.
                 return refusedMerge(
                     M6_STATUS.UNSUPPORTED_OPTIONAL_CONTENT,
@@ -1033,6 +1035,12 @@ export async function runMerge(
             const shifted: OptionalContentDescription = {
                 ...oc,
                 pageProperties: oc.pageProperties.map((e) => ({
+                    ...e,
+                    pageIndex: e.pageIndex + firstNewPage,
+                })),
+                // A form XObject's `/OC` is found again through the output page
+                // it landed on, so its page index shifts with the rest.
+                xobjectUsages: oc.xobjectUsages.map((e) => ({
                     ...e,
                     pageIndex: e.pageIndex + firstNewPage,
                 })),
@@ -1166,6 +1174,21 @@ export async function runMerge(
     }
 
     applyMergeMetadata(out, plan.metadataPolicy, metadataSources);
+
+    // Before anything is swept: put `/Length` into the direct form `save()`
+    // will write, so a copied indirect length object is unreachable now rather
+    // than orphaned in the bytes afterwards.
+    const lengths = canonicalizeStreamLengthsForSave(out);
+    if (lengths.undescribable.length > 0) {
+        return refusedMerge(
+            M6_STATUS.INVARIANT_VIOLATED,
+            `書き出す前に、${lengths.undescribable.length} 件のストリームの長さを確認できませんでした。安全のため書き出しません。`,
+            plan.intake,
+            outputName,
+            { undescribableStreams: lengths.undescribable.length },
+            losses,
+        );
+    }
 
     // Nothing points at it, so nothing writes it.
     pruneUnreachable(out);

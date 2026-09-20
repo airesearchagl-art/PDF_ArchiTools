@@ -89,7 +89,20 @@ export {
 } from './structural-graph';
 
 export { readSourceFacts, classifyLoadError } from './source-facts';
-export { describeOptionalContent, planOptionalContent } from './optional-content';
+export {
+    carryOptionalContent,
+    describeOptionalContent,
+    planOptionalContent,
+    HANDLED_D_KEYS,
+    SUPPORTED_AS_EVENTS,
+    SUPPORTED_BASE_STATE,
+} from './optional-content';
+export type {
+    AutoStateEntry,
+    OptionalContentDescription,
+    PagePropertyEntry,
+    XObjectOcUsage,
+} from './optional-content';
 export { scanJavaScript, sanitizeJavaScript } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export {
@@ -106,6 +119,7 @@ export {
 } from './census';
 export type { CensusNode, CensusOutcome } from './census';
 export {
+    canonicalizeStreamLengthsForSave,
     censusAttachments,
     censusJavaScript,
     censusSignatures,
@@ -120,6 +134,7 @@ export {
     UNNAMED_ATTACHMENT_LABEL,
     UNREADABLE_ATTACHMENT_LABEL,
 } from './prune';
+export type { PruneReport, StreamLengthReport } from './prune';
 export { contentDigest, contentDigestJs } from './digest';
 export {
     snapshotMetadata,

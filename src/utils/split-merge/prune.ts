@@ -24,6 +24,7 @@ import {
     PDFArray,
     PDFDict,
     PDFName,
+    PDFNumber,
     PDFRawStream,
     PDFRef,
     PDFStream,
@@ -114,6 +115,79 @@ export function countUnreachable(doc: PDFDocument): number {
         if (!live.has(ref.tag)) count += 1;
     }
     return count;
+}
+
+export interface StreamLengthReport {
+    /** Streams whose `/Length` was rewritten to the direct current length. */
+    canonicalized: number;
+    /** Streams already carrying the correct direct `/Length`. */
+    unchanged: number;
+    /**
+     * Streams whose current contents could not be measured, by reference. A
+     * non-empty list is a refusal: an artifact whose stream lengths cannot be
+     * described is not one to hand over.
+     */
+    undescribable: string[];
+}
+
+/**
+ * Make `/Length` say what pdf-lib is about to serialise, before the sweep.
+ *
+ * A source stream may carry `/Length <ref>` — an indirect number. `copyPages`
+ * copies the stream *and* that number, and the sweep is right to call the
+ * number reachable, because at that moment the stream dictionary really does
+ * point at it. Then `save()` runs, `PDFStream.updateDict()` rewrites `/Length`
+ * to a **direct** `PDFNumber` (`core/objects/PDFStream.js`), and the copied
+ * number is left in the bytes with nothing pointing at it. A real published
+ * drawing reached readback with 18 such orphans and failed
+ * `unreachableObjects === 0`.
+ *
+ * The honest fix is not to teach the invariant to overlook a number. It is to
+ * put the output graph into the representation pdf-lib will write **before**
+ * anything is counted or swept, so the indirect length objects become
+ * unreachable on their own and `pruneUnreachable` removes them for the ordinary
+ * reason. Run this immediately before that sweep.
+ *
+ * The length written is the stream's own measured content size, never the
+ * `/Length` token already there: a token that disagrees with the bytes is the
+ * thing being corrected, not the authority for it. Contents are never touched,
+ * nothing is compressed to make a number fit, and no replacement length object
+ * is registered — the value is direct, exactly as pdf-lib would write it. A
+ * number still referenced by some other live key survives the sweep through
+ * that reference, because this changes one entry rather than deleting anything.
+ */
+export function canonicalizeStreamLengthsForSave(doc: PDFDocument): StreamLengthReport {
+    const report: StreamLengthReport = { canonicalized: 0, unchanged: 0, undescribable: [] };
+    const LENGTH = PDFName.of('Length');
+
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (!(obj instanceof PDFStream)) continue;
+
+        // The base class throws rather than guessing, and a size that is not a
+        // whole count of bytes describes no stream. Either way the artifact is
+        // refused rather than written with a length nobody can stand behind.
+        let size: number;
+        try {
+            size = obj.getContentsSize();
+        } catch {
+            report.undescribable.push(ref.toString());
+            continue;
+        }
+        if (!Number.isInteger(size) || size < 0) {
+            report.undescribable.push(ref.toString());
+            continue;
+        }
+
+        const current = obj.dict.get(LENGTH);
+        if (current instanceof PDFNumber && current.asNumber() === size) {
+            report.unchanged += 1;
+            continue;
+        }
+        obj.dict.set(LENGTH, PDFNumber.of(size));
+        report.canonicalized += 1;
+    }
+
+    return report;
 }
 
 export interface PruneReport {
