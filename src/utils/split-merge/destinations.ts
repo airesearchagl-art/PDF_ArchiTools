@@ -747,22 +747,6 @@ export function stripInternalDestinations(
     };
 }
 
-/**
- * Put the destinations back, pointing at the output's own page references.
- *
- * The copied annotation is found by its position: `copyPages` preserves the
- * order of `/Annots`, so the annotation that carried the destination is the same
- * one in the copy.
- */
-/**
- * What a reconstruction managed, and what it planned and could not do.
- *
- * `unapplied` is empty on every document this contract handles: each entry was
- * planned against a page that is in the selection and an annotation that was
- * read off that page. It exists because the alternative is the shape this
- * milestone keeps finding — a `continue` that abandons a planned rebuild and
- * returns a count that looks like success.
- */
 // ---------------------------------------------------------------------------
 // Annotation identity. RF-R5-1.
 // ---------------------------------------------------------------------------
@@ -877,6 +861,15 @@ function copiedAnnot(
     return { ok: true, annot };
 }
 
+/**
+ * What a reconstruction managed, and what it planned and could not do.
+ *
+ * `unapplied` is empty on every document this contract handles: each entry was
+ * planned against a page that is in the selection and an annotation that was
+ * named by reference on it. It exists because the alternative is the shape this
+ * milestone keeps finding — a `continue` that abandons a planned rebuild and
+ * returns a count that looks like success.
+ */
 export interface RebuildOutcome {
     rebuilt: number;
     unapplied: string[];
@@ -890,6 +883,15 @@ export interface RebuildOutcome {
     removed: string[];
 }
 
+/**
+ * Put the destinations back, pointing at the output's own page references.
+ *
+ * The copied annotation is found by the **reference** the plan named it with,
+ * resolved against the source as it is now (RF-R5-1). `copyPages` preserves the
+ * order of `/Annots`, so the annotation's position in the source is its position
+ * in the copy — but the position it had when the plan was made is not, because
+ * sanitization takes other entries out of that array in between.
+ */
 export function rebuildDestinations(
     out: PDFDocument,
     outcome: StripOutcome,
