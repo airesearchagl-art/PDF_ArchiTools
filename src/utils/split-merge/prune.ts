@@ -32,6 +32,7 @@ import type { PDFDocument } from 'pdf-lib';
 import { censusIndirectObjects, collectByCensus, dictOf } from './census';
 import type { CensusNode, CensusOutcome } from './census';
 import { readPdfText } from './pdf-text';
+import { classifyField, signatureEvidenceOf } from './field-semantics';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -536,30 +537,81 @@ export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval
 // ---------------------------------------------------------------------------
 
 /**
- * Whether a dictionary would present an artifact as signed. RF-R4-4.
+ * Whether a dictionary would present an artifact as signed, and why. RF-R5-3.
  *
- * A signature field (`/FT /Sig`), a signature or timestamp value (`/Type /Sig`,
- * `/Type /DocTimeStamp`), or the byte range only a signature carries. No M6
- * output carries any of them: Extract removes every signature field under
+ * A signature field (`/FT /Sig`), plus exactly the evidence
+ * {@link signatureEvidenceOf} decides an applied signature by — the same set,
+ * from the same function, so the backstop cannot drift narrower than the
+ * classifier. `/Contents` counts only where the dictionary is a field's value:
+ * a page's `/Contents` is its content stream and says nothing about signing.
+ *
+ * No M6 output carries any of them: Extract removes every signature field under
  * M6-H1, and Merge refuses an applied one under M6-H2 and removes the empty
- * ones. So this is a count that must be zero, measured on the bytes — the
+ * ones. So this is a count that must be zero, measured on the artifact — the
  * backstop for a signature an upstream reader failed to classify.
  */
-export const isSignatureRemnant = (dict: PDFDict): boolean => {
-    const type = nameOf(dict.get(PDFName.of('Type')));
-    return nameOf(dict.get(PDFName.of('FT'))) === '/Sig'
-        || type === '/Sig'
-        || type === '/DocTimeStamp'
-        || dict.get(PDFName.of('ByteRange')) !== undefined;
+export const signatureRemnantOf = (dict: PDFDict, isFieldValue: boolean): string | null => {
+    if (nameOf(dict.get(PDFName.of('FT'))) === '/Sig') return '/FT /Sig';
+    return signatureEvidenceOf(dict, { isFieldValue });
 };
 
-/** Every signature remnant in the artifact, or a refusal. */
+/** The same question without the field-value context: evidence that stands alone. */
+export const isSignatureRemnant = (dict: PDFDict): boolean =>
+    signatureRemnantOf(dict, false) !== null;
+
+/**
+ * Every signature remnant in the artifact, or a refusal.
+ *
+ * Two passes, because `/Contents` is only evidence in one place. The first
+ * finds every dictionary a field points at with `/V`; the second counts. Both
+ * are censuses, so the answer is COMPLETE or REFUSED and never a partial scan
+ * reporting zero (the round-3 rule). A widget is put through `classifyField`
+ * itself — the resolver that decides what an applied signature is — so a
+ * signature whose `/FT` lives on an ancestor, or whose ancestry cannot be read
+ * at all, is counted or refused rather than passed over.
+ */
 export function censusSignatures(doc: PDFDocument): CensusOutcome<number> {
+    const valueTags = new Set<string>();
+    const valueDicts = new Set<PDFDict>();
+    const values = censusIndirectObjects(doc, ({ dict }) => {
+        const v = dict.get(PDFName.of('V'));
+        if (v instanceof PDFRef) {
+            valueTags.add(v.tag);
+            return;
+        }
+        const direct = dictOf(v);
+        if (direct) valueDicts.add(direct);
+    });
+    if (!values.complete) return values;
+
     let count = 0;
-    const outcome = censusIndirectObjects(doc, ({ dict }) => {
-        if (isSignatureRemnant(dict)) count += 1;
+    const unclassified: string[] = [];
+    const outcome = censusIndirectObjects(doc, (node) => {
+        const { dict } = node;
+        if (nameOf(dict.get(PDFName.of('Subtype'))) === '/Widget') {
+            const kind = classifyField(doc, dict);
+            if (kind.kind === 'unreadable') {
+                unclassified.push(kind.reason);
+                return;
+            }
+            if (kind.kind === 'signature') {
+                count += 1;
+                return;
+            }
+        }
+        const isFieldValue = (node.depth === 0 && valueTags.has(node.rootTag))
+            || valueDicts.has(dict);
+        if (signatureRemnantOf(dict, isFieldValue) !== null) count += 1;
     });
     if (!outcome.complete) return outcome;
+    if (unclassified.length > 0) {
+        return {
+            complete: false,
+            reason: `書き出したPDFに、署名欄かどうかを判定できない注釈があります: ${unclassified[0]}`,
+            nodes: outcome.nodes,
+            roots: outcome.roots,
+        };
+    }
     return { complete: true, value: count, nodes: outcome.nodes, roots: outcome.roots };
 }
 

@@ -40,6 +40,7 @@ import {
     planFormForExtract,
     scanJavaScript,
     censusJavaScript,
+    censusSignatures,
     readSourceFacts,
     measureDestinationInvariants,
     rebuildDestinations,
@@ -1512,6 +1513,235 @@ Object.assign(window.__m6, {
             }
         }
         return plainly({ samples: samples.length, disagreements });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 6 oracles. RF-R5-1, RF-R5-2, RF-R5-3.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every annotation in an artifact, read by PDF.js, with where its link goes.
+ *
+ * The question RF-R5-1 asks is not "did it return READY" but "is the annotation
+ * that survived the one the plan was about". PDF.js answers it without sharing
+ * a line with the writer.
+ */
+async function pdfjsAnnots(bytes) {
+    const doc = await pdfjsOpen(bytes);
+    try {
+        const pages = [];
+        for (let i = 1; i <= doc.numPages; i += 1) {
+            const page = await doc.getPage(i);
+            const annots = await page.getAnnotations();
+            const rows = [];
+            for (const a of annots) {
+                rows.push({
+                    subtype: a.subtype,
+                    fieldName: a.fieldName ?? null,
+                    fieldValue: a.fieldValue ?? null,
+                    target: a.subtype === 'Link' ? await pdfjsPageOf(doc, a.dest) : null,
+                });
+            }
+            pages.push(rows);
+        }
+        return pages;
+    } finally {
+        await doc.destroy();
+    }
+}
+
+/**
+ * `/P` on every annotation, checked against the artifact's own page tree.
+ *
+ * A reconstruction that put the reference back in the wrong place, or did not
+ * put it back at all, shows up here and nowhere in a status.
+ */
+function gatePageRefs(doc) {
+    const out = { annots: 0, withP: 0, pointingIntoTree: 0, dangling: 0 };
+    const inTree = new Set(doc.getPages().map((p) => p.ref.tag));
+    for (const page of doc.getPages()) {
+        const annots = page.node.lookup(PDFName.of('Annots'));
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            const annot = doc.context.lookup(annots.get(i));
+            if (!(annot instanceof PDFDict)) continue;
+            out.annots += 1;
+            const p = annot.get(PDFName.of('P'));
+            if (p === undefined) continue;
+            out.withP += 1;
+            if (p instanceof PDFRef && inTree.has(p.tag)) out.pointingIntoTree += 1;
+            else out.dangling += 1;
+        }
+    }
+    return out;
+}
+
+/**
+ * Signature remnants by this gate's own semantics. RF-R5-3.
+ *
+ * Written here rather than imported, and deliberately context-aware in the same
+ * way the production rule claims to be: `/Contents` counts only on a dictionary
+ * some field points at with `/V`, because a page's `/Contents` is its content
+ * stream. A detector that counted the key would fail the two controls.
+ */
+function gateRemnants(doc) {
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    const valueTags = new Set();
+    const valueDicts = new Set();
+    forEachDict(doc, (dict) => {
+        const v = dict.get(PDFName.of('V'));
+        if (v instanceof PDFRef) valueTags.add(v.tag);
+        else if (v instanceof PDFDict) valueDicts.add(v);
+    });
+    /**
+     * `/FT`, resolved up `/Parent` — this gate's own walk, bounded and
+     * cycle-aware. A signature widget whose type lives on its parent is still a
+     * signature widget, and H1 says none may be in an artifact.
+     */
+    const inheritedFt = (dict) => {
+        const seen = new Set();
+        let current = dict;
+        for (let depth = 0; depth < 32 && current instanceof PDFDict; depth += 1) {
+            const own = nameOf(current.get(PDFName.of('FT')));
+            if (own) return own;
+            const parent = current.get(PDFName.of('Parent'));
+            if (parent instanceof PDFRef) {
+                if (seen.has(parent.tag)) return '';
+                seen.add(parent.tag);
+                current = doc.context.lookup(parent);
+            } else {
+                current = parent;
+            }
+        }
+        return '';
+    };
+
+    let count = 0;
+    const reasons = [];
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        const roots = [];
+        const walk = (value, depth) => {
+            if (depth > 32) return;
+            const dict = value instanceof PDFDict
+                ? value
+                : (value?.dict instanceof PDFDict ? value.dict : null);
+            if (!dict) return;
+            roots.push({ dict, depth });
+            for (const [, entry] of dict.entries()) {
+                if (entry instanceof PDFDict) walk(entry, depth + 1);
+                else if (entry instanceof PDFArray) {
+                    for (let i = 0; i < entry.size(); i += 1) walk(entry.get(i), depth + 1);
+                }
+            }
+        };
+        walk(obj, 0);
+        for (const { dict, depth } of roots) {
+            const isValue = (depth === 0 && valueTags.has(ref.tag)) || valueDicts.has(dict);
+            const type = nameOf(dict.get(PDFName.of('Type')));
+            const isWidget = nameOf(dict.get(PDFName.of('Subtype'))) === '/Widget';
+            let why = null;
+            if (nameOf(dict.get(PDFName.of('FT'))) === '/Sig') why = '/FT /Sig';
+            else if (isWidget && inheritedFt(dict) === '/Sig') why = 'a widget inheriting /FT /Sig';
+            else if (type === '/Sig' || type === '/DocTimeStamp') why = `/Type ${type}`;
+            else if (dict.get(PDFName.of('ByteRange')) !== undefined) why = '/ByteRange';
+            else if (isValue && dict.get(PDFName.of('Contents')) !== undefined) why = 'value /Contents';
+            if (why) {
+                count += 1;
+                reasons.push(`${ref.tag}${depth ? `+${depth}` : ''} ${why}`);
+            }
+        }
+    }
+    return { count, reasons };
+}
+
+Object.assign(window.__m6, {
+    /** RF-R5-1: what survived an Extract, and whether it is the right one. */
+    annotPlanStability: async (name, selection, confirmed = []) => {
+        const bytes = await bytesOf(name);
+        const result = await runExtract(bytes, {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: confirmed,
+        });
+        const out = {
+            status: result.status,
+            reason: result.reason ?? null,
+            unapplied: result.detail?.unapplied ?? null,
+            removedAnnotations: result.detail?.removedAnnotations ?? null,
+            signatureRemnants: result.readback?.signatureRemnants ?? null,
+            unreachableObjects: result.readback?.unreachableObjects ?? null,
+            boundary: null,
+            annots: null,
+            pageRefs: null,
+            payloadMarker: null,
+        };
+        if (result.bytes) {
+            out.boundary = inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary).verdict;
+            out.annots = await pdfjsAnnots(result.bytes);
+            out.pageRefs = gatePageRefs(await PDFDocument.load(result.bytes, { updateMetadata: false }));
+            out.payloadMarker = bytesContain(result.bytes, 'R6SIGPAYLOAD');
+        }
+        return plainly(out);
+    },
+
+    /** RF-R5-1, the Merge door: a file-attachment annotation removed after planning. */
+    annotPlanStabilityMerge: async (names, marker) => {
+        const inputs = await uniqueInputs(names);
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        const out = {
+            status: result.status,
+            reason: result.reason ?? null,
+            unapplied: result.detail?.unapplied ?? null,
+            annots: null,
+            pageRefs: null,
+            payloadMarker: null,
+        };
+        if (result.bytes) {
+            out.annots = await pdfjsAnnots(result.bytes);
+            out.pageRefs = gatePageRefs(await PDFDocument.load(result.bytes, { updateMetadata: false }));
+            out.payloadMarker = bytesContain(result.bytes, marker);
+        }
+        return plainly(out);
+    },
+
+    /** RF-R5-2: what the supported-subset reader says about a `/DA` it cannot read. */
+    daEnvelope: async (name) => {
+        const bytes = await bytesOf(name);
+        const extract = await runExtract(bytes, { selection: [0], sourceName: `${name}.pdf` });
+        const inputs = await uniqueInputs([name]);
+        const intake = await intakeSources(inputs);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const form = readForm(doc);
+        return plainly({
+            status: extract.status,
+            reason: extract.reason ?? null,
+            bytes: extract.bytes !== null,
+            intake: intake[0].result,
+            outsideSubset: form.outsideSubset,
+            readable: form.readable,
+        });
+    },
+
+    /** RF-R5-3: the remnant detector, on a document shaped like an output. */
+    signatureRemnantLayer: async (name) => {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const census = censusSignatures(doc);
+        const readback = await readbackArtifact(bytes);
+        return plainly({
+            production: census.complete ? census.value : null,
+            productionComplete: census.complete,
+            productionReason: census.complete ? null : census.reason,
+            readbackRemnants: readback.signatureRemnants,
+            readbackCensusComplete: readback.censusComplete,
+            gate: gateRemnants(doc),
+        });
     },
 });
 

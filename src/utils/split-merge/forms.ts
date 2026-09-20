@@ -17,7 +17,7 @@
  * widget that renders while bound to nothing is exactly the state this contract
  * exists to forbid.
  */
-import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFNull, PDFRef } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import { MECHANISM_BOUNDS } from './policy';
 import { classifyField, readInheritedField } from './field-semantics';
@@ -157,12 +157,26 @@ export function readForm(doc: PDFDocument): FormDescription {
         else out.outsideSubset.push(`AcroForm /DA ${da.reason}`);
     }
 
-    // Which resource names `/DR` actually supplies, so a field's `/DA` can be
-    // checked against them rather than against the presence of `/DR` alone.
-    const dr = look(doc, acro.get(PDFName.of('DR')));
-    if (dr instanceof PDFDict) {
-        const fonts = look(doc, dr.get(PDFName.of('Font')));
-        if (fonts instanceof PDFDict) {
+    /**
+     * Which resource names `/DR` actually supplies, so a field's `/DA` can be
+     * checked against them rather than against the presence of `/DR` alone.
+     *
+     * RF-R5-2, adjacent: a `/DR` — or a `/DR /Font` — that is there and cannot
+     * be read leaves this list empty, and an empty list makes every field's
+     * `/DA` look like it names nothing the reconstruction drops. The names
+     * cannot be enumerated, so the check below cannot be made, and saying so is
+     * the only honest answer.
+     */
+    const drRaw = acro.get(PDFName.of('DR'));
+    const dr = look(doc, drRaw);
+    if (drRaw !== undefined && drRaw !== PDFNull && !(dr instanceof PDFDict)) {
+        out.outsideSubset.push('AcroForm /DR is not a dictionary');
+    } else if (dr instanceof PDFDict) {
+        const fontsRaw = dr.get(PDFName.of('Font'));
+        const fonts = look(doc, fontsRaw);
+        if (fontsRaw !== undefined && fontsRaw !== PDFNull && !(fonts instanceof PDFDict)) {
+            out.outsideSubset.push('AcroForm /DR /Font is not a dictionary');
+        } else if (fonts instanceof PDFDict) {
             for (const [key] of fonts.entries()) out.drFonts.push(key.asString().replace(/^\//, ''));
         }
     }
@@ -202,14 +216,29 @@ export function readForm(doc: PDFDocument): FormDescription {
                 if (field.get(PDFName.of(key)) !== undefined) out.outsideSubset.push(`${full} /${key}`);
             }
 
-            const kids = look(doc, field.get(PDFName.of('Kids')));
+            /**
+             * RF-R5-2, adjacent: a `/Kids` that is there and cannot be read is
+             * not a terminal field. Reading it as one described a field tree
+             * this reader had not seen, and rebuilt against that description.
+             * A `null` entry is an absent one, which PDF says explicitly.
+             */
+            const kidsRaw = field.get(PDFName.of('Kids'));
+            const kids = look(doc, kidsRaw);
             const childFields: unknown[] = [];
             const widgets: PDFRef[] = [];
+            if (kidsRaw !== undefined && kidsRaw !== PDFNull && !(kids instanceof PDFArray)) {
+                out.readable = false;
+                continue;
+            }
             if (kids instanceof PDFArray) {
                 for (let i = 0; i < kids.size(); i += 1) {
                     const kidRaw = kids.get(i);
+                    if (kidRaw === undefined || kidRaw === PDFNull) continue;
                     const kid = look(doc, kidRaw);
-                    if (!(kid instanceof PDFDict)) continue;
+                    if (!(kid instanceof PDFDict)) {
+                        out.readable = false;
+                        continue;
+                    }
                     const isField = ['T', 'FT', 'V', 'DV', 'Ff', 'Kids']
                         .some((k) => kid.get(PDFName.of(k)) !== undefined);
                     if (isField) childFields.push(kidRaw);
@@ -319,10 +348,24 @@ export function readForm(doc: PDFDocument): FormDescription {
             // and value on a dictionary the copy does not preserve as a field.
             if (widgets.length > 0) out.outsideSubset.push(`${full} has separate widget dictionaries`);
 
-            // A `/DA` naming a font that lives in AcroForm `/DR` needs `/DR`
-            // carried, which this reconstruction does not do.
-            const daRead = readPdfBytes(look(doc, field.get(PDFName.of('DA'))));
-            const da = daRead.ok ? latin1(daRead.value.bytes) : null;
+            /**
+             * A `/DA` naming a font that lives in AcroForm `/DR` needs `/DR`
+             * carried, which this reconstruction does not do.
+             *
+             * RF-R5-2: a `/DA` that is there and cannot be read is not a field
+             * without one. Reading it as absent skipped the `/DR` check
+             * entirely, so a field whose appearance depends on a resource this
+             * reconstruction drops was carried anyway and reported READY. The
+             * AcroForm-level `/DA` above already says so; this one now does
+             * too, by the same rule.
+             */
+            const daRaw = look(doc, field.get(PDFName.of('DA')));
+            let da: string | null = null;
+            if (daRaw !== undefined && daRaw !== PDFNull) {
+                const daRead = readPdfBytes(daRaw);
+                if (daRead.ok) da = latin1(daRead.value.bytes);
+                else out.outsideSubset.push(`${full || '(field)'} /DA ${daRead.reason}`);
+            }
             if (da && out.dr) {
                 const named = /\/([A-Za-z0-9_.+-]+)\s+[\d.]+\s+Tf/.exec(da)?.[1];
                 if (named && out.drFonts.includes(named)) {

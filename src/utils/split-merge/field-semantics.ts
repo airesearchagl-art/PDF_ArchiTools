@@ -86,20 +86,41 @@ export function readInheritedField(doc: PDFDocument, field: PDFDict, key: string
     }
 }
 
+/** The `/Type` values that say a dictionary is a signature value. */
+export const SIGNATURE_VALUE_TYPES = ['/Sig', '/DocTimeStamp'];
+
 /**
- * Whether a value is a signature dictionary, by what it holds.
+ * The signature evidence a dictionary carries, named. RF-R5-3.
  *
- * `/Type /Sig` and `/Type /DocTimeStamp` say so; `/ByteRange` and `/Contents`
- * are what a signature is made of and nothing else in a field value carries
- * them. A stream is never a signature value.
+ * Said once, because it is asked twice: here, to decide what an applied
+ * signature is, and by the artifact backstop, to decide that none survived. A
+ * backstop narrower than the classifier it backs up is the detector-reach
+ * mismatch three earlier rounds were spent on.
+ *
+ * `/Type /Sig` and `/Type /DocTimeStamp` say what the dictionary is wherever it
+ * sits. `/ByteRange` is a signature's own and nothing else in a field value
+ * carries it. `/Contents` is the signature's bytes — and also an ordinary key
+ * on a page — so it is evidence only where the dictionary is a field's value,
+ * which is the only place in a document a signature value can sit. A stream is
+ * never a signature value.
  */
-export function isSignatureValue(value: unknown): boolean {
-    if (!(value instanceof PDFDict)) return false;
+export function signatureEvidenceOf(
+    value: unknown,
+    context: { isFieldValue: boolean },
+): string | null {
+    if (!(value instanceof PDFDict)) return null;
     const type = nameOf(value.get(PDFName.of('Type')));
-    return type === '/Sig'
-        || type === '/DocTimeStamp'
-        || value.get(PDFName.of('ByteRange')) !== undefined
-        || value.get(PDFName.of('Contents')) !== undefined;
+    if (SIGNATURE_VALUE_TYPES.includes(type)) return `/Type ${type}`;
+    if (value.get(PDFName.of('ByteRange')) !== undefined) return '/ByteRange';
+    if (context.isFieldValue && value.get(PDFName.of('Contents')) !== undefined) {
+        return 'a field value carrying /Contents';
+    }
+    return null;
+}
+
+/** Whether a field's value is a signature, by what it holds. */
+export function isSignatureValue(value: unknown): boolean {
+    return signatureEvidenceOf(value, { isFieldValue: true }) !== null;
 }
 
 /**

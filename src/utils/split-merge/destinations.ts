@@ -589,7 +589,24 @@ export function planDestinations(doc: PDFDocument, selection: number[]): Destina
 
 /** What has to be put back after the copy, and where. */
 export interface DestinationRebuild {
+    /** The page in the output's own numbering. Merge shifts this. */
     fromIndex: number;
+    /**
+     * The same page in the source document, never shifted. RF-R5-1.
+     *
+     * The annotation is looked up in the source at reconstruction time, so the
+     * lookup needs the page it actually sits on rather than where its copy
+     * landed.
+     */
+    sourcePageIndex: number;
+    /**
+     * The annotation, by reference: identity that survives a removal. RF-R5-1.
+     *
+     * A `PDFRef` is an object number and a generation, so holding one keeps
+     * nothing of the source alive (RF-E).
+     */
+    annotRef: PDFRef | null;
+    /** Where it sat when the plan was made. Kept only to name it in a message. */
     annotIndex: number;
     holderIsAction: boolean;
     targetIndex: number;
@@ -646,6 +663,8 @@ export function stripInternalDestinations(
             if (entry && entry.targetIndex !== null && kept.has(entry.targetIndex)) {
                 rebuild.push({
                     fromIndex: link.fromIndex,
+                    sourcePageIndex: link.fromIndex,
+                    annotRef: link.annotRef,
                     annotIndex: link.annotIndex,
                     holderIsAction: link.key === 'D',
                     targetIndex: entry.targetIndex,
@@ -668,6 +687,8 @@ export function stripInternalDestinations(
         if (link.targetIndex !== null && kept.has(link.targetIndex)) {
             rebuild.push({
                 fromIndex: link.fromIndex,
+                sourcePageIndex: link.fromIndex,
+                annotRef: link.annotRef,
                 annotIndex: link.annotIndex,
                 holderIsAction: link.key === 'D',
                 targetIndex: link.targetIndex,
@@ -742,18 +763,142 @@ export function stripInternalDestinations(
  * milestone keeps finding — a `continue` that abandons a planned rebuild and
  * returns a count that looks like success.
  */
+// ---------------------------------------------------------------------------
+// Annotation identity. RF-R5-1.
+// ---------------------------------------------------------------------------
+
+/**
+ * Give every annotation on a page a reference of its own. RF-R5-1.
+ *
+ * A reconstruction plan has to name one annotation and still mean the same one
+ * later. A position in `/Annots` cannot do that: `removeSignatureWidgets`
+ * (M6-H1) and `removeAttachmentsEverywhere` (M6-H2) both take entries out of
+ * that array between the plan and the copy, and every later entry moves.
+ * Measured: a signature widget carrying an ordinary `/P` made Extract rebuild
+ * `/Annots[0]` after `/Annots[0]` had been removed, and the run refused a
+ * document it supports.
+ *
+ * A reference is identity. An annotation written *directly* into the array has
+ * none to hold, so it is registered as an indirect object here — the same
+ * dictionary, given a name. PDF lets an annotation be either, and every reader
+ * resolves both, so this changes the document's representation and not what it
+ * says; it is also what lets the rest of this module drop the special case
+ * entirely rather than carry a second, weaker identity strategy.
+ *
+ * Runs on the working copy, before any plan is made and before anything is
+ * removed. Shapes this does not understand are left exactly as they are and
+ * reported by the readers that already report them.
+ */
+export function nameAnnotationsByReference(doc: PDFDocument, selection: number[]): void {
+    const pages = doc.getPages();
+    for (const pageIndex of selection) {
+        const page = pages[pageIndex];
+        if (!page) continue;
+        const read = resolve(doc, page.node.get(PDFName.of('Annots')));
+        if (!read.ok || !(read.value instanceof PDFArray)) continue;
+        const annots = read.value;
+        for (let i = 0; i < annots.size(); i += 1) {
+            const entry = annots.get(i);
+            if (entry instanceof PDFRef || isEmptySlot(entry)) continue;
+            if (!(entry instanceof PDFDict)) continue;
+            annots.set(i, doc.context.register(entry));
+        }
+    }
+}
+
+/** Where an annotation named by reference sits in its page's `/Annots` now. */
+type AnnotSite =
+    | { kind: 'at'; index: number }
+    | { kind: 'gone' }
+    | { kind: 'unresolved'; reason: string };
+
+const annotsOf = (doc: PDFDocument, pageIndex: number): PDFArray | null | 'unreadable' => {
+    const page = doc.getPages()[pageIndex];
+    if (!page) return 'unreadable';
+    const read = resolve(doc, page.node.get(PDFName.of('Annots')));
+    if (!read.ok) return 'unreadable';
+    if (isEmptySlot(read.value)) return null;
+    return read.value instanceof PDFArray ? read.value : 'unreadable';
+};
+
+/**
+ * Find the annotation the plan named, in the source, as it is now.
+ *
+ * `gone` is the annotation this run deliberately removed — a signature widget
+ * or a file-attachment annotation. It was not copied, so there is nothing in
+ * the output to reconstruct, and its removal is already a loss the plan
+ * reports. `unresolved` is everything else, and refuses.
+ */
+function locateAnnot(doc: PDFDocument, pageIndex: number, ref: PDFRef | null): AnnotSite {
+    if (ref === null) return { kind: 'unresolved', reason: 'the annotation has no reference to name it by' };
+    const annots = annotsOf(doc, pageIndex);
+    if (annots === 'unreadable') return { kind: 'unresolved', reason: 'the source page /Annots cannot be read' };
+    if (annots === null) return { kind: 'gone' };
+    for (let i = 0; i < annots.size(); i += 1) {
+        const entry = annots.get(i);
+        if (entry instanceof PDFRef && entry.tag === ref.tag) return { kind: 'at', index: i };
+    }
+    return { kind: 'gone' };
+}
+
+/**
+ * The copied annotation the plan is about, proved rather than assumed.
+ *
+ * `copyPages` reproduces `/Annots` entry for entry, so position `i` in the
+ * source is position `i` in the copy — but only while the two arrays are the
+ * same length, which is checked here rather than trusted, and only while the
+ * annotation at that position is the same kind of thing, which is checked too.
+ */
+function copiedAnnot(
+    source: PDFDocument,
+    sourcePageIndex: number,
+    outAnnots: PDFArray,
+    out: PDFDocument,
+    ref: PDFRef | null,
+): { ok: true; annot: PDFDict } | { ok: false; gone: boolean; reason: string } {
+    const site = locateAnnot(source, sourcePageIndex, ref);
+    if (site.kind === 'gone') {
+        return { ok: false, gone: true, reason: 'the annotation was removed before the copy' };
+    }
+    if (site.kind === 'unresolved') return { ok: false, gone: false, reason: site.reason };
+    const sourceAnnots = annotsOf(source, sourcePageIndex);
+    if (!(sourceAnnots instanceof PDFArray) || sourceAnnots.size() !== outAnnots.size()) {
+        return { ok: false, gone: false, reason: 'the copied /Annots does not match the source' };
+    }
+    const annot = out.context.lookup(outAnnots.get(site.index));
+    if (!(annot instanceof PDFDict)) {
+        return { ok: false, gone: false, reason: 'the copied annotation is not there' };
+    }
+    const sourceAnnot = source.context.lookup(sourceAnnots.get(site.index));
+    if (sourceAnnot instanceof PDFDict
+        && nameOf(sourceAnnot.get(PDFName.of('Subtype'))) !== nameOf(annot.get(PDFName.of('Subtype')))) {
+        return { ok: false, gone: false, reason: 'the copied annotation is a different one' };
+    }
+    return { ok: true, annot };
+}
+
 export interface RebuildOutcome {
     rebuilt: number;
     unapplied: string[];
+    /**
+     * Plans whose annotation this run removed before the copy. RF-R5-1.
+     *
+     * Not a failure: the annotation is not in the output because it was taken
+     * out on purpose, and that removal is reported as its own loss. Carried so
+     * the skip is visible rather than silent.
+     */
+    removed: string[];
 }
 
 export function rebuildDestinations(
     out: PDFDocument,
     outcome: StripOutcome,
     selection: number[],
+    source: PDFDocument | null = null,
 ): RebuildOutcome {
     const outPages = out.getPages();
     const unapplied: string[] = [];
+    const removed: string[] = [];
     const outRefOf = (sourceIndex: number): PDFRef | null => {
         const position = selection.indexOf(sourceIndex);
         return position >= 0 && outPages[position] ? outPages[position].ref : null;
@@ -774,11 +919,17 @@ export function rebuildDestinations(
             unapplied.push(`${where}: the copied page has no /Annots array`);
             continue;
         }
-        const annot = out.context.lookup(annots.get(item.annotIndex));
-        if (!(annot instanceof PDFDict)) {
-            unapplied.push(`${where}: the copied annotation is not there`);
+        if (source === null) {
+            unapplied.push(`${where}: the source is not available to name the annotation`);
             continue;
         }
+        // RF-R5-1: by reference, not by the position it had when planned.
+        const found = copiedAnnot(source, item.sourcePageIndex, annots, out, item.annotRef);
+        if (!found.ok) {
+            (found.gone ? removed : unapplied).push(`${where}: ${found.reason}`);
+            continue;
+        }
+        const annot = found.annot;
 
         const target = outRefOf(item.targetIndex);
         if (!target) {
@@ -838,7 +989,7 @@ export function rebuildDestinations(
         }
     }
 
-    return { rebuilt, unapplied };
+    return { rebuilt, unapplied, removed };
 }
 
 /**
@@ -1090,6 +1241,10 @@ export interface PageRefClosure {
     /** Rebuilt after the copy, against output page references. */
     rebuild: {
         fromIndex: number;
+        /** The page in the source document, never shifted. RF-R5-1. */
+        sourcePageIndex: number;
+        /** The annotation, by reference: identity that survives a removal. RF-R5-1. */
+        annotRef: PDFRef | null;
         annotIndex: number | null;
         pagePath: 'annot-P' | 'none';
         targetIndex: number;
@@ -1122,26 +1277,38 @@ export function closeSourcePageRefs(
     const losses: LossRecord[] = [];
 
     const pages = doc.getPages();
-    const annotIndexOf = (pageIndex: number, holder: PDFDict): number | null => {
+    /**
+     * Where the annotation sits, and — RF-R5-1 — what names it. The position is
+     * kept for the message; the reference is what the reconstruction resolves.
+     */
+    const annotEntryOf = (
+        pageIndex: number,
+        holder: PDFDict,
+    ): { index: number; ref: PDFRef | null } | null => {
         const page = pages[pageIndex];
         if (!page) return null;
         const annots = look(doc, page.node.get(PDFName.of('Annots')));
         if (!(annots instanceof PDFArray)) return null;
         for (let i = 0; i < annots.size(); i += 1) {
-            if (look(doc, annots.get(i)) === holder) return i;
+            const entry = annots.get(i);
+            if (look(doc, entry) === holder) {
+                return { index: i, ref: entry instanceof PDFRef ? entry : null };
+            }
         }
         return null;
     };
 
     for (const site of sites) {
         if (site.shape === 'page' && site.key === 'P') {
-            const annotIndex = annotIndexOf(site.fromIndex, site.holder);
+            const found = annotEntryOf(site.fromIndex, site.holder);
             // The annotation belongs to the page it sits on, which is kept by
             // construction — it was reached by walking that page.
-            if (annotIndex !== null && kept.has(site.fromIndex)) {
+            if (found !== null && kept.has(site.fromIndex)) {
                 rebuild.push({
                     fromIndex: site.fromIndex,
-                    annotIndex,
+                    sourcePageIndex: site.fromIndex,
+                    annotRef: found.ref,
+                    annotIndex: found.index,
                     pagePath: 'annot-P',
                     targetIndex: site.fromIndex,
                 });
@@ -1180,15 +1347,17 @@ export function rebuildSourcePageRefs(
     out: PDFDocument,
     closure: PageRefClosure,
     selection: number[],
+    source: PDFDocument | null = null,
 ): RebuildOutcome {
     const outPages = out.getPages();
     const unapplied: string[] = [];
+    const removed: string[] = [];
     let rebuilt = 0;
     for (const item of closure.rebuild) {
         const where = `page ${item.targetIndex} /Annots[${item.annotIndex}] /P`;
         const position = selection.indexOf(item.targetIndex);
         const page = outPages[position];
-        if (!page || item.annotIndex === null) {
+        if (!page) {
             unapplied.push(`${where}: the page it belongs to is not in the output`);
             continue;
         }
@@ -1197,15 +1366,20 @@ export function rebuildSourcePageRefs(
             unapplied.push(`${where}: the copied page has no /Annots array`);
             continue;
         }
-        const annot = out.context.lookup(annots.get(item.annotIndex));
-        if (!(annot instanceof PDFDict)) {
-            unapplied.push(`${where}: the copied annotation is not there`);
+        if (source === null) {
+            unapplied.push(`${where}: the source is not available to name the annotation`);
             continue;
         }
-        annot.set(PDFName.of('P'), page.ref);
+        // RF-R5-1: by reference, not by the position it had when planned.
+        const found = copiedAnnot(source, item.sourcePageIndex, annots, out, item.annotRef);
+        if (!found.ok) {
+            (found.gone ? removed : unapplied).push(`${where}: ${found.reason}`);
+            continue;
+        }
+        found.annot.set(PDFName.of('P'), page.ref);
         rebuilt += 1;
     }
-    return { rebuilt, unapplied };
+    return { rebuilt, unapplied, removed };
 }
 
 /**

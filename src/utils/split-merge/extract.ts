@@ -42,6 +42,7 @@ import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
 import {
     closeSourcePageRefs,
+    nameAnnotationsByReference,
     rebuildDestinations,
     rebuildSourcePageRefs,
     sanitizeDestinations,
@@ -616,6 +617,14 @@ export async function runExtract(
     })();
 
     let working: PDFDocument | null = await PDFDocument.load(sourceBytes, { updateMetadata: false });
+    /**
+     * RF-R5-1: every annotation gets a name before anything is planned or
+     * removed. The reconstructions below are bound to that name, so the
+     * sanitization between them and `copyPages` — signature widgets under
+     * M6-H1, file-attachment annotations under M6-H2 — cannot move the
+     * annotation a plan is about out from under it.
+     */
+    nameAnnotationsByReference(working, selection);
     const strip = sanitizeDestinations(working, selection);
     if (strip.duplicateNames.length > 0) {
         return refusedResult(
@@ -711,8 +720,8 @@ export async function runExtract(
     const actual = await graphOfWholeDocument(out);
 
     // ---- 8. reconstruction ---------------------------------------------------
-    const rebuiltDestinations = rebuildDestinations(out, strip, selection);
-    const rebuiltPageRefs = rebuildSourcePageRefs(out, closure, selection);
+    const rebuiltDestinations = rebuildDestinations(out, strip, selection, working);
+    const rebuiltPageRefs = rebuildSourcePageRefs(out, closure, selection, working);
     const unapplied = [...rebuiltDestinations.unapplied, ...rebuiltPageRefs.unapplied];
     if (unapplied.length > 0) {
         // A reconstruction that was planned and did not happen is a link the
@@ -724,6 +733,9 @@ export async function runExtract(
             { unapplied },
         );
     }
+    // RF-R5-1: reconstructions whose annotation this run removed on purpose.
+    // Not a failure — the removal is its own reported loss — but recorded.
+    const removedAnnots = [...rebuiltDestinations.removed, ...rebuiltPageRefs.removed];
 
     if (ocDescription.present && ocDescription.unsupported.length === 0) {
         const carried = carryOptionalContent(working, ocDescription, out);
@@ -903,6 +915,10 @@ export async function runExtract(
         planned,
         actual,
         readback,
-        detail: { policy: policy.origin, policyProvisional: policy.provisional },
+        detail: {
+            policy: policy.origin,
+            policyProvisional: policy.provisional,
+            ...(removedAnnots.length > 0 ? { removedAnnotations: removedAnnots } : {}),
+        },
     };
 }

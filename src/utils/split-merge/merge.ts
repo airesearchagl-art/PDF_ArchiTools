@@ -56,6 +56,7 @@ import {
 import type { OptionalContentDescription } from './optional-content';
 import {
     closeSourcePageRefs,
+    nameAnnotationsByReference,
     rebuildDestinations,
     rebuildSourcePageRefs,
     sanitizeDestinations,
@@ -822,6 +823,14 @@ export async function runMerge(
         const formDa = safety.form.da;
 
         // ---- only now: sanitize ---------------------------------------------
+        /**
+         * RF-R5-1: name every annotation before anything is planned or
+         * removed. `removeAttachmentsEverywhere` below takes file-attachment
+         * annotations out of `/Annots` after both reconstruction plans are
+         * made, which moved every later entry; the plans are bound to the
+         * reference instead of to the position.
+         */
+        nameAnnotationsByReference(source, indices);
         const signatureRemoval = removeSignatureWidgets(source);
         if (signatureRemoval.unclassified.length > 0) {
             return refusedMerge(
@@ -953,7 +962,7 @@ export async function runMerge(
             unreadable: [],
             duplicateNames: [],
         };
-        const rebuiltDestinations = rebuildDestinations(out, shiftedStrip, mergedSelection);
+        const rebuiltDestinations = rebuildDestinations(out, shiftedStrip, mergedSelection, source);
         const rebuiltPageRefs = rebuildSourcePageRefs(
             out,
             {
@@ -964,6 +973,7 @@ export async function runMerge(
                 })),
             },
             mergedSelection,
+            source,
         );
         const unapplied = [...rebuiltDestinations.unapplied, ...rebuiltPageRefs.unapplied];
         if (unapplied.length > 0) {

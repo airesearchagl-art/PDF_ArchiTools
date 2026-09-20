@@ -1601,6 +1601,178 @@ try {
         && infoM4.output?.info?.Creator === 'PDF ArchiTools — PDF統合',
         `${syntaxDetail(infoM4)}, ${JSON.stringify(infoM4.output?.info)}`);
 
+    // ---- 49. RF-R5-1 the reconstruction plan survives a removal --------------
+    //
+    // A plan named an annotation by its position in `/Annots`; sanitization then
+    // took another entry out of that array and every later position moved. The
+    // shape that reaches it is ordinary — a widget carrying `/P` — and no
+    // earlier fixture had one, because pdf-lib does not write `/P`.
+    //
+    // So the assertion is not the status. It is that the annotation which
+    // survived is the one the plan was about, read by PDF.js, with its link
+    // still reaching the page it named and its `/P` pointing into the output's
+    // own page tree.
+    console.log('\n=== 49. RF-R5-1 annotation plan stability ===');
+    {
+        const SHAPES = [
+            { name: 'r6-sig-empty-p', keeps: [], note: 'an empty signature field carrying /P' },
+            { name: 'r6-sig-applied-p', keeps: [], note: 'an applied signature carrying /P' },
+            { name: 'r6-sig-then-link-p', keeps: [{ subtype: 'Link', target: 1 }], note: 'a link after the removed widget' },
+            { name: 'r6-sig-then-tx-p', keeps: [{ subtype: 'Widget', fieldName: 'r6.kept' }], note: 'a text field after the removed widget' },
+            { name: 'r6-sig-multi-then-link', keeps: [{ subtype: 'Link', target: 1 }], note: 'two removed widgets before a link' },
+            { name: 'r6-link-then-sig', keeps: [{ subtype: 'Link', target: 1 }], note: 'a link before the removed widget' },
+            { name: 'r6-annot-direct', keeps: [{ subtype: 'Link', target: 1 }], note: 'a link written directly into /Annots' },
+        ];
+        for (const shape of SHAPES) {
+            const r = await call('annotPlanStability', shape.name, [0, 1], ['applied-signature']);
+            const first = r.annots?.[0] ?? null;
+            const kept = (first ?? []).map((a) => a.subtype);
+            const wanted = shape.keeps.map((k) => k.subtype);
+            const targetsOk = shape.keeps.every((k, i) => {
+                const got = first?.[i];
+                if (!got || got.subtype !== k.subtype) return false;
+                if (k.target !== undefined && got.target !== k.target) return false;
+                if (k.fieldName !== undefined && got.fieldName !== k.fieldName) return false;
+                return true;
+            });
+            check(`${shape.name}: READY, and ${shape.note} is still the annotation the plan named`,
+                r.status === 'READY'
+                && r.boundary === 'PASS'
+                && r.signatureRemnants === 0
+                && r.payloadMarker === false
+                && JSON.stringify(kept) === JSON.stringify(wanted)
+                && targetsOk,
+                `${r.status} boundary=${r.boundary} sigRemnants=${r.signatureRemnants} payload=${r.payloadMarker} `
+                + `annots=${JSON.stringify(first)} unapplied=${JSON.stringify(r.unapplied)}`);
+            check(`${shape.name}: every /P in the artifact points into its own page tree`,
+                r.pageRefs !== null && r.pageRefs.dangling === 0 && r.unreachableObjects === 0,
+                `${JSON.stringify(r.pageRefs)} unreachable=${r.unreachableObjects}`);
+        }
+
+        const control = await call('annotPlanStability', 'r6-annots-control', [0, 1], []);
+        check('r6-annots-control: with nothing removed, both annotations survive unchanged',
+            control.status === 'READY'
+            && JSON.stringify((control.annots?.[0] ?? []).map((a) => a.subtype)) === '["Link","Widget"]'
+            && control.annots?.[0]?.[0]?.target === 1
+            && control.annots?.[0]?.[1]?.fieldName === 'r6.kept'
+            && control.pageRefs?.dangling === 0,
+            `${control.status} ${JSON.stringify(control.annots?.[0])}`);
+
+        // The Merge door: the attachment annotation is removed after both plans.
+        const merged = await call('annotPlanStabilityMerge',
+            ['r6-att-annot-then-link', 'merge-b'], 'R6ATTACHPAYLOAD');
+        check('Merge: a file-attachment annotation removed after planning does not move the link',
+            merged.status === 'READY'
+            && merged.annots?.[0]?.length === 1
+            && merged.annots[0][0].subtype === 'Link'
+            && merged.annots[0][0].target === 1
+            && merged.pageRefs?.dangling === 0
+            && merged.payloadMarker === false,
+            `${merged.status} annots=${JSON.stringify(merged.annots?.[0])} `
+            + `pageRefs=${JSON.stringify(merged.pageRefs)} payload=${merged.payloadMarker} `
+            + `unapplied=${JSON.stringify(merged.unapplied)}`);
+    }
+
+    // ---- 50. RF-R5-2 a `/DA` that is there and cannot be read ----------------
+    //
+    // It was read as absent, which skipped the `/DR` dependency check — so a
+    // field whose appearance needs a resource this reconstruction drops came
+    // back READY. `/DA` is content-stream syntax, so the question is whether its
+    // **bytes** read: `r6-da-hexbytes` is a readable byte string that happens to
+    // look like UTF-16 and is not a refusal, which is what keeps this from being
+    // a rule about text.
+    console.log('\n=== 50. RF-R5-2 field /DA, present and unreadable ===');
+    {
+        const REFUSES = [
+            ['r6-da-octal', 'an octal escape wider than a byte'],
+            ['r6-da-name', 'a name object'],
+            ['r6-da-number', 'a number'],
+            ['r6-da-indirect-number', 'an indirect number'],
+            ['r6-da-stream', 'a stream'],
+        ];
+        for (const [name, what] of REFUSES) {
+            const r = await call('daEnvelope', name);
+            check(`${name}: /DA that is ${what} is refused, not read as absent`,
+                r.status === 'UNSUPPORTED_FORM'
+                && r.bytes === false
+                && r.intake === 'UNSUPPORTED_FORM'
+                && r.outsideSubset.some((s) => s.includes('/DA')),
+                `${r.status} intake=${r.intake} outside=${JSON.stringify(r.outsideSubset)}`);
+        }
+        const valid = await call('daEnvelope', 'r6-da-valid');
+        check('r6-da-valid: a readable /DA naming a /DR font keeps the envelope it had',
+            valid.status === 'UNSUPPORTED_FORM'
+            && valid.outsideSubset.some((s) => s.includes('names /R6F from AcroForm /DR')),
+            `${valid.status} ${JSON.stringify(valid.outsideSubset)}`);
+        const absent = await call('daEnvelope', 'r6-da-absent');
+        check('r6-da-absent: no /DA is still no /DA, and still supported',
+            absent.status === 'READY' && absent.intake === 'ACCEPTED' && absent.outsideSubset.length === 0,
+            `${absent.status} intake=${absent.intake} ${JSON.stringify(absent.outsideSubset)}`);
+        const hexBytes = await call('daEnvelope', 'r6-da-hexbytes');
+        check('r6-da-hexbytes: a /DA whose bytes read is not a refusal (it is syntax, not prose)',
+            hexBytes.status === 'READY' && hexBytes.outsideSubset.length === 0,
+            `${hexBytes.status} ${JSON.stringify(hexBytes.outsideSubset)}`);
+
+        // The same anti-pattern, in the two readers next door.
+        const dr = await call('daEnvelope', 'r6-dr-notdict');
+        check('r6-dr-notdict: a /DR that cannot be listed is said so, not treated as empty',
+            dr.status === 'UNSUPPORTED_FORM'
+            && dr.outsideSubset.some((s) => s.includes('/DR is not a dictionary')),
+            `${dr.status} ${JSON.stringify(dr.outsideSubset)}`);
+        const kids = await call('daEnvelope', 'r6-kids-notarray');
+        check('r6-kids-notarray: a /Kids that cannot be read is not a terminal field',
+            kids.bytes === false && kids.readable === false,
+            `${kids.status} readable=${kids.readable} ${JSON.stringify(kids.outsideSubset)}`);
+    }
+
+    // ---- 51. RF-R5-3 the remnant backstop reaches what the classifier does ----
+    //
+    // The artifact invariant claimed `signatureRemnants === 0` on a narrower
+    // evidence set than `classifyField` decides an applied signature by. Aligned
+    // now — and `/Contents` is context-aware, because a page's `/Contents` is its
+    // content stream. Each fixture carries exactly one kind of evidence; two
+    // carry `/Contents` where `/Contents` is ordinary.
+    console.log('\n=== 51. RF-R5-3 signature remnant semantics ===');
+    {
+        const EVIDENCE = [
+            ['r6-rem-ft-sig', 1, '/FT /Sig'],
+            ['r6-rem-type-sig', 1, '/Type /Sig'],
+            ['r6-rem-doctimestamp', 1, '/Type /DocTimeStamp'],
+            ['r6-rem-byterange', 1, '/ByteRange'],
+            ['r6-rem-contents-value', 1, 'a field value carrying /Contents'],
+            ['r6-rem-widget-inherited', 2, 'a widget whose /FT /Sig is inherited'],
+        ];
+        for (const [name, want, what] of EVIDENCE) {
+            const r = await call('signatureRemnantLayer', name);
+            check(`${name}: ${what} is counted, by production and by this gate`,
+                r.productionComplete === true
+                && r.production === want
+                && r.readbackRemnants === want
+                && r.gate.count === want,
+                `production=${r.production} readback=${r.readbackRemnants} gate=${r.gate.count} `
+                + `reasons=${JSON.stringify(r.gate.reasons)}`);
+        }
+        for (const [name, what] of [
+            ['r6-rem-page-contents', "a page's own /Contents"],
+            ['r6-rem-dict-contents', 'an ordinary dictionary /Contents'],
+            ['r6-rem-clean', 'an ordinary text field'],
+        ]) {
+            const r = await call('signatureRemnantLayer', name);
+            check(`${name}: ${what} is not a signature (no false positive)`,
+                r.productionComplete === true && r.production === 0
+                && r.readbackRemnants === 0 && r.gate.count === 0,
+                `production=${r.production} readback=${r.readbackRemnants} gate=${r.gate.count} `
+                + `reasons=${JSON.stringify(r.gate.reasons)}`);
+        }
+        const refused = await call('signatureRemnantLayer', 'r6-rem-widget-dangling');
+        probe('the remnant census refuses rather than counting zero it cannot prove',
+            refused.productionComplete === false
+            && refused.production === null
+            && refused.readbackCensusComplete === false,
+            `complete=${refused.productionComplete} reason=${refused.productionReason} `
+            + `readback=${refused.readbackRemnants} censusComplete=${refused.readbackCensusComplete}`);
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));
