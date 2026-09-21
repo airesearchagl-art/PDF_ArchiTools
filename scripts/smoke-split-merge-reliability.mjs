@@ -1923,6 +1923,208 @@ try {
             `pdf.js sees ${off.after.groupCount} group(s) in the artifact`);
     }
 
+    // ---- 54. BLK-R7-A: one object, more than one resource edge ---------------
+    //
+    // The walker answered "have I seen this object" before it answered "what
+    // does `/OC` mean on this edge", so a form first met through a `/Pattern`
+    // or a Type 3 `/CharProcs` was marked and its later `/XObject` edge
+    // returned before reading `/OC`. Neither carried nor refused, the group
+    // stayed out of `/OCProperties` while the copied `/OC` stayed live, and a
+    // layer the author had switched **off** drew in the artifact. Every fixture
+    // below is default-OFF, so the old behaviour is a visible flip.
+    console.log('\n=== 54. BLK-R7-A edge-local /OC classification ===');
+    {
+        const carried = [
+            ['r8-alias-pattern', [0], 'a form aliased into /Pattern is still classified through /XObject'],
+            ['r8-alias-charprocs', [0], 'a form aliased into a Type 3 /CharProcs is still classified'],
+            ['r8-alias-xobject-first', [0], 'the valid edge first is unchanged'],
+            ['r8-alias-two-keys', [0], 'one form under two /XObject keys'],
+            ['r8-alias-two-pages', [0, 1], 'one form used by two pages'],
+            ['r8-alias-nested', [0], 'a nested form that is also a /Pattern alias'],
+            ['r8-alias-cycle', [0], 'a resource graph that loops'],
+        ];
+        for (const [fixture, selection, title] of carried) {
+            const r = await call('r7Oc', fixture, selection);
+            check(`${fixture}: ${title}`,
+                r.plan === 'READY' && r.run === 'READY' && r.unreachable === 0,
+                `plan ${r.plan} run ${r.run} unreachable ${r.unreachable} `
+                + `${(r.unsupported || []).join(' | ')}`);
+            if (!r.output) continue;
+            check(`${fixture}: the edge was found, not skipped`,
+                r.usages >= 1, `usages=${r.usages}`);
+            check(`${fixture}: the artifact registers the group its /OC names`,
+                r.output.ocProperties === true && r.output.outGroups >= 1
+                && r.output.danglingOc === 0,
+                `ocProperties=${r.output.ocProperties} groups=${r.output.outGroups} `
+                + `dangling=${r.output.danglingOc}`);
+            check(`${fixture}: however many edges name it, one group is registered`,
+                r.output.outGroups === 1, `outGroups=${r.output.outGroups} usages=${r.usages}`);
+            check(`${fixture}: the output census agrees the artifact holds together`,
+                r.oc !== null && r.oc.danglingUses === 0 && r.oc.unregisteredUses === 0
+                && r.oc.ocmdSurvivors === 0 && r.oc.configErrors === 0,
+                JSON.stringify(r.oc));
+        }
+
+        // The soft mask's `/G` is an `/OC` position nothing has shown how to
+        // rebuild, so finding it on every edge means finding it, not carrying it.
+        const smask = await call('r7Oc', 'r8-alias-smask', [0]);
+        const saidSmask = (smask.unsupported || []).join(' | ');
+        check('r8-alias-smask: an /OC reached only through a soft mask still fails closed',
+            smask.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && saidSmask.includes('/SMask /G /OC'),
+            `${smask.plan} :: ${saidSmask}`);
+        check('r8-alias-smask: and publishes nothing', smask.run === null, `run=${smask.run}`);
+
+        // The whole point, measured where it shows: on the page.
+        for (const fixture of ['r8-alias-pattern', 'r8-alias-charprocs', 'r8-alias-nested']) {
+            const v = await call('r7Visibility', fixture, [0]);
+            check(`${fixture}: the switched-off layer is hidden in source and artifact alike`,
+                v.before.painted === false && v.after !== null && v.after.painted === false
+                && v.after.groupCount === 1,
+                `before=${v.before.painted} after=${v.after && v.after.painted} `
+                + `groups=${v.after && v.after.groupCount} pixel=${JSON.stringify(v.after && v.after.pixel)}`);
+        }
+        const aliasProbe = await call('r7Visibility', 'r8-alias-pattern', [0]);
+        probe('the alias fixture really does hide its layer to begin with',
+            aliasProbe.before.painted === false && aliasProbe.before.groupCount === 1,
+            `source groups=${aliasProbe.before.groupCount} painted=${aliasProbe.before.painted}`);
+    }
+
+    // ---- 55. BLK-R7-B: a page property must name a registered group ----------
+    //
+    // A group the source leaves out of `/OCProperties /OCGs` has no
+    // configuration in the source — a viewer that cannot find it draws the
+    // content. Carrying it, registering it in the output and then applying the
+    // source's `/D /OFF` to it gave the layer a meaning the source never had,
+    // and content the author could see disappeared from the artifact.
+    console.log('\n=== 55. BLK-R7-B page /Properties source registration ===');
+    {
+        for (const [fixture, title] of [
+            ['r8-props-registered-on', 'a registered group, on'],
+            ['r8-props-registered-off', 'a registered group, off'],
+        ]) {
+            const r = await call('r7Oc', fixture, [0]);
+            check(`${fixture}: ${title} is carried as before`,
+                r.plan === 'READY' && r.run === 'READY' && r.unreachable === 0,
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}`);
+            if (r.output) {
+                check(`${fixture}: the artifact registers exactly the source's group`,
+                    r.output.ocProperties === true && r.output.outGroups === 1,
+                    `groups=${r.output.outGroups}`);
+            }
+            const v = await call('r7Visibility', fixture, [0]);
+            check(`${fixture}: source and artifact show the same thing`,
+                v.after !== null && v.before.painted === v.after.painted,
+                `before=${v.before.painted} after=${v.after && v.after.painted}`);
+        }
+
+        for (const [fixture, fragment, title] of [
+            ['r8-props-unregistered-on', 'does not register', 'an unregistered group, on'],
+            ['r8-props-unregistered-off', 'does not register', 'an unregistered group, off'],
+            ['r8-props-dangling', 'is not a dictionary', 'a property that points at nothing'],
+            ['r8-props-wrongtype', 'is /Annot', 'a property that is not a group'],
+            ['r8-props-direct', 'directly rather than by reference', 'a group written inline'],
+        ]) {
+            const r = await call('r7Oc', fixture, [0]);
+            const said = (r.unsupported || []).join(' | ');
+            check(`${fixture}: ${title} is refused, and says why`,
+                r.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && said.includes(fragment),
+                `${r.plan} :: ${said}`);
+            check(`${fixture}: and publishes nothing`, r.run === null, `run=${r.run}`);
+        }
+    }
+
+    // ---- 56. RF-R8-1: the artifact proves its own optional content -----------
+    //
+    // Discovery decides what may be carried; this decides whether what was
+    // carried holds together, over every indirect object rather than over the
+    // resource graph. A future missed edge must not be able to become READY
+    // plus a live `/OC` plus an incomplete `/OCProperties` ever again — so the
+    // documents below are artifact shapes this tool would never write, handed
+    // straight to the census.
+    console.log('\n=== 56. RF-R8-1 artifact-wide optional content invariant ===');
+    {
+        const clean = [
+            ['r8-art-none', 'an artifact with no optional content at all'],
+            ['r8-art-ok', 'an artifact whose /OC names a registered group'],
+            ['r8-art-control', 'keys that merely begin like /OC are not /OC'],
+        ];
+        for (const [fixture, title] of clean) {
+            const r = await call('r8Census', fixture);
+            check(`${fixture}: ${title} passes`,
+                r.complete === true && r.invariant === null
+                && r.value.danglingUses === 0 && r.value.unregisteredUses === 0
+                && r.value.ocmdSurvivors === 0 && r.value.configErrors === 0,
+                `complete=${r.complete} invariant=${r.invariant} ${JSON.stringify(r.value)}`);
+        }
+        check('r8-art-ok: the census saw the use it should have seen',
+            (await call('r8Census', 'r8-art-ok')).value.uses === 1);
+        check('r8-art-control: an unrelated key is not counted as a use',
+            (await call('r8Census', 'r8-art-control')).value.uses === 0);
+
+        const violations = [
+            ['r8-art-no-ocprops', 'optionalContentUnregisteredUses === 0',
+                'a live /OC with no /OCProperties at all — BLK-R7-A’s own output'],
+            ['r8-art-unregistered', 'optionalContentUnregisteredUses === 0',
+                'a live /OC naming a group the artifact does not register'],
+            ['r8-art-dangling', 'optionalContentDanglingUses === 0',
+                'a live /OC naming nothing'],
+            ['r8-art-ocmd', 'optionalContentOcmdSurvivors === 0',
+                'a membership dictionary that survived into the output'],
+            ['r8-art-on-unregistered', 'optionalContentConfigErrors === 0',
+                '/ON naming a group the artifact does not register'],
+            ['r8-art-off-unregistered', 'optionalContentConfigErrors === 0',
+                '/OFF naming a group the artifact does not register'],
+            ['r8-art-order-unregistered', 'optionalContentConfigErrors === 0',
+                '/Order naming a group the artifact does not register'],
+            ['r8-art-as-unregistered', 'optionalContentConfigErrors === 0',
+                '/AS naming a group the artifact does not register'],
+            ['r8-art-rbgroups', 'optionalContentConfigErrors === 0',
+                'a non-empty /RBGroups, which this output never writes'],
+        ];
+        for (const [fixture, invariant, title] of violations) {
+            const r = await call('r8Census', fixture);
+            check(`${fixture}: ${title} is refused`,
+                r.complete === true && r.invariant === invariant,
+                `complete=${r.complete} invariant=${r.invariant} ${JSON.stringify(r.value)}`);
+            check(`${fixture}: the refusal names what it found`,
+                r.invariantReason !== null && r.value.detail.length > 0,
+                JSON.stringify(r.value && r.value.detail));
+        }
+
+        // A configuration the proof needs and cannot read is a refusal, not a
+        // clean count. There is no truncated-then-zero state here either.
+        const malformed = await call('r8Census', 'r8-art-malformed');
+        check('r8-art-malformed: an unreadable configuration refuses rather than counts',
+            malformed.complete === false && malformed.censusComplete === false
+            && malformed.invariant === 'every artifact census is complete',
+            `complete=${malformed.complete} invariant=${malformed.invariant} ${malformed.reason}`);
+
+        // The two scopes discovery cannot reach: nesting below an object's own
+        // keys, and an object no page walk visits at all.
+        const nested = await call('r8Census', 'r8-art-nested-oc');
+        check('r8-art-nested-oc: an /OC nested in a direct dictionary is found',
+            nested.complete === true && nested.value.uses === 1
+            && nested.value.unregisteredUses === 1,
+            JSON.stringify(nested.value));
+        const detached = await call('r8Census', 'r8-art-detached-oc');
+        check('r8-art-detached-oc: an /OC on an object no page reaches is found',
+            detached.complete === true && detached.value.uses === 1
+            && detached.value.unregisteredUses === 1,
+            JSON.stringify(detached.value));
+
+        // The gate's own reader, sharing no code with the census it checks.
+        for (const [fixture, expectDangling] of [['r8-art-no-ocprops', 1], ['r8-art-ok', 0]]) {
+            const r = await call('r8Census', fixture);
+            check(`${fixture}: the raw reader and the census agree`,
+                r.raw.danglingOc === expectDangling,
+                `raw danglingOc=${r.raw.danglingOc} census unregistered=${r.value && r.value.unregisteredUses}`);
+        }
+
+        probe('the backstop would have caught BLK-R7-A before the walker was fixed',
+            (await call('r8Census', 'r8-art-no-ocprops')).invariant
+                === 'optionalContentUnregisteredUses === 0');
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));

@@ -35,6 +35,8 @@
  */
 import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNull, PDFRef, PDFString } from 'pdf-lib';
 import type { PDFDocument, PDFPage } from 'pdf-lib';
+import { censusIndirectObjects } from './census';
+import type { CensusOutcome } from './census';
 import { MECHANISM_BOUNDS } from './policy';
 import { pdfTextObject, pdfTextOf, readPdfText } from './pdf-text';
 import type { PdfText } from './pdf-text';
@@ -125,7 +127,12 @@ export interface PagePropertyEntry {
     /** Position within the selection, which is the output page index. */
     pageIndex: number;
     key: string;
-    ref: PDFRef | null;
+    /**
+     * The group, by reference, and always one `/OCProperties /OCGs` registers.
+     * BLK-R7-B: an entry that cannot be proven to name a registered group is a
+     * refusal, so there is no longer a case where this is absent.
+     */
+    ref: PDFRef;
     name: string | null;
 }
 
@@ -260,10 +267,13 @@ function orderShapeOf(
  * Walk one kept page's resource graph, refusing every attachment point this
  * reader does not rebuild.
  *
- * A visited set keyed on indirect references makes a cycle terminate and a
- * shared object count once. `/ColorSpace` and `/Shading` are deliberately not
- * opened: they hold no content stream, so they open no resource scope and carry
- * no `/OC`. That is a statement about scope, not about safety.
+ * An expansion set keyed on indirect references makes a cycle terminate and a
+ * shared body expand once. It deduplicates **bodies**, never edges: what an
+ * `/OC` means depends on the resource role it was reached through, so that is
+ * decided per edge before the set is consulted at all. `/ColorSpace` and
+ * `/Shading` are deliberately not opened: they hold no content stream, so they
+ * open no resource scope and carry no `/OC`. That is a statement about scope,
+ * not about safety.
  */
 /**
  * A page's **effective** `/Resources`, resolved through the page tree.
@@ -445,12 +455,40 @@ function walkPageResourceGraph(
     registered: Set<string>,
     usages: XObjectOcUsage[],
 ): void {
-    const visited = new Set<string>();
+    /**
+     * Objects whose **body** has already been expanded.
+     *
+     * Deliberately named for what it deduplicates. It answers "have these
+     * resources been walked before", which is a property of the object, and it
+     * must never be asked about anything that is a property of the *edge* the
+     * object was reached along. BLK-R7-A was exactly that confusion: one
+     * short-circuit stood in front of both, so a form first met through a
+     * `/Pattern` — where `/OC` is not an attachment point and is therefore not
+     * read — was marked, and the later `/XObject` edge, where its `/OC` **is**
+     * read, returned before reading it. Neither carried nor refused, the group
+     * stayed out of `/OCProperties` while the copied `/OC` stayed live, and a
+     * layer the author had switched off drew in the artifact.
+     */
+    const expanded = new Set<string>();
     const refuse = (text: string): void => {
         unsupported.push(text);
     };
 
+    /**
+     * Usages already recorded, keyed by the edge that produced them.
+     *
+     * Edge-local classification runs per edge, so a form reached along two
+     * valid `/XObject` paths is classified twice — correctly, because either
+     * path may be the one that identifies it in the output. What must not
+     * happen is the *same* path recording twice, which a resource cycle can
+     * otherwise produce.
+     */
+    const seenUsages = new Set<string>();
+
     const record = (path: string[], ref: PDFRef, group: PDFDict, viaOcmd: boolean): void => {
+        const key = `${path.join('/')}\u0000${ref.tag}`;
+        if (seenUsages.has(key)) return;
+        seenUsages.add(key);
         usages.push({
             sourcePageIndex: sourceIndex,
             pageIndex,
@@ -582,10 +620,14 @@ function walkPageResourceGraph(
         record(path, ocRaw, r.value, false);
     };
 
-    const firstVisit = (raw: unknown): boolean => {
+    /**
+     * Whether this object's body still needs expanding. Never a question about
+     * the edge it was reached along — see `expanded`.
+     */
+    const firstExpansion = (raw: unknown): boolean => {
         if (!(raw instanceof PDFRef)) return true;
-        if (visited.has(raw.tag)) return false;
-        visited.add(raw.tag);
+        if (expanded.has(raw.tag)) return false;
+        expanded.add(raw.tag);
         return true;
     };
 
@@ -690,6 +732,18 @@ function walkPageResourceGraph(
         }
     };
 
+    /**
+     * One resource edge, then — once per object — that object's body.
+     *
+     * The two halves are separate on purpose, and the order is the fix for
+     * BLK-R7-A. `/OC` means something different depending on where the stream
+     * was reached from: on a form reached through `/XObject` it names the layer
+     * the drawing belongs to, and in a `/Pattern`, a Type 3 `/CharProcs` or a
+     * soft mask's `/G` it is a position this reader does not rebuild. That is a
+     * fact about the **edge**, so it is decided for every edge, before any
+     * node-global deduplication can swallow one. Deduplication then does the one
+     * job it is good for: walking a shared body once.
+     */
     function walkStream(
         raw: unknown,
         where: string,
@@ -702,14 +756,18 @@ function walkPageResourceGraph(
             refuse(`${where} ${r.reason}`);
             return;
         }
-        if (!firstVisit(raw)) return;
         const dict = dictOf(r.value);
         if (!dict) {
             refuse(`${where} is not a dictionary or stream`);
             return;
         }
+
+        // ---- edge-local: decided by how this object was reached -------------
         const ocRaw = dict.get(PDFName.of('OC'));
         if (ocApplies && ocRaw !== undefined) classifyOc(dict, ocRaw, where, path);
+
+        // ---- node-local: the same body wherever it was reached from ---------
+        if (!firstExpansion(raw)) return;
         walkResources(dict.get(PDFName.of('Resources')), where, depth + 1, path);
     }
 
@@ -726,7 +784,9 @@ function walkPageResourceGraph(
         }
         const font = dictOf(r.value);
         if (!font || nameOf(font.get(PDFName.of('Subtype'))) !== '/Type3') return;
-        if (!firstVisit(raw)) return;
+        // A font dictionary is not an `/OC` attachment point, so nothing here is
+        // edge-local and expanding it once is the whole job.
+        if (!firstExpansion(raw)) return;
         walkResources(font.get(PDFName.of('Resources')), where, depth + 1, null);
         const procs = subDict(font, 'CharProcs', where);
         if (procs) {
@@ -744,8 +804,8 @@ function walkPageResourceGraph(
      * No `/SMask` and `/SMask /None` both mean no mask, and neither is a reason
      * to refuse. A mask paints with its `/G`, a transparency group form, so `/G`
      * is walked like any other form — through the same `walkStream`, sharing the
-     * visited set and the depth bound rather than keeping a recursion of its own.
-     * Anything that cannot be read as one of those shapes is refused: an
+     * expansion set and the depth bound rather than keeping a recursion of its
+     * own. Anything that cannot be read as one of those shapes is refused: an
      * unreadable mask is not an absent one.
      */
     function walkSoftMask(raw: unknown, where: string, depth: number): void {
@@ -754,7 +814,10 @@ function walkPageResourceGraph(
             refuse(`${where} ${r.reason}`);
             return;
         }
-        if (!firstVisit(raw)) return;
+        // A graphics state is not an `/OC` attachment point either. Its mask's
+        // `/G` is one, and that is the same edge however often this dictionary
+        // is reached, so expanding it once loses nothing.
+        if (!firstExpansion(raw)) return;
         if (!(r.value instanceof PDFDict)) {
             refuse(`${where} is not a graphics state dictionary`);
             return;
@@ -1106,11 +1169,47 @@ export function describeOptionalContent(
                 out.unsupported.push(`page ${sourceIndex} /Properties ${key.asString()} is ${type || 'untyped'}`);
                 continue;
             }
+            /**
+             * BLK-R7-B — the group has to be one this document already
+             * registers.
+             *
+             * Every other reader here asks that: a form's `/OC`, the group
+             * inside an OCMD, and each `/D /AS` member are all refused when
+             * `/OCProperties /OCGs` does not list them. This one did not, and
+             * the asymmetry was a visibility change rather than a tidiness
+             * problem. A group the source leaves unregistered has no
+             * configuration in the source — a viewer that cannot find it draws
+             * the content — so carrying it, registering it in the output and
+             * then applying the source's `/D /OFF` to it gives the layer a
+             * meaning the source never had, and content the author could see
+             * disappears from the artifact. Measured on the pinned pdf.js:
+             * visible in the source, hidden in the output, status READY.
+             *
+             * A group written as a direct dictionary is refused for the same
+             * reason it is refused on a form: `/OCGs` lists references, so
+             * there is no way to prove a direct dictionary is the registered
+             * one. This reader preserves semantics it can prove; it does not
+             * repair a document's registration on its behalf.
+             */
+            if (!(raw instanceof PDFRef)) {
+                out.unsupported.push(
+                    `page ${sourceIndex} /Properties ${key.asString()} `
+                    + 'names a group written directly rather than by reference',
+                );
+                continue;
+            }
+            if (!registered.has(raw.tag)) {
+                out.unsupported.push(
+                    `page ${sourceIndex} /Properties ${key.asString()} `
+                    + 'names a group /OCProperties does not register',
+                );
+                continue;
+            }
             out.pageProperties.push({
                 sourcePageIndex: sourceIndex,
                 pageIndex: position,
                 key: key.asString(),
-                ref: raw instanceof PDFRef ? raw : null,
+                ref: raw,
                 name: pdfTextOf(look(doc, value.get(PDFName.of('Name')))),
             });
         }
@@ -1132,7 +1231,7 @@ export function describeOptionalContent(
      */
     if (out.autoStates.length > 0) {
         const used = new Set<string>();
-        for (const entry of out.pageProperties) if (entry.ref) used.add(entry.ref.tag);
+        for (const entry of out.pageProperties) used.add(entry.ref.tag);
         for (const usage of out.xobjectUsages) used.add(usage.ref.tag);
         const missing = new Set<string>();
         for (const entry of out.autoStates) {
@@ -1196,7 +1295,7 @@ export function carryOptionalContent(
         if (!(properties instanceof PDFDict)) continue;
         const raw = properties.get(PDFName.of(entry.key.replace(/^\//, '')));
         if (!(raw instanceof PDFRef)) continue;
-        if (entry.ref) sourceRefToOutputRef.set(entry.ref.tag, raw);
+        sourceRefToOutputRef.set(entry.ref.tag, raw);
         outputRefByTag.set(raw.tag, raw);
     }
 
@@ -1246,14 +1345,27 @@ export function carryOptionalContent(
         const rawOc = form.get(PDFName.of('OC'));
         if (!(rawOc instanceof PDFRef)) return unresolvedUsage(use, '/OC did not survive the copy');
 
+        /**
+         * What is in the output decides this, not what the source looked like.
+         *
+         * The two are the same on the first usage of a form. They differ on the
+         * second, because one form can be named by more than one edge — two
+         * `/XObject` keys, a nested path and a direct one, a cycle — and
+         * edge-local classification records each of them (BLK-R7-A). The first
+         * usage of a shared form reduced its `/OCMD` to the group; by the time
+         * the second arrives, `use.viaOcmd` still says "membership dictionary"
+         * while the output already holds the group. Branching on the source
+         * would refuse an artifact this reader itself just made correct.
+         */
         let groupRef: PDFRef | null = null;
-        if (use.viaOcmd) {
+        const target = out.context.lookup(rawOc);
+        const targetType = target instanceof PDFDict ? nameOf(target.get(PDFName.of('Type'))) : '';
+        if (targetType === '/OCMD') {
             // OC-B: the copied membership dictionary is replaced by the single
             // group it named. pdf.js evaluates the two identically, and
             // carrying the group alone keeps the output's supported shapes to
             // the ones this reader can prove.
-            const ocmd = out.context.lookup(rawOc);
-            const members = ocmd instanceof PDFDict ? ocmd.get(PDFName.of('OCGs')) : undefined;
+            const members = (target as PDFDict).get(PDFName.of('OCGs'));
             const resolved = members instanceof PDFRef ? out.context.lookup(members) : members;
             if (members instanceof PDFRef && resolved instanceof PDFDict) {
                 groupRef = members;
@@ -1263,8 +1375,12 @@ export function carryOptionalContent(
             }
             if (!groupRef) return unresolvedUsage(use, '/OC names a membership dictionary this output cannot reduce');
             form.set(PDFName.of('OC'), groupRef);
-        } else {
+        } else if (targetType === '/OCG') {
+            // OC-A, or a form an earlier usage of the same object already
+            // reduced. Either way the output already names the group.
             groupRef = rawOc;
+        } else {
+            return unresolvedUsage(use, '/OC does not name a group this output can register');
         }
 
         sourceRefToOutputRef.set(use.ref.tag, groupRef);
@@ -1484,4 +1600,291 @@ export function carryOptionalContent(
         off: off.length,
         mapped: sourceRefToOutputRef.size,
     };
+}
+
+/**
+ * What an artifact's optional content actually is — measured on the bytes that
+ * were written, not on the intentions of the code that wrote them.
+ */
+export interface OptionalContentFacts {
+    /** Live `/OC` entries found anywhere in the artifact. */
+    uses: number;
+    /** Groups the artifact's `/OCProperties /OCGs` registers. */
+    registeredGroups: number;
+    /** `/OC` entries naming an object the artifact does not hold. Must be 0. */
+    danglingUses: number;
+    /** `/OC` entries naming a group `/OCProperties` does not register. Must be 0. */
+    unregisteredUses: number;
+    /** `/OC` entries still naming a membership dictionary. Must be 0. */
+    ocmdSurvivors: number;
+    /**
+     * Configuration entries naming something other than a registered output
+     * group, plus the output shapes this contract does not allow. Must be 0.
+     */
+    configErrors: number;
+    /** What was found, so a refusal can name it rather than only count it. */
+    detail: string[];
+}
+
+/** Enough to name the problem; a refusal does not need the whole list. */
+const OC_DETAIL_CAP = 6;
+
+/**
+ * RF-R8-1 — the artifact proves its own optional content is self-consistent.
+ *
+ * `describeOptionalContent` reads a *source* to decide what may be carried.
+ * This reads an *artifact* to decide whether what was carried holds together,
+ * and the two are deliberately not the same walk. A reader that re-used the
+ * resource walker would inherit its blind paths, and inheriting the blind paths
+ * is exactly the failure this exists to catch: BLK-R7-A produced a READY
+ * artifact with a live `/OC`, no `/OCProperties` at all, and a layer the author
+ * had switched off drawn in full — and no invariant noticed, because there was
+ * no optional-content invariant to notice it.
+ *
+ * So the scope here is every indirect object in the artifact, through the same
+ * COMPLETE-or-REFUSED census the JavaScript, attachment and signature scans
+ * use. Nothing has to be *discovered* by traversal to be inspected, which is
+ * what makes this a backstop rather than a second opinion from the same
+ * witness. The walk never follows a reference — each target is its own root —
+ * and the few lookups below are direct, on references the walk already holds.
+ *
+ * Two outcomes, as always. A structure this proof needs and cannot read is
+ * REFUSED; a structure it can read and that does not hold together is counted.
+ * Both stop an artifact being handed over.
+ */
+export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalContentFacts> {
+    const facts: OptionalContentFacts = {
+        uses: 0,
+        registeredGroups: 0,
+        danglingUses: 0,
+        unregisteredUses: 0,
+        ocmdSurvivors: 0,
+        configErrors: 0,
+        detail: [],
+    };
+    const note = (text: string): void => {
+        if (facts.detail.length < OC_DETAIL_CAP) facts.detail.push(text);
+    };
+    const refused = (reason: string): CensusOutcome<OptionalContentFacts> => (
+        { complete: false, reason, nodes: 0, roots: 0 }
+    );
+
+    // ---- the configuration ---------------------------------------------------
+    let rawOcProperties: unknown;
+    try {
+        rawOcProperties = doc.catalog.get(PDFName.of('OCProperties'));
+    } catch (error) {
+        return refused(
+            '書き出したPDFのオプショナルコンテンツ設定を読み取れませんでした: '
+            + String((error as Error)?.message ?? error),
+        );
+    }
+
+    const registered = new Set<string>();
+    let config: PDFDict | null = null;
+    const present = rawOcProperties !== undefined && rawOcProperties !== PDFNull;
+
+    if (present) {
+        const read = resolve(doc, rawOcProperties);
+        if (!read.ok) return refused(`書き出したPDFの /OCProperties ${read.reason}`);
+        if (!(read.value instanceof PDFDict)) {
+            return refused('書き出したPDFの /OCProperties が辞書ではありません。');
+        }
+        const ocProperties = read.value;
+
+        const rawGroups = ocProperties.get(PDFName.of('OCGs'));
+        if (rawGroups === undefined) {
+            return refused('書き出したPDFの /OCProperties に /OCGs がありません。');
+        }
+        const groupsRead = resolve(doc, rawGroups);
+        if (!groupsRead.ok) return refused(`書き出したPDFの /OCProperties /OCGs ${groupsRead.reason}`);
+        if (!(groupsRead.value instanceof PDFArray)) {
+            return refused('書き出したPDFの /OCProperties /OCGs が配列ではありません。');
+        }
+        for (let i = 0; i < groupsRead.value.size(); i += 1) {
+            const member = groupsRead.value.get(i);
+            if (!(member instanceof PDFRef)) {
+                facts.configErrors += 1;
+                note(`/OCProperties /OCGs[${i}] is not a reference to a group`);
+                continue;
+            }
+            const target = look(doc, member);
+            if (!(target instanceof PDFDict) || nameOf(target.get(PDFName.of('Type'))) !== '/OCG') {
+                facts.configErrors += 1;
+                note(`/OCProperties /OCGs[${i}] does not resolve to a group`);
+                continue;
+            }
+            registered.add(member.tag);
+        }
+        facts.registeredGroups = registered.size;
+
+        const rawD = ocProperties.get(PDFName.of('D'));
+        if (rawD === undefined) {
+            return refused('書き出したPDFの /OCProperties に /D がありません。');
+        }
+        const dRead = resolve(doc, rawD);
+        if (!dRead.ok) return refused(`書き出したPDFの /OCProperties /D ${dRead.reason}`);
+        if (!(dRead.value instanceof PDFDict)) {
+            return refused('書き出したPDFの /OCProperties /D が辞書ではありません。');
+        }
+        config = dRead.value;
+    }
+
+    if (config !== null) {
+        const configured = config;
+        const membersOf = (key: string): void => {
+            const raw = configured.get(PDFName.of(key));
+            if (raw === undefined) return;
+            const read = resolve(doc, raw);
+            if (!read.ok || !(read.value instanceof PDFArray)) {
+                facts.configErrors += 1;
+                note(`/D /${key} is not a readable array`);
+                return;
+            }
+            for (let i = 0; i < read.value.size(); i += 1) {
+                const member = read.value.get(i);
+                if (!(member instanceof PDFRef) || !registered.has(member.tag)) {
+                    facts.configErrors += 1;
+                    note(`/D /${key}[${i}] does not name a registered group`);
+                }
+            }
+        };
+        membersOf('ON');
+        membersOf('OFF');
+
+        // `/Order` nests, and a nested array may open with a text label. Only a
+        // group reference has to be registered; the rest is shape.
+        let orderTooDeep = false;
+        const walkOrder = (node: unknown, depth: number): void => {
+            if (depth > MECHANISM_BOUNDS.maxOrderDepth) {
+                orderTooDeep = true;
+                return;
+            }
+            if (node instanceof PDFRef) {
+                if (!registered.has(node.tag)) {
+                    facts.configErrors += 1;
+                    note('/D /Order names a group the artifact does not register');
+                }
+                return;
+            }
+            const value = look(doc, node);
+            if (value instanceof PDFArray) {
+                for (let i = 0; i < value.size(); i += 1) walkOrder(value.get(i), depth + 1);
+                return;
+            }
+            if (isStringObject(value)) return;
+            facts.configErrors += 1;
+            note('/D /Order holds an entry that is neither a group, an array nor a label');
+        };
+        const rawOrder = configured.get(PDFName.of('Order'));
+        if (rawOrder !== undefined) {
+            const read = resolve(doc, rawOrder);
+            if (!read.ok || !(read.value instanceof PDFArray)) {
+                facts.configErrors += 1;
+                note('/D /Order is not a readable array');
+            } else {
+                walkOrder(read.value, 0);
+            }
+        }
+        if (orderTooDeep) {
+            return refused(
+                `書き出したPDFの /D /Order が ${MECHANISM_BOUNDS.maxOrderDepth} 段より深く、確認できませんでした。`,
+            );
+        }
+
+        const rawAs = configured.get(PDFName.of('AS'));
+        if (rawAs !== undefined) {
+            const read = resolve(doc, rawAs);
+            if (!read.ok || !(read.value instanceof PDFArray)) {
+                facts.configErrors += 1;
+                note('/D /AS is not a readable array');
+            } else {
+                for (let i = 0; i < read.value.size(); i += 1) {
+                    const entryRead = resolve(doc, read.value.get(i));
+                    if (!entryRead.ok || !(entryRead.value instanceof PDFDict)) {
+                        facts.configErrors += 1;
+                        note(`/D /AS[${i}] is not a readable dictionary`);
+                        continue;
+                    }
+                    const groupsRead = resolve(doc, entryRead.value.get(PDFName.of('OCGs')));
+                    if (!groupsRead.ok || !(groupsRead.value instanceof PDFArray)) {
+                        facts.configErrors += 1;
+                        note(`/D /AS[${i}] /OCGs is not a readable array`);
+                        continue;
+                    }
+                    for (let g = 0; g < groupsRead.value.size(); g += 1) {
+                        const member = groupsRead.value.get(g);
+                        if (!(member instanceof PDFRef) || !registered.has(member.tag)) {
+                            facts.configErrors += 1;
+                            note(`/D /AS[${i}] /OCGs[${g}] does not name a registered group`);
+                        }
+                    }
+                }
+            }
+        }
+
+        // OC-D: the only radio-button shape this tool writes is the empty array.
+        const rawRbGroups = configured.get(PDFName.of('RBGroups'));
+        if (rawRbGroups !== undefined) {
+            const read = resolve(doc, rawRbGroups);
+            if (!read.ok || !(read.value instanceof PDFArray)) {
+                facts.configErrors += 1;
+                note('/D /RBGroups is not a readable array');
+            } else if (read.value.size() > 0) {
+                facts.configErrors += 1;
+                note(`/D /RBGroups holds ${read.value.size()} group(s), which this output never writes`);
+            }
+        }
+    }
+
+    // ---- every live `/OC`, wherever it is -----------------------------------
+    const pending: { rootTag: string; raw: unknown }[] = [];
+    const outcome = censusIndirectObjects(doc, ({ dict, rootTag }) => {
+        const raw = dict.get(PDFName.of('OC'));
+        // A null entry is the same as an absent one, and is not a use.
+        if (raw === undefined || raw === PDFNull) return;
+        pending.push({ rootTag, raw });
+    });
+    if (!outcome.complete) return outcome;
+
+    for (const { rootTag, raw } of pending) {
+        facts.uses += 1;
+        if (!(raw instanceof PDFRef)) {
+            // `/OCGs` lists references, so a group written any other way cannot
+            // be shown to be one the artifact registers.
+            facts.unregisteredUses += 1;
+            note(`object ${rootTag} /OC is not a reference to a group`);
+            continue;
+        }
+        const target = look(doc, raw);
+        if (target === undefined) {
+            facts.danglingUses += 1;
+            note(`object ${rootTag} /OC points at ${raw.tag}, which is not in the artifact`);
+            continue;
+        }
+        const targetDict = dictOf(target);
+        const type = targetDict ? nameOf(targetDict.get(PDFName.of('Type'))) : '';
+        if (type === '/OCMD') {
+            // OC-B is canonicalized to the group itself, so a surviving
+            // membership dictionary is a shape this output never writes.
+            facts.ocmdSurvivors += 1;
+            note(`object ${rootTag} /OC still names a membership dictionary`);
+            continue;
+        }
+        if (type !== '/OCG') {
+            facts.unregisteredUses += 1;
+            note(`object ${rootTag} /OC names ${type || 'something that is not a group'}`);
+            continue;
+        }
+        if (!registered.has(raw.tag)) {
+            facts.unregisteredUses += 1;
+            note(
+                present
+                    ? `object ${rootTag} /OC names a group /OCProperties does not register`
+                    : `object ${rootTag} /OC names a group, and the artifact declares no /OCProperties`,
+            );
+        }
+    }
+
+    return { complete: true, value: facts, nodes: outcome.nodes, roots: outcome.roots };
 }

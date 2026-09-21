@@ -424,6 +424,29 @@ export interface ReadbackFacts {
     artifactWideJavaScript: number;
     /** Widgets belonging to no field. Must be 0. */
     orphanWidgets: number;
+    /**
+     * RF-R8-1: the artifact's own optional content, measured on the bytes.
+     *
+     * Discovery decides what may be carried; these decide whether what was
+     * carried holds together. They exist because BLK-R7-A shipped READY with a
+     * live `/OC`, no `/OCProperties` and a hidden layer drawn in full, and
+     * nothing here could have caught it — there was no optional-content
+     * invariant at all.
+     */
+    /** Live `/OC` entries anywhere in the artifact. Not itself a failure. */
+    optionalContentUses: number;
+    /** Groups the artifact's `/OCProperties /OCGs` registers. */
+    optionalContentRegisteredGroups: number;
+    /** `/OC` entries naming an object the artifact does not hold. Must be 0. */
+    optionalContentDanglingUses: number;
+    /** `/OC` entries naming a group the artifact does not register. Must be 0. */
+    optionalContentUnregisteredUses: number;
+    /** `/OC` entries still naming a membership dictionary. Must be 0. */
+    optionalContentOcmdSurvivors: number;
+    /** Configuration entries that do not hold together. Must be 0. */
+    optionalContentConfigErrors: number;
+    /** What the census found, so a refusal can name it. */
+    optionalContentDetail: string[];
     /** `/FileAttachment` annotations anywhere in the artifact. Must be 0. */
     fileAttachmentAnnots: number;
     /** `/Filespec` objects carrying an `/EF`. Must be 0. */

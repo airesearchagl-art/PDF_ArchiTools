@@ -34,6 +34,7 @@ import {
     reachableGraph,
     comparePlanWithActual,
     readbackArtifact,
+    censusOptionalContent,
     describeOptionalContent,
     planOptionalContent,
     readForm,
@@ -1828,7 +1829,35 @@ async function ocOutputFacts(bytes) {
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
     const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
     if (!(oc instanceof PDFDict)) {
-        return { ocProperties: false, outGroups: 0, forms: 0, ocOnForms: 0, danglingOc: 0, ocmdSurvivors: 0 };
+        // An artifact with no configuration still has to be described, because
+        // "no configuration" plus a live `/OC` is the defect, not the absence
+        // of one. Every count below is present, so a caller reading one of them
+        // never reads `undefined` as zero.
+        let ocOnForms = 0;
+        for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+            if (!(obj instanceof PDFRawStream)) continue;
+            const sub = obj.dict.get(PDFName.of('Subtype'));
+            if (!(sub instanceof PDFName) || sub.asString() !== '/Form') continue;
+            if (obj.dict.get(PDFName.of('OC')) !== undefined) ocOnForms += 1;
+        }
+        return {
+            ocProperties: false,
+            outGroups: 0,
+            dKeys: [],
+            asPresent: false,
+            asEntries: 0,
+            asDangling: 0,
+            rbGroups: -1,
+            forms: 0,
+            ocOnForms,
+            // With nothing registered, every `/OC` on a form is one a viewer
+            // cannot resolve.
+            danglingOc: ocOnForms,
+            ocmdSurvivors: 0,
+            onDangling: 0,
+            offDangling: 0,
+            orderDangling: 0,
+        };
     }
     const groups = oc.lookup(PDFName.of('OCGs'));
     const registered = new Set();
@@ -1878,6 +1907,27 @@ async function ocOutputFacts(bytes) {
             }
         }
     }
+    // `/ON`, `/OFF` and `/Order` read raw, so the gate has its own answer about
+    // the configuration rather than only the production census's.
+    const listDangling = (key) => {
+        const list = dDict ? dDict.lookup(PDFName.of(key)) : undefined;
+        if (!(list instanceof PDFArray)) return 0;
+        let bad = 0;
+        const walk = (node, depth) => {
+            if (depth > 32) { bad += 1; return; }
+            if (node instanceof PDFRef) {
+                if (!registered.has(node.tag)) bad += 1;
+                return;
+            }
+            const value = node instanceof PDFRef ? undefined : node;
+            if (value instanceof PDFArray) {
+                for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+            }
+        };
+        for (let i = 0; i < list.size(); i += 1) walk(list.get(i), 0);
+        return bad;
+    };
+
     return {
         ocProperties: true,
         outGroups: registered.size,
@@ -1890,6 +1940,9 @@ async function ocOutputFacts(bytes) {
         ocOnForms,
         danglingOc,
         ocmdSurvivors,
+        onDangling: listDangling('ON'),
+        offDangling: listDangling('OFF'),
+        orderDangling: listDangling('Order'),
     };
 }
 
@@ -2034,7 +2087,43 @@ Object.assign(window.__m6, {
             runReason: result.reason ?? null,
             unreachable: readback ? readback.unreachableObjects : null,
             output: out,
+            // RF-R8-1: what the production output census says about the same
+            // artifact the raw reader above just described.
+            oc: readback ? {
+                uses: readback.optionalContentUses,
+                registeredGroups: readback.optionalContentRegisteredGroups,
+                danglingUses: readback.optionalContentDanglingUses,
+                unregisteredUses: readback.optionalContentUnregisteredUses,
+                ocmdSurvivors: readback.optionalContentOcmdSurvivors,
+                configErrors: readback.optionalContentConfigErrors,
+                detail: readback.optionalContentDetail,
+            } : null,
+            censusComplete: readback ? readback.censusComplete : null,
             pdfjs: result.bytes ? await pdfjsOpens(result.bytes) : null,
+        });
+    },
+
+    /**
+     * RF-R8-1's direct layer test: an artifact shape handed straight to the
+     * output census and to the invariants, with no Extract in between. The
+     * backstop has to hold on documents this tool would never write, because
+     * that is the only situation in which a backstop matters.
+     */
+    async r8Census(name) {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const census = censusOptionalContent(doc);
+        const facts = await readbackArtifact(bytes);
+        const breach = checkArtifactInvariants(facts, facts.pageCount);
+        return plainly({
+            complete: census.complete,
+            reason: census.complete ? null : census.reason,
+            value: census.complete ? census.value : null,
+            censusComplete: facts.censusComplete,
+            censusRefusal: facts.censusRefusal ?? null,
+            invariant: breach ? breach.invariant : null,
+            invariantReason: breach ? breach.reason : null,
+            raw: await ocOutputFacts(bytes),
         });
     },
 

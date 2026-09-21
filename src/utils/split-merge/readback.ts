@@ -16,6 +16,7 @@ import type { ReadbackFacts } from './contracts';
 import { countSourcePageReferences, measureDestinationInvariants } from './destinations';
 import { scanJavaScript } from './javascript';
 import { countOrphanWidgets } from './forms';
+import { censusOptionalContent } from './optional-content';
 import {
     censusAttachments,
     censusJavaScript,
@@ -40,8 +41,9 @@ export async function readbackArtifact(bytes: Uint8Array): Promise<ReadbackFacts
     const attachments = censusAttachments(doc);
     const tagging = censusTagging(doc);
     const signatures = censusSignatures(doc);
+    const optionalContent = censusOptionalContent(doc);
 
-    const refusals = [js, attachments, tagging, signatures]
+    const refusals = [js, attachments, tagging, signatures, optionalContent]
         .filter((c) => !c.complete)
         .map((c) => (c as { reason: string }).reason);
 
@@ -60,6 +62,23 @@ export async function readbackArtifact(bytes: Uint8Array): Promise<ReadbackFacts
         reachableJavaScript: reachable.count,
         artifactWideJavaScript: js.complete ? js.value.length : Number.NaN,
         orphanWidgets: countOrphanWidgets(doc),
+        optionalContentUses: optionalContent.complete ? optionalContent.value.uses : Number.NaN,
+        optionalContentRegisteredGroups: optionalContent.complete
+            ? optionalContent.value.registeredGroups
+            : Number.NaN,
+        optionalContentDanglingUses: optionalContent.complete
+            ? optionalContent.value.danglingUses
+            : Number.NaN,
+        optionalContentUnregisteredUses: optionalContent.complete
+            ? optionalContent.value.unregisteredUses
+            : Number.NaN,
+        optionalContentOcmdSurvivors: optionalContent.complete
+            ? optionalContent.value.ocmdSurvivors
+            : Number.NaN,
+        optionalContentConfigErrors: optionalContent.complete
+            ? optionalContent.value.configErrors
+            : Number.NaN,
+        optionalContentDetail: optionalContent.complete ? optionalContent.value.detail : [],
         fileAttachmentAnnots: attachments.complete ? attachments.value.fileAttachmentAnnots : Number.NaN,
         filespecsWithEF: attachments.complete ? attachments.value.efCarriers : Number.NaN,
         embeddedFileStreams: attachments.complete ? attachments.value.payloadStreams : Number.NaN,
@@ -190,6 +209,51 @@ export function checkArtifactInvariants(
             invariant: 'unreachableObjects === 0',
             value: facts.unreachableObjects,
             reason: `書き出したPDFに、どこからも参照されないオブジェクトが ${facts.unreachableObjects} 件残っていました。`,
+        };
+    }
+    /**
+     * RF-R8-1 — the artifact's optional content holds together, or it is not
+     * handed over.
+     *
+     * Every one of these is a visibility statement rather than a tidiness one.
+     * A layer reference a viewer cannot resolve is not ignored by the viewer: it
+     * falls back to its own default, and the author's "off" becomes the reader's
+     * "on". That is the defect BLK-R7-A shipped as READY, and the reason this
+     * check does not trust the discovery that produced the artifact — it is a
+     * separate census over every indirect object, so a resource path discovery
+     * never opens still cannot carry a live `/OC` past here.
+     */
+    const ocDetail = facts.optionalContentDetail.length > 0
+        ? `（${facts.optionalContentDetail[0]}）`
+        : '';
+    if (facts.optionalContentDanglingUses !== 0) {
+        return {
+            invariant: 'optionalContentDanglingUses === 0',
+            value: facts.optionalContentDanglingUses,
+            reason: `書き出したPDFに、存在しないレイヤーを指す指定が ${facts.optionalContentDanglingUses} 件残っていました${ocDetail}。`,
+        };
+    }
+    if (facts.optionalContentUnregisteredUses !== 0) {
+        return {
+            invariant: 'optionalContentUnregisteredUses === 0',
+            value: facts.optionalContentUnregisteredUses,
+            reason: '書き出したPDFに、レイヤー一覧に登録されていないレイヤーを指す指定が '
+                + `${facts.optionalContentUnregisteredUses} 件残っていました${ocDetail}。`,
+        };
+    }
+    if (facts.optionalContentOcmdSurvivors !== 0) {
+        return {
+            invariant: 'optionalContentOcmdSurvivors === 0',
+            value: facts.optionalContentOcmdSurvivors,
+            reason: '書き出したPDFに、この形式では書き出さないはずのレイヤー指定が '
+                + `${facts.optionalContentOcmdSurvivors} 件残っていました${ocDetail}。`,
+        };
+    }
+    if (facts.optionalContentConfigErrors !== 0) {
+        return {
+            invariant: 'optionalContentConfigErrors === 0',
+            value: facts.optionalContentConfigErrors,
+            reason: `書き出したPDFのレイヤー設定に、筋の通らない参照が ${facts.optionalContentConfigErrors} 件ありました${ocDetail}。`,
         };
     }
     return null;

@@ -91,6 +91,7 @@ export {
 export { readSourceFacts, classifyLoadError } from './source-facts';
 export {
     carryOptionalContent,
+    censusOptionalContent,
     describeOptionalContent,
     planOptionalContent,
     HANDLED_D_KEYS,
@@ -100,6 +101,7 @@ export {
 export type {
     AutoStateEntry,
     OptionalContentDescription,
+    OptionalContentFacts,
     PagePropertyEntry,
     XObjectOcUsage,
 } from './optional-content';
