@@ -21,7 +21,7 @@ import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import type { M6SourceFacts } from './contracts';
 import { MECHANISM_BOUNDS } from './policy';
-import { censusAttachments } from './prune';
+import { censusAttachments, classifyAttachments } from './prune';
 import { classifyField } from './field-semantics';
 import { pdfTextOf } from './pdf-text';
 
@@ -186,7 +186,7 @@ function pagesWithStructParents(doc: PDFDocument): number[] {
  */
 function readAttachments(
     doc: PDFDocument,
-): { complete: boolean; reason?: string; present: boolean; names: string[] } {
+): { complete: boolean; reason?: string; present: boolean; names: string[]; unsafe: string[] } {
     let present = false;
 
     const namesDict = look(doc, doc.catalog.get(PDFName.of('Names')));
@@ -199,10 +199,18 @@ function readAttachments(
     // `/F`, the embedded-files key for a specification that names nothing, and
     // an explicit unnamed label rather than silence when there is no name.
     const census = censusAttachments(doc);
-    if (!census.complete) return { complete: false, reason: census.reason, present, names: [] };
+    if (!census.complete) return { complete: false, reason: census.reason, present, names: [], unsafe: [] };
     if (census.value.efCarriers > 0 || census.value.fileAttachmentAnnots > 0) present = true;
 
-    return { complete: true, present, names: [...census.value.names] };
+    // BLK-R8R-1: the same question the remover asks before it touches
+    // anything — so a structure it would refuse is refused here, before a
+    // confirmation is ever asked for.
+    const classified = classifyAttachments(doc);
+    if (!classified.complete) {
+        return { complete: false, reason: classified.reason, present, names: [], unsafe: [] };
+    }
+
+    return { complete: true, present, names: [...census.value.names], unsafe: [...classified.value.unsafe] };
 }
 
 /**
@@ -251,6 +259,7 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         hasAttachments: false,
         attachmentNames: [],
         attachmentsComplete: false,
+        attachmentsUnsafe: [],
         hasOptionalContent: false,
     };
 
@@ -312,6 +321,7 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         facts.hasAttachments = attachments.present;
         facts.attachmentNames = attachments.names;
         facts.attachmentsComplete = attachments.complete;
+        facts.attachmentsUnsafe = attachments.unsafe;
         if (!attachments.complete) facts.attachmentsRefusal = attachments.reason;
 
         facts.hasOptionalContent = doc.catalog.get(PDFName.of('OCProperties')) !== undefined;

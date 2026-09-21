@@ -93,7 +93,9 @@ export {
     carryOptionalContent,
     censusOptionalContent,
     describeOptionalContent,
+    optionalContentSemantics,
     planOptionalContent,
+    verifySanitizedOptionalContent,
     HANDLED_D_KEYS,
     SUPPORTED_AS_EVENTS,
     SUPPORTED_BASE_STATE,
@@ -103,9 +105,10 @@ export type {
     OptionalContentDescription,
     OptionalContentFacts,
     PagePropertyEntry,
+    SanitizedOptionalContentVerdict,
     XObjectOcUsage,
 } from './optional-content';
-export { scanJavaScript, sanitizeJavaScript } from './javascript';
+export { scanJavaScript, sanitizeJavaScript, javaScriptCarrierConflict } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export {
     measureDestinationInvariants,
@@ -126,6 +129,7 @@ export {
     censusJavaScript,
     censusSignatures,
     censusTagging,
+    classifyAttachments,
     countUnreachable,
     pruneUnreachable,
     removeAttachmentsEverywhere,
@@ -136,7 +140,7 @@ export {
     UNNAMED_ATTACHMENT_LABEL,
     UNREADABLE_ATTACHMENT_LABEL,
 } from './prune';
-export type { PruneReport, StreamLengthReport } from './prune';
+export type { AttachmentAnalysis, PruneReport, StreamLengthReport } from './prune';
 export { contentDigest, contentDigestJs } from './digest';
 export {
     snapshotMetadata,

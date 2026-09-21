@@ -163,6 +163,14 @@ export interface XObjectOcUsage {
      * replaces with the group itself. OC-B.
      */
     viaOcmd: boolean;
+    /**
+     * The form itself, by source reference. Every usage naming the same source
+     * form has to find the same written form, and no two source forms may find
+     * one — the carry checks both, so a path is a witness, never an identity.
+     */
+    formRef: string | null;
+    /** What the source `/OC` names: the group, or the OC-B membership dictionary. */
+    ocRef: string;
 }
 
 /** One `/D /AS` usage application dictionary, in terms that survive a copy. */
@@ -177,6 +185,11 @@ export interface OptionalContentDescription {
     groups: { ref: PDFRef; name: string | null }[];
     on: (string | null)[];
     off: (string | null)[];
+    /** `/D /ON` and `/D /OFF` by reference, as written. RF-R9-1 identity. */
+    onRefs: string[];
+    offRefs: string[];
+    /** `/D /Order` with every group as its reference. RF-R9-1 identity. */
+    orderRefShape: unknown;
     /** `/D /Name`, as the text a reader shows. Compared across Merge sources. */
     dName: string | null;
     /** The same value as bytes and token, to be written back as it was. BLK-R4-1. */
@@ -264,13 +277,35 @@ function orderShapeOf(
 }
 
 /**
+ * `/Order` with every group as its reference — the identity RF-R9-1 compares
+ * across sanitization within one loaded document, where two groups may share a
+ * name but never a reference. Shape only; `orderShapeOf` does the refusing.
+ */
+function orderRefShapeOf(doc: PDFDocument, node: unknown, depth: number): unknown {
+    if (depth > MECHANISM_BOUNDS.maxOrderDepth) return '(too deep)';
+    const value = look(doc, node);
+    if (value instanceof PDFArray) {
+        const shape: unknown[] = [];
+        for (let i = 0; i < value.size(); i += 1) shape.push(orderRefShapeOf(doc, value.get(i), depth + 1));
+        return shape;
+    }
+    if (node instanceof PDFRef) return `ref:${node.tag}`;
+    if (isStringObject(value)) {
+        const read = readPdfText(value);
+        return read.ok ? `label:${read.value.text}` : '(unreadable label)';
+    }
+    return value instanceof PDFDict ? '(direct dictionary)' : '(other)';
+}
+
+/**
  * Walk one kept page's resource graph, refusing every attachment point this
  * reader does not rebuild.
  *
- * An expansion set keyed on indirect references makes a cycle terminate and a
- * shared body expand once. It deduplicates **bodies**, never edges: what an
- * `/OC` means depends on the resource role it was reached through, so that is
- * decided per edge before the set is consulted at all. `/ColorSpace` and
+ * An expansion set keyed on `(indirect reference, context)` makes a cycle
+ * terminate and a shared body expand once per context (RF-R8R-2). It
+ * deduplicates **bodies**, never edges: what an `/OC` means depends on the
+ * resource role it was reached through, so that is decided per edge before the
+ * set is consulted at all. `/ColorSpace` and
  * `/Shading` are deliberately not opened: they hold no content stream, so they
  * open no resource scope and carry no `/OC`. That is a statement about scope,
  * not about safety.
@@ -456,20 +491,50 @@ function walkPageResourceGraph(
     usages: XObjectOcUsage[],
 ): void {
     /**
-     * Objects whose **body** has already been expanded.
+     * RF-R8R-2 — a body is expanded once per **context**, not once per object.
      *
-     * Deliberately named for what it deduplicates. It answers "have these
-     * resources been walked before", which is a property of the object, and it
-     * must never be asked about anything that is a property of the *edge* the
-     * object was reached along. BLK-R7-A was exactly that confusion: one
-     * short-circuit stood in front of both, so a form first met through a
-     * `/Pattern` — where `/OC` is not an attachment point and is therefore not
-     * read — was marked, and the later `/XObject` edge, where its `/OC` **is**
-     * read, returned before reading it. Neither carried nor refused, the group
-     * stayed out of `/OCProperties` while the copied `/OC` stayed live, and a
-     * layer the author had switched off drew in the artifact.
+     * Round 8 made the edge decide what `/OC` means on that edge, then expanded
+     * each object's body once. That is only sound if expanding a body gives the
+     * same answer whoever asks — and it does not. The children of a form reached
+     * through `/Pattern`, a Type 3 `/CharProcs`, a soft mask's `/G` or an
+     * annotation's appearance are in a scope this reader does not rebuild, so
+     * their `/OC` is refused; the same children reached through `/XObject` from
+     * the page are carried. Whichever edge expanded the shared form first
+     * decided for the other, so swapping two keys in a resource dictionary
+     * turned a refusal into READY.
+     *
+     * The answer for a child depends on exactly one thing about how its parent
+     * was reached: whether that path is all `/XObject` from the page (`xobject`)
+     * or passes through anything else (`scope`). So that is the memo key —
+     * `(object, context)` — and each body is expanded at most twice. Both
+     * contexts are always explored when both are reachable, so the refusal a
+     * `scope` path produces is produced whatever the dictionary order.
+     *
+     * Why one `/XObject` path per object is enough for the output, rather than
+     * one per alias: a usage is how the carry *finds* a written form, and every
+     * alias of one source form finds the same written form, because one Extract
+     * or one Merge source is copied in a single `copyPages` call and its copier
+     * copies each source object once. The carry does not assume that: every
+     * usage names its source form (`formRef`), and the carry refuses if one
+     * source form resolves to two written forms, or two to one.
+     *
+     * **Bounded and order-independent.** Work is done level by level in
+     * resource depth, so each `(object, context)` is expanded at the smallest
+     * depth it can be reached at — which makes the depth bound a property of
+     * the graph, not of which key happened to be read first. Every edge out of
+     * every expanded body is classified exactly once.
      */
+    type Context = 'scope' | 'xobject';
+    const contextOf = (path: string[] | null): Context => (path === null ? 'scope' : 'xobject');
     const expanded = new Set<string>();
+    const firstExpansion = (raw: unknown, kind: string): boolean => {
+        if (!(raw instanceof PDFRef)) return true;
+        const key = `${raw.tag}|${kind}`;
+        if (expanded.has(key)) return false;
+        expanded.add(key);
+        return true;
+    };
+
     const refuse = (text: string): void => {
         unsupported.push(text);
     };
@@ -480,12 +545,18 @@ function walkPageResourceGraph(
      * Edge-local classification runs per edge, so a form reached along two
      * valid `/XObject` paths is classified twice — correctly, because either
      * path may be the one that identifies it in the output. What must not
-     * happen is the *same* path recording twice, which a resource cycle can
-     * otherwise produce.
+     * happen is the *same* path recording twice.
      */
     const seenUsages = new Set<string>();
 
-    const record = (path: string[], ref: PDFRef, group: PDFDict, viaOcmd: boolean): void => {
+    const record = (
+        path: string[],
+        ref: PDFRef,
+        group: PDFDict,
+        viaOcmd: boolean,
+        ocRef: string,
+        formRaw: unknown,
+    ): void => {
         const key = `${path.join('/')}\u0000${ref.tag}`;
         if (seenUsages.has(key)) return;
         seenUsages.add(key);
@@ -496,6 +567,8 @@ function walkPageResourceGraph(
             ref,
             name: pdfTextOf(look(doc, group.get(PDFName.of('Name')))),
             viaOcmd,
+            formRef: formRaw instanceof PDFRef ? formRaw.tag : null,
+            ocRef,
         });
     };
 
@@ -510,7 +583,13 @@ function walkPageResourceGraph(
      * picture, and the redundant dictionary is not carried into the output.
      * Anything outside that envelope is refused rather than approximated.
      */
-    const classifyOcmd = (target: PDFDict, where: string, path: string[]): void => {
+    const classifyOcmd = (
+        target: PDFDict,
+        where: string,
+        path: string[],
+        ocRaw: unknown,
+        formRaw: unknown,
+    ): void => {
         if (target.get(PDFName.of('VE')) !== undefined) {
             refuse(`${where} /OC is an /OCMD with a /VE visibility expression`);
             return;
@@ -569,19 +648,26 @@ function walkPageResourceGraph(
             refuse(`${where} /OC is an /OCMD whose group cannot be read`);
             return;
         }
-        record(path, ref, group, true);
+        record(path, ref, group, true, ocRaw instanceof PDFRef ? ocRaw.tag : '(direct)', formRaw);
     };
 
     /**
      * OC-A: `/OC` on a form XObject, naming a registered group.
      *
      * `path === null` means this stream was not reached through `/XObject`
-     * resources — a soft mask's `/G`, an annotation appearance — and those
+     * resources all the way from the page — a soft mask's `/G`, an annotation
+     * appearance, anything under a pattern or a Type 3 glyph — and those
      * positions keep refusing, because nothing has shown what carrying them
      * would mean. Presence alone is no longer the refusal; what the `/OC`
      * actually resolves to decides it.
      */
-    const classifyOc = (dict: PDFDict, ocRaw: unknown, where: string, path: string[] | null): void => {
+    const classifyOc = (
+        dict: PDFDict,
+        ocRaw: unknown,
+        where: string,
+        path: string[] | null,
+        formRaw: unknown,
+    ): void => {
         if (path === null) {
             refuse(`${where} /OC`);
             return;
@@ -602,7 +688,7 @@ function walkPageResourceGraph(
         }
         const type = nameOf(r.value.get(PDFName.of('Type')));
         if (type === '/OCMD') {
-            classifyOcmd(r.value, where, path);
+            classifyOcmd(r.value, where, path, ocRaw, formRaw);
             return;
         }
         if (type !== '/OCG') {
@@ -617,18 +703,7 @@ function walkPageResourceGraph(
             refuse(`${where} /OC names a group /OCProperties does not register`);
             return;
         }
-        record(path, ocRaw, r.value, false);
-    };
-
-    /**
-     * Whether this object's body still needs expanding. Never a question about
-     * the edge it was reached along — see `expanded`.
-     */
-    const firstExpansion = (raw: unknown): boolean => {
-        if (!(raw instanceof PDFRef)) return true;
-        if (expanded.has(raw.tag)) return false;
-        expanded.add(raw.tag);
-        return true;
+        record(path, ocRaw, r.value, false, ocRaw.tag, formRaw);
     };
 
     const subDict = (holder: PDFDict, key: string, where: string): PDFDict | null => {
@@ -672,7 +747,83 @@ function walkPageResourceGraph(
         }
     };
 
-    const walkResources = (raw: unknown, where: string, depth: number, path: string[] | null): void => {
+    // ---- the schedule ---------------------------------------------------------
+    //
+    // One list per resource depth. A task at depth d only ever adds tasks at d
+    // (a stream's body, a font, a graphics state — same depth as the edge that
+    // reached it) or at d + 1 (the resources that body opens), so finishing a
+    // level before starting the next expands everything at its smallest depth.
+    type Task =
+        | { t: 'resources'; raw: unknown; where: string; depth: number; path: string[] | null }
+        | { t: 'body'; raw: unknown; dict: PDFDict; where: string; depth: number; path: string[] | null }
+        | { t: 'type3'; raw: unknown; font: PDFDict; where: string; depth: number }
+        | { t: 'softmask'; raw: unknown; value: unknown; where: string; depth: number };
+    const levels: Task[][] = [];
+    const schedule = (task: Task): void => {
+        (levels[task.depth] ??= []).push(task);
+    };
+
+    /**
+     * One resource edge to a stream: decided here, for this edge. The body is
+     * scheduled, and expanded later at most once per context.
+     */
+    const edgeStream = (
+        raw: unknown,
+        where: string,
+        depth: number,
+        ocApplies: boolean,
+        path: string[] | null,
+    ): void => {
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} ${r.reason}`);
+            return;
+        }
+        const dict = dictOf(r.value);
+        if (!dict) {
+            refuse(`${where} is not a dictionary or stream`);
+            return;
+        }
+        // ---- edge-local: decided by how this object was reached -------------
+        const ocRaw = dict.get(PDFName.of('OC'));
+        if (ocApplies && ocRaw !== undefined) classifyOc(dict, ocRaw, where, path, raw);
+        // ---- node-local, per context: the body ------------------------------
+        schedule({ t: 'body', raw, dict, where, depth, path });
+    };
+
+    /**
+     * A Type 3 font draws its glyphs with content streams, and those streams
+     * take their resources from the font. Other font types hold no content
+     * stream and are passed over. A font is not an `/OC` attachment point and
+     * everything under it is `scope`, so its expansion is context-independent.
+     */
+    const edgeType3 = (raw: unknown, where: string, depth: number): void => {
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} ${r.reason}`);
+            return;
+        }
+        const font = dictOf(r.value);
+        if (!font || nameOf(font.get(PDFName.of('Subtype'))) !== '/Type3') return;
+        schedule({ t: 'type3', raw, font, where, depth });
+    };
+
+    /**
+     * A graphics state's soft mask — the path that was not walked until B1, and
+     * through which `ocg-extgstate-smask` extracted READY with a group behind it.
+     * Its resolution is refused per edge; the rest is a property of the object.
+     */
+    const edgeSoftMask = (raw: unknown, where: string, depth: number): void => {
+        const r = resolve(doc, raw);
+        if (!r.ok) {
+            refuse(`${where} ${r.reason}`);
+            return;
+        }
+        schedule({ t: 'softmask', raw, value: r.value, where, depth });
+    };
+
+    const runResources = (task: Extract<Task, { t: 'resources' }>): void => {
+        const { raw, where, depth, path } = task;
         if (raw === undefined) return;
         if (depth > MECHANISM_BOUNDS.maxResourceDepth) {
             refuse(`${where} /Resources nested deeper than ${MECHANISM_BOUNDS.maxResourceDepth}`);
@@ -697,7 +848,7 @@ function walkPageResourceGraph(
                 // The one route along which an `/OC` can be carried, so the key
                 // is added to the path that finds this form again in the output.
                 const name = key.asString().replace(/^\//, '');
-                walkStream(
+                edgeStream(
                     entry,
                     `${where} /XObject ${key.asString()}`,
                     depth,
@@ -713,116 +864,63 @@ function walkPageResourceGraph(
                 // A shading pattern is a plain dictionary with no content
                 // stream; a tiling pattern is a stream with resources. Neither
                 // is an `/OC` attachment point — a pattern is a scope.
-                walkStream(entry, `${where} /Pattern ${key.asString()}`, depth, false, null);
+                edgeStream(entry, `${where} /Pattern ${key.asString()}`, depth, false, null);
             }
         }
 
         const fonts = subDict(resources, 'Font', where);
         if (fonts) {
             for (const [key, entry] of fonts.entries()) {
-                walkType3(entry, `${where} /Font ${key.asString()}`, depth);
+                edgeType3(entry, `${where} /Font ${key.asString()}`, depth);
             }
         }
 
         const graphicsStates = subDict(resources, 'ExtGState', where);
         if (graphicsStates) {
             for (const [key, entry] of graphicsStates.entries()) {
-                walkSoftMask(entry, `${where} /ExtGState ${key.asString()}`, depth);
+                edgeSoftMask(entry, `${where} /ExtGState ${key.asString()}`, depth);
+            }
+        }
+    };
+
+    const runBody = (task: Extract<Task, { t: 'body' }>): void => {
+        if (!firstExpansion(task.raw, contextOf(task.path))) return;
+        schedule({
+            t: 'resources',
+            raw: task.dict.get(PDFName.of('Resources')),
+            where: task.where,
+            depth: task.depth + 1,
+            path: task.path,
+        });
+    };
+
+    const runType3 = (task: Extract<Task, { t: 'type3' }>): void => {
+        const { raw, font, where, depth } = task;
+        if (!firstExpansion(raw, 'font')) return;
+        schedule({ t: 'resources', raw: font.get(PDFName.of('Resources')), where, depth: depth + 1, path: null });
+        const procs = subDict(font, 'CharProcs', where);
+        if (procs) {
+            for (const [glyph, entry] of procs.entries()) {
+                edgeStream(entry, `${where} /CharProcs ${glyph.asString()}`, depth + 1, false, null);
             }
         }
     };
 
     /**
-     * One resource edge, then — once per object — that object's body.
-     *
-     * The two halves are separate on purpose, and the order is the fix for
-     * BLK-R7-A. `/OC` means something different depending on where the stream
-     * was reached from: on a form reached through `/XObject` it names the layer
-     * the drawing belongs to, and in a `/Pattern`, a Type 3 `/CharProcs` or a
-     * soft mask's `/G` it is a position this reader does not rebuild. That is a
-     * fact about the **edge**, so it is decided for every edge, before any
-     * node-global deduplication can swallow one. Deduplication then does the one
-     * job it is good for: walking a shared body once.
-     */
-    function walkStream(
-        raw: unknown,
-        where: string,
-        depth: number,
-        ocApplies: boolean,
-        path: string[] | null,
-    ): void {
-        const r = resolve(doc, raw);
-        if (!r.ok) {
-            refuse(`${where} ${r.reason}`);
-            return;
-        }
-        const dict = dictOf(r.value);
-        if (!dict) {
-            refuse(`${where} is not a dictionary or stream`);
-            return;
-        }
-
-        // ---- edge-local: decided by how this object was reached -------------
-        const ocRaw = dict.get(PDFName.of('OC'));
-        if (ocApplies && ocRaw !== undefined) classifyOc(dict, ocRaw, where, path);
-
-        // ---- node-local: the same body wherever it was reached from ---------
-        if (!firstExpansion(raw)) return;
-        walkResources(dict.get(PDFName.of('Resources')), where, depth + 1, path);
-    }
-
-    /**
-     * A Type 3 font draws its glyphs with content streams, and those streams
-     * take their resources from the font. Other font types hold no content
-     * stream and are passed over.
-     */
-    function walkType3(raw: unknown, where: string, depth: number): void {
-        const r = resolve(doc, raw);
-        if (!r.ok) {
-            refuse(`${where} ${r.reason}`);
-            return;
-        }
-        const font = dictOf(r.value);
-        if (!font || nameOf(font.get(PDFName.of('Subtype'))) !== '/Type3') return;
-        // A font dictionary is not an `/OC` attachment point, so nothing here is
-        // edge-local and expanding it once is the whole job.
-        if (!firstExpansion(raw)) return;
-        walkResources(font.get(PDFName.of('Resources')), where, depth + 1, null);
-        const procs = subDict(font, 'CharProcs', where);
-        if (procs) {
-            for (const [glyph, entry] of procs.entries()) {
-                walkStream(entry, `${where} /CharProcs ${glyph.asString()}`, depth + 1, false, null);
-            }
-        }
-    }
-
-    /**
-     * A graphics state's soft mask — the path that was not walked until B1, and
-     * through which `ocg-extgstate-smask` extracted READY with a group behind
-     * it.
-     *
      * No `/SMask` and `/SMask /None` both mean no mask, and neither is a reason
      * to refuse. A mask paints with its `/G`, a transparency group form, so `/G`
-     * is walked like any other form — through the same `walkStream`, sharing the
-     * expansion set and the depth bound rather than keeping a recursion of its
-     * own. Anything that cannot be read as one of those shapes is refused: an
-     * unreadable mask is not an absent one.
+     * is an edge like any other — through the same `edgeStream`, sharing the
+     * expansion set and the depth bound. Anything that cannot be read as one of
+     * those shapes is refused: an unreadable mask is not an absent one.
      */
-    function walkSoftMask(raw: unknown, where: string, depth: number): void {
-        const r = resolve(doc, raw);
-        if (!r.ok) {
-            refuse(`${where} ${r.reason}`);
-            return;
-        }
-        // A graphics state is not an `/OC` attachment point either. Its mask's
-        // `/G` is one, and that is the same edge however often this dictionary
-        // is reached, so expanding it once loses nothing.
-        if (!firstExpansion(raw)) return;
-        if (!(r.value instanceof PDFDict)) {
+    const runSoftMask = (task: Extract<Task, { t: 'softmask' }>): void => {
+        const { raw, value, where, depth } = task;
+        if (!firstExpansion(raw, 'gs')) return;
+        if (!(value instanceof PDFDict)) {
             refuse(`${where} is not a graphics state dictionary`);
             return;
         }
-        const rawMask = r.value.get(PDFName.of('SMask'));
+        const rawMask = value.get(PDFName.of('SMask'));
         if (rawMask === undefined) return;
         const mask = resolve(doc, rawMask);
         if (!mask.ok) {
@@ -863,8 +961,8 @@ function walkPageResourceGraph(
         }
         // A soft mask's group keeps refusing an `/OC`: nothing has shown what
         // carrying one there would mean.
-        walkStream(rawGroup, groupWhere, depth, true, null);
-    }
+        edgeStream(rawGroup, groupWhere, depth, true, null);
+    };
 
     /** `/AP` holds a stream per state, or a dictionary of streams per state. */
     const walkAppearance = (annot: PDFDict, where: string): void => {
@@ -879,10 +977,10 @@ function walkPageResourceGraph(
             }
             if (r.value instanceof PDFDict) {
                 for (const [state, stream] of r.value.entries()) {
-                    walkStream(stream, `${apWhere} ${state.asString()}`, 0, true, null);
+                    edgeStream(stream, `${apWhere} ${state.asString()}`, 0, true, null);
                 }
             } else {
-                walkStream(entry, apWhere, 0, true, null);
+                edgeStream(entry, apWhere, 0, true, null);
             }
         }
     };
@@ -911,12 +1009,27 @@ function walkPageResourceGraph(
     }
 
     // The page's EFFECTIVE resources, inherited ones included (M6-H9b-A).
-    walkResources(
-        effectiveResources(doc, pageNode, `page ${sourceIndex}`, refuse),
-        `page ${sourceIndex}`,
-        0,
-        [],
-    );
+    schedule({
+        t: 'resources',
+        raw: effectiveResources(doc, pageNode, `page ${sourceIndex}`, refuse),
+        where: `page ${sourceIndex}`,
+        depth: 0,
+        path: [],
+    });
+
+    for (let depth = 0; depth < levels.length; depth += 1) {
+        const level = levels[depth] ?? [];
+        // A task may add to its own level while the level runs, so the length
+        // is read on every turn.
+        for (let i = 0; i < level.length; i += 1) {
+            const task = level[i];
+            if (task.t === 'resources') runResources(task);
+            else if (task.t === 'body') runBody(task);
+            else if (task.t === 'type3') runType3(task);
+            else runSoftMask(task);
+        }
+        levels[depth] = [];
+    }
 }
 
 /**
@@ -935,6 +1048,9 @@ export function describeOptionalContent(
         groups: [],
         on: [],
         off: [],
+        onRefs: [],
+        offRefs: [],
+        orderRefShape: null,
         dName: null,
         dNameValue: null,
         baseState: null,
@@ -1061,8 +1177,28 @@ export function describeOptionalContent(
             const k = key.asString().replace(/^\//, '');
             if (!HANDLED_D_KEYS.includes(k)) out.unsupported.push(`/D /${k}`);
         }
-        out.on = refsOf(look(doc, d.get(PDFName.of('ON')))).map(nameOfGroup);
-        out.off = refsOf(look(doc, d.get(PDFName.of('OFF')))).map(nameOfGroup);
+        const onRefs = refsOf(look(doc, d.get(PDFName.of('ON'))));
+        const offRefs = refsOf(look(doc, d.get(PDFName.of('OFF'))));
+        out.on = onRefs.map(nameOfGroup);
+        out.off = offRefs.map(nameOfGroup);
+        out.onRefs = onRefs.map((r) => r.tag);
+        out.offRefs = offRefs.map((r) => r.tag);
+        /**
+         * RF-R9-2 (Human decision): a group listed in both `/ON` and `/OFF` is
+         * outside the support envelope. The specification does not say which
+         * list wins, and readers disagree — the pinned pdf.js applies `/OFF`
+         * last, so the layer is hidden there, and that is one reader's answer,
+         * not the author's. Neither side is chosen and nothing is normalised;
+         * the document is refused. A group repeated within one list is still
+         * one state, and stays as it was.
+         */
+        const offTags = new Set(out.offRefs);
+        const both = [...new Set(out.onRefs.filter((tag) => offTags.has(tag)))];
+        if (both.length > 0) {
+            out.unsupported.push(
+                `/D /ON and /D /OFF both list ${both.length} group(s) (${both.join(', ')})`,
+            );
+        }
         // BLK-R4-1: the configuration's name is text a reader shows, carried as
         // the token it was. Present and not a readable text string used to
         // read as "no name", and the name was dropped without a word.
@@ -1133,6 +1269,7 @@ export function describeOptionalContent(
                 out.unsupported.push('/D /Order is not an array');
             } else {
                 out.orderShape = orderShapeOf(doc, order, nameOfGroup, 0, out.unsupported, false);
+                out.orderRefShape = orderRefShapeOf(doc, order, 0);
             }
         }
     }
@@ -1264,6 +1401,91 @@ export function planOptionalContent(oc: OptionalContentDescription): OptionalCon
     return { status: 'CARRY', groups: oc.pageProperties.length };
 }
 
+/**
+ * RF-R9-1 — the optional-content semantics of one loaded source, normalised.
+ *
+ * Everything the carry reproduces, by identity rather than by count: which
+ * groups are registered and what they are called, every page `/Properties`
+ * use, every form `/OC` use with the path that finds it and what the `/OC`
+ * named (the OC-B membership dictionary included), `/D /Name`, `/BaseState`,
+ * `/ON`, `/OFF`, `/Order`, `/AS` and the empty `/RBGroups`. Reference tags are
+ * safe identities here because both sides are read from the same loaded
+ * document; they are never compared across documents.
+ *
+ * Deterministic: collections whose order carries no meaning are sorted, so two
+ * readings of the same semantics produce the same text.
+ */
+export function optionalContentSemantics(oc: OptionalContentDescription): Record<string, string> {
+    const sorted = (items: string[]): string[] => [...items].sort();
+    const field = (value: unknown): string => JSON.stringify(value ?? null);
+    return {
+        present: field(oc.present),
+        groups: field(oc.groups.map((g) => [g.ref.tag, g.name])),
+        pageProperties: field(sorted(oc.pageProperties.map((p) => JSON.stringify(
+            [p.sourcePageIndex, p.pageIndex, p.key, p.ref.tag, p.name],
+        )))),
+        xobjectUsages: field(sorted(oc.xobjectUsages.map((u) => JSON.stringify(
+            [u.sourcePageIndex, u.pageIndex, u.path, u.ref.tag, u.name, u.viaOcmd, u.ocRef, u.formRef],
+        )))),
+        dName: field(oc.dNameValue ?? oc.dName),
+        baseState: field(oc.baseState),
+        on: field(oc.onRefs),
+        off: field(oc.offRefs),
+        order: field([oc.orderPresent, oc.orderRefShape]),
+        autoStates: field([
+            oc.autoStatesPresent,
+            oc.autoStates.map((e) => [e.event, e.categories, e.ocgs.map((r) => r.tag)]),
+        ]),
+        rbGroups: field(oc.emptyRbGroups),
+        configs: field(oc.configs),
+        unsupported: field(sorted(oc.unsupported)),
+    };
+}
+
+export type SanitizedOptionalContentVerdict = {
+    status: 'UNSUPPORTED_OPTIONAL_CONTENT' | 'PLAN_RUNTIME_MISMATCH';
+    reason: string;
+    detail: Record<string, unknown>;
+} | null;
+
+/**
+ * RF-R9-1 — a source's optional content must come through its destructive
+ * sanitization unchanged, or the operation is refused.
+ *
+ * None of those steps — signature widgets, destinations, attachments — is an
+ * adopted optional-content transformation. So `before` (read before any of them
+ * ran) and `after` (read on the source that will actually be copied) must
+ * describe the same semantics, and `after` must still be supported. This is the
+ * check an artifact census cannot make: a sanitizer that takes a group's `/OFF`
+ * entry with it leaves a configuration that holds together perfectly, in which
+ * the layer the author switched off is on.
+ */
+export function verifySanitizedOptionalContent(
+    before: OptionalContentDescription,
+    after: OptionalContentDescription,
+): SanitizedOptionalContentVerdict {
+    if (after.present && after.unsupported.length > 0) {
+        return {
+            status: 'UNSUPPORTED_OPTIONAL_CONTENT',
+            reason: '安全のための除去処理の後、オプショナルコンテンツ（レイヤー）の構成が対応範囲外になったため処理しません: '
+                + after.unsupported.join(', '),
+            detail: { unsupported: after.unsupported, stage: 'after-sanitization' },
+        };
+    }
+    const a = optionalContentSemantics(before);
+    const b = optionalContentSemantics(after);
+    const changed = Object.keys(a).filter((k) => a[k] !== b[k]);
+    if (changed.length > 0) {
+        return {
+            status: 'PLAN_RUNTIME_MISMATCH',
+            reason: '安全のための除去処理によって、オプショナルコンテンツ（レイヤー）の構成が'
+                + '変わってしまうため処理しません。',
+            detail: { mismatch: 'optional-content', changed },
+        };
+    }
+    return null;
+}
+
 export type CarryOutcome =
     | { status: 'CARRIED'; carried: number; on: number; off: number; mapped: number }
     | { status: 'REFUSED'; reason: string; unsupported: string[] };
@@ -1337,11 +1559,33 @@ export function carryOptionalContent(
         };
     };
 
+    /**
+     * RF-R8R-2: a path is a witness, not an identity. The walk records one
+     * `/XObject` path per form and context, which is enough only because one
+     * source form becomes one written form. That is checked, not assumed: the
+     * same source form found as two written forms, or two source forms found as
+     * one, is a refusal.
+     */
+    const writtenBySource = new Map<string, PDFDict>();
+    const sourceByWritten = new Map<PDFDict, string>();
+
     for (const use of description.xobjectUsages) {
         const page = outPages[use.pageIndex];
         if (!page) continue;
         const form = formAtPath(page, use.path);
         if (!form) return unresolvedUsage(use, 'is not in the written page');
+        if (use.formRef !== null) {
+            const written = writtenBySource.get(use.formRef);
+            if (written !== undefined && written !== form) {
+                return unresolvedUsage(use, 'is one source form found as two written forms');
+            }
+            const source = sourceByWritten.get(form);
+            if (source !== undefined && source !== use.formRef) {
+                return unresolvedUsage(use, 'is a written form two source forms both lead to');
+            }
+            writtenBySource.set(use.formRef, form);
+            sourceByWritten.set(form, use.formRef);
+        }
         const rawOc = form.get(PDFName.of('OC'));
         if (!(rawOc instanceof PDFRef)) return unresolvedUsage(use, '/OC did not survive the copy');
 
@@ -1618,6 +1862,13 @@ export interface OptionalContentFacts {
     /** `/OC` entries still naming a membership dictionary. Must be 0. */
     ocmdSurvivors: number;
     /**
+     * RF-R8R-1: `/Properties` entries naming an optional-content group or
+     * membership dictionary — the marked-content channel (`/OC /MC0 BDC`), which
+     * holds no `/OC` key at all. Not itself a failure; the dangling,
+     * unregistered and membership-dictionary counts above include these.
+     */
+    propertyUses: number;
+    /**
      * Configuration entries naming something other than a registered output
      * group, plus the output shapes this contract does not allow. Must be 0.
      */
@@ -1659,11 +1910,16 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
         danglingUses: 0,
         unregisteredUses: 0,
         ocmdSurvivors: 0,
+        propertyUses: 0,
         configErrors: 0,
         detail: [],
     };
     const note = (text: string): void => {
         if (facts.detail.length < OC_DETAIL_CAP) facts.detail.push(text);
+    };
+    const configError = (text: string): void => {
+        facts.configErrors += 1;
+        note(text);
     };
     const refused = (reason: string): CensusOutcome<OptionalContentFacts> => (
         { complete: false, reason, nodes: 0, roots: 0 }
@@ -1691,6 +1947,15 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
             return refused('書き出したPDFの /OCProperties が辞書ではありません。');
         }
         const ocProperties = read.value;
+
+        // RF-R8R-1: the output envelope, not only its references. This tool
+        // writes `/OCGs` and `/D` and nothing else — `/Configs` in particular
+        // is refused at the source, so one here was not carried by anything
+        // this contract proved.
+        for (const [k] of ocProperties.entries()) {
+            const key = k.asString().replace(LEADING_SLASH, '');
+            if (key !== 'OCGs' && key !== 'D') configError(`/OCProperties /${key} is not written by this output`);
+        }
 
         const rawGroups = ocProperties.get(PDFName.of('OCGs'));
         if (rawGroups === undefined) {
@@ -1732,25 +1997,45 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
 
     if (config !== null) {
         const configured = config;
-        const membersOf = (key: string): void => {
+
+        // RF-R8R-1: the `/D` keys this output writes, and no others. `/Locked`,
+        // `/Intent`, `/ListMode` and the rest are refused at the source, so one
+        // in an artifact was not produced by anything this contract proved.
+        for (const [k] of configured.entries()) {
+            const key = k.asString().replace(LEADING_SLASH, '');
+            if (!HANDLED_D_KEYS.includes(key)) configError(`/D /${key} is not written by this output`);
+        }
+        const rawBase = configured.get(PDFName.of('BaseState'));
+        if (rawBase !== undefined && nameOf(look(doc, rawBase)) !== SUPPORTED_BASE_STATE) {
+            configError(`/D /BaseState is not ${SUPPORTED_BASE_STATE}, the only state this output writes`);
+        }
+
+        const membersOf = (key: string): Set<string> => {
+            const tags = new Set<string>();
             const raw = configured.get(PDFName.of(key));
-            if (raw === undefined) return;
+            if (raw === undefined) return tags;
             const read = resolve(doc, raw);
             if (!read.ok || !(read.value instanceof PDFArray)) {
-                facts.configErrors += 1;
-                note(`/D /${key} is not a readable array`);
-                return;
+                configError(`/D /${key} is not a readable array`);
+                return tags;
             }
             for (let i = 0; i < read.value.size(); i += 1) {
                 const member = read.value.get(i);
                 if (!(member instanceof PDFRef) || !registered.has(member.tag)) {
-                    facts.configErrors += 1;
-                    note(`/D /${key}[${i}] does not name a registered group`);
+                    configError(`/D /${key}[${i}] does not name a registered group`);
+                    continue;
                 }
+                tags.add(member.tag);
             }
+            return tags;
         };
-        membersOf('ON');
-        membersOf('OFF');
+        const onTags = membersOf('ON');
+        const offTags = membersOf('OFF');
+        // RF-R9-2: one group in both lists has no single state, and this output
+        // never writes one — the source is refused before it gets here.
+        for (const tag of onTags) {
+            if (offTags.has(tag)) configError(`/D /ON and /D /OFF both list ${tag}`);
+        }
 
         // `/Order` nests, and a nested array may open with a text label. Only a
         // group reference has to be registered; the rest is shape.
@@ -1806,7 +2091,29 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
                         note(`/D /AS[${i}] is not a readable dictionary`);
                         continue;
                     }
-                    const groupsRead = resolve(doc, entryRead.value.get(PDFName.of('OCGs')));
+                    // RF-R8R-1: the whole OC-C envelope, read independently of
+                    // the source reader that decided it — three keys, one of
+                    // three events, a category array of names.
+                    const entry = entryRead.value;
+                    for (const [k] of entry.entries()) {
+                        const key = k.asString().replace(LEADING_SLASH, '');
+                        if (!HANDLED_AS_KEYS.includes(key)) configError(`/D /AS[${i}] carries /${key}`);
+                    }
+                    const event = nameOf(look(doc, entry.get(PDFName.of('Event'))));
+                    if (!SUPPORTED_AS_EVENTS.includes(event)) {
+                        configError(`/D /AS[${i}] /Event is ${event || 'missing'}, which this output never writes`);
+                    }
+                    const categoryRead = resolve(doc, entry.get(PDFName.of('Category')));
+                    if (!categoryRead.ok || !(categoryRead.value instanceof PDFArray)) {
+                        configError(`/D /AS[${i}] /Category is not a readable array`);
+                    } else {
+                        for (let c = 0; c < categoryRead.value.size(); c += 1) {
+                            if (!(categoryRead.value.get(c) instanceof PDFName)) {
+                                configError(`/D /AS[${i}] /Category[${c}] is not a name`);
+                            }
+                        }
+                    }
+                    const groupsRead = resolve(doc, entry.get(PDFName.of('OCGs')));
                     if (!groupsRead.ok || !(groupsRead.value instanceof PDFArray)) {
                         facts.configErrors += 1;
                         note(`/D /AS[${i}] /OCGs is not a readable array`);
@@ -1837,15 +2144,76 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
         }
     }
 
-    // ---- every live `/OC`, wherever it is -----------------------------------
+    // ---- every live `/OC`, and every `/Properties` map, wherever they are ------
     const pending: { rootTag: string; raw: unknown }[] = [];
+    const propertyMaps: { rootTag: string; raw: unknown }[] = [];
     const outcome = censusIndirectObjects(doc, ({ dict, rootTag }) => {
+        const properties = dict.get(PDFName.of('Properties'));
+        if (properties !== undefined && properties !== PDFNull) propertyMaps.push({ rootTag, raw: properties });
         const raw = dict.get(PDFName.of('OC'));
         // A null entry is the same as an absent one, and is not a use.
         if (raw === undefined || raw === PDFNull) return;
         pending.push({ rootTag, raw });
     });
     if (!outcome.complete) return outcome;
+
+    /**
+     * RF-R8R-1 — the marked-content channel.
+     *
+     * `/OC /MC0 BDC … EMC` in a content stream names its group through a
+     * resource dictionary's `/Properties`, so it holds no `/OC` key for the scan
+     * above to find. That is the channel the original M6-H9b defect lived in,
+     * and the one BLK-R7-B shipped through: a page property naming a group the
+     * artifact does not register draws, whatever the author switched off.
+     *
+     * Every `/Properties` map anywhere in the artifact is read — a page's own,
+     * an inherited one on a `/Pages` node, a form's — so a page's effective
+     * resources are covered without walking the page tree. An entry that names
+     * a group must name a registered one by reference; a membership dictionary
+     * is a shape this output never writes; an entry naming nothing is a use
+     * whose meaning cannot be known. An ordinary property list — marked content
+     * that is not optional content — is not a use, and is left alone.
+     */
+    for (const { rootTag, raw } of propertyMaps) {
+        const mapRead = resolve(doc, raw);
+        if (!mapRead.ok) {
+            facts.danglingUses += 1;
+            note(`object ${rootTag} /Properties ${mapRead.reason}`);
+            continue;
+        }
+        if (!(mapRead.value instanceof PDFDict)) continue;
+        for (const [key, entry] of mapRead.value.entries()) {
+            const name = `object ${rootTag} /Properties ${key.asString()}`;
+            const target = entry instanceof PDFRef ? look(doc, entry) : entry;
+            if (entry instanceof PDFRef && target === undefined) {
+                facts.propertyUses += 1;
+                facts.danglingUses += 1;
+                note(`${name} points at ${entry.tag}, which is not in the artifact`);
+                continue;
+            }
+            const targetDict = dictOf(target);
+            const type = targetDict ? nameOf(targetDict.get(PDFName.of('Type'))) : '';
+            if (type === '/OCMD') {
+                facts.propertyUses += 1;
+                facts.ocmdSurvivors += 1;
+                note(`${name} names a membership dictionary`);
+                continue;
+            }
+            if (type !== '/OCG') continue;
+            facts.propertyUses += 1;
+            if (!(entry instanceof PDFRef)) {
+                facts.unregisteredUses += 1;
+                note(`${name} is a group written directly rather than by reference`);
+            } else if (!registered.has(entry.tag)) {
+                facts.unregisteredUses += 1;
+                note(
+                    present
+                        ? `${name} names a group /OCProperties does not register`
+                        : `${name} names a group, and the artifact declares no /OCProperties`,
+                );
+            }
+        }
+    }
 
     for (const { rootTag, raw } of pending) {
         facts.uses += 1;

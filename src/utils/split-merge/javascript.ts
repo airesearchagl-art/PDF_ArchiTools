@@ -54,6 +54,32 @@ export const actionCarriesJavaScript = (dict: PDFDict): boolean =>
     dict.get(PDFName.of('JS')) !== undefined
     || nameOf(dict.get(PDFName.of('S'))) === '/JavaScript';
 
+/**
+ * Round 9, the BLK-R8R-1 rule applied to scripts: `/JS` is evidence to inspect,
+ * not authority to empty a dictionary.
+ *
+ * Removing JavaScript means taking an **action** apart. Both removers used to
+ * take apart whatever carried `/JS` or `/S /JavaScript`, and a dictionary can
+ * carry either key while being something else entirely. Measured, READY: a
+ * form XObject a page draws carried a stray `/JS`, its stream dictionary was
+ * emptied — `/Subtype`, `/BBox`, `/Resources` with it — and the drawing was
+ * gone from the artifact with no loss reported.
+ *
+ * So a carrier is only removed as JavaScript when nothing about it says it is
+ * something else. A stream, a `/Type` other than `/Action`, or any `/Subtype`
+ * is positive evidence of another role, and the answer is a typed refusal
+ * rather than a guess about which role to destroy. Returns what the conflict
+ * is, or null for an action-shaped carrier.
+ */
+export function javaScriptCarrierConflict(dict: PDFDict, isStream: boolean): string | null {
+    if (isStream) return 'is a stream, not an action';
+    const type = nameOf(dict.get(PDFName.of('Type')));
+    if (type !== '' && type !== '/Action') return `is ${type}, not an action`;
+    const subtype = nameOf(dict.get(PDFName.of('Subtype')));
+    if (subtype !== '') return `has /Subtype ${subtype}, which no action has`;
+    return null;
+}
+
 /** A document the scanner cannot finish inspecting is refused, never passed. */
 class Unscannable extends Error {}
 
@@ -308,6 +334,8 @@ export function scanJavaScript(doc: PDFDocument): JavaScriptScan {
 
 export type SanitizeOutcome =
     | { status: 'REFUSED'; incomplete: string[]; reason: string }
+    /** A `/JS` carrier that is provably something besides an action. Round 9. */
+    | { status: 'UNSAFE'; conflicts: string[]; reason: string }
     | { status: 'READY'; removedReferences: number; removedObjects: number };
 
 /**
@@ -326,6 +354,21 @@ export function sanitizeJavaScript(doc: PDFDocument): SanitizeOutcome {
             incomplete: scan.incomplete,
             reason: `この文書のアクション構造を完全に検査できませんでした: ${scan.incomplete.join(', ')}`,
         };
+    }
+
+    // Round 9: every indirect carrier this function would take apart is an
+    // action, or nothing is touched. Asked before the first reference goes.
+    const conflicts: string[] = [];
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        const inner = (obj as unknown as { dict?: unknown })?.dict;
+        const isStream = !(obj instanceof PDFDict) && inner instanceof PDFDict;
+        const dict = obj instanceof PDFDict ? obj : inner instanceof PDFDict ? inner : null;
+        if (!dict || !actionCarriesJavaScript(dict)) continue;
+        const conflict = javaScriptCarrierConflict(dict, isStream);
+        if (conflict) conflicts.push(`object ${ref.tag} carries JavaScript but ${conflict}`);
+    }
+    if (conflicts.length > 0) {
+        return { status: 'UNSAFE', conflicts, reason: conflicts.join('; ') };
     }
 
     let removedReferences = 0;

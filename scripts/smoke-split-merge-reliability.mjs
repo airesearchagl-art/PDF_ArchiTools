@@ -2125,6 +2125,337 @@ try {
                 === 'optionalContentUnregisteredUses === 0');
     }
 
+    // ---- 57. BLK-R8R-1: `/EF` is evidence, not authority to delete ----------
+    //
+    // The remover used to treat any dictionary with `/EF` as a file
+    // specification and delete everything an `/EF` named, then every reference
+    // to it. READY, under a confirmation that named only "an attachment": a
+    // switched-off layer drawn, a drawing gone, a page blank. Every expectation
+    // below is read off the picture pdf.js paints and the gate's own walkers,
+    // not only off the status.
+    console.log('\n=== 57. BLK-R8R-1 attachment semantic safety ===');
+    {
+        const LAYER = [{ x: 100, y: 100 }];
+        const unsafe = [
+            ['r9-v1-ocg-ef', 'an optional-content group that carries /EF', 'M6R9_V1_PAYLOAD'],
+            ['r9-v2-form-oc-ocg-ef', 'the group a form /OC names, carrying /EF', 'M6R9_V2_PAYLOAD'],
+            ['r9-v5-ocprops-direct-ef', 'a direct /OCProperties carrying /EF', 'M6R9_V5_PAYLOAD'],
+            ['r9-v6-ocprops-indirect-ef', 'an indirect /OCProperties carrying /EF', 'M6R9_V6_PAYLOAD'],
+            ['r9-v7-ocprops-ef-form', '/OCProperties with /EF over a form /OC', 'M6R9_V7_PAYLOAD'],
+            ['r9-w1-ef-form', 'an /EF /F naming the form the page draws', null],
+            ['r9-w2-ef-contents', "an /EF /F naming the page's own content stream", null],
+            ['r9-w5-shared-nonattachment', 'a payload page private data also names', 'M6R9_W5_PAYLOAD'],
+        ];
+        for (const [fixture, title] of unsafe) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            check(`${fixture}: ${title} is refused in planning, before any confirmation`,
+                r.plan === 'UNSAFE_ATTACHMENT_STRUCTURE' && r.requires.length === 0,
+                `plan=${r.plan} requires=${r.requires.join(',')}`);
+            check(`${fixture}: and Extract publishes nothing`,
+                r.run === 'UNSAFE_ATTACHMENT_STRUCTURE' && r.bytes === null,
+                `run=${r.run} bytes=${r.bytes}`);
+            const why = (r.planDetail && r.planDetail.unsafe) || [];
+            check(`${fixture}: the refusal names what it would have destroyed`,
+                why.length > 0, JSON.stringify(why).slice(0, 180));
+        }
+        // What the source looks like, so "no output" is compared with something.
+        for (const [fixture, expected] of [
+            ['r9-v1-ocg-ef', 'white'], ['r9-v5-ocprops-direct-ef', 'white'], ['r9-w1-ef-form', 'blue'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            probe(`${fixture}: the source really ${expected === 'white' ? 'hides' : 'draws'} what the old remover changed`,
+                r.before[0] === expected, `source=${r.before[0]}`);
+        }
+
+        // Merge: the source is refused at intake by name (M6-H10), and nothing
+        // of it reaches the output — not its layer, not its payload.
+        for (const [fixture, marker] of [
+            ['r9-v1-ocg-ef', 'M6R9_V1_PAYLOAD'], ['r9-v5-ocprops-direct-ef', 'M6R9_V5_PAYLOAD'],
+            ['r9-v6-ocprops-indirect-ef', 'M6R9_V6_PAYLOAD'], ['r9-v7-ocprops-ef-form', 'M6R9_V7_PAYLOAD'],
+            ['r9-w1-ef-form', null], ['r9-w2-ef-contents', null],
+        ]) {
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, marker ? [marker] : []);
+            const verdict = m.intake.find((i) => i.name === fixture);
+            check(`${fixture}: Merge intake refuses the source by name`,
+                verdict && verdict.result === 'UNSAFE_ATTACHMENT_STRUCTURE', JSON.stringify(m.intake));
+            // `merge-b` carries no optional content and no payload, so any layer
+            // or payload in the output could only have come from the refused one.
+            check(`${fixture}: and the source is not in what the Merge writes`,
+                !m.order.includes(fixture)
+                && (m.bytes === null || (m.audit.ocKeys === 0 && m.audit.propsOc === 0
+                    && m.audit.registered === 0 && (!marker || m.markers[marker] === false))),
+                `run=${m.run} pages=${m.pages} order=${m.order.join(',')} audit=${JSON.stringify(m.audit)}`);
+            const alone = await call('r9Merge', [fixture], null, []);
+            check(`${fixture}: a Merge of that source alone produces nothing`,
+                alone.bytes === null, `plan=${alone.plan} run=${alone.run}`);
+        }
+
+        // Controls: the attachment shapes this contract always removed stay
+        // removable, and removing them changes nothing a reader sees.
+        const controls = [
+            ['r9-w0-valid', 'an ordinary /EmbeddedFiles attachment', 'M6R9_W0_PAYLOAD'],
+            ['r9-w3-typeless-tree', 'a typeless file specification the tree proves', 'M6R9_W3_PAYLOAD'],
+            ['r9-w4-shared-payload', 'one payload, two attachment specifications', 'M6R9_W4_PAYLOAD'],
+            ['r9-w6-indirect-annots', 'a file-attachment annotation in an indirect /Annots', 'M6R9_W6_PAYLOAD'],
+        ];
+        for (const [fixture, title, marker] of controls) {
+            const r = await call('r9Extract', fixture, [0], LAYER, [marker]);
+            check(`${fixture}: ${title} still asks for the attachment confirmation`,
+                r.plan === 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION' && r.requires.includes('attachments'),
+                `plan=${r.plan} requires=${r.requires.join(',')}`);
+            check(`${fixture}: once confirmed it is READY and the payload is gone from the bytes`,
+                r.run === 'READY' && r.markers[marker] === false && r.sourceMarkers[marker] === true,
+                `run=${r.run} marker=${JSON.stringify(r.markers)}`);
+            check(`${fixture}: no /EF, payload or file-attachment annotation survives`,
+                r.independent && r.independent.efCarriers === 0 && r.independent.embeddedFileStreams === 0
+                && r.independent.fileAttachmentAnnots === 0,
+                JSON.stringify(r.independent && {
+                    ef: r.independent.efCarriers, payload: r.independent.embeddedFileStreams,
+                    annots: r.independent.fileAttachmentAnnots,
+                }));
+            check(`${fixture}: and the page draws exactly what the source drew`,
+                r.after && r.after[0] === r.before[0] && r.before[0] === 'blue',
+                `before=${r.before} after=${r.after}`);
+        }
+        const merged = await call('r9Merge', ['r9-w0-valid', 'merge-b'], null, ['M6R9_W0_PAYLOAD']);
+        check('r9-w0-valid: Merge still removes a proven attachment after confirmation',
+            merged.run === 'READY' && merged.markers.M6R9_W0_PAYLOAD === false
+            && merged.independent.efCarriers === 0,
+            `run=${merged.run} markers=${JSON.stringify(merged.markers)}`);
+    }
+
+    // ---- 58. RF-R9-1: a sanitizer may not change the optional content -------
+    //
+    // An artifact that holds together can still be the wrong one. Signature
+    // removal deleting an object that was also the switched-off group left the
+    // old Extract carrying nothing — READY, the layer drawn. The fix compares
+    // the source's optional-content semantics before and after every
+    // destructive step, and refuses on any difference.
+    console.log('\n=== 58. RF-R9-1 source optional-content semantic equality ===');
+    {
+        const LAYER = [{ x: 100, y: 100 }];
+        for (const fixture of ['r9-h1-sig-ocg-marked', 'r9-h2-sig-ocg-form']) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            check(`${fixture}: Extract refuses when sanitization changes the optional content`,
+                r.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && r.run === 'UNSUPPORTED_OPTIONAL_CONTENT'
+                && r.bytes === null,
+                `plan=${r.plan} run=${r.run}`);
+            check(`${fixture}: and says it was the sanitization that did it`,
+                r.planDetail && r.planDetail.stage === 'after-sanitization',
+                JSON.stringify(r.planDetail));
+            probe(`${fixture}: the source hides the layer the old Extract drew`,
+                r.before[0] === 'white', `source=${r.before[0]}`);
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
+            check(`${fixture}: Merge refuses it after sanitizing the source, before any copy`,
+                m.run === 'UNSUPPORTED_OPTIONAL_CONTENT' && m.bytes === null
+                && m.runDetail && m.runDetail.stage === 'after-sanitization',
+                `run=${m.run} detail=${JSON.stringify(m.runDetail)}`);
+        }
+
+        // The comparator itself, on real before/after readings of one document.
+        const mutations = [
+            ['r9-onoff-off', 'drop-off', 'off'],
+            ['r9-onoff-neither', 'add-on', 'on'],
+            ['r9-onoff-off', 'drop-property', 'pageProperties'],
+            ['r9-onoff-off', 'rename-group', 'groups'],
+            ['r9-onoff-off', 'basestate', 'baseState'],
+            ['r9-v7-ocprops-ef-form', 'drop-form-oc', 'xobjectUsages'],
+        ];
+        for (const [fixture, mutation, field] of mutations) {
+            const r = await call('r9OcVerify', fixture, mutation);
+            check(`comparator: ${mutation} is a mismatch, and names ${field}`,
+                r.verdict && r.verdict.status === 'PLAN_RUNTIME_MISMATCH'
+                && r.verdict.detail.changed.includes(field),
+                JSON.stringify(r.verdict));
+        }
+        const unchanged = await call('r9OcVerify', 'r9-onoff-off', 'none');
+        check('comparator: an untouched document is equal to itself, deterministically',
+            unchanged.verdict === null && unchanged.deterministic === true, JSON.stringify(unchanged));
+
+        // Controls: documents whose sanitization touches nothing optional stay READY.
+        for (const fixture of ['r9-onoff-off', 'r9-w0-valid']) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            check(`${fixture}: an unchanged configuration passes the comparison`,
+                r.run === 'READY' && r.after[0] === r.before[0], `run=${r.run} before=${r.before} after=${r.after}`);
+        }
+    }
+
+    // ---- 59. RF-R9-2: one group in /ON and /OFF ----------------------------
+    //
+    // Human decision: outside the support envelope. Neither side is chosen,
+    // pdf.js's own winner (/OFF) is not relied on, and nothing is normalised.
+    console.log('\n=== 59. RF-R9-2 /ON-/OFF overlap ===');
+    {
+        const LAYER = [{ x: 100, y: 100 }];
+        for (const [fixture, expected] of [
+            ['r9-onoff-on', 'blue'], ['r9-onoff-off', 'white'], ['r9-onoff-neither', 'blue'],
+            ['r9-onoff-dup-on', 'blue'], ['r9-onoff-dup-off', 'white'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            check(`${fixture}: carried, and the layer looks the same`,
+                r.run === 'READY' && r.before[0] === expected && r.after[0] === expected,
+                `run=${r.run} before=${r.before} after=${r.after}`);
+            check(`${fixture}: the artifact lists no group in both /ON and /OFF`,
+                r.audit && r.audit.onOffOverlap === 0, JSON.stringify(r.audit));
+        }
+        for (const fixture of ['r9-onoff-both', 'r9-onoff-multi']) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            const d = await call('r9Describe', fixture, [0]);
+            check(`${fixture}: a group in both /ON and /OFF is refused`,
+                r.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && r.run === 'UNSUPPORTED_OPTIONAL_CONTENT'
+                && r.bytes === null,
+                `plan=${r.plan} run=${r.run}`);
+            check(`${fixture}: and the reason is the overlap, not something else`,
+                d.unsupported.some((u) => u.includes('/D /ON and /D /OFF both list')),
+                d.unsupported.join(' | '));
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
+            check(`${fixture}: Merge refuses the source at intake`,
+                m.intake.find((i) => i.name === fixture).result === 'UNSUPPORTED_OPTIONAL_CONTENT',
+                JSON.stringify(m.intake));
+        }
+        const artifact = await call('r9Census', 'r9-art-p13-onoff-overlap');
+        check('r9-art-p13-onoff-overlap: an artifact with the overlap is a configuration violation',
+            artifact.invariant === 'optionalContentConfigErrors === 0' && artifact.audit.onOffOverlap === 1,
+            `invariant=${artifact.invariant} audit=${JSON.stringify(artifact.audit)}`);
+    }
+
+    // ---- 60. RF-R8R-1: the marked-content channel and the full envelope -----
+    //
+    // `/OC /MC0 BDC` names its group through `/Properties` and holds no `/OC`
+    // key, so the Round 8 census never saw it. And a census that checks only
+    // references lets a configuration this tool never writes through.
+    console.log('\n=== 60. RF-R8R-1 artifact /Properties channel and envelope ===');
+    {
+        const cases = [
+            ['r9-art-p1-props-registered', null, 'a page property naming a registered group'],
+            ['r9-art-p2-props-unregistered', 'optionalContentUnregisteredUses === 0', 'a page property naming an unregistered group'],
+            ['r9-art-p3-props-dangling', 'optionalContentDanglingUses === 0', 'a page property naming nothing'],
+            ['r9-art-p4-props-ocmd', 'optionalContentOcmdSurvivors === 0', 'a page property naming a membership dictionary'],
+            ['r9-art-p5-prefix-props-direct', 'optionalContentUnregisteredUses === 0', "b76bda8's real r8-props-direct artifact"],
+            ['r9-art-p6-props-ordinary', null, 'an ordinary, non-optional property list'],
+            ['r9-art-p7-as-event', 'optionalContentConfigErrors === 0', 'an /AS event this output never writes'],
+            ['r9-art-p8-as-category', 'optionalContentConfigErrors === 0', 'an /AS category that is not a name'],
+            ['r9-art-p9-as-extra-key', 'optionalContentConfigErrors === 0', 'an /AS entry with an extra key'],
+            ['r9-art-p10-basestate-off', 'optionalContentConfigErrors === 0', 'a /BaseState other than /ON'],
+            ['r9-art-p11-configs', 'optionalContentConfigErrors === 0', 'an /OCProperties /Configs'],
+            ['r9-art-p12-locked', 'optionalContentConfigErrors === 0', 'a /D /Locked'],
+            ['r9-art-envelope-ok', null, 'the whole supported envelope at once'],
+        ];
+        for (const [fixture, invariant, title] of cases) {
+            const r = await call('r9Census', fixture);
+            check(`${fixture}: ${title} ${invariant ? 'is refused' : 'passes'}`,
+                r.complete === true && r.invariant === invariant,
+                `invariant=${r.invariant} value=${JSON.stringify(r.value)}`);
+        }
+        // The gate's own audit agrees, field by field.
+        const audit = async (fixture) => (await call('r9Census', fixture)).audit;
+        check('raw audit: the unregistered page property is unregistered', (await audit('r9-art-p2-props-unregistered')).propsBad === 1);
+        check('raw audit: the dangling page property dangles', (await audit('r9-art-p3-props-dangling')).propsDangling === 1);
+        check('raw audit: the membership dictionary is one', (await audit('r9-art-p4-props-ocmd')).propsOcmd === 1);
+        check("raw audit: b76bda8's artifact names a group written directly", (await audit('r9-art-p5-prefix-props-direct')).propsBad === 1);
+        check('raw audit: the ordinary property list is not optional content', (await audit('r9-art-p6-props-ordinary')).propsOc === 0);
+        check('raw audit: the bad /AS entries are bad', (await audit('r9-art-p7-as-event')).asBad === 1
+            && (await audit('r9-art-p8-as-category')).asBad === 1 && (await audit('r9-art-p9-as-extra-key')).asBad === 1);
+        check('raw audit: /BaseState, /Configs and /Locked are outside the envelope',
+            (await audit('r9-art-p10-basestate-off')).baseStateBad === true
+            && (await audit('r9-art-p11-configs')).ocPropsExtraKeys.includes('/Configs')
+            && (await audit('r9-art-p12-locked')).dExtraKeys.includes('/Locked'));
+        const p2 = await call('r9Census', 'r9-art-p2-props-unregistered');
+        probe('the unregistered page property really draws the layer the census refuses',
+            p2.raster[0] === 'blue', `raster=${p2.raster}`);
+        const p1 = await call('r9Census', 'r9-art-p1-props-registered');
+        check('r9-art-p1-props-registered: the census counts the marked-content use it passed',
+            p1.value.propertyUses === 1 && p1.raster[0] === 'white', `value=${JSON.stringify(p1.value)} raster=${p1.raster}`);
+    }
+
+    // ---- 61. RF-R8R-2: a node analysis is reused only where it is context-free
+    //
+    // A shared parent's CHILD carrying `/OC` is refused under a scope-only role
+    // and carried under `/XObject`. Expanding the parent once, for whoever came
+    // first, let a key order turn the refusal into READY. Now each order must
+    // give the same answer, for the same reason.
+    console.log('\n=== 61. RF-R8R-2 context-sensitive nested walk ===');
+    {
+        const LAYER = [{ x: 100, y: 100 }];
+        for (const role of ['pattern', 'charprocs', 'smask']) {
+            const a = await call('r9Extract', `r9-nest-${role}-alias-first`, [0], LAYER);
+            const b = await call('r9Extract', `r9-nest-${role}-xobject-first`, [0], LAYER);
+            const da = await call('r9Describe', `r9-nest-${role}-alias-first`, [0]);
+            const db = await call('r9Describe', `r9-nest-${role}-xobject-first`, [0]);
+            const reason = (d) => d.unsupported.some((u) => /\/XObject \/C1 \/OC$/.test(u));
+            check(`${role}: both dictionary orders give the same answer`,
+                a.plan === b.plan && a.run === b.run && a.bytes === b.bytes,
+                `alias-first=${a.plan}/${a.run} xobject-first=${b.plan}/${b.run}`);
+            check(`${role}: the answer is the refusal, in both orders, with no bytes`,
+                a.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && b.plan === 'UNSUPPORTED_OPTIONAL_CONTENT'
+                && a.bytes === null && b.bytes === null);
+            check(`${role}: for the same reason — the child's /OC under a scope-only role`,
+                reason(da) && reason(db), `${da.unsupported.join(' | ')} || ${db.unsupported.join(' | ')}`);
+        }
+
+        // Shared parents whose every alias must stay right.
+        const CXT = [{ x: 15, y: 15 }, { x: 50, y: 50 }, { x: 115, y: 115 }, { x: 150, y: 150 }];
+        const cxt = [
+            ['r9-cxt1-shared-parent', ['red', 'white', 'red', 'white'], 'a shared parent under /A and /B, layer off'],
+            ['r9-cxt1-shared-parent-on', ['red', 'blue', 'red', 'blue'], 'the same, layer on'],
+            ['r9-cxt3-same-names', ['red', 'white', 'red', 'blue'], 'one child name under two parents, two groups'],
+        ];
+        for (const [fixture, expected, title] of cxt) {
+            const r = await call('r9Extract', fixture, [0], CXT);
+            check(`${fixture}: ${title} is carried`, r.run === 'READY', `run=${r.run}`);
+            check(`${fixture}: every alias draws what the source draws`,
+                JSON.stringify(r.before) === JSON.stringify(expected)
+                && JSON.stringify(r.after) === JSON.stringify(expected),
+                `before=${r.before} after=${r.after}`);
+            check(`${fixture}: every group the artifact uses is registered`,
+                r.audit.ocBad === 0 && r.audit.ocKeys >= 1, JSON.stringify(r.audit));
+        }
+        const pages = await call('r9Extract', 'r9-cxt2-two-pages', [0, 1],
+            [{ page: 1, x: 50, y: 50 }, { page: 2, x: 50, y: 50 }]);
+        check('r9-cxt2-two-pages: one shared parent on two pages stays hidden on both',
+            pages.run === 'READY' && JSON.stringify(pages.after) === JSON.stringify(['white', 'white']),
+            `run=${pages.run} after=${pages.after}`);
+        const scopeA = await call('r9Extract', 'r9-cxt4-scope-alias-alias-first', [0], CXT);
+        const scopeB = await call('r9Extract', 'r9-cxt4-scope-alias-xobject-first', [0], CXT);
+        check('r9-cxt4: a scope-only alias beside two valid ones refuses in both orders',
+            scopeA.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && scopeB.plan === 'UNSUPPORTED_OPTIONAL_CONTENT'
+            && scopeA.bytes === null && scopeB.bytes === null,
+            `a=${scopeA.plan} b=${scopeB.plan}`);
+        const cycle = await call('r9Extract', 'r9-cxt5-cycle', [0], LAYER);
+        const cycleUses = await call('r9Describe', 'r9-cxt5-cycle', [0]);
+        check('r9-cxt5-cycle: a looping graph completes, and the layer stays hidden',
+            cycle.run === 'READY' && cycle.after[0] === 'white' && cycle.audit.ocBad === 0,
+            `run=${cycle.run} after=${cycle.after}`);
+        check('r9-cxt5-cycle: every usage names the one source form it found',
+            cycleUses.usages.length > 0 && new Set(cycleUses.usages.map((u) => u.formRef)).size === 1,
+            JSON.stringify(cycleUses.usages));
+    }
+
+    // ---- 62. Round 9 / J: `/JS` is evidence, not authority to empty ---------
+    //
+    // The JavaScript counterpart of BLK-R8R-1, found while closing it: a form
+    // XObject a page draws, carrying a stray `/JS`, had its stream dictionary
+    // emptied by the scrub — READY, drawing gone, nothing reported.
+    console.log('\n=== 62. Round 9 JavaScript carrier safety ===');
+    {
+        const LAYER = [{ x: 100, y: 100 }];
+        for (const [fixture, title] of [
+            ['r9-j1-ocg-js', 'a group carrying /JS'],
+            ['r9-j2-form-js', 'a drawn form XObject carrying /JS'],
+            ['r9-j3-page-js', 'a page carrying /S /JavaScript'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], LAYER);
+            check(`${fixture}: ${title} is refused rather than emptied`,
+                r.run === 'UNSAFE_JAVASCRIPT_STRUCTURE' && r.bytes === null,
+                `plan=${r.plan} run=${r.run}`);
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
+            check(`${fixture}: and so is the Merge that carries it`,
+                m.run === 'UNSAFE_JAVASCRIPT_STRUCTURE' && m.bytes === null, `run=${m.run}`);
+        }
+        const j2 = await call('r9Extract', 'r9-j2-form-js', [0], LAYER);
+        probe('r9-j2-form-js: the source draws the form the old scrub erased', j2.before[0] === 'blue');
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));

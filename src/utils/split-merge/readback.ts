@@ -75,6 +75,9 @@ export async function readbackArtifact(bytes: Uint8Array): Promise<ReadbackFacts
         optionalContentOcmdSurvivors: optionalContent.complete
             ? optionalContent.value.ocmdSurvivors
             : Number.NaN,
+        optionalContentPropertyUses: optionalContent.complete
+            ? optionalContent.value.propertyUses
+            : Number.NaN,
         optionalContentConfigErrors: optionalContent.complete
             ? optionalContent.value.configErrors
             : Number.NaN,

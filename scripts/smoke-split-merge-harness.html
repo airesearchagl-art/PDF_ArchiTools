@@ -64,6 +64,9 @@ import {
     contentDigest,
     contentDigestJs,
     UNNAMED_ATTACHMENT_LABEL,
+    verifySanitizedOptionalContent,
+    optionalContentSemantics,
+    classifyAttachments,
 } from '/src/utils/split-merge/index.ts';
 import {
     PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream, PDFRef, PDFString,
@@ -2136,6 +2139,281 @@ Object.assign(window.__m6, {
         if (!result.bytes) return plainly({ status: result.status, before, after: null });
         const after = await pdfjsVisibility(result.bytes);
         return plainly({ status: result.status, before, after });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 9 — attachment / optional-content semantic safety
+// ---------------------------------------------------------------------------
+
+/**
+ * The colour pdf.js paints at named points, by page and user-space position.
+ *
+ * Round 9's defects were all "READY, and the page looks different": a hidden
+ * layer drawn, a drawing gone. The only honest oracle for that is the picture,
+ * read where the fixture put each thing — not a production count.
+ */
+async function rasterAt(bytes, points) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const out = [];
+    const rendered = new Map();
+    for (const { page = 1, x, y } of points) {
+        if (page > doc.numPages) { out.push('no page'); continue; }
+        if (!rendered.has(page)) {
+            const pg = await doc.getPage(page);
+            const viewport = pg.getViewport({ scale: 1 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            await pg.render({ canvasContext: context, viewport }).promise;
+            rendered.set(page, { context, viewport });
+        }
+        const { context, viewport } = rendered.get(page);
+        const [cx, cy] = viewport.convertToViewportPoint(x, y);
+        const d = context.getImageData(Math.floor(cx), Math.floor(cy), 1, 1).data;
+        out.push(d[2] > 200 && d[0] < 80 && d[1] < 80 ? 'blue'
+            : d[0] > 200 && d[1] < 80 && d[2] < 80 ? 'red'
+                : d[1] > 200 && d[0] < 80 && d[2] < 80 ? 'green'
+                    : d[0] > 240 && d[1] > 240 && d[2] > 240 ? 'white'
+                        : `rgb(${d[0]},${d[1]},${d[2]})`);
+    }
+    await doc.destroy();
+    return out;
+}
+
+/**
+ * The gate's own optional-content audit of an artifact — every `/OC`, every
+ * `/Properties` entry, and the configuration envelope — written here rather
+ * than imported, so it cannot share a blind spot with `censusOptionalContent`.
+ */
+function rawOcAudit(doc) {
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    const lookup = (v) => { try { return v instanceof PDFRef ? doc.context.lookup(v) : v; } catch { return undefined; } };
+    const dictOf = (v) => (v instanceof PDFDict ? v : (v?.dict instanceof PDFDict ? v.dict : null));
+    const out = {
+        registered: 0, ocKeys: 0, ocBad: 0, propsOc: 0, propsBad: 0, propsDangling: 0, propsOcmd: 0,
+        onOffOverlap: 0, dExtraKeys: [], ocPropsExtraKeys: [], baseStateBad: false, asBad: 0,
+    };
+    const ocp = dictOf(lookup(doc.catalog.get(PDFName.of('OCProperties'))));
+    const registered = new Set();
+    let d = null;
+    if (ocp) {
+        const groups = lookup(ocp.get(PDFName.of('OCGs')));
+        if (groups instanceof PDFArray) {
+            for (let i = 0; i < groups.size(); i += 1) {
+                const g = groups.get(i);
+                if (g instanceof PDFRef && nameOf(dictOf(lookup(g))?.get(PDFName.of('Type'))) === '/OCG') registered.add(g.tag);
+            }
+        }
+        out.ocPropsExtraKeys = [...ocp.keys()].map((k) => k.asString()).filter((k) => k !== '/OCGs' && k !== '/D');
+        d = dictOf(lookup(ocp.get(PDFName.of('D'))));
+    }
+    out.registered = registered.size;
+    if (d) {
+        const allowed = ['/Order', '/ON', '/OFF', '/Name', '/BaseState', '/AS', '/RBGroups'];
+        out.dExtraKeys = [...d.keys()].map((k) => k.asString()).filter((k) => !allowed.includes(k));
+        const base = d.get(PDFName.of('BaseState'));
+        out.baseStateBad = base !== undefined && nameOf(lookup(base)) !== '/ON';
+        const tags = (key) => {
+            const list = lookup(d.get(PDFName.of(key)));
+            const set = new Set();
+            if (list instanceof PDFArray) for (let i = 0; i < list.size(); i += 1) { const m = list.get(i); if (m instanceof PDFRef) set.add(m.tag); }
+            return set;
+        };
+        const on = tags('ON');
+        for (const t of tags('OFF')) if (on.has(t)) out.onOffOverlap += 1;
+        const as = lookup(d.get(PDFName.of('AS')));
+        if (as instanceof PDFArray) {
+            for (let i = 0; i < as.size(); i += 1) {
+                const e = dictOf(lookup(as.get(i)));
+                if (!e) { out.asBad += 1; continue; }
+                const keysOk = [...e.keys()].every((k) => ['/Event', '/Category', '/OCGs'].includes(k.asString()));
+                const eventOk = ['/View', '/Print', '/Export'].includes(nameOf(lookup(e.get(PDFName.of('Event')))));
+                const cat = lookup(e.get(PDFName.of('Category')));
+                let catOk = cat instanceof PDFArray;
+                if (catOk) for (let c = 0; c < cat.size(); c += 1) if (!(cat.get(c) instanceof PDFName)) catOk = false;
+                if (!keysOk || !eventOk || !catOk) out.asBad += 1;
+            }
+        }
+    }
+    const seen = new Set();
+    const visit = (value, depth) => {
+        if (!value || depth > 200 || value instanceof PDFRef || seen.has(value)) return;
+        seen.add(value);
+        const dict = dictOf(value);
+        if (dict) {
+            const oc = dict.get(PDFName.of('OC'));
+            if (oc !== undefined && String(oc) !== 'null') {
+                out.ocKeys += 1;
+                if (!(oc instanceof PDFRef) || !registered.has(oc.tag)) out.ocBad += 1;
+            }
+            const props = lookup(dict.get(PDFName.of('Properties')));
+            if (props instanceof PDFDict) {
+                for (const [, entry] of props.entries()) {
+                    const target = lookup(entry);
+                    if (entry instanceof PDFRef && target === undefined) { out.propsDangling += 1; continue; }
+                    const type = nameOf(dictOf(target)?.get(PDFName.of('Type')));
+                    if (type === '/OCMD') { out.propsOcmd += 1; continue; }
+                    if (type !== '/OCG') continue;
+                    out.propsOc += 1;
+                    if (!(entry instanceof PDFRef) || !registered.has(entry.tag)) out.propsBad += 1;
+                }
+            }
+            for (const [, entry] of dict.entries()) visit(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) for (let i = 0; i < value.size(); i += 1) visit(value.get(i), depth + 1);
+    };
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) visit(obj, 0);
+    return out;
+}
+
+/** Load, apply one destructive mutation, describe again — the comparator's input. */
+function mutateOptionalContent(doc, mutation) {
+    const ocp = doc.catalog.lookup(PDFName.of('OCProperties'));
+    const d = ocp instanceof PDFDict ? ocp.lookup(PDFName.of('D')) : null;
+    const page = doc.getPages()[0].node;
+    const res = page.lookup(PDFName.of('Resources'));
+    if (mutation === 'drop-off' && d instanceof PDFDict) d.delete(PDFName.of('OFF'));
+    if (mutation === 'add-on' && d instanceof PDFDict) {
+        const groups = ocp.lookup(PDFName.of('OCGs'));
+        d.set(PDFName.of('ON'), doc.context.obj([groups.get(0)]));
+    }
+    if (mutation === 'drop-property' && res instanceof PDFDict) {
+        const props = res.lookup(PDFName.of('Properties'));
+        if (props instanceof PDFDict) props.delete(PDFName.of('MC0'));
+    }
+    if (mutation === 'rename-group') {
+        const groups = ocp.lookup(PDFName.of('OCGs'));
+        groups.lookup(0).set(PDFName.of('Name'), PDFString.of('Renamed'));
+    }
+    if (mutation === 'drop-form-oc' && res instanceof PDFDict) {
+        const xobjects = res.lookup(PDFName.of('XObject'));
+        const form = xobjects instanceof PDFDict ? xobjects.lookup(PDFName.of('Fm0')) : null;
+        if (form?.dict instanceof PDFDict) form.dict.delete(PDFName.of('OC'));
+    }
+    if (mutation === 'basestate' && d instanceof PDFDict) d.delete(PDFName.of('BaseState'));
+}
+
+Object.assign(window.__m6, {
+    /**
+     * Extract, confirming exactly what the plan asked for — so an attachment
+     * that is proven an attachment is removed, and anything else is judged by
+     * the refusal, not by a confirmation. Every result is read three ways: the
+     * production status, the gate's own walkers, and pdf.js at named points.
+     */
+    async r9Extract(name, selection, points, markers = []) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+        });
+        const before = points ? await rasterAt(source, points) : null;
+        if (!result.bytes) {
+            return plainly({
+                plan: plan.status, requires: plan.requiresConfirmation ?? [], planDetail: plan.detail ?? null,
+                run: result.status, runDetail: result.detail ?? null, bytes: null, before, after: null,
+            });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            plan: plan.status,
+            requires: plan.requiresConfirmation ?? [],
+            run: result.status,
+            bytes: result.bytes.length,
+            before,
+            after: points ? await rasterAt(result.bytes, points) : null,
+            losses: result.losses.map((l) => l.kind),
+            independent: walkEverything(doc),
+            audit: rawOcAudit(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+            sourceMarkers: Object.fromEntries(markers.map((m) => [m, bytesContain(source, m)])),
+        });
+    },
+
+    /** Merge, confirming what the plan asked for, bound to its fingerprint. */
+    async r9Merge(names, points, markers = []) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const first = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const options = {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: first.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(first),
+        };
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, options);
+        const base = {
+            intake: intake.map((r) => ({ name: r.id, result: r.result })),
+            plan: plan.status,
+            order: plan.order ?? [],
+            run: result.status,
+            runDetail: result.bytes ? null : (result.detail ?? null),
+        };
+        if (!result.bytes) return plainly({ ...base, bytes: null, after: null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            bytes: result.bytes.length,
+            pages: doc.getPageCount(),
+            after: points ? await rasterAt(result.bytes, points) : null,
+            independent: walkEverything(doc),
+            audit: rawOcAudit(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /** An artifact shape straight into the census and the invariants. */
+    async r9Census(name) {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const census = censusOptionalContent(doc);
+        const facts = await readbackArtifact(bytes);
+        const breach = checkArtifactInvariants(facts, facts.pageCount);
+        return plainly({
+            complete: census.complete,
+            value: census.complete ? census.value : null,
+            invariant: breach ? breach.invariant : null,
+            audit: rawOcAudit(doc),
+            raster: await rasterAt(bytes, [{ x: 100, y: 100 }]),
+        });
+    },
+
+    /**
+     * RF-R9-1's comparator, fed a real before/after: the same loaded document
+     * described, mutated the way a destructive sanitizer would, described again.
+     */
+    async r9OcVerify(name, mutation) {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const before = describeOptionalContent(doc, null);
+        const twice = describeOptionalContent(doc, null);
+        const deterministic = JSON.stringify(optionalContentSemantics(before))
+            === JSON.stringify(optionalContentSemantics(twice));
+        mutateOptionalContent(doc, mutation);
+        const after = describeOptionalContent(doc, null);
+        const verdict = verifySanitizedOptionalContent(before, after);
+        return plainly({ deterministic, verdict });
+    },
+
+    /** The source-side optional-content reading, for the refusal reasons. */
+    async r9Describe(name, selection) {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const oc = describeOptionalContent(doc, selection);
+        const attach = classifyAttachments(doc);
+        return plainly({
+            unsupported: oc.unsupported,
+            usages: oc.xobjectUsages.map((u) => ({ path: u.path, formRef: u.formRef, ocRef: u.ocRef })),
+            attachmentsUnsafe: attach.complete ? attach.value.unsafe : ['(incomplete)'],
+        });
     },
 });
 

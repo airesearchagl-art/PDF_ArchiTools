@@ -30,10 +30,11 @@ import {
     PDFStream,
 } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
-import { censusIndirectObjects, collectByCensus, dictOf } from './census';
+import { CENSUS_BUDGET, censusIndirectObjects, collectByCensus, dictOf } from './census';
 import type { CensusNode, CensusOutcome } from './census';
 import { readPdfText } from './pdf-text';
 import { classifyField, signatureEvidenceOf } from './field-semantics';
+import { javaScriptCarrierConflict } from './javascript';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -256,11 +257,32 @@ export function censusJavaScript(doc: PDFDocument): CensusOutcome<CensusNode[]> 
  */
 export type ScrubOutcome =
     | { complete: true; scrubbed: number }
-    | { complete: false; reason: string };
+    | { complete: false; unsafe: false; reason: string }
+    /** Round 9: a carrier that is provably something besides an action. */
+    | { complete: false; unsafe: true; reason: string; details: string[] };
 
 export function scrubAllJavaScript(doc: PDFDocument): ScrubOutcome {
     const census = censusJavaScript(doc);
-    if (!census.complete) return { complete: false, reason: census.reason };
+    if (!census.complete) return { complete: false, unsafe: false, reason: census.reason };
+
+    // Round 9 — `/JS` is evidence, not authority. Every carrier is proven to be
+    // an action before any one of them is emptied; a stream, or anything typed
+    // or subtyped as something else, refuses the whole scrub untouched.
+    const streamRoots = new Set<string>();
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (obj instanceof PDFStream) streamRoots.add(ref.tag);
+    }
+    const conflicts: string[] = [];
+    for (const node of census.value) {
+        const conflict = javaScriptCarrierConflict(node.dict, node.depth === 0 && streamRoots.has(node.rootTag));
+        if (conflict) {
+            const where = node.depth === 0 ? `object ${node.rootTag}` : `a dictionary inside ${node.rootTag}`;
+            conflicts.push(`${where} carries JavaScript but ${conflict}`);
+        }
+    }
+    if (conflicts.length > 0) {
+        return { complete: false, unsafe: true, reason: conflicts.join('; '), details: conflicts };
+    }
 
     const rootTags = new Set<string>();
     for (const node of census.value) {
@@ -476,24 +498,389 @@ export function censusAttachments(doc: PDFDocument): CensusOutcome<AttachmentCen
     return { complete: true, value: result, nodes: outcome.nodes, roots: outcome.roots };
 }
 
-export type AttachmentRemoval =
-    | { complete: true; removed: number; names: string[]; removedActions: string[] }
-    | { complete: false; reason: string };
+/**
+ * BLK-R8R-1 — `/EF` is evidence to inspect, not authority to delete.
+ *
+ * The remover this replaces treated any dictionary carrying `/EF` as a file
+ * specification, condemned every object an `/EF` named, and then deleted every
+ * reference, anywhere, to anything it had condemned. Nothing asked whether those
+ * objects were attachments. Measured, READY, under a confirmation that said only
+ * "an attachment is not carried": an optional-content group carrying `/EF` was
+ * deleted together with its registration, so a layer the author had switched
+ * off was drawn; an `/OCProperties` carrying `/EF` lost its catalog key; an
+ * `/EF /F` naming the form a page draws, or the page's own content stream,
+ * deleted the drawing and handed over a blank page.
+ *
+ * So removal is two steps now, and the first one can refuse:
+ *
+ *   1. **Classify** ({@link classifyAttachments}). Every `/EF` carrier, every
+ *      payload an `/EF` names, every `/FileAttachment` annotation and every
+ *      `/EmbeddedFiles` tree node is checked for its **shape** — it is the
+ *      attachment structure it would be removed as — and for its **context** —
+ *      every reference to it comes from a proven attachment structure. Anything
+ *      else is UNSAFE, and the removal is refused before one entry is touched.
+ *   2. **Remove edges.** Only then are the attachment edges taken out. What
+ *      becomes unreachable is left to the reachability sweep; nothing is deleted
+ *      merely because an `/EF` named it.
+ *
+ * Proven attachment structures — the entry points this contract has always
+ * removed, and no others:
+ *
+ *   - a value of the catalog's `/Names /EmbeddedFiles` name tree;
+ *   - the `/FS` of a `/FileAttachment` annotation;
+ *   - the `/F` of an action (a dictionary with `/S`) — the `/Launch` family;
+ *   - a member of an `/AF` associated-files array.
+ *
+ * A typeless file specification stays supported (BLK-2R): its context proves
+ * what it is. A dictionary with `/EF` in any other context, or with keys a file
+ * specification does not have, is not one — and is not removed as one.
+ */
+
+/** The keys a file specification dictionary may carry. ISO 32000-2, 7.11.3. */
+const FILESPEC_KEYS = new Set([
+    'Type', 'FS', 'F', 'UF', 'DOS', 'Mac', 'Unix', 'ID', 'V', 'EF', 'RF',
+    'Desc', 'CI', 'Thumb', 'EP', 'AFRelationship',
+]);
+/** The keys an `/EF` dictionary may carry. Each names one embedded file stream. */
+const EF_KEYS = new Set(['F', 'UF', 'DOS', 'Mac', 'Unix']);
+/** Stream subtypes that make a stream something a page draws, not a file. */
+const DRAWN_SUBTYPES = new Set(['/Form', '/Image', '/PS']);
+
+/** Where one reference is held. An indirect array's holder is found through it. */
+type EdgeSite =
+    | { kind: 'dict'; holder: PDFDict; key: string; viaArray: boolean; rootTag: string }
+    | { kind: 'array'; arrayTag: string };
+
+/** A reference's context, resolved to the dictionary and key that hold it. */
+interface EdgeContext {
+    holder: PDFDict;
+    key: string;
+    viaArray: boolean;
+    rootTag: string;
+}
+
+export interface AttachmentAnalysis {
+    /** Every dictionary carrying `/EF`, as the census found it. */
+    carriers: CensusNode[];
+    /** Every `/FileAttachment` annotation. */
+    annots: CensusNode[];
+    /**
+     * Why removing these would touch something that is not an attachment. One
+     * entry makes the whole removal a refusal.
+     */
+    unsafe: string[];
+}
 
 /**
- * Remove every attachment, everywhere, and leave nothing half-removed.
+ * Decide, changing nothing, whether every attachment structure in the document
+ * can be removed without touching anything that is not an attachment.
  *
- * Three things go together, because removing any one of them alone is what
- * produced the defects: the `/EF` entry, the payload streams behind it, and —
- * when the carrier sits inside an action this contract does not support, such as
- * `/Launch` — the whole containing action. Deleting a `/Launch` action's file
- * and leaving the action behind would ship a broken action, which is a partial
- * semantic this contract does not invent.
+ * COMPLETE or REFUSED, like every census here: an inbound-reference index that
+ * could not be proven to cover the document cannot prove exclusivity either.
+ */
+export function classifyAttachments(doc: PDFDocument): CensusOutcome<AttachmentAnalysis> {
+    const carriers: CensusNode[] = [];
+    const annots: CensusNode[] = [];
+    const inbound = new Map<string, EdgeSite[]>();
+    const arrayHolder = new Map<PDFArray, EdgeSite>();
+    const rootArrayTag = new Map<PDFArray, string>();
+    const rootIsStream = new Set<string>();
+    let tooDeep = false;
+
+    const addEdge = (tag: string, site: EdgeSite): void => {
+        const list = inbound.get(tag);
+        if (list) list.push(site);
+        else inbound.set(tag, [site]);
+    };
+    const scanArray = (array: PDFArray, site: EdgeSite, depth: number): void => {
+        if (depth > CENSUS_BUDGET.maxDirectDepth) {
+            tooDeep = true;
+            return;
+        }
+        arrayHolder.set(array, site);
+        const inner: EdgeSite = site.kind === 'dict' ? { ...site, viaArray: true } : site;
+        for (let i = 0; i < array.size(); i += 1) {
+            const item = array.get(i);
+            if (item instanceof PDFRef) addEdge(item.tag, inner);
+            else if (item instanceof PDFArray) scanArray(item, inner, depth + 1);
+        }
+    };
+
+    // Indirect arrays hold references too — `/Annots` very often is one — and
+    // the census hands its visitor dictionaries only.
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (obj instanceof PDFStream) rootIsStream.add(ref.tag);
+        if (obj instanceof PDFArray) {
+            rootArrayTag.set(obj, ref.tag);
+            scanArray(obj, { kind: 'array', arrayTag: ref.tag }, 0);
+        }
+    }
+
+    const outcome = censusIndirectObjects(doc, (node) => {
+        const { dict, rootTag } = node;
+        for (const [k, value] of dict.entries()) {
+            const key = k.asString().replace(/^\//, '');
+            if (value instanceof PDFRef) {
+                addEdge(value.tag, { kind: 'dict', holder: dict, key, viaArray: false, rootTag });
+            } else if (value instanceof PDFArray) {
+                scanArray(value, { kind: 'dict', holder: dict, key, viaArray: true, rootTag }, 0);
+            }
+        }
+        if (isFileAttachmentAnnot(dict)) annots.push(node);
+        if (carriesEmbeddedFile(dict)) carriers.push(node);
+    });
+    if (!outcome.complete) return outcome;
+    if (tooDeep) {
+        return {
+            complete: false,
+            reason: `an array nests deeper than ${CENSUS_BUDGET.maxDirectDepth}`,
+            nodes: outcome.nodes,
+            roots: outcome.roots,
+        };
+    }
+
+    /** Every dictionary-and-key a reference is ultimately held under, or null. */
+    const contextsOf = (site: EdgeSite): EdgeContext[] | null => {
+        if (site.kind === 'dict') return [site];
+        const holders = inbound.get(site.arrayTag) ?? [];
+        const out: EdgeContext[] = [];
+        for (const holder of holders) {
+            // An indirect array held by another indirect array is a shape no
+            // attachment structure takes, so it is not followed further.
+            if (holder.kind !== 'dict') return null;
+            out.push({ ...holder, viaArray: true });
+        }
+        return out;
+    };
+    const where = (c: EdgeContext): string => `${c.rootTag} /${c.key}`;
+    const typeOf = (dict: PDFDict): string => nameOf(dict.get(PDFName.of('Type')));
+
+    const unsafe: string[] = [];
+    const note = (text: string): void => {
+        if (!unsafe.includes(text)) unsafe.push(text);
+    };
+
+    // ---- the `/EmbeddedFiles` tree ------------------------------------------
+    const namesDict = lookupQuietly(doc, doc.catalog.get(PDFName.of('Names')));
+    const treeNodes = new Set<PDFDict>();
+    const treeTags = new Set<string>();
+    if (namesDict instanceof PDFDict) {
+        const walkTree = (raw: unknown, depth: number): void => {
+            if (depth > 32) return;
+            if (raw instanceof PDFRef) {
+                if (treeTags.has(raw.tag)) return;
+                treeTags.add(raw.tag);
+            }
+            const node = lookupQuietly(doc, raw);
+            if (!(node instanceof PDFDict)) return;
+            treeNodes.add(node);
+            const kids = lookupQuietly(doc, node.get(PDFName.of('Kids')));
+            if (kids instanceof PDFArray) {
+                for (let i = 0; i < kids.size(); i += 1) walkTree(kids.get(i), depth + 1);
+            }
+        };
+        const root = namesDict.get(PDFName.of('EmbeddedFiles'));
+        if (root !== undefined) walkTree(root, 0);
+    }
+
+    // ---- what each role may be held by --------------------------------------
+    const carrierDicts = new Set<PDFDict>();
+    const efDicts = new Set<PDFDict>();
+    const isAction = (dict: PDFDict): boolean => dict.get(PDFName.of('S')) !== undefined;
+
+    const fileSpecContext = (c: EdgeContext): boolean =>
+        (treeNodes.has(c.holder) && c.key === 'Names' && c.viaArray)
+        || (isFileAttachmentAnnot(c.holder) && c.key === 'FS' && !c.viaArray)
+        || (isAction(c.holder) && c.key === 'F' && !c.viaArray)
+        || (c.key === 'AF' && c.viaArray);
+    const efDictContext = (c: EdgeContext): boolean =>
+        carrierDicts.has(c.holder) && c.key === 'EF' && !c.viaArray;
+    const payloadContext = (c: EdgeContext): boolean =>
+        efDicts.has(c.holder) && EF_KEYS.has(c.key) && !c.viaArray;
+    const annotContext = (c: EdgeContext): boolean =>
+        (c.key === 'Annots' && c.viaArray)
+        || (c.key === 'Parent' && !c.viaArray && nameOf(c.holder.get(PDFName.of('Subtype'))) === '/Popup')
+        || (c.key === 'IRT' && !c.viaArray)
+        || (c.key === 'Obj' && !c.viaArray && typeOf(c.holder) === '/OBJR');
+    const treeNodeContext = (c: EdgeContext): boolean =>
+        (c.holder === namesDict && c.key === 'EmbeddedFiles' && !c.viaArray)
+        || (treeNodes.has(c.holder) && c.key === 'Kids' && c.viaArray);
+
+    /** Every reference to `tag` is held in `allowed` context, or it is unsafe. */
+    const exclusive = (
+        tag: string,
+        allowed: (c: EdgeContext) => boolean,
+        what: string,
+    ): void => {
+        for (const site of inbound.get(tag) ?? []) {
+            const contexts = contextsOf(site);
+            if (contexts === null) {
+                note(`${what} ${tag} is reached through an indirect array held by another array`);
+                continue;
+            }
+            for (const c of contexts) {
+                if (!allowed(c)) {
+                    note(`${what} ${tag} is also reached from ${where(c)}, which is not an attachment structure`);
+                }
+            }
+        }
+    };
+
+    /** The context a direct dictionary sits in, from its census parent. */
+    const directContexts = (node: CensusNode): EdgeContext[] | null => {
+        const parent = node.parent;
+        if (!parent) return null;
+        if (parent.container instanceof PDFDict) {
+            return [{
+                holder: parent.container,
+                key: String(parent.key),
+                viaArray: false,
+                rootTag: node.rootTag,
+            }];
+        }
+        const site = arrayHolder.get(parent.container);
+        if (site) return contextsOf(site);
+        const tag = rootArrayTag.get(parent.container);
+        return tag === undefined ? null : contextsOf({ kind: 'array', arrayTag: tag });
+    };
+
+    // ---- carriers: file-specification shape, `/EF` shape --------------------
+    for (const node of carriers) {
+        const { dict, depth, rootTag } = node;
+        const label = depth === 0 ? `object ${rootTag}` : `a dictionary inside ${rootTag}`;
+        const type = typeOf(dict);
+        const foreign = [...dict.keys()]
+            .map((k) => k.asString().replace(/^\//, ''))
+            .filter((k) => !FILESPEC_KEYS.has(k));
+        if (depth === 0 && rootIsStream.has(rootTag)) {
+            note(`${label} carries /EF but is a stream, not a file specification`);
+        } else if (type !== '' && type !== '/Filespec') {
+            note(`${label} carries /EF but is ${type}, not a file specification`);
+        } else if (foreign.length > 0) {
+            note(`${label} carries /EF alongside /${foreign.join(', /')}, which a file specification does not have`);
+        }
+        carrierDicts.add(dict);
+
+        // A stream's dictionary is not a PDFDict instance, so a stream here fails
+        // the same test as a number would.
+        const ef = lookupQuietly(doc, dict.get(PDFName.of('EF')));
+        if (!(ef instanceof PDFDict)) {
+            note(`${label} /EF is not a dictionary of embedded files`);
+            continue;
+        }
+        efDicts.add(ef);
+        for (const [k] of ef.entries()) {
+            const key = k.asString().replace(/^\//, '');
+            if (!EF_KEYS.has(key)) note(`${label} /EF holds /${key}, which names no embedded file`);
+        }
+    }
+
+    for (const node of carriers) {
+        const { dict, depth, rootTag } = node;
+        const label = depth === 0 ? `object ${rootTag}` : `a dictionary inside ${rootTag}`;
+
+        // Context: where the file specification itself is held.
+        if (depth === 0) {
+            exclusive(rootTag, fileSpecContext, 'file specification');
+        } else {
+            const contexts = directContexts(node);
+            if (contexts === null || contexts.length === 0 || !contexts.every(fileSpecContext)) {
+                const at = contexts && contexts.length > 0 ? ` at ${where(contexts[0])}` : '';
+                note(`${label} carries /EF${at}, which is not an attachment structure`);
+            }
+        }
+
+        const rawEf = dict.get(PDFName.of('EF'));
+        if (rawEf instanceof PDFRef) exclusive(rawEf.tag, efDictContext, '/EF dictionary');
+        const ef = lookupQuietly(doc, rawEf);
+        if (!(ef instanceof PDFDict)) continue;
+
+        // Payloads: an embedded file stream, held by `/EF` dictionaries only.
+        for (const [k, raw] of ef.entries()) {
+            const key = k.asString().replace(/^\//, '');
+            const target = lookupQuietly(doc, raw);
+            const at = raw instanceof PDFRef ? raw.tag : 'a direct value';
+            if (!(target instanceof PDFStream)) {
+                note(`${label} /EF /${key} names ${at}, which is not an embedded file stream`);
+                continue;
+            }
+            const payloadType = typeOf(target.dict);
+            const subtype = nameOf(target.dict.get(PDFName.of('Subtype')));
+            if (payloadType !== '' && payloadType !== '/EmbeddedFile') {
+                note(`${label} /EF /${key} names ${at}, which is ${payloadType}, not an embedded file`);
+            } else if (DRAWN_SUBTYPES.has(subtype)) {
+                note(`${label} /EF /${key} names ${at}, which is a ${subtype} XObject, not an embedded file`);
+            }
+            if (raw instanceof PDFRef) exclusive(raw.tag, payloadContext, 'embedded file');
+        }
+    }
+
+    // ---- file-attachment annotations -----------------------------------------
+    for (const node of annots) {
+        const { dict, depth, rootTag } = node;
+        const type = typeOf(dict);
+        if (type !== '' && type !== '/Annot') {
+            note(`object ${rootTag} is a /FileAttachment annotation and also ${type}`);
+        }
+        if (depth === 0) {
+            exclusive(rootTag, annotContext, 'file-attachment annotation');
+        } else {
+            const contexts = directContexts(node);
+            if (contexts === null || contexts.length === 0 || !contexts.every(annotContext)) {
+                note(`a /FileAttachment annotation inside ${rootTag} is held outside any /Annots array`);
+            }
+        }
+    }
+
+    // ---- the tree the Names entry is removed with ----------------------------
+    for (const tag of treeTags) exclusive(tag, treeNodeContext, '/EmbeddedFiles node');
+
+    return {
+        complete: true,
+        value: { carriers, annots, unsafe },
+        nodes: outcome.nodes,
+        roots: outcome.roots,
+    };
+}
+
+export type AttachmentRemoval =
+    | { complete: true; removed: number; names: string[]; removedActions: string[] }
+    /** The inspection could not be proven to have covered the document. */
+    | { complete: false; unsafe: false; reason: string }
+    /** An `/EF`, payload or annotation that is not provably an attachment. */
+    | { complete: false; unsafe: true; reason: string; details: string[] };
+
+/**
+ * Remove every attachment, everywhere, and leave nothing half-removed — or
+ * refuse, having touched nothing, when that would remove anything else.
+ *
+ * What goes together is unchanged: the `/EF` entry, the payload streams behind
+ * it, and — when the file specification sits inside an action this contract does
+ * not support, such as `/Launch` — the whole containing action. Deleting a
+ * `/Launch` action's file and leaving the action behind would ship a broken
+ * action, which is a partial semantic this contract does not invent.
+ *
+ * What changed is the authority. Only structures {@link classifyAttachments}
+ * proved attachment-exclusive are edited, and objects are not deleted here at
+ * all: the edges into them are removed, and what that leaves unreachable is
+ * never copied from a source and is swept from an artifact by
+ * {@link pruneUnreachable}.
  */
 export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval {
-    const names: string[] = [];
+    const analysis = classifyAttachments(doc);
+    if (!analysis.complete) return { complete: false, unsafe: false, reason: analysis.reason };
+    if (analysis.value.unsafe.length > 0) {
+        return {
+            complete: false,
+            unsafe: true,
+            reason: analysis.value.unsafe.join('; '),
+            details: [...analysis.value.unsafe],
+        };
+    }
+    const { carriers, annots } = analysis.value;
+
     const removedActions: string[] = [];
-    /** Indirect objects to delete, and whose incoming references to remove. */
+    /** Indirect attachment structures whose incoming references are removed. */
     const condemnedTags = new Set<string>();
     let removed = 0;
 
@@ -507,17 +894,17 @@ export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval
         if (!s) return null;
         return s === '/GoTo' ? null : s;
     };
+    const emptyAction = (holder: PDFDict, kind: string): void => {
+        removedActions.push(kind);
+        for (const [key] of [...holder.entries()]) holder.delete(key);
+        removed += 1;
+    };
 
-    // ---- phase 1: identify, by a census that proves it covered the artifact ---
-    const carriers = collectByCensus(doc, (node) => carriesEmbeddedFile(node.dict));
-    if (!carriers.complete) return { complete: false, reason: carriers.reason };
-    const annots = collectByCensus(doc, (node) => isFileAttachmentAnnot(node.dict));
-    if (!annots.complete) return { complete: false, reason: annots.reason };
     // Named before anything is taken apart, by the same rule the facts reader
     // uses, so what the run reports removing is what the person was shown.
-    names.push(...attachmentLabels(doc, carriers.value, annots.value));
+    const names = attachmentLabels(doc, carriers, annots);
 
-    for (const node of carriers.value) {
+    for (const node of carriers) {
         const { dict, parent, depth, rootTag } = node;
 
         const ef = dict.get(PDFName.of('EF'));
@@ -530,27 +917,23 @@ export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval
         dict.delete(PDFName.of('EF'));
         removed += 1;
 
-        // A carrier that IS an indirect object is condemned whole; one nested
-        // directly inside something else is edited in place.
+        // A carrier that IS an indirect object loses every reference to it —
+        // each proven above to be an attachment edge. One nested directly
+        // inside something else is edited in place.
         if (depth === 0) condemnedTags.add(rootTag);
         else if (parent && parent.container instanceof PDFDict) {
             const holder = parent.container;
             const kind = unsupportedAction(holder);
-            if (kind) {
-                // A `/Launch` whose file has been taken away is a broken action,
-                // and this contract does not invent partial action semantics. The
-                // whole action goes, and the removal is named.
-                removedActions.push(kind);
-                for (const [key] of [...holder.entries()]) holder.delete(key);
-                removed += 1;
-            } else {
-                holder.delete(PDFName.of(String(parent.key)));
-            }
+            if (kind) emptyAction(holder, kind);
+            else holder.delete(PDFName.of(String(parent.key)));
         }
     }
 
-    for (const node of annots.value) {
-        condemn(node.dict.get(PDFName.of('FS')));
+    for (const node of annots) {
+        // The annotation's own `/FS` entry goes with it. A file specification
+        // that carries `/EF` was condemned as a carrier above; one that does
+        // not carries no payload, and is left for the sweep rather than having
+        // every other reference to it removed on the annotation's account.
         node.dict.delete(PDFName.of('FS'));
         if (node.depth === 0) condemnedTags.add(node.rootTag);
         else if (node.parent?.container instanceof PDFArray) {
@@ -568,38 +951,40 @@ export function removeAttachmentsEverywhere(doc: PDFDocument): AttachmentRemoval
         removed += 1;
     }
 
-    // ---- phase 2: remove every incoming reference, then the objects -----------
+    // ---- the incoming references, and only those -----------------------------
     //
-    // The census deliberately does not follow references — that is what makes it
-    // complete — so it cannot see that an `/Annots` array holds a reference to a
-    // condemned annotation. Taking the object out without taking the reference
-    // out left the annotation in the artifact, counted by the readback and
-    // reported as a survival. So references are removed by their own pass.
+    // Every one was classified an attachment edge above, so removing them
+    // removes attachments and nothing else. The census does not follow
+    // references, so it cannot see that an `/Annots` array holds one; indirect
+    // arrays are walked by their own pass for the same reason.
     if (condemnedTags.size > 0) {
+        const pruneArray = (array: PDFArray, depth: number): void => {
+            if (depth > CENSUS_BUDGET.maxDirectDepth) return;
+            for (let i = array.size() - 1; i >= 0; i -= 1) {
+                const entry = array.get(i);
+                if (entry instanceof PDFRef && condemnedTags.has(entry.tag)) array.remove(i);
+                else if (entry instanceof PDFArray) pruneArray(entry, depth + 1);
+            }
+        };
         const pass = censusIndirectObjects(doc, ({ dict }) => {
             for (const [key, value] of [...dict.entries()]) {
-                if (value instanceof PDFRef && condemnedTags.has(value.tag)) dict.delete(key);
-                if (value instanceof PDFArray) {
-                    for (let i = value.size() - 1; i >= 0; i -= 1) {
-                        const entry = value.get(i);
-                        if (entry instanceof PDFRef && condemnedTags.has(entry.tag)) value.remove(i);
+                if (value instanceof PDFRef && condemnedTags.has(value.tag)) {
+                    // A `/Launch` whose file has been taken away is a broken
+                    // action; the whole action goes, and the removal is named.
+                    const kind = key.asString() === '/F' ? unsupportedAction(dict) : null;
+                    if (kind) {
+                        emptyAction(dict, kind);
+                        break;
                     }
+                    dict.delete(key);
+                } else if (value instanceof PDFArray) {
+                    pruneArray(value, 0);
                 }
             }
         });
-        if (!pass.complete) return { complete: false, reason: pass.reason };
-    }
-
-    for (const tag of condemnedTags) {
-        for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-            if (ref.tag !== tag) continue;
-            const dict = dictOf(obj);
-            if (dict) {
-                for (const [key] of [...dict.entries()]) dict.delete(key);
-            }
-            doc.context.delete(ref);
-            removed += 1;
-            break;
+        if (!pass.complete) return { complete: false, unsafe: false, reason: pass.reason };
+        for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+            if (obj instanceof PDFArray) pruneArray(obj, 0);
         }
     }
 

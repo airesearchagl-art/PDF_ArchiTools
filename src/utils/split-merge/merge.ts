@@ -43,6 +43,8 @@ import {
     INTAKE_RESULT,
     M6_STATUS,
     requiresConfirmation,
+    UNSAFE_ATTACHMENT_REASON_JA,
+    UNSAFE_JAVASCRIPT_REASON_JA,
 } from './contracts';
 import { inspectLoadBoundary } from './load-boundary';
 import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
@@ -52,6 +54,7 @@ import {
     carryOptionalContent,
     describeOptionalContent,
     planOptionalContent,
+    verifySanitizedOptionalContent,
 } from './optional-content';
 import type { OptionalContentDescription } from './optional-content';
 import {
@@ -219,6 +222,19 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
                 status: M6_STATUS.CENSUS_INCOMPLETE,
                 reason: '添付ファイルの有無を完全に確認できなかったため統合できません。',
                 detail: { reason: facts.attachmentsRefusal },
+            },
+        };
+    }
+    if (facts.attachmentsUnsafe.length > 0) {
+        // BLK-R8R-1: at intake, so the Merge never asks anyone to confirm the
+        // removal of an "attachment" that is also a layer or a drawing.
+        return {
+            ...base,
+            refusal: {
+                intake: INTAKE_RESULT.UNSAFE_ATTACHMENT_STRUCTURE,
+                status: M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+                reason: UNSAFE_ATTACHMENT_REASON_JA,
+                detail: { unsafe: facts.attachmentsUnsafe },
             },
         };
     }
@@ -886,12 +902,44 @@ export async function runMerge(
 
         const strippedAttachments = removeAttachmentsEverywhere(source);
         if (!strippedAttachments.complete) {
+            return strippedAttachments.unsafe
+                ? refusedMerge(
+                    M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+                    `${input.name}: ${UNSAFE_ATTACHMENT_REASON_JA}`,
+                    plan.intake,
+                    outputName,
+                    { source: input.name, unsafe: strippedAttachments.details },
+                    losses,
+                )
+                : refusedMerge(
+                    M6_STATUS.CENSUS_INCOMPLETE,
+                    `${input.name}: 添付ファイルの有無を完全に確認できなかったため処理しません。`,
+                    plan.intake,
+                    outputName,
+                    { source: input.name, reason: strippedAttachments.reason },
+                    losses,
+                );
+        }
+
+        /**
+         * RF-R9-1 — the source as it will actually be copied, re-described and
+         * held to what was inspected before any of it was sanitized.
+         *
+         * The carry used to run on the description taken before the source was
+         * mutated, over the mutated source. A sanitizer that took a group's
+         * `/OFF` entry with it left a configuration that held together and was
+         * wrong: the layer was carried, registered, and on. Now the carry runs
+         * on this description, and only when it is the same one.
+         */
+        const sanitizedOc = describeOptionalContent(source, null);
+        const ocChange = verifySanitizedOptionalContent(oc, sanitizedOc);
+        if (ocChange) {
             return refusedMerge(
-                M6_STATUS.CENSUS_INCOMPLETE,
-                `${input.name}: 添付ファイルの有無を完全に確認できなかったため処理しません。`,
+                ocChange.status,
+                `${input.name}: ${ocChange.reason}`,
                 plan.intake,
                 outputName,
-                { source: input.name, reason: strippedAttachments.reason },
+                { source: input.name, ...ocChange.detail },
                 losses,
             );
         }
@@ -1018,8 +1066,10 @@ export async function runMerge(
             }
         }
 
-        if (oc.present && oc.unsupported.length === 0) {
-            if (oc.pageProperties.length === 0 && oc.xobjectUsages.length === 0) {
+        // RF-R9-1: carried from the verified post-sanitization description of
+        // the source actually copied, never from the pre-mutation one.
+        if (sanitizedOc.present) {
+            if (sanitizedOc.pageProperties.length === 0 && sanitizedOc.xobjectUsages.length === 0) {
                 // The source declares optional content that no page of it uses
                 // — through `/Properties` or through a form XObject's `/OC`.
                 // Carrying nothing would drop the configuration silently.
@@ -1033,14 +1083,14 @@ export async function runMerge(
                 );
             }
             const shifted: OptionalContentDescription = {
-                ...oc,
-                pageProperties: oc.pageProperties.map((e) => ({
+                ...sanitizedOc,
+                pageProperties: sanitizedOc.pageProperties.map((e) => ({
                     ...e,
                     pageIndex: e.pageIndex + firstNewPage,
                 })),
                 // A form XObject's `/OC` is found again through the output page
                 // it landed on, so its page index shifts with the rest.
-                xobjectUsages: oc.xobjectUsages.map((e) => ({
+                xobjectUsages: sanitizedOc.xobjectUsages.map((e) => ({
                     ...e,
                     pageIndex: e.pageIndex + firstNewPage,
                 })),
@@ -1138,14 +1188,23 @@ export async function runMerge(
 
     const outputAttachments = removeAttachmentsEverywhere(out);
     if (!outputAttachments.complete) {
-        return refusedMerge(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            '添付ファイルの有無を完全に確認できなかったため処理しません。',
-            plan.intake,
-            outputName,
-            { reason: outputAttachments.reason },
-            losses,
-        );
+        return outputAttachments.unsafe
+            ? refusedMerge(
+                M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+                UNSAFE_ATTACHMENT_REASON_JA,
+                plan.intake,
+                outputName,
+                { unsafe: outputAttachments.details },
+                losses,
+            )
+            : refusedMerge(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                '添付ファイルの有無を完全に確認できなかったため処理しません。',
+                plan.intake,
+                outputName,
+                { reason: outputAttachments.reason },
+                losses,
+            );
     }
     dropOpenAction(out);
 
@@ -1160,17 +1219,36 @@ export async function runMerge(
             losses,
         );
     }
+    if (sanitized.status === 'UNSAFE') {
+        return refusedMerge(
+            M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+            UNSAFE_JAVASCRIPT_REASON_JA,
+            plan.intake,
+            outputName,
+            { conflicts: sanitized.conflicts },
+            losses,
+        );
+    }
 
     const scrubbed = scrubAllJavaScript(out);
     if (!scrubbed.complete) {
-        return refusedMerge(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            'JavaScriptの有無を完全に確認できなかったため処理しません。',
-            plan.intake,
-            outputName,
-            { reason: scrubbed.reason },
-            losses,
-        );
+        return scrubbed.unsafe
+            ? refusedMerge(
+                M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+                UNSAFE_JAVASCRIPT_REASON_JA,
+                plan.intake,
+                outputName,
+                { conflicts: scrubbed.details },
+                losses,
+            )
+            : refusedMerge(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                'JavaScriptの有無を完全に確認できなかったため処理しません。',
+                plan.intake,
+                outputName,
+                { reason: scrubbed.reason },
+                losses,
+            );
     }
 
     applyMergeMetadata(out, plan.metadataPolicy, metadataSources);

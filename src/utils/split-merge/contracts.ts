@@ -119,6 +119,25 @@ export const M6_STATUS = {
      * described, and describing it as empty is how it disappeared silently.
      */
     UNREADABLE_DESTINATIONS: 'UNREADABLE_DESTINATIONS',
+    /**
+     * Something carries the marks of an attachment and cannot be proven to be
+     * only one. BLK-R8R-1.
+     *
+     * `/EF` is evidence to inspect, not authority to delete. A dictionary that
+     * carries `/EF` and is also an optional-content group, a payload that is
+     * also the form a page draws, a payload also reached from outside any
+     * attachment structure — removing any of them as "the attachment" would
+     * remove the other thing too, under a confirmation that named only the
+     * attachment. So the document is refused before anything is asked.
+     */
+    UNSAFE_ATTACHMENT_STRUCTURE: 'UNSAFE_ATTACHMENT_STRUCTURE',
+    /**
+     * Something carries JavaScript and is provably not only an action — a
+     * stream, a form XObject, a group, a page. Round 9, the same rule as
+     * BLK-R8R-1: taking it apart as "the script" would take the drawing, the
+     * layer or the page with it, so the document is refused instead.
+     */
+    UNSAFE_JAVASCRIPT_STRUCTURE: 'UNSAFE_JAVASCRIPT_STRUCTURE',
 } as const;
 
 export type M6Status = typeof M6_STATUS[keyof typeof M6_STATUS];
@@ -155,6 +174,19 @@ export class M6Error extends Error {
  */
 export const GENERIC_REFUSAL_JA =
     'このPDFは安全に処理できることを確認できなかったため処理しません。';
+
+/**
+ * BLK-R8R-1, in the person's words: what would be lost is not only an
+ * attachment, so this is not a question they can be asked.
+ */
+export const UNSAFE_ATTACHMENT_REASON_JA =
+    '添付ファイルの目印（/EF）を持つ構造を、添付ファイル以外の内容（レイヤー・図形・ページの内容など）と'
+    + '区別できないため処理しません。添付ファイルとして取り除くと、それ以外の内容まで失われるおそれがあります。';
+
+/** Round 9, the JavaScript counterpart of {@link UNSAFE_ATTACHMENT_REASON_JA}. */
+export const UNSAFE_JAVASCRIPT_REASON_JA =
+    'JavaScriptの目印を持つ構造を、アクション以外の内容（図形・レイヤー・ページなど）と'
+    + '区別できないため処理しません。JavaScriptとして取り除くと、それ以外の内容まで失われるおそれがあります。';
 
 /** What a kept page loses, named one by one so it can be agreed to. */
 export type M6Loss =
@@ -329,6 +361,15 @@ export interface M6SourceFacts {
     attachmentsComplete: boolean;
     /** Why the attachment census could not prove completeness. */
     attachmentsRefusal?: string;
+    /**
+     * BLK-R8R-1: every `/EF`, payload or file-attachment annotation that could
+     * not be proven to be an attachment and nothing else.
+     *
+     * Non-empty is a refusal before anything is asked or written. A person is
+     * only ever asked to agree to losing an attachment; removing something that
+     * merely carries `/EF` would take whatever else it is along with it.
+     */
+    attachmentsUnsafe: string[];
     hasOptionalContent: boolean;
     /** Why the facts could not be read, when `readable` is false. */
     reason?: string;
@@ -443,6 +484,12 @@ export interface ReadbackFacts {
     optionalContentUnregisteredUses: number;
     /** `/OC` entries still naming a membership dictionary. Must be 0. */
     optionalContentOcmdSurvivors: number;
+    /**
+     * RF-R8R-1: `/Properties` entries naming a group or membership dictionary —
+     * marked-content optional content. Not itself a failure; the dangling,
+     * unregistered and membership-dictionary counts include these.
+     */
+    optionalContentPropertyUses: number;
     /** Configuration entries that do not hold together. Must be 0. */
     optionalContentConfigErrors: number;
     /** What the census found, so a refusal can name it. */
@@ -505,6 +552,8 @@ export const INTAKE_RESULT = {
      * incomplete census here has to be a refusal rather than "nothing found".
      */
     CENSUS_INCOMPLETE: 'CENSUS_INCOMPLETE',
+    /** An `/EF` structure that is not provably only an attachment. BLK-R8R-1. */
+    UNSAFE_ATTACHMENT_STRUCTURE: 'UNSAFE_ATTACHMENT_STRUCTURE',
     /** Requested, and never decided. Always a refusal, never an omission. */
     NOT_DECIDED: 'NOT_DECIDED',
 } as const;
@@ -525,6 +574,7 @@ export const INTAKE_LABEL_JA: Record<IntakeResultCode, string> = {
     WORKER_TIMEOUT: '確認処理が時間内に終わりませんでした',
     CANCELLED: '中止されました',
     CENSUS_INCOMPLETE: '内容を完全に確認できませんでした',
+    UNSAFE_ATTACHMENT_STRUCTURE: '添付ファイルとして安全に取り除けない構造を含みます',
     NOT_DECIDED: '確認できていません',
 };
 

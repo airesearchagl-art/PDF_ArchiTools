@@ -35,7 +35,12 @@ import type {
     M6SourceFacts,
     StructuralPlan,
 } from './contracts';
-import { GENERIC_REFUSAL_JA, M6_STATUS } from './contracts';
+import {
+    GENERIC_REFUSAL_JA,
+    M6_STATUS,
+    UNSAFE_ATTACHMENT_REASON_JA,
+    UNSAFE_JAVASCRIPT_REASON_JA,
+} from './contracts';
 import { inspectLoadBoundary } from './load-boundary';
 import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
 import type { M6Policy } from './policy';
@@ -52,6 +57,7 @@ import {
     carryOptionalContent,
     describeOptionalContent,
     planOptionalContent,
+    verifySanitizedOptionalContent,
 } from './optional-content';
 import { sanitizeJavaScript } from './javascript';
 import { planFormForExtract, readForm, rebuildAcroForm, removeSignatureWidgets } from './forms';
@@ -132,6 +138,7 @@ const emptyFacts = (sourceBytes: number): M6SourceFacts => ({
     hasAttachments: false,
     attachmentNames: [],
     attachmentsComplete: false,
+    attachmentsUnsafe: [],
     hasOptionalContent: false,
 });
 
@@ -236,6 +243,19 @@ export async function planExtract(
             facts,
             destinationPolicy,
             { reason: facts.attachmentsRefusal },
+        );
+    }
+    if (facts.attachmentsUnsafe.length > 0) {
+        // BLK-R8R-1: refused here, before a confirmation is asked for. The
+        // confirmation would name an attachment; the removal would take a
+        // layer, a drawing or a page's content with it.
+        return refusedPlan(
+            M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+            UNSAFE_ATTACHMENT_REASON_JA,
+            selection,
+            facts,
+            destinationPolicy,
+            { unsafe: facts.attachmentsUnsafe },
         );
     }
     if (selection.length === 0) {
@@ -399,14 +419,23 @@ export async function planExtract(
     // reporting zero if it cannot prove it covered the document.
     const plannedAttachments = removeAttachmentsEverywhere(working);
     if (!plannedAttachments.complete) {
-        return refusedPlan(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            '添付ファイルの有無を完全に確認できなかったため処理しません。',
-            selection,
-            facts,
-            destinationPolicy,
-            { reason: plannedAttachments.reason },
-        );
+        return plannedAttachments.unsafe
+            ? refusedPlan(
+                M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+                UNSAFE_ATTACHMENT_REASON_JA,
+                selection,
+                facts,
+                destinationPolicy,
+                { unsafe: plannedAttachments.details },
+            )
+            : refusedPlan(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                '添付ファイルの有無を完全に確認できなかったため処理しません。',
+                selection,
+                facts,
+                destinationPolicy,
+                { reason: plannedAttachments.reason },
+            );
     }
     // Every `/Sig` widget goes, applied or empty: the reconstruction does not
     // rebuild signature fields (M6-H3 defers that), and a widget left behind
@@ -426,6 +455,27 @@ export async function planExtract(
                 { unclassified: removal.unclassified },
             );
         }
+    }
+
+    /**
+     * RF-R9-1 — the sanitization above is not an optional-content
+     * transformation, so what it leaves has to be exactly what was planned.
+     *
+     * An artifact that holds together can still be the wrong one: a sanitizer
+     * that deletes a group's `/OFF` entry leaves a coherent configuration in
+     * which the layer is on. So the question is asked of the source, on both
+     * sides of the destructive steps, and any difference is a refusal.
+     */
+    const sanitizedOc = verifySanitizedOptionalContent(oc, describeOptionalContent(working, selection));
+    if (sanitizedOc) {
+        return refusedPlan(
+            sanitizedOc.status,
+            sanitizedOc.reason,
+            selection,
+            facts,
+            destinationPolicy,
+            sanitizedOc.detail,
+        );
     }
 
     const structural = await planStructuralGraph(working, selection);
@@ -619,6 +669,11 @@ export async function runExtract(
 
     let working: PDFDocument | null = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     /**
+     * RF-R9-1: the optional content of these bytes, taken before anything
+     * destructive touches them, so what is carried can be proven to be it.
+     */
+    const ocBeforeSanitization = describeOptionalContent(working, selection);
+    /**
      * RF-R5-1: every annotation gets a name before anything is planned or
      * removed. The reconstructions below are bound to that name, so the
      * sanitization between them and `copyPages` — signature widgets under
@@ -667,15 +722,34 @@ export async function runExtract(
     }
     const removedAttachments = removeAttachmentsEverywhere(working);
     if (!removedAttachments.complete) {
-        return refusedResult(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            '添付ファイルの有無を完全に確認できなかったため処理しません。',
-            outputName,
-            { reason: removedAttachments.reason },
-        );
+        return removedAttachments.unsafe
+            ? refusedResult(
+                M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+                UNSAFE_ATTACHMENT_REASON_JA,
+                outputName,
+                { unsafe: removedAttachments.details },
+            )
+            : refusedResult(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                '添付ファイルの有無を完全に確認できなかったため処理しません。',
+                outputName,
+                { reason: removedAttachments.reason },
+            );
     }
 
+    /**
+     * RF-R9-1 — re-described on the sanitized source, and it has to be the
+     * same optional content, supported, before anything is copied.
+     *
+     * This used to carry only when the re-description happened to come back
+     * supported and otherwise carry nothing at all, which let a sanitizer that
+     * broke a layer ship READY with the layer silently dropped.
+     */
     const ocDescription = describeOptionalContent(working, selection);
+    const sanitizedOc = verifySanitizedOptionalContent(ocBeforeSanitization, ocDescription);
+    if (sanitizedOc) {
+        return refusedResult(sanitizedOc.status, sanitizedOc.reason, outputName, sanitizedOc.detail);
+    }
     const form = readForm(working);
     const formPlan = planFormForExtract(form, selection);
 
@@ -738,7 +812,8 @@ export async function runExtract(
     // Not a failure — the removal is its own reported loss — but recorded.
     const removedAnnots = [...rebuiltDestinations.removed, ...rebuiltPageRefs.removed];
 
-    if (ocDescription.present && ocDescription.unsupported.length === 0) {
+    // Supported and unchanged, both proven above; there is no silent branch.
+    if (ocDescription.present) {
         const carried = carryOptionalContent(working, ocDescription, out);
         if (carried.status === 'REFUSED') {
             return refusedResult(
@@ -782,12 +857,19 @@ export async function runExtract(
     }
     const outputAttachments = removeAttachmentsEverywhere(out);
     if (!outputAttachments.complete) {
-        return refusedResult(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            '添付ファイルの有無を完全に確認できなかったため処理しません。',
-            outputName,
-            { reason: outputAttachments.reason },
-        );
+        return outputAttachments.unsafe
+            ? refusedResult(
+                M6_STATUS.UNSAFE_ATTACHMENT_STRUCTURE,
+                UNSAFE_ATTACHMENT_REASON_JA,
+                outputName,
+                { unsafe: outputAttachments.details },
+            )
+            : refusedResult(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                '添付ファイルの有無を完全に確認できなかったため処理しません。',
+                outputName,
+                { reason: outputAttachments.reason },
+            );
     }
     dropOpenAction(out);
 
@@ -797,18 +879,30 @@ export async function runExtract(
             incomplete: sanitized.incomplete,
         });
     }
+    if (sanitized.status === 'UNSAFE') {
+        return refusedResult(M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE, UNSAFE_JAVASCRIPT_REASON_JA, outputName, {
+            conflicts: sanitized.conflicts,
+        });
+    }
 
     // Belt and braces beside the sweep below: a script inside something that
     // is still reachable has to go too, and a top-level `/S` check never saw
     // an action nested as a direct dictionary.
     const scrubbed = scrubAllJavaScript(out);
     if (!scrubbed.complete) {
-        return refusedResult(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            'JavaScriptの有無を完全に確認できなかったため処理しません。',
-            outputName,
-            { reason: scrubbed.reason },
-        );
+        return scrubbed.unsafe
+            ? refusedResult(
+                M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+                UNSAFE_JAVASCRIPT_REASON_JA,
+                outputName,
+                { conflicts: scrubbed.details },
+            )
+            : refusedResult(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                'JavaScriptの有無を完全に確認できなかったため処理しません。',
+                outputName,
+                { reason: scrubbed.reason },
+            );
     }
 
     const metadata = applyMetadataSnapshot(out, metadataSnapshot, options.sourceName);
