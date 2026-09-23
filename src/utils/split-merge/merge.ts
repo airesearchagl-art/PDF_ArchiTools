@@ -45,6 +45,7 @@ import {
     requiresConfirmation,
     UNSAFE_ATTACHMENT_REASON_JA,
     UNSAFE_JAVASCRIPT_REASON_JA,
+    UNSCANNABLE_ACTIONS_REASON_JA,
 } from './contracts';
 import { inspectLoadBoundary } from './load-boundary';
 import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
@@ -238,30 +239,43 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
             },
         };
     }
-    if (!facts.javascriptComplete) {
-        return {
-            ...base,
-            refusal: {
-                intake: INTAKE_RESULT.CENSUS_INCOMPLETE,
-                status: M6_STATUS.CENSUS_INCOMPLETE,
-                reason: 'JavaScriptの有無を完全に確認できなかったため統合できません。',
-                detail: { reason: facts.javascriptRefusal },
-            },
-        };
-    }
-    if (facts.javascriptUnsafe.length > 0) {
-        // BLK-R9R-1 / RF-R10-1: at intake, so an unsafe script structure is
-        // named on the file's own row before any confirmation is presented —
-        // it used to surface only after the losses had been agreed to.
-        return {
-            ...base,
-            refusal: {
-                intake: INTAKE_RESULT.UNSAFE_JAVASCRIPT_STRUCTURE,
-                status: M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
-                reason: UNSAFE_JAVASCRIPT_REASON_JA,
-                detail: { unsafe: facts.javascriptUnsafe },
-            },
-        };
+    // BLK-R9R-1 / RF-R10-1 / RF-R10R-1: at intake, so an unsafe or unscannable
+    // script structure is named on the file's own row before any confirmation is
+    // presented — and the source is excluded under H10 like any other refused
+    // one, instead of refusing the whole Merge after the copy has begun.
+    switch (facts.javascript.status) {
+        case 'CENSUS_INCOMPLETE':
+            return {
+                ...base,
+                refusal: {
+                    intake: INTAKE_RESULT.CENSUS_INCOMPLETE,
+                    status: M6_STATUS.CENSUS_INCOMPLETE,
+                    reason: 'JavaScriptの有無を完全に確認できなかったため統合できません。',
+                    detail: { reason: facts.javascript.reason },
+                },
+            };
+        case 'UNSCANNABLE':
+            return {
+                ...base,
+                refusal: {
+                    intake: INTAKE_RESULT.UNSCANNABLE_ACTIONS,
+                    status: M6_STATUS.UNSCANNABLE_ACTIONS,
+                    reason: `${UNSCANNABLE_ACTIONS_REASON_JA}: ${facts.javascript.incomplete.join(', ')}`,
+                    detail: { incomplete: facts.javascript.incomplete },
+                },
+            };
+        case 'UNSAFE_STRUCTURE':
+            return {
+                ...base,
+                refusal: {
+                    intake: INTAKE_RESULT.UNSAFE_JAVASCRIPT_STRUCTURE,
+                    status: M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+                    reason: UNSAFE_JAVASCRIPT_REASON_JA,
+                    detail: { unsafe: facts.javascript.unsafe },
+                },
+            };
+        default:
+            break;
     }
     if (facts.hasAppliedSignature) {
         // M6-H2: Merge refuses an applied signature, unlike Extract. A merge

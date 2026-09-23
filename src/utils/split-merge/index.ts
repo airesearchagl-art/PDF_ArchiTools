@@ -29,6 +29,7 @@ export {
     INTAKE_RESULT,
     INTAKE_LABEL_JA,
     GENERIC_REFUSAL_JA,
+    UNSCANNABLE_ACTIONS_REASON_JA,
     M6Error,
     isRunnable,
     m6SnapshotKey,
@@ -42,6 +43,7 @@ export type {
     FieldCollisionPolicy,
     IntakeRecord,
     IntakeResultCode,
+    JavaScriptSafety,
     LossRecord,
     M6Loss,
     M6Snapshot,
@@ -113,8 +115,14 @@ export {
     sanitizeJavaScript,
     javaScriptCarrierConflict,
     classifyJavaScript,
+    assessJavaScript,
+    javaScriptSafetyOf,
+    walkActions,
+    isProvenAction,
+    ACTION_SUBTYPES,
+    SCRIPT_ACTION_SUBTYPES,
 } from './javascript';
-export type { JavaScriptAnalysis } from './javascript';
+export type { ActionWalk, JavaScriptAnalysis, JavaScriptAssessment } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export {
     measureDestinationInvariants,

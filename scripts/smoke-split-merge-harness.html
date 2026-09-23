@@ -40,6 +40,8 @@ import {
     readForm,
     planFormForExtract,
     scanJavaScript,
+    assessJavaScript,
+    sanitizeJavaScript,
     censusJavaScript,
     censusSignatures,
     readSourceFacts,
@@ -2192,6 +2194,70 @@ async function rasterAt(bytes, points) {
 }
 
 /**
+ * Round 11's independent oracles. PDF.js shares no code with pdf-lib, so an
+ * operator that is gone from the drawing is seen by a reader that never
+ * touched the sanitizer.
+ */
+async function opNames(bytes) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const pg = await doc.getPage(1);
+    const list = await pg.getOperatorList();
+    const names = Object.fromEntries(Object.entries(pdfjsLib.OPS).map(([k, v]) => [v, k]));
+    await doc.destroy();
+    return list.fnArray.map((f) => names[f] ?? String(f));
+}
+
+/**
+ * References that name an object the document does not hold, counted by the
+ * gate's own walk: a resource whose target was deleted is not a JavaScript
+ * count, and nothing the production readback measures would notice it.
+ */
+function danglingRefs(doc) {
+    let count = 0;
+    const seen = new Set();
+    const walk = (value, depth) => {
+        if (!value || depth > 200 || seen.has(value)) return;
+        if (value instanceof PDFRef) {
+            let target;
+            try { target = doc.context.lookup(value); } catch { target = undefined; }
+            if (target === undefined) count += 1;
+            return;
+        }
+        seen.add(value);
+        const dict = value instanceof PDFDict ? value : (value?.dict instanceof PDFDict ? value.dict : null);
+        if (dict) {
+            for (const [, entry] of dict.entries()) walk(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) {
+            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+        }
+    };
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) walk(obj, 0);
+    return count;
+}
+
+/** What the first page's resource categories resolve to, by name. */
+function resourceKinds(doc) {
+    const lookup = (v) => { try { return v instanceof PDFRef ? doc.context.lookup(v) : v; } catch { return undefined; } };
+    const resources = lookup(doc.getPages()[0].node.get(PDFName.of('Resources')));
+    const out = {};
+    if (!(resources instanceof PDFDict)) return out;
+    for (const category of ['ExtGState', 'Properties']) {
+        const group = lookup(resources.get(PDFName.of(category)));
+        if (!(group instanceof PDFDict)) continue;
+        out[category] = {};
+        for (const [key, value] of group.entries()) {
+            const target = lookup(value);
+            out[category][key.asString().replace(/^\//, '')] = target instanceof PDFDict ? 'dict' : String(target === undefined ? 'missing' : 'other');
+        }
+    }
+    return out;
+}
+
+/**
  * The gate's own optional-content audit of an artifact — every `/OC`, every
  * `/Properties` entry, and the configuration envelope — written here rather
  * than imported, so it cannot share a blind spot with `censusOptionalContent`.
@@ -2377,6 +2443,67 @@ Object.assign(window.__m6, {
             independent: walkEverything(doc),
             audit: rawOcAudit(doc),
             markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /**
+     * Round 11: Extract, read by an oracle that never consulted the
+     * sanitizer — the operators PDF.js draws, the references the artifact holds
+     * that name nothing, and what the page's resources resolve to. The same
+     * reads are taken of the source, so "unchanged" is a comparison and not a
+     * belief.
+     */
+    async r11Artifact(name, selection, points, markers = []) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+        });
+        const sourceDoc = await PDFDocument.load(source, { updateMetadata: false });
+        const base = {
+            plan: plan.status,
+            requires: plan.requiresConfirmation ?? [],
+            planDetail: plan.detail ?? null,
+            run: result.status,
+            sourceOps: await opNames(source),
+            sourceResources: resourceKinds(sourceDoc),
+            before: points ? await rasterAt(source, points) : null,
+            sourceMarkers: Object.fromEntries(markers.map((m) => [m, bytesContain(source, m)])),
+        };
+        if (!result.bytes) return plainly({ ...base, bytes: null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            bytes: result.bytes.length,
+            ops: await opNames(result.bytes),
+            resources: resourceKinds(doc),
+            dangling: danglingRefs(doc),
+            after: points ? await rasterAt(result.bytes, points) : null,
+            independent: walkEverything(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /**
+     * Round 11 (RF-R10R-1): one unmodified source, asked the JavaScript question
+     * by everything that asks it — the source facts planning reads, the shared
+     * assessment, the sanitizer and the scrub. On one immutable source they
+     * cannot answer differently, and this is where that is measured.
+     */
+    async r11Assess(name) {
+        const bytes = await bytesOf(name);
+        const fresh = () => PDFDocument.load(bytes, { updateMetadata: false });
+        const doc = await fresh();
+        const facts = readSourceFacts(doc, bytes.length);
+        const assessed = assessJavaScript(doc);
+        const sanitized = sanitizeJavaScript(await fresh());
+        const scrubbed = scrubAllJavaScript(await fresh());
+        return plainly({
+            facts: facts.javascript.status,
+            assessed: assessed.status,
+            sanitize: sanitized.status,
+            scrub: scrubbed.complete ? 'OK' : (scrubbed.unsafe ? 'UNSAFE' : 'INCOMPLETE'),
         });
     },
 

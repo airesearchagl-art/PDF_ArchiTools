@@ -284,13 +284,19 @@ try {
         // rather than accepted and then refused after somebody has agreed to
         // losing the attachment.
         fixture('r10-k15-js-and-attachment'),
+        // Round 11: a source whose action structure cannot be read to the end
+        // and holds an ordinary attachment, and one whose graphics state is
+        // registered under the resource name /A and carries a stray script.
+        // Each is named on its own row, in its own words.
+        fixture('r11-q9-att-annot-a-42'),
+        fixture('r11-p2-extgstate-name-a'),
     );
     await settle(6000);
 
     const mergeText = await bodyText();
     const rows = await page.$$eval('[data-usage-target="merge-list"] > div', (els) => els.length);
     check('every chosen file has a row, including the ones that cannot be merged',
-        rows === 5, `${rows} rows for 5 files`);
+        rows === 7, `${rows} rows for 7 files`);
     check('RF-R10-1: no confirmation is offered for a file that cannot be merged at all',
         !mergeText.includes('内容を了承して'),
         mergeText.includes('内容を了承して') ? 'a confirmation was offered' : 'none offered');
@@ -299,6 +305,8 @@ try {
         ['signature-applied.pdf', '電子署名が適用されています'],
         ['no-header.pdf', '安全に読み込めることを確認できませんでした'],
         ['r10-k15-js-and-attachment.pdf', 'JavaScriptとして安全に取り除けない構造を含みます'],
+        ['r11-q9-att-annot-a-42.pdf', 'アクションの構造を完全に確認できませんでした'],
+        ['r11-p2-extgstate-name-a.pdf', 'JavaScriptとして安全に取り除けない構造を含みます'],
     ]) {
         check(`${name} is shown with its reason`,
             mergeText.includes(name) && mergeText.includes(label),
@@ -642,6 +650,95 @@ try {
             markers.every((m) => !bytes.includes(m)),
             `${path.basename(out)}, ${bytes.length} bytes`);
     }
+
+    // ---- 11. Round 11: a hard JavaScript refusal comes before every question ---
+    //
+    // BLK-R10R-1 and RF-R10R-1, in the built app. A source whose action
+    // structure cannot be read, or whose script is not proven to be one, has to
+    // be refused by name, on its own row, before anyone is asked about anything
+    // else in it — and the source beside it still has to merge. The intake label
+    // table drives the row, so no new component is asked for; this proves that
+    // it does.
+    console.log('\n=== 11. Round 11 a hard JavaScript refusal precedes every confirmation ===');
+
+    // Merge: the unscannable source holds an ordinary attachment. If it were
+    // accepted, the first click would ask to agree to losing it. It is excluded
+    // at intake instead, so the first click writes the merge.
+    await openMerge();
+    const r11MergeInput = await page.$('input[type="file"]');
+    await r11MergeInput.uploadFile(fixture('r11-q9-att-annot-a-42'), fixture('merge-b'));
+    await settle(4000);
+    const r11Rows = await mergeRows();
+    check('r11-q9: the unscannable source is named on its own row',
+        r11Rows.some((r) => r.name === 'r11-q9-att-annot-a-42.pdf' && r.intake === 'UNSCANNABLE_ACTIONS'),
+        JSON.stringify(r11Rows));
+    check('r11-q9: and the source beside it is still acceptable',
+        r11Rows.some((r) => r.name === 'merge-b.pdf' && r.intake === 'ACCEPTED'), JSON.stringify(r11Rows));
+    const r11Before = downloadedNames().length;
+    await clickMergeExport();
+    await settle(6000);
+    const r11Notice = await mergeNotice();
+    check('r11-q9: the first click writes the merge, and asks about nothing',
+        downloadedNames().length === r11Before + 1 && !r11Notice.includes('CONFIRMATION_REQUIRED'),
+        `${downloadedNames().length - r11Before} new file(s), ${r11Notice.slice(0, 80)}`);
+    check('r11-q9: and the notice says the source was left out, and why',
+        r11Notice.includes('r11-q9-att-annot-a-42.pdf') && r11Notice.includes('アクションの構造を完全に確認できませんでした'),
+        r11Notice.slice(0, 160));
+    const r11Out = downloadedNames()
+        .map((f) => path.join(downloads, f))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    check('r11-q9: and nothing of the excluded source is in the bytes',
+        !fs.readFileSync(r11Out).includes('M6R11_ATTACHMENT_PAYLOAD'), path.basename(r11Out));
+
+    // Extract: the same documents, driven through the real controls. The
+    // refusal has to be the first thing said, and no confirmation may be
+    // offered for an extract that cannot happen.
+    const extractRefusal = async (name) => {
+        await openSplitMerge();
+        const extractInput = await page.$('input[type="file"]');
+        await extractInput.uploadFile(fixture(name));
+        await settle(3500);
+        await page.evaluate(() => {
+            document.querySelector('[data-usage-target="extract-pages"] > div')?.click();
+        });
+        await settle(400);
+        const filesBefore = downloadedNames().length;
+        await page.evaluate(() => {
+            document.querySelector('[data-usage-target="extract-export"]')?.click();
+        });
+        await settle(4000);
+        return {
+            text: await bodyText(),
+            button: await page.evaluate(
+                () => document.querySelector('[data-usage-target="extract-export"]')?.textContent ?? ''),
+            written: downloadedNames().length - filesBefore,
+        };
+    };
+    for (const [name, code, reason, title] of [
+        ['r11-q9-att-annot-a-42', 'UNSCANNABLE_ACTIONS',
+            'この文書のアクション構造を完全に検査できませんでした', 'an action structure that cannot be read, and an attachment'],
+        ['r11-c-unscannable-att-tag', 'UNSCANNABLE_ACTIONS',
+            'この文書のアクション構造を完全に検査できませんでした', 'an unreadable action structure, an attachment and tagging'],
+        ['r11-p2-extgstate-name-a', 'UNSAFE_JAVASCRIPT_STRUCTURE',
+            'JavaScriptの目印を持つ構造を', 'a graphics state called /A carrying a script'],
+        ['r11-c-unsafe-att-tag', 'UNSAFE_JAVASCRIPT_STRUCTURE',
+            'JavaScriptの目印を持つ構造を', 'unsafe JavaScript, an attachment and tagging'],
+    ]) {
+        const r = await extractRefusal(name);
+        check(`${name}: ${title} is refused by name`,
+            r.text.includes(code) && r.text.includes(reason), r.text.includes(code) ? code : 'NOT SHOWN');
+        check(`${name}: and no confirmation is offered`,
+            !r.text.includes('内容を了承して') && r.button.includes('選択したページを書き出し'),
+            `button="${r.button}"`);
+        check(`${name}: and the attachment it holds is not named as something to agree to`,
+            !r.text.includes('notes.txt'), r.text.includes('notes.txt') ? 'notes.txt is on screen' : 'not named');
+        check(`${name}: and nothing is written`, r.written === 0, `${r.written} new file(s)`);
+    }
+    // The control: an attachment on its own is still asked about, by name.
+    const r11Att = await extractRefusal('r11-c-att-only');
+    check('r11-c-att-only: an ordinary attachment still gets its confirmation',
+        r11Att.text.includes('notes.txt') && r11Att.button.includes('内容を了承して書き出し'),
+        `button="${r11Att.button}"`);
 
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));

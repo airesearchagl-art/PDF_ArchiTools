@@ -2601,6 +2601,313 @@ try {
             `intake=${k15v ? k15v.result : 'missing'}`);
     }
 
+    // ---- 64. BLK-R10R-1: a holder and an edge authorize; a name does not -----
+    //
+    // Round 10 asked what establishes that a dictionary is an action, and took
+    // two things for proof that are not: that it carries `/S`, and that the key
+    // holding a reference to it is *named* `/A`, `/Next` or `/OpenAction`. A
+    // resource may be called "A". Measured at 7dea89b: READY, losses empty,
+    // reachableJavaScript 0 — and `setGState` gone from the drawing.
+    //
+    // Every subject below is the same document as its control with one stray key
+    // added, so a refusal is never mistaken for a fix that simply refuses
+    // anything with a resource called "A". Each is read by PDF.js and by the
+    // gate's own walk, neither of which ever consulted the sanitizer.
+    console.log('\n=== 64. Round 11 JavaScript holder and edge authorization ===');
+    {
+        const SQUARE = [{ x: 100, y: 100 }];
+        const JS = 'UNSAFE_JAVASCRIPT_STRUCTURE';
+
+        /** Refused at planning as unsafe JavaScript, by Extract and by Merge. */
+        const refuse = async (fixture, title, needle, marker) => {
+            const r = await call('r11Artifact', fixture, [0], SQUARE, marker ? [marker] : []);
+            if (marker) {
+                probe(`${fixture}: the source really holds the script the refusal is about`,
+                    r.sourceMarkers[marker] === true);
+            }
+            check(`${fixture}: ${title} is refused as unsafe JavaScript, before anything is asked`,
+                r.plan === JS && r.requires.length === 0, `plan=${r.plan} requires=${r.requires.join(',')}`);
+            check(`${fixture}: and Extract publishes nothing`,
+                r.run === JS && r.bytes === null, `run=${r.run}`);
+            const named = (r.planDetail?.unsafe ?? []).join(' | ');
+            check(`${fixture}: and the refusal says what it would have taken apart`,
+                named.includes(needle), named.slice(0, 160));
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
+            const verdict = m.intake.find((i) => i.name === fixture);
+            check(`${fixture}: Merge refuses the source at intake, by name`,
+                Boolean(verdict) && verdict.result === JS, `intake=${verdict ? verdict.result : 'missing'}`);
+            check(`${fixture}: and the source is not in what the Merge writes`,
+                !m.order.includes(fixture), `order=${m.order.join(',')}`);
+        };
+
+        /** READY, the script gone, and the drawing exactly what the source drew. */
+        const passes = async (fixture, title, marker) => {
+            const r = await call('r11Artifact', fixture, [0], SQUARE, [marker]);
+            check(`${fixture}: ${title} is READY`, r.plan === 'READY' && r.run === 'READY',
+                `plan=${r.plan} run=${r.run}`);
+            check(`${fixture}: and the script is not in the artifact`,
+                r.markers?.[marker] === false && r.independent?.javascript === 0,
+                `marker=${r.markers?.[marker]} js=${r.independent?.javascript}`);
+            check(`${fixture}: and PDF.js draws the operators the source drew`,
+                JSON.stringify(r.ops) === JSON.stringify(r.sourceOps),
+                `${(r.sourceOps ?? []).length} -> ${(r.ops ?? []).length} operators`);
+            check(`${fixture}: and the square is painted exactly as it was`,
+                JSON.stringify(r.after) === JSON.stringify(r.before),
+                `before=${r.before?.join(',')} after=${r.after?.join(',')}`);
+            check(`${fixture}: and no reference in the artifact names nothing`,
+                r.dangling === 0, `dangling=${r.dangling}`);
+        };
+
+        // ---- the reviewer's exact adversarial family -------------------------
+        for (const [fixture, title, marker] of [
+            ['r11-p2-extgstate-name-a', 'a graphics state registered under the resource name /A', 'M6R11_P2'],
+            ['r11-p4-extgstate-direct-name-a', 'the same graphics state written directly under /A', 'M6R11_P4'],
+            ['r11-p1-props-name-a', 'a property list named /A', 'M6R11_P1'],
+            ['r11-p1b-props-name-next', 'a property list named /Next', 'M6R11_P1B'],
+            ['r11-p5-props-name-openaction', 'a property list named /OpenAction', 'M6R11_P5'],
+        ]) {
+            await refuse(fixture, title, 'is not an action position', marker);
+        }
+        // Not the optional-content invariant, and not the last thing to notice:
+        // the run is refused for the JavaScript reason, which is the sentence
+        // that is true.
+        const p1 = await call('r11Artifact', 'r11-p1-props-name-a', [0], SQUARE, []);
+        check('r11-p1: it is not left for the optional-content invariant to find a missing layer',
+            p1.run !== 'INVARIANT_VIOLATED' && p1.plan === JS, `plan=${p1.plan} run=${p1.run}`);
+
+        // ---- the controls: the same documents, the stray key removed ---------
+        const gs = await call('r11Artifact', 'r11-p2c-extgstate-name-a-clean', [0], SQUARE, []);
+        probe('r11-p2c: the source really draws through the graphics state',
+            gs.sourceOps.includes('setGState') && gs.before[0] !== 'blue',
+            `ops=${gs.sourceOps.join(',')} before=${gs.before?.[0]}`);
+        for (const [fixture, title, category, name] of [
+            ['r11-p2c-extgstate-name-a-clean', 'a graphics state named /A', 'ExtGState', 'A'],
+            ['r11-p4c-extgstate-direct-name-a-clean', 'a direct graphics state named /A', 'ExtGState', 'A'],
+            ['r11-p1c-props-name-a-clean', 'a property list named /A', 'Properties', 'A'],
+            ['r11-p1bc-props-name-next-clean', 'a property list named /Next', 'Properties', 'Next'],
+            ['r11-p5c-props-name-openaction-clean', 'a property list named /OpenAction', 'Properties', 'OpenAction'],
+        ]) {
+            const r = await call('r11Artifact', fixture, [0], SQUARE, ['M6R11_PLIST']);
+            check(`${fixture}: ${title} is not refused merely for its name`,
+                r.plan === 'READY' && r.run === 'READY', `plan=${r.plan} run=${r.run}`);
+            check(`${fixture}: and PDF.js draws the operators the source drew`,
+                JSON.stringify(r.ops) === JSON.stringify(r.sourceOps),
+                `${(r.sourceOps ?? []).join(',')} -> ${(r.ops ?? []).join(',')}`);
+            check(`${fixture}: and the square is painted exactly as it was`,
+                JSON.stringify(r.after) === JSON.stringify(r.before),
+                `before=${r.before?.join(',')} after=${r.after?.join(',')}`);
+            check(`${fixture}: and /${category} /${name} still resolves to a dictionary`,
+                r.resources?.[category]?.[name] === 'dict'
+                && r.sourceResources?.[category]?.[name] === 'dict',
+                JSON.stringify(r.resources?.[category]));
+            check(`${fixture}: and no reference in the artifact names nothing`,
+                r.dangling === 0, `dangling=${r.dangling}`);
+        }
+
+        // ---- the holder matrix: one child, byte for byte, every holder -------
+        for (const [fixture, marker, title] of [
+            ['r11-h-a-real-openaction', 'M6R11_HA', "the catalog's /OpenAction"],
+            ['r11-h-c-real-annot-a', 'M6R11_HC', "a page annotation's /A"],
+            ['r11-h-e-real-aa', 'M6R11_HE', "an annotation's /AA event"],
+            ['r11-h-g-proven-next', 'M6R11_HG', "a proven action's /Next"],
+            ['r11-h-g2-goto-next-rebuilt', 'M6R11_HG2', "an internal GoTo's /Next, which the rebuild orphans"],
+            ['r11-h-i-names-value', 'M6R11_HI', 'a value slot of the /Names /JavaScript tree'],
+        ]) {
+            await passes(fixture, `the action held by ${title}`, marker);
+        }
+        for (const [fixture, marker, title] of [
+            ['r11-h-b-private-openaction', 'M6R11_HB', "an arbitrary dictionary's /OpenAction"],
+            ['r11-h-d-resource-name-a', 'M6R11_HD', 'a property list named /A'],
+            ['r11-h-d2-extgstate-name-a', 'M6R11_HD2', 'a graphics state named /A'],
+            ['r11-h-f-private-aa', 'M6R11_HF', "an arbitrary dictionary's /AA"],
+            ['r11-h-h-nonaction-next', 'M6R11_HH', "an unproven dictionary's /Next"],
+            ['r11-h-h2-private-next', 'M6R11_HH2', "an arbitrary dictionary's /Next"],
+            ['r11-h-j-names-key-slot', 'M6R11_HJ', 'a name slot of the /Names /JavaScript array'],
+            ['r11-h-k-unrelated-names-tree', 'M6R11_HK', 'a name tree that is not the JavaScript one'],
+        ]) {
+            await refuse(fixture, `the same child held by ${title}`, 'is not an action position', marker);
+        }
+
+        // ---- shared ownership, and one key name in two holders ---------------
+        await refuse('r11-s-annot-a-and-extgstate-a',
+            'an action held by a real annotation /A and by /ExtGState /A', 'is not an action position',
+            'M6R11_S1');
+        await passes('r11-s-three-action-edges', 'an action held by three action positions', 'M6R11_S2');
+        // A holder nothing reaches is not a reason to refuse; one the page reaches is.
+        await passes('r11-s-dead-holder-ignored',
+            'an action also named by an object nothing reaches', 'M6R11_S3');
+
+        // ---- `/S` is a closed vocabulary -------------------------------------
+        await passes('r11-t-javascript', 'a JavaScript action', 'M6R11_T1');
+        await passes('r11-t-rendition', 'a Rendition action carrying /JS', 'M6R11_T2');
+        await passes('r11-t-chain-recognised',
+            'a script reached through URI, Named and Hide actions', 'M6R11_T9');
+        for (const [fixture, marker, title, needle] of [
+            ['r11-t-unknown-s', 'M6R11_T3', 'an unknown /S', 'is not an action type'],
+            ['r11-t-missing-s', 'M6R11_T4', 'a /Type /Action with no /S', 'carries no /S'],
+            ['r11-t-not-a-name-s', 'M6R11_T5', 'an /S that is a string', 'carries no /S'],
+            ['r11-t-type-action-unknown-s', 'M6R11_T6', '/Type /Action with an unknown /S', 'is not an action type'],
+            ['r11-t-type-action-no-script-s', 'M6R11_T7', 'a recognised action with no script to carry', 'no script to carry'],
+            ['r11-t-transparency-s', 'M6R11_T8', 'a transparency group subtype', 'is not an action type'],
+            ['r11-t-chain-unrecognised-link', 'M6R11_T10', 'a script behind a link whose /S is not an action', 'is not an action position'],
+        ]) {
+            await refuse(fixture, title, needle, marker);
+        }
+
+        // ---- Outline items are not a position the action scan walks ----------
+        //
+        // Not a new Human decision: nothing in the current scan reaches an outline
+        // item's `/A`, so a script there is not proven to be at an action position.
+        // Fail closed, and say so. Round 10 read the key's name and accepted it.
+        await refuse('r11-o-outline-a-js', "a script in an outline item's /A", 'is not an action position',
+            'M6R11_O1');
+        const oc = await call('r11Artifact', 'r11-oc-outline-clean', [0], SQUARE, []);
+        check('r11-oc-outline-clean: the same outline without the script is READY',
+            oc.plan === 'READY' && oc.run === 'READY', `plan=${oc.plan} run=${oc.run}`);
+    }
+
+    // ---- 65. RF-R10R-1: one JavaScript safety answer, asked at planning -----
+    //
+    // The sanitizer asked two questions — was the action scan complete, and is
+    // every carrier proven — and planning asked one. So an action structure the
+    // scan could not read to the end planned READY, or asked for the attachment
+    // to be agreed to, and was refused as UNSCANNABLE_ACTIONS after the answer had
+    // been given. A Merge refused every source, not the one that was the problem.
+    console.log('\n=== 65. Round 11 planning asks what the sanitizer asks ===');
+    {
+        const SQUARE = [{ x: 100, y: 100 }];
+        const UNSCAN = 'UNSCANNABLE_ACTIONS';
+        const PAYLOAD = 'M6R11_ATTACHMENT_PAYLOAD';
+
+        for (const [fixture, title, needle] of [
+            ['r11-q9-att-annot-a-42', "an annotation's /A that is the number 42", 'A is neither an action nor a destination'],
+            ['r11-r1-att-annot-aa-42', "an annotation's /AA event that is the number 42", 'neither an action nor a destination'],
+            ['r11-r2-att-page-aa-42', "a page's /AA event that is the number 42", 'neither an action nor a destination'],
+            ['r11-r3-att-annot-a-name', "an annotation's /A that is a name", 'neither an action nor a destination'],
+            ['r11-r4-att-annot-a-dangling', "an annotation's /A that names nothing", 'neither an action nor a destination'],
+            ['r11-r6-att-next-name', 'an action whose /Next is a name', 'neither an action nor a destination'],
+            ['r11-r7-att-annot-a-stream', "an annotation's /A that is a stream", 'neither an action nor a destination'],
+            ['r11-q11-att-next-list-42', 'a /Next list whose second member is the number 42', 'neither an action nor a destination'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], SQUARE, [PAYLOAD]);
+            probe(`${fixture}: the source really holds the attachment a confirmation would name`,
+                r.sourceMarkers[PAYLOAD] === true);
+            check(`${fixture}: ${title} is refused at planning, and nobody is asked about the attachment`,
+                r.plan === UNSCAN && r.requires.length === 0, `plan=${r.plan} requires=${r.requires.join(',')}`);
+            check(`${fixture}: and nothing is written`,
+                r.run === UNSCAN && r.bytes === null, `run=${r.run}`);
+            const named = (r.planDetail?.incomplete ?? []).join(' | ');
+            check(`${fixture}: and the refusal says which position could not be read`,
+                named.includes(needle), named.slice(0, 160));
+
+            // Merge: this source is excluded, by name, at intake — under the
+            // adopted H10 rule — and the source beside it is merged.
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, [PAYLOAD]);
+            const verdict = m.intake.find((i) => i.name === fixture);
+            check(`${fixture}: Merge names the source at intake, as unscannable`,
+                Boolean(verdict) && verdict.result === UNSCAN, `intake=${verdict ? verdict.result : 'missing'}`);
+            check(`${fixture}: and the other source is merged without it, and without a confirmation`,
+                m.run === 'READY' && m.order.join(',') === 'merge-b' && m.bytes !== null,
+                `run=${m.run} order=${m.order.join(',')}`);
+            check(`${fixture}: and none of the excluded source is in what the Merge writes`,
+                m.markers?.[PAYLOAD] === false, `payload=${m.markers?.[PAYLOAD]}`);
+            const alone = await call('r9Merge', [fixture], null, []);
+            check(`${fixture}: a Merge of nothing else writes nothing`,
+                alone.bytes === null && alone.order.length === 0 && alone.run !== 'READY',
+                `run=${alone.run} order=${alone.order.length}`);
+        }
+
+        // The same defect with nothing to confirm: planning used to say READY.
+        for (const fixture of ['r11-eq9-annot-a-42', 'r11-eq9b-annot-a-dangling']) {
+            const r = await call('r9Extract', fixture, [0], SQUARE, []);
+            check(`${fixture}: with no attachment, planning still does not say READY`,
+                r.plan === UNSCAN && r.run === UNSCAN && r.bytes === null,
+                `plan=${r.plan} run=${r.run}`);
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
+            const verdict = m.intake.find((i) => i.name === fixture);
+            check(`${fixture}: and Merge excludes it at intake instead of refusing every source`,
+                verdict?.result === UNSCAN && m.run === 'READY' && m.order.join(',') === 'merge-b',
+                `intake=${verdict?.result} run=${m.run}`);
+        }
+
+        // ---- the hard refusal comes before every question ---------------------
+        for (const [fixture, expected, title] of [
+            ['r11-c-unsafe-only', 'UNSAFE_JAVASCRIPT_STRUCTURE', 'unsafe JavaScript alone'],
+            ['r11-c-unscannable-only', UNSCAN, 'unscannable JavaScript alone'],
+            ['r11-c-unsafe-att', 'UNSAFE_JAVASCRIPT_STRUCTURE', 'unsafe JavaScript and an attachment'],
+            ['r11-c-unscannable-att', UNSCAN, 'unscannable JavaScript and an attachment'],
+            ['r11-c-unsafe-tag', 'UNSAFE_JAVASCRIPT_STRUCTURE', 'unsafe JavaScript and tagging'],
+            ['r11-c-unscannable-tag', UNSCAN, 'unscannable JavaScript and tagging'],
+            ['r11-c-unsafe-att-tag', 'UNSAFE_JAVASCRIPT_STRUCTURE', 'unsafe JavaScript, an attachment and tagging'],
+            ['r11-c-unscannable-att-tag', UNSCAN, 'unscannable JavaScript, an attachment and tagging'],
+            ['r11-c-both-att', UNSCAN, 'both kinds of JavaScript refusal and an attachment'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], SQUARE, []);
+            check(`${fixture}: ${title} is a hard refusal first, and asks nothing`,
+                r.plan === expected && r.requires.length === 0, `plan=${r.plan} requires=${r.requires.join(',')}`);
+            check(`${fixture}: and nothing is written`, r.bytes === null && r.run === expected, `run=${r.run}`);
+        }
+        // The controls: the ordinary losses are still asked about, once.
+        const attOnly = await call('r9Extract', 'r11-c-att-only', [0], SQUARE, [PAYLOAD]);
+        check('r11-c-att-only: an ordinary attachment still gets its confirmation',
+            attOnly.plan === 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION'
+            && attOnly.requires.join(',') === 'attachments', `plan=${attOnly.plan} requires=${attOnly.requires}`);
+        check('r11-c-att-only: and once agreed to it is READY, without the payload',
+            attOnly.run === 'READY' && attOnly.markers?.[PAYLOAD] === false, `run=${attOnly.run}`);
+        const tagOnly = await call('r9Extract', 'r11-c-tag-only', [0], SQUARE, []);
+        check('r11-c-tag-only: tagging still gets its confirmation',
+            tagOnly.plan === 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION'
+            && tagOnly.requires.join(',') === 'tagging', `plan=${tagOnly.plan} requires=${tagOnly.requires}`);
+
+        // ---- planning and the sanitizer, asked of one unmodified source --------
+        //
+        // The source facts planning reads, the shared assessment, `sanitizeJavaScript`
+        // and `scrubAllJavaScript` are four askers of one question. On a source
+        // nothing has touched, none of them may answer differently.
+        const EXPECTED = {
+            SAFE: { sanitize: 'READY', scrub: 'OK' },
+            UNSAFE_STRUCTURE: { sanitize: 'UNSAFE', scrub: 'UNSAFE' },
+            UNSCANNABLE: { sanitize: 'REFUSED', scrub: 'INCOMPLETE' },
+        };
+        const matrix = [
+            // a valid script, wherever it may be
+            ['r10-k7-shared-action', 'SAFE'], ['r10-k9-names-js', 'SAFE'], ['r10-k10-aa-js', 'SAFE'],
+            ['r10-k11-next-js', 'SAFE'], ['r10-k12-detached-action', 'SAFE'],
+            ['r11-h-a-real-openaction', 'SAFE'], ['r11-h-c-real-annot-a', 'SAFE'], ['r11-h-e-real-aa', 'SAFE'],
+            ['r11-h-g-proven-next', 'SAFE'], ['r11-h-g2-goto-next-rebuilt', 'SAFE'],
+            ['r11-s-dead-holder-ignored', 'SAFE'], ['r11-h-i-names-value', 'SAFE'], ['r11-t-javascript', 'SAFE'],
+            ['r11-t-rendition', 'SAFE'], ['r11-t-chain-recognised', 'SAFE'], ['r11-s-three-action-edges', 'SAFE'],
+            ['rem-js-detached-parent-field', 'SAFE'],
+            // no script at all, whatever the resources are called
+            ['r11-p2c-extgstate-name-a-clean', 'SAFE'], ['r11-p1c-props-name-a-clean', 'SAFE'],
+            // not proven to be an action
+            ['r10-k4-extgstate-js', 'UNSAFE_STRUCTURE'], ['r10-k5-group-js', 'UNSAFE_STRUCTURE'],
+            ['r10-k6-props-js', 'UNSAFE_STRUCTURE'], ['r10-k8-mixed-owner', 'UNSAFE_STRUCTURE'],
+            ['r10-k13-detached-typeless', 'UNSAFE_STRUCTURE'], ['r10-k14-extgstate-typed-js', 'UNSAFE_STRUCTURE'],
+            ['r11-p2-extgstate-name-a', 'UNSAFE_STRUCTURE'], ['r11-p4-extgstate-direct-name-a', 'UNSAFE_STRUCTURE'],
+            ['r11-p1-props-name-a', 'UNSAFE_STRUCTURE'], ['r11-p1b-props-name-next', 'UNSAFE_STRUCTURE'],
+            ['r11-p5-props-name-openaction', 'UNSAFE_STRUCTURE'],
+            ['r11-h-b-private-openaction', 'UNSAFE_STRUCTURE'], ['r11-h-d-resource-name-a', 'UNSAFE_STRUCTURE'],
+            ['r11-h-f-private-aa', 'UNSAFE_STRUCTURE'], ['r11-h-h-nonaction-next', 'UNSAFE_STRUCTURE'],
+            ['r11-h-j-names-key-slot', 'UNSAFE_STRUCTURE'], ['r11-h-k-unrelated-names-tree', 'UNSAFE_STRUCTURE'],
+            ['r11-s-annot-a-and-extgstate-a', 'UNSAFE_STRUCTURE'], ['r11-t-unknown-s', 'UNSAFE_STRUCTURE'],
+            ['r11-t-missing-s', 'UNSAFE_STRUCTURE'], ['r11-o-outline-a-js', 'UNSAFE_STRUCTURE'],
+            // an action structure that cannot be read to the end
+            ['r11-q9-att-annot-a-42', 'UNSCANNABLE'], ['r11-eq9-annot-a-42', 'UNSCANNABLE'],
+            ['r11-r1-att-annot-aa-42', 'UNSCANNABLE'], ['r11-r2-att-page-aa-42', 'UNSCANNABLE'],
+            ['r11-r3-att-annot-a-name', 'UNSCANNABLE'], ['r11-r4-att-annot-a-dangling', 'UNSCANNABLE'],
+            ['r11-r6-att-next-name', 'UNSCANNABLE'], ['r11-r7-att-annot-a-stream', 'UNSCANNABLE'],
+            ['r11-q11-att-next-list-42', 'UNSCANNABLE'],
+        ];
+        for (const [fixture, kind] of matrix) {
+            const a = await call('r11Assess', fixture);
+            check(`${fixture}: planning, the assessment, the sanitizer and the scrub all say ${kind}`,
+                a.facts === kind && a.assessed === kind
+                && a.sanitize === EXPECTED[kind].sanitize && a.scrub === EXPECTED[kind].scrub,
+                JSON.stringify(a));
+        }
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));

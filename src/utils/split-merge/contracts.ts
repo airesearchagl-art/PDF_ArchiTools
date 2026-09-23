@@ -188,6 +188,34 @@ export const UNSAFE_JAVASCRIPT_REASON_JA =
     'JavaScriptの目印を持つ構造を、アクション以外の内容（図形・レイヤー・ページなど）と'
     + '区別できないため処理しません。JavaScriptとして取り除くと、それ以外の内容まで失われるおそれがあります。';
 
+/**
+ * Round 11 (RF-R10R-1): the same refusal, for a source whose action structure
+ * could not be inspected completely. Planning, intake and the sanitizer all say
+ * this one sentence, so a document is refused for the same reason in the same
+ * words wherever the question is asked.
+ */
+export const UNSCANNABLE_ACTIONS_REASON_JA =
+    'この文書のアクション構造を完全に検査できませんでした';
+
+/**
+ * What is known about the JavaScript in one document. Closed: exactly one of
+ * these is true, and only SAFE lets anything be planned.
+ *
+ * - `SAFE`: every carrier is proven to be an action — by its own shape and by
+ *   every place that refers to it — and every action position was inspected.
+ * - `UNSAFE_STRUCTURE`: something carries JavaScript and is not proven to be an
+ *   action nothing else depends on. Taking it apart would take that with it.
+ * - `UNSCANNABLE`: an action position could not be read to the end, so what
+ *   lies past it is unknown.
+ * - `CENSUS_INCOMPLETE`: the object census that finds the carriers could not
+ *   prove it covered the document (or was never asked).
+ */
+export type JavaScriptSafety =
+    | { status: 'SAFE' }
+    | { status: 'UNSAFE_STRUCTURE'; unsafe: string[] }
+    | { status: 'UNSCANNABLE'; incomplete: string[] }
+    | { status: 'CENSUS_INCOMPLETE'; reason: string };
+
 /** What a kept page loses, named one by one so it can be agreed to. */
 export type M6Loss =
     | 'tagging'
@@ -371,19 +399,23 @@ export interface M6SourceFacts {
      */
     attachmentsUnsafe: string[];
     /**
-     * BLK-R9R-1: every JavaScript carrier that could not be proven to be an
-     * action and nothing else.
+     * The one JavaScript safety answer for this source: whether every script in
+     * it can be taken apart without taking anything else with it, and whether
+     * that could be proven at all.
      *
      * Read here, at intake, rather than only when the artifact is being
      * sanitized — RF-R10-1. A document that cannot be processed for a
      * JavaScript reason must say so before anyone is asked to agree to losing
      * an attachment for an operation that was never going to happen.
+     *
+     * Round 11 (RF-R10R-1): this is the same {@link JavaScriptSafety} the
+     * sanitizer asks of the artifact — the ownership classification and the
+     * action scan's completeness together — so planning cannot say READY about a
+     * document the sanitizer will later refuse as unscannable. A closed type
+     * rather than a flag and a list: a boolean beside a list can disagree with
+     * itself, and this cannot.
      */
-    javascriptUnsafe: string[];
-    /** Whether the JavaScript ownership analysis proved it covered the document. */
-    javascriptComplete: boolean;
-    /** Why that analysis could not prove completeness. */
-    javascriptRefusal?: string;
+    javascript: JavaScriptSafety;
     hasOptionalContent: boolean;
     /** Why the facts could not be read, when `readable` is false. */
     reason?: string;
@@ -573,6 +605,13 @@ export const INTAKE_RESULT = {
      * at intake rather than at sanitization time. RF-R10-1.
      */
     UNSAFE_JAVASCRIPT_STRUCTURE: 'UNSAFE_JAVASCRIPT_STRUCTURE',
+    /**
+     * An action position that could not be read to the end, so what lies past
+     * it is unknown. RF-R10R-1: refused here, at intake, in the same words the
+     * sanitizer uses — it used to be found only after the losses had been
+     * agreed to, and for a Merge it refused every source, not just this one.
+     */
+    UNSCANNABLE_ACTIONS: 'UNSCANNABLE_ACTIONS',
     /** Requested, and never decided. Always a refusal, never an omission. */
     NOT_DECIDED: 'NOT_DECIDED',
 } as const;
@@ -595,6 +634,7 @@ export const INTAKE_LABEL_JA: Record<IntakeResultCode, string> = {
     CENSUS_INCOMPLETE: '内容を完全に確認できませんでした',
     UNSAFE_ATTACHMENT_STRUCTURE: '添付ファイルとして安全に取り除けない構造を含みます',
     UNSAFE_JAVASCRIPT_STRUCTURE: 'JavaScriptとして安全に取り除けない構造を含みます',
+    UNSCANNABLE_ACTIONS: 'アクションの構造を完全に確認できませんでした',
     NOT_DECIDED: '確認できていません',
 };
 

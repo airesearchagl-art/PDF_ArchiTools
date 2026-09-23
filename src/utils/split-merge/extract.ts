@@ -40,6 +40,7 @@ import {
     M6_STATUS,
     UNSAFE_ATTACHMENT_REASON_JA,
     UNSAFE_JAVASCRIPT_REASON_JA,
+    UNSCANNABLE_ACTIONS_REASON_JA,
 } from './contracts';
 import { inspectLoadBoundary } from './load-boundary';
 import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
@@ -139,8 +140,7 @@ const emptyFacts = (sourceBytes: number): M6SourceFacts => ({
     attachmentNames: [],
     attachmentsComplete: false,
     attachmentsUnsafe: [],
-    javascriptUnsafe: [],
-    javascriptComplete: false,
+    javascript: { status: 'CENSUS_INCOMPLETE', reason: 'the JavaScript in this document was not assessed' },
     hasOptionalContent: false,
 });
 
@@ -260,31 +260,46 @@ export async function planExtract(
             { unsafe: facts.attachmentsUnsafe },
         );
     }
-    if (!facts.javascriptComplete) {
-        // The same rule as the attachment census: an ownership analysis that
-        // could not prove it covered the document cannot prove that taking a
-        // script apart takes nothing else with it.
-        return refusedPlan(
-            M6_STATUS.CENSUS_INCOMPLETE,
-            'JavaScriptの有無を完全に確認できなかったため処理しません。',
-            selection,
-            facts,
-            destinationPolicy,
-            { reason: facts.javascriptRefusal },
-        );
-    }
-    if (facts.javascriptUnsafe.length > 0) {
-        // BLK-R9R-1, and RF-R10-1 for the position: refused here, before the
-        // losses are computed, so nobody is asked to agree to losing an
-        // attachment for an extract that cannot happen for a JavaScript reason.
-        return refusedPlan(
-            M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
-            UNSAFE_JAVASCRIPT_REASON_JA,
-            selection,
-            facts,
-            destinationPolicy,
-            { unsafe: facts.javascriptUnsafe },
-        );
+    // The JavaScript hard-safety answer, asked before anything that could
+    // present a confirmation. BLK-R9R-1 and RF-R10-1 for the position, and
+    // RF-R10R-1 for the scope: it is the same assessment the sanitizer will ask
+    // of the artifact, so an action structure the run would refuse as
+    // unscannable is refused here — nobody is asked to agree to losing an
+    // attachment, or the tagging, for an extract that cannot happen for a
+    // JavaScript reason.
+    switch (facts.javascript.status) {
+        case 'CENSUS_INCOMPLETE':
+            // The same rule as the attachment census: an analysis that could not
+            // prove it covered the document cannot prove that taking a script
+            // apart takes nothing else with it.
+            return refusedPlan(
+                M6_STATUS.CENSUS_INCOMPLETE,
+                'JavaScriptの有無を完全に確認できなかったため処理しません。',
+                selection,
+                facts,
+                destinationPolicy,
+                { reason: facts.javascript.reason },
+            );
+        case 'UNSCANNABLE':
+            return refusedPlan(
+                M6_STATUS.UNSCANNABLE_ACTIONS,
+                `${UNSCANNABLE_ACTIONS_REASON_JA}: ${facts.javascript.incomplete.join(', ')}`,
+                selection,
+                facts,
+                destinationPolicy,
+                { incomplete: facts.javascript.incomplete },
+            );
+        case 'UNSAFE_STRUCTURE':
+            return refusedPlan(
+                M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+                UNSAFE_JAVASCRIPT_REASON_JA,
+                selection,
+                facts,
+                destinationPolicy,
+                { unsafe: facts.javascript.unsafe },
+            );
+        default:
+            break;
     }
     if (selection.length === 0) {
         // Refused in planning, never after `save()`: pdf-lib adds a blank A4 to

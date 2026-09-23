@@ -28,7 +28,7 @@
  * pre-parse Load Boundary already refuses a document whose direct nesting is
  * deeper than its nesting cap long before a census sees it.
  */
-import { PDFArray, PDFDict, PDFRawStream, PDFRef, PDFStream } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFRawStream, PDFRef, PDFStream } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 
 /**
@@ -196,4 +196,77 @@ export function collectByCensus(
     });
     if (!outcome.complete) return outcome;
     return { complete: true, value: found, nodes: outcome.nodes, roots: outcome.roots };
+}
+
+const nameOf = (v: unknown): string => {
+    const asString = (v as { asString?: () => string } | null)?.asString;
+    return typeof asString === 'function' ? asString.call(v) : '';
+};
+
+/**
+ * Every indirect object reachable from the document's roots.
+ *
+ * The roots are marked **by reference**, not by object: pushing the catalog
+ * object walks everything under it but never adds the catalog's own reference,
+ * so an earlier version of this sweep deleted the catalog and the artifact
+ * reopened with no page tree at all. A root that is not marked is not a root.
+ *
+ * Bounded by the visited set rather than by a depth limit. A reachability answer
+ * that gave up early would delete objects that are reachable, which is the one
+ * failure mode worse than keeping a detached one.
+ *
+ * Lives here, with the other whole-document traversal, because two modules ask
+ * it: the sweep that deletes what nothing reaches, and the JavaScript ownership
+ * analysis, which does not count a reference held by an object nothing reaches
+ * as a reason to refuse — a dead holder takes nothing live with it.
+ */
+export function reachableRefTags(doc: PDFDocument): Set<string> {
+    const live = new Set<string>();
+    const seenObjects = new Set<object>();
+    const stack: unknown[] = [];
+
+    const push = (value: unknown): void => {
+        if (value === undefined || value === null) return;
+        stack.push(value);
+    };
+
+    const { Root, Info } = doc.context.trailerInfo as { Root?: unknown; Info?: unknown };
+    if (Root !== undefined) push(Root);
+    if (Info !== undefined) push(Info);
+    push(doc.catalog);
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        const dict = dictOf(obj);
+        if (dict && nameOf(dict.get(PDFName.of('Type'))) === '/Catalog') push(ref);
+    }
+
+    while (stack.length > 0) {
+        const value = stack.pop();
+
+        if (value instanceof PDFRef) {
+            if (live.has(value.tag)) continue;
+            live.add(value.tag);
+            let target: unknown;
+            try {
+                target = doc.context.lookup(value);
+            } catch {
+                continue;
+            }
+            if (target !== undefined) push(target);
+            continue;
+        }
+
+        if (typeof value !== 'object' || value === null) continue;
+        if (seenObjects.has(value)) continue;
+        seenObjects.add(value);
+
+        if (value instanceof PDFDict) {
+            for (const [, entry] of value.entries()) push(entry);
+        } else if (value instanceof PDFArray) {
+            for (let i = 0; i < value.size(); i += 1) push(value.get(i));
+        } else if (value instanceof PDFStream) {
+            for (const [, entry] of value.dict.entries()) push(entry);
+        }
+    }
+
+    return live;
 }

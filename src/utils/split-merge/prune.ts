@@ -30,11 +30,17 @@ import {
     PDFStream,
 } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
-import { CENSUS_BUDGET, censusIndirectObjects, collectByCensus, dictOf } from './census';
+import {
+    CENSUS_BUDGET,
+    censusIndirectObjects,
+    collectByCensus,
+    dictOf,
+    reachableRefTags,
+} from './census';
 import type { CensusNode, CensusOutcome } from './census';
 import { readPdfText } from './pdf-text';
 import { classifyField, signatureEvidenceOf } from './field-semantics';
-import { classifyJavaScript } from './javascript';
+import { assessJavaScript } from './javascript';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -45,72 +51,9 @@ const nameOf = (v: unknown): string => {
 // Reachability, and the sweep
 // ---------------------------------------------------------------------------
 
-/**
- * Every indirect object reachable from the document's roots.
- *
- * The roots are marked **by reference**, not by object: pushing the catalog
- * object walks everything under it but never adds the catalog's own reference,
- * so an earlier version of this sweep deleted the catalog and the artifact
- * reopened with no page tree at all. A root that is not marked is not a root.
- *
- * Bounded by the visited set rather than by a depth limit. A reachability answer
- * that gave up early would delete objects that are reachable, which is the one
- * failure mode worse than keeping a detached one.
- */
-function reachableRefs(doc: PDFDocument): Set<string> {
-    const live = new Set<string>();
-    const seenObjects = new Set<object>();
-    const stack: unknown[] = [];
-
-    const push = (value: unknown): void => {
-        if (value === undefined || value === null) return;
-        stack.push(value);
-    };
-
-    const { Root, Info } = doc.context.trailerInfo as { Root?: unknown; Info?: unknown };
-    if (Root !== undefined) push(Root);
-    if (Info !== undefined) push(Info);
-    push(doc.catalog);
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        const dict = dictOf(obj);
-        if (dict && nameOf(dict.get(PDFName.of('Type'))) === '/Catalog') push(ref);
-    }
-
-    while (stack.length > 0) {
-        const value = stack.pop();
-
-        if (value instanceof PDFRef) {
-            if (live.has(value.tag)) continue;
-            live.add(value.tag);
-            let target: unknown;
-            try {
-                target = doc.context.lookup(value);
-            } catch {
-                continue;
-            }
-            if (target !== undefined) push(target);
-            continue;
-        }
-
-        if (typeof value !== 'object' || value === null) continue;
-        if (seenObjects.has(value)) continue;
-        seenObjects.add(value);
-
-        if (value instanceof PDFDict) {
-            for (const [, entry] of value.entries()) push(entry);
-        } else if (value instanceof PDFArray) {
-            for (let i = 0; i < value.size(); i += 1) push(value.get(i));
-        } else if (value instanceof PDFStream) {
-            for (const [, entry] of value.dict.entries()) push(entry);
-        }
-    }
-
-    return live;
-}
-
 /** Indirect objects nothing reachable points at, measured on an artifact. */
 export function countUnreachable(doc: PDFDocument): number {
-    const live = reachableRefs(doc);
+    const live = reachableRefTags(doc);
     let count = 0;
     for (const [ref] of doc.context.enumerateIndirectObjects()) {
         if (!live.has(ref.tag)) count += 1;
@@ -198,7 +141,7 @@ export interface PruneReport {
 
 /** Delete every indirect object nothing reachable points at. */
 export function pruneUnreachable(doc: PDFDocument): PruneReport {
-    const live = reachableRefs(doc);
+    const live = reachableRefTags(doc);
     const doomed: PDFRef[] = [];
     const byKind: Record<string, number> = {};
 
@@ -262,28 +205,32 @@ export type ScrubOutcome =
     | { complete: false; unsafe: true; reason: string; details: string[] };
 
 export function scrubAllJavaScript(doc: PDFDocument): ScrubOutcome {
-    const census = censusJavaScript(doc);
-    if (!census.complete) return { complete: false, unsafe: false, reason: census.reason };
-
-    // Round 10 — `/JS` is evidence, not authority, and the proof is positive:
-    // every carrier is shown to be an action, by its own shape and by every
-    // reference that reaches it, before any one of them is emptied. Anything
-    // else refuses the whole scrub untouched. The same classifier answers for
-    // planning, for `sanitizeJavaScript` and for here, so the three cannot
-    // disagree about the same document.
-    const owned = classifyJavaScript(doc);
-    if (!owned.complete) return { complete: false, unsafe: false, reason: owned.reason };
-    if (owned.value.unsafe.length > 0) {
+    // Round 11 — `/JS` is evidence, not authority, and the proof is positive:
+    // every carrier is shown to be an action, by its own shape and by the
+    // position every reference to it sits at, before any one of them is
+    // emptied. Anything else refuses the whole scrub untouched. The same
+    // assessment answers for planning, for intake, for `sanitizeJavaScript` and
+    // for here, so they cannot disagree about the same document — and an action
+    // scan that could not finish is a refusal here too, not "nothing found".
+    const assessed = assessJavaScript(doc);
+    if (assessed.status === 'UNSCANNABLE') {
+        return { complete: false, unsafe: false, reason: assessed.incomplete.join('; ') };
+    }
+    if (assessed.status === 'CENSUS_INCOMPLETE') {
+        return { complete: false, unsafe: false, reason: assessed.reason };
+    }
+    if (assessed.status === 'UNSAFE_STRUCTURE') {
         return {
             complete: false,
             unsafe: true,
-            reason: owned.value.unsafe.join('; '),
-            details: [...owned.value.unsafe],
+            reason: assessed.unsafe.join('; '),
+            details: [...assessed.unsafe],
         };
     }
+    const carriers = assessed.carriers;
 
     const rootTags = new Set<string>();
-    for (const node of census.value) {
+    for (const node of carriers) {
         rootTags.add(node.rootTag);
         // The entry that holds it goes, so the artifact does not keep an action
         // dictionary stripped of everything that made it one.
@@ -306,7 +253,7 @@ export function scrubAllJavaScript(doc: PDFDocument): ScrubOutcome {
         }
     }
 
-    return { complete: true, scrubbed: census.value.length };
+    return { complete: true, scrubbed: carriers.length };
 }
 
 // ---------------------------------------------------------------------------
