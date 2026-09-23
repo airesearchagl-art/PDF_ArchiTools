@@ -139,6 +139,8 @@ const emptyFacts = (sourceBytes: number): M6SourceFacts => ({
     attachmentNames: [],
     attachmentsComplete: false,
     attachmentsUnsafe: [],
+    javascriptUnsafe: [],
+    javascriptComplete: false,
     hasOptionalContent: false,
 });
 
@@ -256,6 +258,32 @@ export async function planExtract(
             facts,
             destinationPolicy,
             { unsafe: facts.attachmentsUnsafe },
+        );
+    }
+    if (!facts.javascriptComplete) {
+        // The same rule as the attachment census: an ownership analysis that
+        // could not prove it covered the document cannot prove that taking a
+        // script apart takes nothing else with it.
+        return refusedPlan(
+            M6_STATUS.CENSUS_INCOMPLETE,
+            'JavaScriptの有無を完全に確認できなかったため処理しません。',
+            selection,
+            facts,
+            destinationPolicy,
+            { reason: facts.javascriptRefusal },
+        );
+    }
+    if (facts.javascriptUnsafe.length > 0) {
+        // BLK-R9R-1, and RF-R10-1 for the position: refused here, before the
+        // losses are computed, so nobody is asked to agree to losing an
+        // attachment for an extract that cannot happen for a JavaScript reason.
+        return refusedPlan(
+            M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+            UNSAFE_JAVASCRIPT_REASON_JA,
+            selection,
+            facts,
+            destinationPolicy,
+            { unsafe: facts.javascriptUnsafe },
         );
     }
     if (selection.length === 0) {

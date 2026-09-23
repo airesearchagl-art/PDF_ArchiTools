@@ -279,17 +279,26 @@ try {
         fixture('xfa'),
         fixture('signature-applied'),
         fixture('no-header'),
+        // RF-R10-1: holds a perfectly ordinary attachment and a drawn form
+        // carrying a stray `/JS`. It has to be named here, on its own row,
+        // rather than accepted and then refused after somebody has agreed to
+        // losing the attachment.
+        fixture('r10-k15-js-and-attachment'),
     );
     await settle(6000);
 
     const mergeText = await bodyText();
     const rows = await page.$$eval('[data-usage-target="merge-list"] > div', (els) => els.length);
     check('every chosen file has a row, including the ones that cannot be merged',
-        rows === 4, `${rows} rows for 4 files`);
+        rows === 5, `${rows} rows for 5 files`);
+    check('RF-R10-1: no confirmation is offered for a file that cannot be merged at all',
+        !mergeText.includes('内容を了承して'),
+        mergeText.includes('内容を了承して') ? 'a confirmation was offered' : 'none offered');
     for (const [name, label] of [
         ['xfa.pdf', 'XFAフォームを含みます'],
         ['signature-applied.pdf', '電子署名が適用されています'],
         ['no-header.pdf', '安全に読み込めることを確認できませんでした'],
+        ['r10-k15-js-and-attachment.pdf', 'JavaScriptとして安全に取り除けない構造を含みます'],
     ]) {
         check(`${name} is shown with its reason`,
             mergeText.includes(name) && mergeText.includes(label),

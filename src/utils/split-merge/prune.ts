@@ -34,7 +34,7 @@ import { CENSUS_BUDGET, censusIndirectObjects, collectByCensus, dictOf } from '.
 import type { CensusNode, CensusOutcome } from './census';
 import { readPdfText } from './pdf-text';
 import { classifyField, signatureEvidenceOf } from './field-semantics';
-import { javaScriptCarrierConflict } from './javascript';
+import { classifyJavaScript } from './javascript';
 
 const nameOf = (v: unknown): string => {
     const asString = (v as { asString?: () => string } | null)?.asString;
@@ -265,23 +265,21 @@ export function scrubAllJavaScript(doc: PDFDocument): ScrubOutcome {
     const census = censusJavaScript(doc);
     if (!census.complete) return { complete: false, unsafe: false, reason: census.reason };
 
-    // Round 9 — `/JS` is evidence, not authority. Every carrier is proven to be
-    // an action before any one of them is emptied; a stream, or anything typed
-    // or subtyped as something else, refuses the whole scrub untouched.
-    const streamRoots = new Set<string>();
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        if (obj instanceof PDFStream) streamRoots.add(ref.tag);
-    }
-    const conflicts: string[] = [];
-    for (const node of census.value) {
-        const conflict = javaScriptCarrierConflict(node.dict, node.depth === 0 && streamRoots.has(node.rootTag));
-        if (conflict) {
-            const where = node.depth === 0 ? `object ${node.rootTag}` : `a dictionary inside ${node.rootTag}`;
-            conflicts.push(`${where} carries JavaScript but ${conflict}`);
-        }
-    }
-    if (conflicts.length > 0) {
-        return { complete: false, unsafe: true, reason: conflicts.join('; '), details: conflicts };
+    // Round 10 — `/JS` is evidence, not authority, and the proof is positive:
+    // every carrier is shown to be an action, by its own shape and by every
+    // reference that reaches it, before any one of them is emptied. Anything
+    // else refuses the whole scrub untouched. The same classifier answers for
+    // planning, for `sanitizeJavaScript` and for here, so the three cannot
+    // disagree about the same document.
+    const owned = classifyJavaScript(doc);
+    if (!owned.complete) return { complete: false, unsafe: false, reason: owned.reason };
+    if (owned.value.unsafe.length > 0) {
+        return {
+            complete: false,
+            unsafe: true,
+            reason: owned.value.unsafe.join('; '),
+            details: [...owned.value.unsafe],
+        };
     }
 
     const rootTags = new Set<string>();

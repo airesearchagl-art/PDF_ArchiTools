@@ -22,6 +22,7 @@ import type { PDFDocument } from 'pdf-lib';
 import type { M6SourceFacts } from './contracts';
 import { MECHANISM_BOUNDS } from './policy';
 import { censusAttachments, classifyAttachments } from './prune';
+import { classifyJavaScript } from './javascript';
 import { classifyField } from './field-semantics';
 import { pdfTextOf } from './pdf-text';
 
@@ -260,6 +261,8 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         attachmentNames: [],
         attachmentsComplete: false,
         attachmentsUnsafe: [],
+        javascriptUnsafe: [],
+        javascriptComplete: false,
         hasOptionalContent: false,
     };
 
@@ -323,6 +326,17 @@ export function readSourceFacts(doc: PDFDocument, sourceBytes: number): M6Source
         facts.attachmentsComplete = attachments.complete;
         facts.attachmentsUnsafe = attachments.unsafe;
         if (!attachments.complete) facts.attachmentsRefusal = attachments.reason;
+
+        /**
+         * BLK-R9R-1 / RF-R10-1: the same question the JavaScript remover asks
+         * before it touches anything, asked here so a structure it would refuse
+         * is refused at intake — before a confirmation about something else is
+         * ever presented.
+         */
+        const scripts = classifyJavaScript(doc);
+        facts.javascriptComplete = scripts.complete;
+        if (scripts.complete) facts.javascriptUnsafe = [...scripts.value.unsafe];
+        else facts.javascriptRefusal = scripts.reason;
 
         facts.hasOptionalContent = doc.catalog.get(PDFName.of('OCProperties')) !== undefined;
     } catch (error) {

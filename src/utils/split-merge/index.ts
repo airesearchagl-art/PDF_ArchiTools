@@ -108,7 +108,13 @@ export type {
     SanitizedOptionalContentVerdict,
     XObjectOcUsage,
 } from './optional-content';
-export { scanJavaScript, sanitizeJavaScript, javaScriptCarrierConflict } from './javascript';
+export {
+    scanJavaScript,
+    sanitizeJavaScript,
+    javaScriptCarrierConflict,
+    classifyJavaScript,
+} from './javascript';
+export type { JavaScriptAnalysis } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export {
     measureDestinationInvariants,

@@ -991,6 +991,11 @@ Object.assign(window.__m6, {
             count: counted.complete ? counted.value : null,
             scrubComplete: scrub.complete,
             scrubbed: scrub.complete ? scrub.scrubbed : null,
+            // Round 10 distinguishes the two ways a scrub can decline: the
+            // census could not be proven complete, or it was complete and the
+            // carrier could not be proven to be an action.
+            scrubUnsafe: scrub.complete ? false : Boolean(scrub.unsafe),
+            scrubReason: scrub.complete ? null : scrub.reason,
         });
     },
 
@@ -2319,6 +2324,9 @@ Object.assign(window.__m6, {
             return plainly({
                 plan: plan.status, requires: plan.requiresConfirmation ?? [], planDetail: plan.detail ?? null,
                 run: result.status, runDetail: result.detail ?? null, bytes: null, before, after: null,
+                // A refusal still has a source, and a probe that the source
+                // really holds what the refusal is about needs to read it.
+                sourceMarkers: Object.fromEntries(markers.map((m) => [m, bytesContain(source, m)])),
             });
         }
         const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });

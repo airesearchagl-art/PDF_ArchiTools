@@ -238,6 +238,31 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
             },
         };
     }
+    if (!facts.javascriptComplete) {
+        return {
+            ...base,
+            refusal: {
+                intake: INTAKE_RESULT.CENSUS_INCOMPLETE,
+                status: M6_STATUS.CENSUS_INCOMPLETE,
+                reason: 'JavaScriptの有無を完全に確認できなかったため統合できません。',
+                detail: { reason: facts.javascriptRefusal },
+            },
+        };
+    }
+    if (facts.javascriptUnsafe.length > 0) {
+        // BLK-R9R-1 / RF-R10-1: at intake, so an unsafe script structure is
+        // named on the file's own row before any confirmation is presented —
+        // it used to surface only after the losses had been agreed to.
+        return {
+            ...base,
+            refusal: {
+                intake: INTAKE_RESULT.UNSAFE_JAVASCRIPT_STRUCTURE,
+                status: M6_STATUS.UNSAFE_JAVASCRIPT_STRUCTURE,
+                reason: UNSAFE_JAVASCRIPT_REASON_JA,
+                detail: { unsafe: facts.javascriptUnsafe },
+            },
+        };
+    }
     if (facts.hasAppliedSignature) {
         // M6-H2: Merge refuses an applied signature, unlike Extract. A merge
         // mixes a signed document into other people's content, and the combined

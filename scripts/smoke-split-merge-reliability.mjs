@@ -796,10 +796,19 @@ try {
     check('a census within budget completes and finds the script',
         shallow.censusComplete === true
         && shallow.countComplete === true
-        && shallow.count === 1
-        && shallow.scrubbed === 1,
-        `complete ${shallow.censusComplete}, count ${shallow.count}, `
-        + `scrubbed ${shallow.scrubbed}`);
+        && shallow.count === 1,
+        `complete ${shallow.censusComplete}, count ${shallow.count}`);
+    /**
+     * Round 10 changed what happens next, and the change is the point. This
+     * fixture hangs its action off the catalog's `/M6Deep` — a key no action
+     * position uses — so finding the script is no longer authority to take the
+     * object apart. The census still completes and still counts it; the scrub
+     * declines, and says which of the two reasons it is.
+     */
+    check('and a complete census is still not authority to scrub what it found',
+        shallow.scrubComplete === false && shallow.scrubUnsafe === true,
+        `scrubComplete ${shallow.scrubComplete}, unsafe ${shallow.scrubUnsafe}, `
+        + `reason ${String(shallow.scrubReason).slice(0, 80)}`);
 
     const starved = await call('censusDeepDirect', shallow.maxDirectDepth + 64);
     check('a census past its budget refuses instead of reporting zero',
@@ -2448,12 +2457,148 @@ try {
             check(`${fixture}: ${title} is refused rather than emptied`,
                 r.run === 'UNSAFE_JAVASCRIPT_STRUCTURE' && r.bytes === null,
                 `plan=${r.plan} run=${r.run}`);
+            // Round 10 moved this refusal from the run to intake (RF-R10-1),
+            // so the Merge now excludes the source by name under the adopted
+            // H10 partial-merge rule rather than failing after the copy. The
+            // assertion is the stronger one either way: the unsafe source is
+            // named, and nothing of it is in what the Merge writes.
             const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
-            check(`${fixture}: and so is the Merge that carries it`,
-                m.run === 'UNSAFE_JAVASCRIPT_STRUCTURE' && m.bytes === null, `run=${m.run}`);
+            const verdict = m.intake.find((i) => i.name === fixture);
+            check(`${fixture}: and the Merge refuses the source at intake, by name`,
+                Boolean(verdict) && verdict.result === 'UNSAFE_JAVASCRIPT_STRUCTURE',
+                `intake=${verdict ? verdict.result : 'missing'}`);
+            check(`${fixture}: and the source is not in what the Merge writes`,
+                !m.order.includes(fixture), `order=${m.order.join(',')}`);
         }
         const j2 = await call('r9Extract', 'r9-j2-form-js', [0], LAYER);
         probe('r9-j2-form-js: the source draws the form the old scrub erased', j2.before[0] === 'blue');
+    }
+
+    // ---- 63. BLK-R9R-1: a carrier is proven an action, not assumed to be one -
+    //
+    // Round 9 asked what contradicted "action" — a stream, a `/Type` that is not
+    // `/Action`, a `/Subtype`. Most PDF dictionaries declare none of those, so
+    // the class stayed open: a typeless graphics state, a typeless transparency
+    // group and an ordinary marked-content property list each carried a stray
+    // `/JS`, each was deleted as "the script", and each left its reference
+    // behind. Measured at 0a30302: READY, losses empty, and the page drew
+    // differently. The question is now positive — what says it IS an action —
+    // and it is asked of the carrier's own shape and of every reference that
+    // reaches it.
+    console.log('\n=== 63. Round 10 JavaScript carrier ownership ===');
+    {
+        const SQUARE = [{ x: 100, y: 100 }];
+
+        // ---- the carriers the old test let through, and the boundary it caught
+        for (const [fixture, title] of [
+            ['r10-k4-extgstate-js', 'a typeless graphics state carrying /JS'],
+            ['r10-k5-group-js', 'a typeless transparency group carrying /JS'],
+            ['r10-k6-props-js', 'an ordinary property list carrying /JS'],
+            ['r10-k14-extgstate-typed-js', 'a declared graphics state carrying /JS'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], SQUARE);
+            check(`${fixture}: ${title} is refused, before any confirmation`,
+                r.plan === 'UNSAFE_JAVASCRIPT_STRUCTURE' && r.requires.length === 0,
+                `plan=${r.plan} requires=${r.requires.join(',')}`);
+            check(`${fixture}: and Extract publishes nothing`,
+                r.run === 'UNSAFE_JAVASCRIPT_STRUCTURE' && r.bytes === null, `run=${r.run}`);
+            const named = (r.planDetail?.unsafe ?? []).join(' | ');
+            check(`${fixture}: the refusal names what it would have taken apart`,
+                named.includes('carries JavaScript') || named.includes('is also reached from'), named.slice(0, 120));
+            const m = await call('r9Merge', [fixture, 'merge-b'], null, []);
+            const verdict = m.intake.find((i) => i.name === fixture);
+            check(`${fixture}: Merge refuses the source at intake, by name`,
+                Boolean(verdict) && verdict.result === 'UNSAFE_JAVASCRIPT_STRUCTURE',
+                `intake=${verdict ? verdict.result : 'missing'}`);
+            check(`${fixture}: and the source is not in what the Merge writes`,
+                !m.order.includes(fixture), `order=${m.order.join(',')}`);
+        }
+
+        // ---- the same documents with the stray key removed -------------------
+        const k4c = await call('r9Extract', 'r10-k4c-extgstate-clean', [0], SQUARE);
+        probe('r10-k4c: the source really paints the square through the graphics state',
+            k4c.before[0] !== 'blue', `before=${k4c.before[0]}`);
+        check('r10-k4c-extgstate-clean: READY, and the square is painted exactly as it was',
+            k4c.run === 'READY' && JSON.stringify(k4c.after) === JSON.stringify(k4c.before),
+            `run=${k4c.run} before=${k4c.before?.join(',')} after=${k4c.after?.join(',')}`);
+        check('r10-k4c-extgstate-clean: and the artifact carries no JavaScript',
+            k4c.independent.javascript === 0, `js=${k4c.independent?.javascript}`);
+
+        const k5c = await call('r9Extract', 'r10-k5c-group-clean', [0], SQUARE, ['/Transparency']);
+        check('r10-k5c-group-clean: READY, with the transparency group still in the bytes',
+            k5c.run === 'READY' && k5c.markers['/Transparency'] === true,
+            `run=${k5c.run} group=${k5c.markers?.['/Transparency']}`);
+        check('r10-k5c-group-clean: the square is painted exactly as it was',
+            JSON.stringify(k5c.after) === JSON.stringify(k5c.before),
+            `before=${k5c.before?.join(',')} after=${k5c.after?.join(',')}`);
+        check('r10-k5c-group-clean: and the artifact carries no JavaScript',
+            k5c.independent.javascript === 0, `js=${k5c.independent?.javascript}`);
+
+        const k6c = await call('r9Extract', 'r10-k6c-props-clean', [0], SQUARE, ['M6R10_PLIST']);
+        check('r10-k6c-props-clean: READY, with the property list still in the bytes',
+            k6c.run === 'READY' && k6c.markers.M6R10_PLIST === true,
+            `run=${k6c.run} list=${k6c.markers?.M6R10_PLIST}`);
+        check('r10-k6c-props-clean: the square is painted exactly as it was',
+            JSON.stringify(k6c.after) === JSON.stringify(k6c.before),
+            `before=${k6c.before?.join(',')} after=${k6c.after?.join(',')}`);
+        check('r10-k6c-props-clean: no optional-content use is invented for it',
+            k6c.audit.propsOc === 0 && k6c.independent.javascript === 0,
+            `propsOc=${k6c.audit?.propsOc} js=${k6c.independent?.javascript}`);
+
+        // ---- ownership: who is allowed to point at an action ------------------
+        const k7 = await call('r9Extract', 'r10-k7-shared-action', [0], SQUARE, ['M6R10_SHARED']);
+        check('r10-k7-shared-action: an action named by two action slots is still removed',
+            k7.run === 'READY' && k7.markers.M6R10_SHARED === false,
+            `run=${k7.run} script=${k7.markers?.M6R10_SHARED}`);
+        check('r10-k7-shared-action: and the page draws exactly what the source drew',
+            JSON.stringify(k7.after) === JSON.stringify(k7.before) && k7.independent.javascript === 0,
+            `before=${k7.before?.join(',')} after=${k7.after?.join(',')} js=${k7.independent?.javascript}`);
+
+        const k8 = await call('r9Extract', 'r10-k8-mixed-owner', [0], SQUARE);
+        check('r10-k8-mixed-owner: an action a drawing resource also names is refused',
+            k8.plan === 'UNSAFE_JAVASCRIPT_STRUCTURE' && k8.bytes === null, `plan=${k8.plan} run=${k8.run}`);
+        check('r10-k8-mixed-owner: and the refusal names the reference that is not an action',
+            (k8.planDetail?.unsafe ?? []).join(' ').includes('is also reached from'),
+            (k8.planDetail?.unsafe ?? []).join(' ').slice(0, 120));
+
+        const k13 = await call('r9Extract', 'r10-k13-detached-typeless', [0], SQUARE);
+        check('r10-k13-detached-typeless: having no inbound reference is not proof of being an action',
+            k13.plan === 'UNSAFE_JAVASCRIPT_STRUCTURE' && k13.bytes === null,
+            `plan=${k13.plan} run=${k13.run}`);
+
+        // ---- BLK-1R: every supported position still removes its script --------
+        for (const [fixture, marker, title] of [
+            ['r10-k9-names-js', 'M6R10_NAMETREE', 'the document script name tree'],
+            ['r10-k10-aa-js', 'M6R10_AA', "an annotation's /AA"],
+            ['r10-k11-next-js', 'M6R10_NEXT', "an action's /Next"],
+            ['r10-k12-detached-action', 'M6R10_DETACHED', 'a detached action nothing points at'],
+        ]) {
+            const r = await call('r9Extract', fixture, [0], SQUARE, [marker]);
+            check(`${fixture}: ${title} is still a supported removal`,
+                r.run === 'READY' && r.markers[marker] === false,
+                `run=${r.run} script=${r.markers?.[marker]}`);
+            check(`${fixture}: the artifact carries no JavaScript by either count`,
+                r.independent.javascript === 0, `js=${r.independent?.javascript}`);
+            check(`${fixture}: and the page draws exactly what the source drew`,
+                JSON.stringify(r.after) === JSON.stringify(r.before),
+                `before=${r.before?.join(',')} after=${r.after?.join(',')}`);
+        }
+
+        // ---- RF-R10-1: the refusal arrives before the confirmation ------------
+        const k15 = await call('r9Extract', 'r10-k15-js-and-attachment', [0], SQUARE,
+            ['M6R10_ATTACHMENT_PAYLOAD']);
+        probe('r10-k15: the source really holds the attachment a confirmation would name',
+            k15.sourceMarkers.M6R10_ATTACHMENT_PAYLOAD === true);
+        check('r10-k15-js-and-attachment: nobody is asked to agree to the attachment loss',
+            k15.plan === 'UNSAFE_JAVASCRIPT_STRUCTURE' && k15.requires.length === 0,
+            `plan=${k15.plan} requires=${k15.requires.join(',')}`);
+        check('r10-k15-js-and-attachment: and nothing is written',
+            k15.run === 'UNSAFE_JAVASCRIPT_STRUCTURE' && k15.bytes === null, `run=${k15.run}`);
+        const k15m = await call('r9Merge', ['r10-k15-js-and-attachment', 'merge-b'], null, []);
+        const k15v = k15m.intake.find((i) => i.name === 'r10-k15-js-and-attachment');
+        check('r10-k15-js-and-attachment: Merge names it at intake rather than after a confirmation',
+            Boolean(k15v) && k15v.result === 'UNSAFE_JAVASCRIPT_STRUCTURE',
+            `intake=${k15v ? k15v.result : 'missing'}`);
     }
 
     // ---- 34. local only ------------------------------------------------------

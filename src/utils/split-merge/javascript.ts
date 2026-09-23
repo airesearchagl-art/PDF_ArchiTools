@@ -24,8 +24,10 @@
  * So a sanitized artifact is measured twice, and the contract is **both counts
  * at zero**.
  */
-import { PDFArray, PDFDict, PDFName, PDFRef } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFRef, PDFStream } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
+import { CENSUS_BUDGET, censusIndirectObjects } from './census';
+import type { CensusNode, CensusOutcome } from './census';
 import { MECHANISM_BOUNDS } from './policy';
 
 const nameOf = (v: unknown): string => {
@@ -68,8 +70,21 @@ export const actionCarriesJavaScript = (dict: PDFDict): boolean =>
  * So a carrier is only removed as JavaScript when nothing about it says it is
  * something else. A stream, a `/Type` other than `/Action`, or any `/Subtype`
  * is positive evidence of another role, and the answer is a typed refusal
- * rather than a guess about which role to destroy. Returns what the conflict
- * is, or null for an action-shaped carrier.
+ * rather than a guess about which role to destroy.
+ *
+ * **Round 10 — BLK-R9R-1.** That test was the wrong way round. The absence of
+ * those marks proves nothing: most PDF dictionaries are typeless, and a
+ * typeless one carrying a stray `/JS` passed every clause above and was
+ * deleted. Measured, READY, losses empty: `/Resources /ExtGState /GS0` naming
+ * `<< /ca 0.5 /CA 0.5 /LW 7 /JS (…) >>` lost its graphics state entirely —
+ * pdf.js reported `ignoring ExtGState: GState should be a dictionary` and drew
+ * the page opaque. So the question is no longer "does anything contradict
+ * *action*" but "does anything **establish** it". An action dictionary carries
+ * `/S` — the specification requires it — or says `/Type /Action` outright.
+ * Nothing else is authority to take a dictionary apart.
+ *
+ * Shape is half the proof; {@link classifyJavaScript} supplies the other half.
+ * Returns what the conflict is, or null for an action-shaped carrier.
  */
 export function javaScriptCarrierConflict(dict: PDFDict, isStream: boolean): string | null {
     if (isStream) return 'is a stream, not an action';
@@ -77,7 +92,249 @@ export function javaScriptCarrierConflict(dict: PDFDict, isStream: boolean): str
     if (type !== '' && type !== '/Action') return `is ${type}, not an action`;
     const subtype = nameOf(dict.get(PDFName.of('Subtype')));
     if (subtype !== '') return `has /Subtype ${subtype}, which no action has`;
+    // Round 10: positive authorization. `/S` is required of every action; a
+    // dictionary that declares `/Type /Action` has said so in the other way.
+    if (type !== '/Action' && nameOf(dict.get(PDFName.of('S'))) === '') {
+        return 'carries no /S and no /Type /Action, so nothing says it is one';
+    }
     return null;
+}
+
+// ---------------------------------------------------------------------------
+// Round 10 — who owns a JavaScript carrier
+// ---------------------------------------------------------------------------
+
+/**
+ * Where one reference is held. An indirect array's holder is found through it.
+ *
+ * Deliberately a second implementation of the shape `prune.ts` uses for
+ * attachments rather than a shared one. Detection stays domain-specific here
+ * for the same reason the censuses are separate: a change to what counts as an
+ * action must not be able to change what counts as an attachment.
+ */
+type EdgeSite =
+    | { kind: 'dict'; holder: PDFDict; key: string; viaArray: boolean; rootTag: string }
+    | { kind: 'array'; arrayTag: string };
+
+/** A reference's context, resolved to the dictionary and key that hold it. */
+interface EdgeContext {
+    holder: PDFDict;
+    key: string;
+    viaArray: boolean;
+    rootTag: string;
+}
+
+export interface JavaScriptAnalysis {
+    /** Every dictionary carrying JavaScript, as the census found it. */
+    carriers: CensusNode[];
+    /**
+     * Why taking one of them apart would take something else with it. One
+     * entry makes the whole removal a refusal.
+     */
+    unsafe: string[];
+}
+
+/**
+ * BLK-R9R-1 — decide, changing nothing, whether every JavaScript carrier in the
+ * document can be taken apart without taking anything else with it.
+ *
+ * Two things have to be true of a carrier before it is removed as JavaScript:
+ *
+ *   1. **Shape.** Something about it says *action*
+ *      ({@link javaScriptCarrierConflict}).
+ *   2. **Ownership.** Every reference that reaches it is an action position —
+ *      the ones this contract already removes JavaScript through, and no
+ *      others: a catalog or page `/OpenAction`, an `/A`, an entry of an `/AA`,
+ *      an action's `/Next`, a value of the `/Names /JavaScript` name tree.
+ *
+ * A dictionary reached from `/ExtGState`, from a form's `/Group`, from a page's
+ * `/Properties`, or from any other semantic position is something else that
+ * happens to carry `/JS`, and it is refused rather than guessed at.
+ *
+ * COMPLETE or REFUSED, like every census here: an inbound index that could not
+ * be proven to cover the document cannot prove exclusivity either. An
+ * incomplete analysis is never read as "nothing else points at it".
+ */
+export function classifyJavaScript(doc: PDFDocument): CensusOutcome<JavaScriptAnalysis> {
+    const carriers: CensusNode[] = [];
+    const inbound = new Map<string, EdgeSite[]>();
+    const arrayHolder = new Map<PDFArray, EdgeSite>();
+    const rootArrayTag = new Map<PDFArray, string>();
+    const rootIsStream = new Set<string>();
+    let tooDeep = false;
+
+    const addEdge = (tag: string, site: EdgeSite): void => {
+        const list = inbound.get(tag);
+        if (list) list.push(site);
+        else inbound.set(tag, [site]);
+    };
+    const scanArray = (array: PDFArray, site: EdgeSite, depth: number): void => {
+        if (depth > CENSUS_BUDGET.maxDirectDepth) {
+            tooDeep = true;
+            return;
+        }
+        arrayHolder.set(array, site);
+        const inner: EdgeSite = site.kind === 'dict' ? { ...site, viaArray: true } : site;
+        for (let i = 0; i < array.size(); i += 1) {
+            const item = array.get(i);
+            if (item instanceof PDFRef) addEdge(item.tag, inner);
+            else if (item instanceof PDFArray) scanArray(item, inner, depth + 1);
+        }
+    };
+
+    // Indirect arrays hold references too — an `/AA` value and a `/Next` list
+    // very often are — and the census hands its visitor dictionaries only.
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (obj instanceof PDFStream) rootIsStream.add(ref.tag);
+        if (obj instanceof PDFArray) {
+            rootArrayTag.set(obj, ref.tag);
+            scanArray(obj, { kind: 'array', arrayTag: ref.tag }, 0);
+        }
+    }
+
+    /** Every dictionary that is the value of an `/AA`, wherever it lives. */
+    const additionalActionDicts = new Set<PDFDict>();
+
+    const outcome = censusIndirectObjects(doc, (node) => {
+        const { dict, rootTag } = node;
+        for (const [k, value] of dict.entries()) {
+            const key = k.asString().replace(/^\//, '');
+            if (value instanceof PDFRef) {
+                addEdge(value.tag, { kind: 'dict', holder: dict, key, viaArray: false, rootTag });
+            } else if (value instanceof PDFArray) {
+                scanArray(value, { kind: 'dict', holder: dict, key, viaArray: true, rootTag }, 0);
+            }
+        }
+        const aa = look(doc, dict.get(PDFName.of('AA')));
+        if (aa instanceof PDFDict) additionalActionDicts.add(aa);
+        if (actionCarriesJavaScript(dict)) carriers.push(node);
+    });
+    if (!outcome.complete) return outcome;
+    if (tooDeep) {
+        return {
+            complete: false,
+            reason: `an array nests deeper than ${CENSUS_BUDGET.maxDirectDepth}`,
+            nodes: outcome.nodes,
+            roots: outcome.roots,
+        };
+    }
+
+    // The `/Names /JavaScript` tree, whose `/Names` arrays hold document-level
+    // scripts. Walked to its own bound; a tree this reader cannot finish
+    // walking simply leaves its nodes unproven, and an unproven context is a
+    // refusal rather than a pass.
+    const jsTreeNodes = new Set<PDFDict>();
+    const namesDict = look(doc, doc.catalog.get(PDFName.of('Names')));
+    if (namesDict instanceof PDFDict) {
+        const seen = new Set<string>();
+        const walkTree = (raw: unknown, depth: number): void => {
+            if (depth > MECHANISM_BOUNDS.maxNameTreeDepth) return;
+            if (raw instanceof PDFRef) {
+                if (seen.has(raw.tag)) return;
+                seen.add(raw.tag);
+            }
+            const node = look(doc, raw);
+            if (!(node instanceof PDFDict)) return;
+            jsTreeNodes.add(node);
+            const kids = look(doc, node.get(PDFName.of('Kids')));
+            if (kids instanceof PDFArray) {
+                for (let i = 0; i < kids.size(); i += 1) walkTree(kids.get(i), depth + 1);
+            }
+        };
+        const root = namesDict.get(PDFName.of('JavaScript'));
+        if (root !== undefined) walkTree(root, 0);
+    }
+
+    /** Every dictionary-and-key a reference is ultimately held under, or null. */
+    const contextsOf = (site: EdgeSite): EdgeContext[] | null => {
+        if (site.kind === 'dict') return [site];
+        const holders = inbound.get(site.arrayTag) ?? [];
+        const out: EdgeContext[] = [];
+        for (const holder of holders) {
+            // An indirect array held by another indirect array is a shape no
+            // action position takes, so it is not followed further.
+            if (holder.kind !== 'dict') return null;
+            out.push({ ...holder, viaArray: true });
+        }
+        return out;
+    };
+    const where = (c: EdgeContext): string => `${c.rootTag} /${c.key}`;
+
+    /**
+     * The action positions this contract already removes JavaScript through —
+     * the same set `scanJavaScript` visits, read as edges rather than as a
+     * walk. Nothing is added here; Round 10 does not widen what JavaScript
+     * support means.
+     */
+    const actionContext = (c: EdgeContext): boolean =>
+        (c.key === 'OpenAction' && !c.viaArray)
+        || (c.key === 'A' && !c.viaArray)
+        || (additionalActionDicts.has(c.holder) && !c.viaArray)
+        || c.key === 'Next'
+        || (jsTreeNodes.has(c.holder) && c.key === 'Names' && c.viaArray);
+
+    const unsafe: string[] = [];
+    const note = (text: string): void => {
+        if (!unsafe.includes(text)) unsafe.push(text);
+    };
+
+    /** The context a direct dictionary sits in, from its census parent. */
+    const directContexts = (node: CensusNode): EdgeContext[] | null => {
+        const parent = node.parent;
+        if (!parent) return null;
+        if (parent.container instanceof PDFDict) {
+            return [{
+                holder: parent.container,
+                key: String(parent.key),
+                viaArray: false,
+                rootTag: node.rootTag,
+            }];
+        }
+        const site = arrayHolder.get(parent.container);
+        if (site) return contextsOf(site);
+        const tag = rootArrayTag.get(parent.container);
+        return tag === undefined ? null : contextsOf({ kind: 'array', arrayTag: tag });
+    };
+
+    for (const node of carriers) {
+        const { dict, depth, rootTag } = node;
+        const label = depth === 0 ? `object ${rootTag}` : `a dictionary inside ${rootTag}`;
+
+        const conflict = javaScriptCarrierConflict(dict, depth === 0 && rootIsStream.has(rootTag));
+        if (conflict) note(`${label} carries JavaScript but ${conflict}`);
+
+        if (depth === 0) {
+            // An indirect carrier nothing points at is detached: `dropOpenAction`
+            // and the destination and AcroForm rebuilds all orphan actions on
+            // purpose, and removing one takes nothing with it. Its shape still
+            // has to say action, which the check above has already asked.
+            for (const site of inbound.get(rootTag) ?? []) {
+                const contexts = contextsOf(site);
+                if (contexts === null) {
+                    note(`${label} is reached through an indirect array held by another array`);
+                    continue;
+                }
+                for (const c of contexts) {
+                    if (!actionContext(c)) {
+                        note(`${label} is also reached from ${where(c)}, which is not an action`);
+                    }
+                }
+            }
+        } else {
+            const contexts = directContexts(node);
+            if (contexts === null || contexts.length === 0 || !contexts.every(actionContext)) {
+                const at = contexts && contexts.length > 0 ? ` at ${where(contexts[0])}` : '';
+                note(`${label} carries JavaScript${at}, which is not an action`);
+            }
+        }
+    }
+
+    return {
+        complete: true,
+        value: { carriers, unsafe },
+        nodes: outcome.nodes,
+        roots: outcome.roots,
+    };
 }
 
 /** A document the scanner cannot finish inspecting is refused, never passed. */
@@ -356,19 +613,24 @@ export function sanitizeJavaScript(doc: PDFDocument): SanitizeOutcome {
         };
     }
 
-    // Round 9: every indirect carrier this function would take apart is an
-    // action, or nothing is touched. Asked before the first reference goes.
-    const conflicts: string[] = [];
-    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
-        const inner = (obj as unknown as { dict?: unknown })?.dict;
-        const isStream = !(obj instanceof PDFDict) && inner instanceof PDFDict;
-        const dict = obj instanceof PDFDict ? obj : inner instanceof PDFDict ? inner : null;
-        if (!dict || !actionCarriesJavaScript(dict)) continue;
-        const conflict = javaScriptCarrierConflict(dict, isStream);
-        if (conflict) conflicts.push(`object ${ref.tag} carries JavaScript but ${conflict}`);
+    // Round 10: every carrier this function would take apart is proven to be an
+    // action — by its own shape and by every reference that reaches it — or
+    // nothing is touched. Asked before the first reference goes, and asked
+    // through the same classifier planning used, so the two cannot disagree.
+    const owned = classifyJavaScript(doc);
+    if (!owned.complete) {
+        return {
+            status: 'REFUSED',
+            incomplete: [owned.reason],
+            reason: `この文書のアクション構造を完全に検査できませんでした: ${owned.reason}`,
+        };
     }
-    if (conflicts.length > 0) {
-        return { status: 'UNSAFE', conflicts, reason: conflicts.join('; ') };
+    if (owned.value.unsafe.length > 0) {
+        return {
+            status: 'UNSAFE',
+            conflicts: [...owned.value.unsafe],
+            reason: owned.value.unsafe.join('; '),
+        };
     }
 
     let removedReferences = 0;

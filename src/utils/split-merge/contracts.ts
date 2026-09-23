@@ -370,6 +370,20 @@ export interface M6SourceFacts {
      * merely carries `/EF` would take whatever else it is along with it.
      */
     attachmentsUnsafe: string[];
+    /**
+     * BLK-R9R-1: every JavaScript carrier that could not be proven to be an
+     * action and nothing else.
+     *
+     * Read here, at intake, rather than only when the artifact is being
+     * sanitized — RF-R10-1. A document that cannot be processed for a
+     * JavaScript reason must say so before anyone is asked to agree to losing
+     * an attachment for an operation that was never going to happen.
+     */
+    javascriptUnsafe: string[];
+    /** Whether the JavaScript ownership analysis proved it covered the document. */
+    javascriptComplete: boolean;
+    /** Why that analysis could not prove completeness. */
+    javascriptRefusal?: string;
     hasOptionalContent: boolean;
     /** Why the facts could not be read, when `readable` is false. */
     reason?: string;
@@ -554,6 +568,11 @@ export const INTAKE_RESULT = {
     CENSUS_INCOMPLETE: 'CENSUS_INCOMPLETE',
     /** An `/EF` structure that is not provably only an attachment. BLK-R8R-1. */
     UNSAFE_ATTACHMENT_STRUCTURE: 'UNSAFE_ATTACHMENT_STRUCTURE',
+    /**
+     * A `/JS` carrier that is not provably only an action. BLK-R9R-1, surfaced
+     * at intake rather than at sanitization time. RF-R10-1.
+     */
+    UNSAFE_JAVASCRIPT_STRUCTURE: 'UNSAFE_JAVASCRIPT_STRUCTURE',
     /** Requested, and never decided. Always a refusal, never an omission. */
     NOT_DECIDED: 'NOT_DECIDED',
 } as const;
@@ -575,6 +594,7 @@ export const INTAKE_LABEL_JA: Record<IntakeResultCode, string> = {
     CANCELLED: '中止されました',
     CENSUS_INCOMPLETE: '内容を完全に確認できませんでした',
     UNSAFE_ATTACHMENT_STRUCTURE: '添付ファイルとして安全に取り除けない構造を含みます',
+    UNSAFE_JAVASCRIPT_STRUCTURE: 'JavaScriptとして安全に取り除けない構造を含みます',
     NOT_DECIDED: '確認できていません',
 };
 
