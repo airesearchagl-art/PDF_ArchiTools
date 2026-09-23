@@ -610,6 +610,12 @@ export const INTAKE_RESULT = {
      * it is unknown. RF-R10R-1: refused here, at intake, in the same words the
      * sanitizer uses — it used to be found only after the losses had been
      * agreed to, and for a Merge it refused every source, not just this one.
+     *
+     * Round 12 (RF-R11R-1): the same code for the *other* reader of actions, the
+     * one that follows them to the pages they point at. A Merge asked it only
+     * when it ran, so an `/AA` that named nothing, or a chain longer than that
+     * reader could follow, was accepted here and stopped the whole Merge later.
+     * Both are asked at intake now, and both answer with this one code.
      */
     UNSCANNABLE_ACTIONS: 'UNSCANNABLE_ACTIONS',
     /** Requested, and never decided. Always a refusal, never an omission. */

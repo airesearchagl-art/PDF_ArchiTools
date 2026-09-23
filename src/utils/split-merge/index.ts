@@ -125,10 +125,12 @@ export {
 export type { ActionWalk, JavaScriptAnalysis, JavaScriptAssessment } from './javascript';
 export { readForm, planFormForExtract, countOrphanWidgets } from './forms';
 export {
+    assessSourceActionStructure,
     measureDestinationInvariants,
     planDestinations,
     rebuildDestinations,
 } from './destinations';
+export type { ActionStructureAssessment } from './destinations';
 export { readbackArtifact, checkArtifactInvariants } from './readback';
 export {
     censusIndirectObjects,

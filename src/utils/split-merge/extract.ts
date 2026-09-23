@@ -448,7 +448,7 @@ export async function planExtract(
     if (closure.unreadable.length > 0) {
         return refusedPlan(
             M6_STATUS.UNSCANNABLE_ACTIONS,
-            `この文書のアクション構造を完全に検査できませんでした: ${closure.unreadable.join(', ')}`,
+            `${UNSCANNABLE_ACTIONS_REASON_JA}: ${closure.unreadable.join(', ')}`,
             selection,
             facts,
             destinationPolicy,
@@ -747,7 +747,7 @@ export async function runExtract(
     if (closure.unreadable.length > 0) {
         return refusedResult(
             M6_STATUS.UNSCANNABLE_ACTIONS,
-            `この文書のアクション構造を完全に検査できませんでした: ${closure.unreadable.join(', ')}`,
+            `${UNSCANNABLE_ACTIONS_REASON_JA}: ${closure.unreadable.join(', ')}`,
             outputName,
             { unreadable: closure.unreadable },
         );

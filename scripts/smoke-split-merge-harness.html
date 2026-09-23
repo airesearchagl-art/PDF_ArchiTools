@@ -41,6 +41,7 @@ import {
     planFormForExtract,
     scanJavaScript,
     assessJavaScript,
+    assessSourceActionStructure,
     sanitizeJavaScript,
     censusJavaScript,
     censusSignatures,
@@ -2552,6 +2553,201 @@ Object.assign(window.__m6, {
     },
 });
 
+// ---------------------------------------------------------------------------
+// Round 12 (RF-R11R-1): Merge asks whether a source's actions can be read
+// ---------------------------------------------------------------------------
+
+/** A document from explicit numbered objects, built in the page so a sweep can cover every length. */
+function pdfFromObjects(objects) {
+    const nums = [...objects.keys()].sort((a, b) => a - b);
+    const max = nums[nums.length - 1];
+    let body = '%PDF-1.7\n';
+    const offsets = new Map();
+    for (const n of nums) {
+        offsets.set(n, body.length);
+        body += `${n} 0 obj\n${objects.get(n)}\nendobj\n`;
+    }
+    const xrefAt = body.length;
+    body += `xref\n0 ${max + 1}\n0000000000 65535 f \n`;
+    for (let n = 1; n <= max; n += 1) {
+        body += offsets.has(n)
+            ? `${String(offsets.get(n)).padStart(10, '0')} 00000 n \n`
+            : '0000000000 65535 f \n';
+    }
+    body += `trailer\n<< /Size ${max + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+    const out = new Uint8Array(body.length);
+    for (let i = 0; i < body.length; i += 1) out[i] = body.charCodeAt(i) & 0xff;
+    return out;
+}
+
+/**
+ * A page whose first annotation's `/A` starts a chain of `hops` `/Next` hops
+ * (`hops + 1` actions). `shape` is how each `/Next` is written, and `endJs` makes
+ * the last action a script, so the sanitizer has something to remove at the
+ * bound. Nothing else is in the document: any refusal is a reader's.
+ */
+function chainBytes(hops, shape, endJs) {
+    const uri = (tail = '') => `<< /Type /Action /S /URI /URI (https://example.invalid/)${tail} >>`;
+    const o = new Map();
+    o.set(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    o.set(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    o.set(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R /Annots [8 0 R] >>');
+    const content = '0 1 0 rg 10 170 180 20 re f';
+    o.set(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    o.set(8, '<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A 40 0 R >>');
+    for (let i = 0; i <= hops; i += 1) {
+        const last = i === hops;
+        const next = shape === 'array' ? ` /Next [${41 + i} 0 R]` : ` /Next ${41 + i} 0 R`;
+        o.set(40 + i, last
+            ? (endJs ? '<< /Type /Action /S /JavaScript /JS (app.alert\\(M6R12_SWEEP\\)) >>' : uri())
+            : uri(next));
+    }
+    return pdfFromObjects(o);
+}
+
+Object.assign(window.__m6, {
+    /**
+     * Merge as a person meets it — the intake, the plan they are asked to agree
+     * to *before* agreeing, and the run — with the sources named. Everything a
+     * confirmation is about is returned: which losses the first plan presents
+     * and for which file, so "nobody was asked about the excluded source" is a
+     * measurement of the plan and not an inference from the outcome.
+     */
+    async r12Merge(names, markers = []) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const first = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const options = {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: first.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(first),
+        };
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, options);
+        const base = {
+            intake: intake.map((r) => ({ id: r.id, name: r.name, result: r.result, reason: r.reason ?? null })),
+            first: {
+                status: first.status,
+                requires: first.requiresConfirmation ?? [],
+                losses: (first.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? '', why: l.why ?? '' })),
+            },
+            plan: plan.status,
+            order: plan.order ?? [],
+            run: result.status,
+            runDetail: result.bytes ? null : (result.detail ?? null),
+            sourceMarkers: Object.fromEntries(await Promise.all(names.map(async (n) => {
+                const bytes = await bytesOf(n);
+                return [n, Object.fromEntries(markers.map((m) => [m, bytesContain(bytes, m)]))];
+            }))),
+        };
+        if (!result.bytes) return plainly({ ...base, bytes: null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            bytes: result.bytes.length,
+            pages: doc.getPageCount(),
+            independent: walkEverything(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /**
+     * What each reader of a source's actions says about it, and what Extract's
+     * plan says. The JavaScript assessment and the destinations-side readability
+     * are different readers, and RF-R11R-1 was a source the first accepted and the
+     * second refused, so both are reported side by side.
+     */
+    async r12Readability(name) {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const readability = assessSourceActionStructure(doc);
+        const plan = await planExtract(bytes, { selection: [0], sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        return plainly({
+            js: assessJavaScript(doc).status,
+            readability: readability.status,
+            unreadable: readability.status === 'READABLE' ? [] : readability.unreadable,
+            extract: plan.status,
+            requires: plan.requiresConfirmation ?? [],
+        });
+    },
+
+    /**
+     * One chain of an exact length, asked of every reader and every step: both
+     * scanners, Extract's plan, Merge's intake beside a clean source, and the
+     * run. Built in the page so the gate can walk every length across the bound.
+     */
+    async r12Sweep(shape, hops, endJs) {
+        const bytes = chainBytes(hops, shape, endJs);
+        const partner = await bytesOf('merge-b');
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const plan = await planExtract(bytes, { selection: [0], sourceName: 'chain.pdf', policy: PROVISIONAL_POLICY });
+        const inputs = [
+            { id: 'clean', name: 'clean.pdf', type: 'application/pdf', bytes: partner },
+            { id: 'chain', name: 'chain.pdf', type: 'application/pdf', bytes: bytes },
+        ];
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const merged = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const run = await runMerge(inputs, merged, {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: merged.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(merged),
+        });
+        let after = null;
+        if (run.bytes) {
+            const out = await PDFDocument.load(run.bytes, { updateMetadata: false });
+            after = { pages: out.getPageCount(), javascript: walkEverything(out).javascript };
+        }
+        return plainly({
+            js: assessJavaScript(doc).status,
+            readability: assessSourceActionStructure(doc).status,
+            extract: plan.status,
+            intake: intake.find((r) => r.id === 'chain')?.result ?? null,
+            run: run.status,
+            after,
+        });
+    },
+
+    /**
+     * The run-time backstop's agreement with intake, one source at a time:
+     * what intake said about `name`, and what the run then did with it beside a
+     * source that is fine. Cheap enough to ask of every fixture there is.
+     */
+    async r12Parity(name) {
+        const inputs = [
+            { id: 'clean', name: 'clean.pdf', type: 'application/pdf', bytes: await bytesOf('merge-b') },
+            { id: 'x', name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) },
+        ];
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const run = await runMerge(inputs, plan, {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        return plainly({ intake: intake.find((r) => r.id === 'x')?.result ?? null, run: run.status });
+    },
+
+    /**
+     * A source whose bytes are not the bytes intake saw: intake reads `seen`, the
+     * run is handed `run` under the same id. The run-time check is the backstop
+     * for exactly this, and has to still refuse.
+     */
+    async r12Swap(seen, run) {
+        const seenInput = { id: 'x', name: 'x.pdf', type: 'application/pdf', bytes: await bytesOf(seen) };
+        const runInput = { id: 'x', name: 'x.pdf', type: 'application/pdf', bytes: await bytesOf(run) };
+        const intake = await intakeSources([seenInput], { policy: PROVISIONAL_POLICY });
+        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const result = await runMerge([runInput], plan, {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        return plainly({ intake: intake[0].result, plan: plan.status, run: result.status, bytes: result.bytes ? result.bytes.length : null });
+    },
+});
 
 document.getElementById('state').textContent = 'ready';
 window.__m6Ready = true;

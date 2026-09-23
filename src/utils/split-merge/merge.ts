@@ -59,6 +59,7 @@ import {
 } from './optional-content';
 import type { OptionalContentDescription } from './optional-content';
 import {
+    assessSourceActionStructure,
     closeSourcePageRefs,
     nameAnnotationsByReference,
     rebuildDestinations,
@@ -276,6 +277,31 @@ function inspectSource(doc: PDFDocument, sizeBytes: number): SourceSafety {
             };
         default:
             break;
+    }
+    // RF-R11R-1: the other half of "can this source's actions be read to the end".
+    //
+    // The assessment above reads what a script hides behind. `runMerge` asks a
+    // second question before it copies a page — whether every action on it can
+    // be followed to find the pages it points at — and until now Merge asked it
+    // only there. A source could pass the first, be accepted here, be planned
+    // READY, be agreed to (an attachment, say), and then stop the whole Merge with
+    // UNSCANNABLE_ACTIONS: safe sources and all, after the answer had been given.
+    //
+    // It is asked here of the same immutable document, through the primitive the
+    // run's own check is built on, so it cannot say READABLE about a structure the
+    // run then refuses. The run keeps its check: it is the backstop, and it now has
+    // nothing left to disagree about.
+    const actions = assessSourceActionStructure(doc);
+    if (actions.status === 'UNSCANNABLE_ACTIONS') {
+        return {
+            ...base,
+            refusal: {
+                intake: INTAKE_RESULT.UNSCANNABLE_ACTIONS,
+                status: M6_STATUS.UNSCANNABLE_ACTIONS,
+                reason: `${UNSCANNABLE_ACTIONS_REASON_JA}: ${actions.unreadable.join(', ')}`,
+                detail: { unreadable: actions.unreadable },
+            },
+        };
     }
     if (facts.hasAppliedSignature) {
         // M6-H2: Merge refuses an applied signature, unlike Extract. A merge
@@ -927,7 +953,7 @@ export async function runMerge(
         if (closure.unreadable.length > 0) {
             return refusedMerge(
                 M6_STATUS.UNSCANNABLE_ACTIONS,
-                `${input.name}: この文書のアクション構造を完全に検査できませんでした: `
+                `${input.name}: ${UNSCANNABLE_ACTIONS_REASON_JA}: `
                 + closure.unreadable.join(', '),
                 plan.intake,
                 outputName,

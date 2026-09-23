@@ -17,6 +17,7 @@
  *   node scripts/make-m6-split-merge-fixtures.mjs
  *   node scripts/smoke-split-merge-reliability.mjs
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -2905,6 +2906,248 @@ try {
                 a.facts === kind && a.assessed === kind
                 && a.sanitize === EXPECTED[kind].sanitize && a.scrub === EXPECTED[kind].scrub,
                 JSON.stringify(a));
+        }
+    }
+
+    // ---- 66. RF-R11R-1: Merge asks what the run asks about actions ------------
+    //
+    // Two readers of an action's structure decide whether a source can be copied.
+    // The JavaScript assessment asks what a script hides behind, and Merge asked
+    // it at intake. The other follows each action to the pages it points at —
+    // closeSourcePageRefs — and Merge asked it only when it ran. A source that
+    // satisfied the first and not the second was accepted, planned READY, agreed
+    // to (an attachment, say), and then stopped the whole Merge with
+    // UNSCANNABLE_ACTIONS: the safe sources with it, after the answer had been
+    // given. The changelog said the file alone would be left out. This section
+    // measures that it is — by what the first plan presents, not by the outcome —
+    // and that the two readers count a /Next hop the same way.
+    console.log('\n=== 66. Round 12 Merge asks what the run asks about actions ===');
+    {
+        const UNSCAN = 'UNSCANNABLE_ACTIONS';
+        const PAYLOAD = 'M6R12_ATTACHMENT_PAYLOAD';
+        const bound = constants.mechanismBounds.maxActionDepth;
+        const partner = await call('r12Merge', ['merge-b'], []);
+        const partnerPages = partner.pages;
+        check('merge-b merges alone, so the other sources can be measured against its page count',
+            partner.run === 'READY' && Number.isInteger(partnerPages) && partnerPages > 0, `pages=${partnerPages}`);
+        check('the action-chain bound is a positive whole number, and the sweep below is derived from it',
+            Number.isInteger(bound) && bound > 0, `maxActionDepth=${bound}`);
+
+        // ---- an /AA that names nothing --------------------------------------
+        for (const [fixture, title, hasAttachment, hasTagging] of [
+            ['r12-a-annot-dangling-aa-att', "an annotation's /AA that names nothing, and an attachment", true, false],
+            ['r12-b-page-dangling-aa-att', "a page's /AA that names nothing, and an attachment", true, false],
+            ['r12-c-annot-dangling-aa-att-tag', "an annotation's /AA that names nothing, an attachment and tagging", true, true],
+            ['r12-c-annot-dangling-aa-tag', "an annotation's /AA that names nothing, and tagging", false, true],
+            ['r12-c-annot-dangling-aa', "an annotation's /AA that names nothing", false, false],
+            ['r12-c-page-dangling-aa', "a page's /AA that names nothing", false, false],
+            ['r12-c-widget-dangling-aa', "a form widget's /AA that names nothing", false, false],
+        ]) {
+            const r = await call('r12Readability', fixture);
+            // The negative probes: the two facts that made this a defect. The
+            // reader Merge did not ask refuses it, and the reader Merge did ask
+            // accepts it — so a Merge that asked only the latter was wrong.
+            probe(`${fixture}: the reader Merge used to ask only at run time refuses it`,
+                r.readability === UNSCAN, `readability=${r.readability} ${(r.unreadable ?? []).join(' | ').slice(0, 100)}`);
+            probe(`${fixture}: and the JavaScript assessment Merge already asked at intake accepts it`,
+                r.js === 'SAFE', `js=${r.js}`);
+
+            const m = await call('r12Merge', [fixture, 'merge-b'], [PAYLOAD]);
+            const verdict = m.intake.find((i) => i.id === fixture);
+            if (hasAttachment) {
+                probe(`${fixture}: the source really holds the attachment a confirmation would name`,
+                    m.sourceMarkers[fixture][PAYLOAD] === true);
+            }
+            check(`${fixture}: Merge refuses the source at intake, by name, as unscannable`,
+                verdict?.result === UNSCAN && verdict.name === `${fixture}.pdf`,
+                `intake=${verdict?.result} name=${verdict?.name}`);
+            check(`${fixture}: and the intake says which structure could not be read`,
+                (verdict?.reason ?? '').includes('/AA'), (verdict?.reason ?? '').slice(0, 140));
+            check(`${fixture}: and the source beside it is accepted`,
+                m.intake.find((i) => i.id === 'merge-b')?.result === 'ACCEPTED');
+            check(`${fixture}: and the first plan asks about nothing`,
+                m.first.requires.length === 0, `requires=${m.first.requires.join(',')}`);
+            check(`${fixture}: and none of the excluded source's losses is presented`,
+                !m.first.losses.some((l) => ['attachments', 'tagging'].includes(l.kind)
+                    && (l.what ?? '').includes(fixture)),
+                m.first.losses.map((l) => `${l.kind}:${l.what}`).join(' | ').slice(0, 160));
+            check(`${fixture}: and the source is named as left out`,
+                m.first.losses.some((l) => l.kind === 'excluded-source' && (l.what ?? '').includes(fixture)),
+                m.first.losses.map((l) => l.kind).join(','));
+            check(`${fixture}: and the Merge writes the other source alone`,
+                m.run === 'READY' && m.order.join(',') === 'merge-b' && m.pages === partnerPages,
+                `run=${m.run} order=${m.order.join(',')} pages=${m.pages}`);
+            check(`${fixture}: and nothing of the excluded source is in what it writes`,
+                m.markers?.[PAYLOAD] === false && m.independent?.javascript === 0
+                && m.independent?.embeddedFileStreams === 0 && m.independent?.structTreeRoot === false,
+                JSON.stringify(m.markers));
+            const alone = await call('r12Merge', [fixture], []);
+            check(`${fixture}: a Merge of nothing else writes nothing, by the adopted no-accepted-source result`,
+                alone.bytes === null && alone.order.length === 0 && alone.run === 'EMPTY_SELECTION',
+                `run=${alone.run} order=${alone.order.length}`);
+            if (fixture !== 'r12-c-widget-dangling-aa') {
+                const e = await call('r9Extract', fixture, [0], null, []);
+                check(`${fixture}: Extract still refuses it at planning, and asks nothing`,
+                    e.plan === UNSCAN && e.requires.length === 0 && e.bytes === null,
+                    `plan=${e.plan} requires=${e.requires.join(',')}`);
+            }
+        }
+
+        // ---- a /Next chain of an exact length --------------------------------
+        const arrayBound = Math.floor(bound / 2);
+        for (const [fixture, title] of [
+            ['r12-d-next-15', '15 hops'],
+            ['r12-d-next-16', '16 hops — one past what the second reader used to allow'],
+            ['r12-d-next-17', '17 hops'],
+            ['r12-e-next-31', '31 hops'],
+            ['r12-e-next-32', `${bound} hops — the bound, inclusive`],
+            ['r12-x-next-array-16', `${arrayBound} hops through /Next arrays — their bound`],
+            ['r12-v-direct-action', 'a direct action'],
+            ['r12-v-indirect-action', 'an indirect action'],
+            ['r12-v-next-array', 'a /Next list of two actions'],
+            ['r12-v-aa-valid', 'an /AA event with an action'],
+        ]) {
+            const r = await call('r12Readability', fixture);
+            check(`${fixture}: ${title} is read to the end by both readers`,
+                r.js === 'SAFE' && r.readability === 'READABLE', `js=${r.js} readability=${r.readability}`);
+            check(`${fixture}: and Extract plans it`, r.extract === 'READY', `extract=${r.extract}`);
+            const m = await call('r12Merge', [fixture, 'merge-b'], []);
+            check(`${fixture}: and Merge accepts it at intake and writes both sources`,
+                m.intake.every((i) => i.result === 'ACCEPTED') && m.run === 'READY'
+                && m.pages === partnerPages + 1 && m.first.requires.length === 0,
+                `intake=${m.intake.map((i) => i.result).join(',')} run=${m.run} pages=${m.pages}`);
+        }
+        for (const [fixture, title] of [
+            ['r12-f-next-33', `${bound + 1} hops — one over the bound`],
+            ['r12-x-next-array-17', `${arrayBound + 1} hops through /Next arrays — one over theirs`],
+            ['r12-f-next-33-js', `${bound + 1} hops, ending in a script`],
+            ['r12-g-next-array-bad-member', 'a /Next list with a member that is not an action'],
+            ['r12-h-next-cycle', 'a chain that comes back to where it started'],
+            ['r12-h-next-self', 'an action whose /Next is itself'],
+        ]) {
+            const r = await call('r12Readability', fixture);
+            check(`${fixture}: ${title} is refused by at least one reader, and Extract says so at planning`,
+                (r.js === 'UNSCANNABLE' || r.readability === UNSCAN) && r.extract === UNSCAN && r.requires.length === 0,
+                `js=${r.js} readability=${r.readability} extract=${r.extract}`);
+            const m = await call('r12Merge', [fixture, 'merge-b'], []);
+            const verdict = m.intake.find((i) => i.id === fixture);
+            check(`${fixture}: and Merge excludes it at intake with the typed result, and writes the other source`,
+                verdict?.result === UNSCAN && m.run === 'READY' && m.order.join(',') === 'merge-b'
+                && m.pages === partnerPages,
+                `intake=${verdict?.result} run=${m.run} pages=${m.pages}`);
+        }
+        for (const fixture of ['r12-f-next-33', 'r12-x-next-array-17']) {
+            const r = await call('r12Readability', fixture);
+            check(`${fixture}: both readers refuse it — the second no longer refuses less, or more, than the first`,
+                r.js === 'UNSCANNABLE' && r.readability === UNSCAN, `js=${r.js} readability=${r.readability}`);
+        }
+
+        // ---- the confirmation that is still asked, and the one that is not -----
+        {
+            const seen = await call('r12Merge', ['r12-d-next-17-att', 'merge-b'], [PAYLOAD]);
+            check('r12-d-next-17-att: a valid 17-hop chain and an attachment is accepted, and the attachment is asked about',
+                seen.intake.every((i) => i.result === 'ACCEPTED') && seen.first.requires.includes('attachments'),
+                `intake=${seen.intake.map((i) => i.result).join(',')} requires=${seen.first.requires.join(',')}`);
+            check('r12-d-next-17-att: and once agreed to, it merges — it used to stop the whole Merge',
+                seen.run === 'READY' && seen.pages === partnerPages + 1 && seen.markers?.[PAYLOAD] === false,
+                `run=${seen.run} pages=${seen.pages} payload=${seen.markers?.[PAYLOAD]}`);
+            const over = await call('r12Merge', ['r12-f-next-33-att', 'merge-b'], [PAYLOAD]);
+            check('r12-f-next-33-att: one hop over the bound is excluded before the attachment is asked about',
+                over.intake.find((i) => i.id === 'r12-f-next-33-att')?.result === UNSCAN
+                && over.first.requires.length === 0
+                && !over.first.losses.some((l) => l.kind === 'attachments')
+                && over.run === 'READY' && over.pages === partnerPages && over.markers?.[PAYLOAD] === false,
+                `requires=${over.first.requires.join(',')} run=${over.run} pages=${over.pages}`);
+            for (const fixture of ['r12-g-next-array-bad-member-att', 'r12-h-next-cycle-att']) {
+                const m = await call('r12Merge', [fixture, 'merge-b'], [PAYLOAD]);
+                check(`${fixture}: an unreadable chain and an attachment is excluded before anything is asked`,
+                    m.intake.find((i) => i.id === fixture)?.result === UNSCAN && m.first.requires.length === 0
+                    && m.run === 'READY' && m.pages === partnerPages && m.markers?.[PAYLOAD] === false,
+                    `requires=${m.first.requires.join(',')} run=${m.run}`);
+            }
+        }
+
+        // ---- a script at the end of a chain is removed at the bound --------------
+        for (const [fixture, marker, title] of [
+            ['r12-e-next-32-js', 'M6R12_E32', `a script ${bound} hops down a chain`],
+            ['r12-x-next-array-16-js', 'M6R12_X16', `a script ${arrayBound} hops down a chain of /Next arrays`],
+            ['r12-v-next-array-js', 'M6R12_V1', 'a script in a /Next list'],
+        ]) {
+            const e = await call('r9Extract', fixture, [0], null, [marker]);
+            probe(`${fixture}: the source really holds the script`, e.sourceMarkers[marker] === true);
+            check(`${fixture}: Extract writes ${title} without it`,
+                e.run === 'READY' && e.markers[marker] === false && e.independent.javascript === 0,
+                `run=${e.run} javascript=${e.independent?.javascript}`);
+            const m = await call('r12Merge', [fixture, 'merge-b'], [marker]);
+            check(`${fixture}: and so does Merge`,
+                m.run === 'READY' && m.pages === partnerPages + 1 && m.markers[marker] === false
+                && m.independent.javascript === 0,
+                `run=${m.run} javascript=${m.independent?.javascript}`);
+        }
+
+        // ---- the sweep: every length, both shapes, every reader and every step ---
+        //
+        // The bound is not a claim about the fixtures above. For every length from
+        // nothing to well past the bound, in both shapes, ending in a URI or in a
+        // script, the JavaScript assessment, the readability, Extract's plan,
+        // Merge's intake and the run all give the same answer, and the answer
+        // changes exactly where the bound says it does: `bound` hops for a direct
+        // /Next, half that for /Next arrays, whose container is a level of its own.
+        for (const [shape, limit] of [['direct', bound], ['array', arrayBound]]) {
+            for (const endJs of [false, true]) {
+                const off = [];
+                let read = 0;
+                for (let hops = 0; hops <= bound + 8; hops += 1) {
+                    const expected = hops <= limit;
+                    const s = await call('r12Sweep', shape, hops, endJs);
+                    const agrees = (s.js === 'SAFE') === expected
+                        && (s.readability === 'READABLE') === expected
+                        && s.extract === (expected ? 'READY' : UNSCAN)
+                        && s.intake === (expected ? 'ACCEPTED' : UNSCAN)
+                        && s.run === 'READY'
+                        && s.after?.pages === partnerPages + (expected ? 1 : 0)
+                        && s.after?.javascript === 0;
+                    if (expected && agrees) read += 1;
+                    if (!agrees) off.push(`${hops}:${JSON.stringify(s)}`);
+                }
+                check(`sweep: ${shape} /Next chains ending in ${endJs ? 'a script' : 'a URI'}, 0..${bound + 8} hops — `
+                    + `both readers, Extract, Merge intake and the run agree, and the bound is ${limit} hops, inclusive`,
+                    off.length === 0 && read === limit + 1,
+                    off.length === 0 ? `${read} lengths read` : off.slice(0, 2).join(' | ').slice(0, 300));
+            }
+        }
+
+        // ---- the run-time backstop, and the invariant it now has nothing to disagree about
+        //
+        // Every fixture there is, one at a time beside a source that is fine: what
+        // intake accepted, the run must not then refuse as UNSCANNABLE_ACTIONS. The
+        // check is meaningful only if the sweep saw both kinds of source.
+        const everything = fs.readdirSync(path.join(ROOT, 'test-fixtures', 'm6-split-merge-production'))
+            .filter((f) => f.endsWith('.pdf')).map((f) => f.slice(0, -4)).sort();
+        let accepted = 0;
+        let refusedUnscannable = 0;
+        const stopped = [];
+        for (const name of everything) {
+            const p = await call('r12Parity', name);
+            if (p.intake === 'ACCEPTED') {
+                accepted += 1;
+                if (p.run === UNSCAN) stopped.push(name);
+            }
+            if (p.intake === UNSCAN) refusedUnscannable += 1;
+        }
+        check(`parity: of every fixture there is (${everything.length}), none that Merge accepted at intake stops the run as ${UNSCAN}`,
+            stopped.length === 0 && everything.length >= 385, stopped.join(', ') || `${accepted} accepted`);
+        probe('parity: the sweep is not vacuous — it met sources Merge accepted and sources it refused as unscannable',
+            accepted >= 100 && refusedUnscannable >= 10, `accepted=${accepted} unscannable=${refusedUnscannable}`);
+
+        // The backstop is still there: bytes that are not the bytes intake saw.
+        const control = await call('r12Swap', 'merge-b', 'merge-b');
+        probe('backstop: the swap harness is not refusing everything — the same bytes run', control.run === 'READY', `run=${control.run}`);
+        for (const fixture of ['r12-c-annot-dangling-aa', 'r12-f-next-33']) {
+            const swapped = await call('r12Swap', 'merge-b', fixture);
+            check(`backstop: ${fixture}, handed to the run in place of what intake saw, is still refused`,
+                swapped.bytes === null && [UNSCAN, 'PLAN_RUNTIME_MISMATCH'].includes(swapped.run),
+                `run=${swapped.run}`);
         }
     }
 

@@ -740,6 +740,65 @@ try {
         r11Att.text.includes('notes.txt') && r11Att.button.includes('内容を了承して書き出し'),
         `button="${r11Att.button}"`);
 
+    // ---- 12. Round 12: a source whose actions cannot be followed is left out ---
+    //
+    // RF-R11R-1, in the built app. Merge used to accept a source whose /AA named
+    // nothing, ask about its attachment, and stop the whole Merge after the
+    // answer had been given. The row has to say so, the first click has to write
+    // the other source without asking, and a chain that is merely long — inside
+    // the bound — has to be an ordinary source with an ordinary confirmation.
+    console.log('\n=== 12. Round 12 a source whose actions cannot be followed is left out ===');
+    for (const [name, title] of [
+        ['r12-a-annot-dangling-aa-att', "an annotation's /AA that names nothing"],
+        ['r12-b-page-dangling-aa-att', "a page's /AA that names nothing"],
+    ]) {
+        await openMerge();
+        const r12Input = await page.$('input[type="file"]');
+        await r12Input.uploadFile(fixture(name), fixture('merge-b'));
+        await settle(4000);
+        const rows12 = await mergeRows();
+        check(`${name}: ${title} is named on its own row`,
+            rows12.some((r) => r.name === `${name}.pdf` && r.intake === 'UNSCANNABLE_ACTIONS'),
+            JSON.stringify(rows12));
+        check(`${name}: and the source beside it is still acceptable`,
+            rows12.some((r) => r.name === 'merge-b.pdf' && r.intake === 'ACCEPTED'), JSON.stringify(rows12));
+        // Counted by what was written since the click, not by how many names there
+        // are: the merge of these two is named the same as Round 11's, and a write
+        // over an existing name adds no name.
+        const started12 = Date.now();
+        await clickMergeExport();
+        await settle(6000);
+        const notice12 = await mergeNotice();
+        const wrote12 = downloadedNames().filter((f) => fs.statSync(path.join(downloads, f)).mtimeMs >= started12 - 1000);
+        check(`${name}: the first click writes the merge, and asks about nothing`,
+            wrote12.length === 1 && !notice12.includes('CONFIRMATION_REQUIRED'),
+            `${wrote12.length} file(s) written since the click, ${notice12.slice(0, 80)}`);
+        check(`${name}: and the notice says the source was left out, and why`,
+            notice12.includes(`${name}.pdf`) && notice12.includes('アクションの構造を完全に確認できませんでした'),
+            notice12.slice(0, 160));
+        const out12 = wrote12.map((f) => path.join(downloads, f))[0];
+        check(`${name}: and nothing of the excluded source is in the bytes`,
+            Boolean(out12) && !fs.readFileSync(out12).includes('M6R12_ATTACHMENT_PAYLOAD'),
+            out12 ? path.basename(out12) : 'no file was written');
+    }
+    await openMerge();
+    const r12Long = await page.$('input[type="file"]');
+    await r12Long.uploadFile(fixture('r12-d-next-17-att'), fixture('merge-b'));
+    await settle(4000);
+    const rowsLong = await mergeRows();
+    check('r12-d-next-17-att: a valid 17-hop chain is an ordinary source, not an unreadable one',
+        rowsLong.every((r) => r.intake === 'ACCEPTED'), JSON.stringify(rowsLong));
+    const beforeLong = downloadedNames().length;
+    await clickMergeExport();
+    await settle(3000);
+    check('r12-d-next-17-att: its attachment is asked about, by name, before anything is written',
+        (await mergeNotice()).includes('CONFIRMATION_REQUIRED') && downloadedNames().length === beforeLong,
+        `${downloadedNames().length - beforeLong} new file(s)`);
+    await clickMergeExport();
+    await settle(6000);
+    check('r12-d-next-17-att: and once agreed to, the merge is written — it used to stop the whole Merge',
+        downloadedNames().length === beforeLong + 1, `${downloadedNames().length - beforeLong} new file(s)`);
+
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));
 

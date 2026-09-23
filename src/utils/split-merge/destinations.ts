@@ -1009,7 +1009,36 @@ export function rebuildDestinations(
  * is counted, and rebuilt afterwards only against output page references. What
  * cannot be rebuilt is reported; what cannot be understood is refused.
  */
-const ACTION_CHAIN_BOUND = 32;
+/**
+ * How many `/Next` hops an action chain may take before it is refused, and what
+ * "a hop" costs. Round 12 (RF-R11R-1).
+ *
+ * The number is `MECHANISM_BOUNDS.maxActionDepth` — the one the JavaScript action
+ * scan in `javascript.ts` already reads — and not a second constant that happens
+ * to be equal. Two scanners that answer "can this chain be read to the end?" with
+ * two different numbers will disagree about some document, and the disagreement
+ * shows up where it does the most harm: after a confirmation.
+ *
+ * **One hop is one unit.** The first action of a chain (an annotation's `/A`, an
+ * `/AA` event) is at depth 0, and each action reached through a `/Next` is one
+ * deeper. So a chain of 32 hops — 33 actions — is read, and a chain of 33 hops is
+ * refused. The bound is inclusive.
+ *
+ * This walker used to spend two units per hop: one for stepping from the
+ * `/Next` entry to the action, and one for stepping from the action to *its*
+ * `/Next`. That is recursion through the implementation, not depth in the
+ * document, and it made the real limit 15 hops — a chain the JavaScript scan
+ * accepted and this one refused after the person had already agreed to the
+ * losses.
+ *
+ * A `/Next` **array** costs one more unit than a single `/Next`, for the array
+ * container, exactly as it does in `javascript.ts`. Both scanners agree on that
+ * too, and the gate walks chains of both shapes across the boundary to prove it.
+ *
+ * This is an internal mechanism bound. It is not a product limit and is not part
+ * of the B4 policy.
+ */
+const ACTION_CHAIN_BOUND = MECHANISM_BOUNDS.maxActionDepth;
 
 interface PageRefSite {
     /** The dictionary holding the key. */
@@ -1045,12 +1074,14 @@ function collectActionPageRefs(
     depth: number,
     seen: Set<string>,
 ): void {
+    const raw = holder.get(PDFName.of(key));
+    // Nothing is there to read, so the depth it would have been read at is not a
+    // reason to refuse. This is the order `javascript.ts` asks in as well.
+    if (raw === undefined) return;
     if (depth > ACTION_CHAIN_BOUND) {
         unreadable.push(`${where}: action chain deeper than ${ACTION_CHAIN_BOUND}`);
         return;
     }
-    const raw = holder.get(PDFName.of(key));
-    if (raw === undefined) return;
     if (raw instanceof PDFRef) {
         if (seen.has(raw.tag)) {
             unreadable.push(`${where}: cyclic action chain`);
@@ -1062,7 +1093,9 @@ function collectActionPageRefs(
 
     if (resolved instanceof PDFArray) {
         // Under `/Next` an array is a list of actions; under a destination key
-        // it is the destination itself. Only the key says which.
+        // it is the destination itself. Only the key says which. The array is a
+        // level of its own, so its members are one deeper than a single action
+        // would have been.
         if (key === 'Next') {
             for (let i = 0; i < resolved.size(); i += 1) {
                 const item = look(doc, resolved.get(i));
@@ -1076,8 +1109,10 @@ function collectActionPageRefs(
         return;
     }
     if (!(resolved instanceof PDFDict)) return;
+    // The action is at the depth of the entry that holds it: stepping into it is
+    // not a hop, and only stepping from it to its `/Next` is.
     collectFromActionDict(
-        doc, resolved, where, fromIndex, pageIndexOf, out, unreadable, depth + 1, seen,
+        doc, resolved, where, fromIndex, pageIndexOf, out, unreadable, depth, seen,
     );
 }
 
@@ -1201,6 +1236,53 @@ export function collectSourcePageRefs(
     }
 
     return { sites, unreadable };
+}
+
+/**
+ * The verdict of {@link assessSourceActionStructure}: closed, and `unreadable`
+ * carries the position of every structure the walk could not finish.
+ */
+export type ActionStructureAssessment =
+    | { status: 'READABLE' }
+    | { status: 'UNSCANNABLE_ACTIONS'; unreadable: string[] };
+
+/**
+ * Whether every action the copy is about to touch can be read to the end.
+ * Round 12 (RF-R11R-1).
+ *
+ * The answer `closeSourcePageRefs` gives at run time, asked of an immutable
+ * document before anything is copied. It is not a second scanner: it is
+ * {@link collectSourcePageRefs} — the walk `closeSourcePageRefs` starts from,
+ * before it changes a thing — with its `unreadable` list read as a verdict. What
+ * this calls unreadable and what the run refuses are the same list by
+ * construction, so a source cannot pass one and fail the other over the same
+ * structure.
+ *
+ * Present-but-unreadable is not absent. An `/AA` that names nothing is a
+ * structure a reader was pointed at and could not follow; it is reported, not
+ * treated as "no additional actions".
+ *
+ * Never throws. A walk that fails for a reason nobody anticipated is an
+ * unreadable document, not an exception the caller has to remember to catch.
+ * `selection` is the pages whose actions matter: an Extract's selection, or —
+ * the default — every page, which is what a Merge copies.
+ */
+export function assessSourceActionStructure(
+    doc: PDFDocument,
+    selection?: number[],
+): ActionStructureAssessment {
+    let unreadable: string[];
+    try {
+        ({ unreadable } = collectSourcePageRefs(doc, selection ?? doc.getPageIndices()));
+    } catch (error) {
+        return {
+            status: 'UNSCANNABLE_ACTIONS',
+            unreadable: [`the action structure could not be read: ${String((error as Error)?.message ?? error)}`],
+        };
+    }
+    return unreadable.length === 0
+        ? { status: 'READABLE' }
+        : { status: 'UNSCANNABLE_ACTIONS', unreadable: [...unreadable] };
 }
 
 /**
