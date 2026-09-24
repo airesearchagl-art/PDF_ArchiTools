@@ -294,13 +294,21 @@ function walkAction(
         // script wherever one is — but it is a rooted position nowhere: only a
         // proven action's `/Next` list is an action position, and that is the
         // classifier's question.
+        //
+        // A `/Next` list is not a hop of its own. Each member is the action a
+        // single `/Next` would have named, so it is read at the depth that action
+        // would have had: one hop is one unit whether `/Next` holds one action or
+        // a list of them, and the members of one list are siblings, not a queue.
+        // Any other list keeps the level its container has always cost — it is
+        // not a shape the format defines, and it is not what this is about.
+        const memberDepth = key === 'Next' ? depth : depth + 1;
         for (let i = 0; i < resolved.size(); i += 1) {
             walkActionValue(
                 doc,
                 resolved.get(i),
                 { holder: resolved, key: i, inArray: true },
                 sink,
-                depth + 1,
+                memberDepth,
                 new Set(seen),
             );
         }

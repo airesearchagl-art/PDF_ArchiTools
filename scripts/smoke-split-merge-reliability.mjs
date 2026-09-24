@@ -2994,14 +2994,25 @@ try {
         }
 
         // ---- a /Next chain of an exact length --------------------------------
-        const arrayBound = Math.floor(bound / 2);
+        //
+        // Round 12A: the /Next array is a representation and not a hop, so a chain
+        // written as lists has the direct chain's boundary and no other — 32 hops
+        // read, 33 refused. The x fixtures walk it in every spelling.
         for (const [fixture, title] of [
             ['r12-d-next-15', '15 hops'],
             ['r12-d-next-16', '16 hops — one past what the second reader used to allow'],
             ['r12-d-next-17', '17 hops'],
             ['r12-e-next-31', '31 hops'],
             ['r12-e-next-32', `${bound} hops — the bound, inclusive`],
-            ['r12-x-next-array-16', `${arrayBound} hops through /Next arrays — their bound`],
+            ['r12-x-next-array-15', '15 hops through /Next arrays'],
+            ['r12-x-next-array-16', '16 hops through /Next arrays — what the container used to leave as the limit'],
+            ['r12-x-next-array-17', '17 hops through /Next arrays — one past what the container used to allow'],
+            ['r12-x-next-array-31', '31 hops through /Next arrays'],
+            ['r12-x-next-array-32', `${bound} hops through /Next arrays — the bound, inclusive, as for a direct chain`],
+            ['r12-x-next-array-indirect-32', `${bound} hops through /Next arrays held by objects of their own`],
+            ['r12-x-next-inline-32', `${bound} hops with every /Next written as the action itself`],
+            ['r12-x-next-array-wide-last-32', `${bound} hops through /Next lists of three, the chain last: siblings are not a queue`],
+            ['r12-x-next-array-wide-first-32', `${bound} hops through /Next lists of three, the chain first`],
             ['r12-v-direct-action', 'a direct action'],
             ['r12-v-indirect-action', 'an indirect action'],
             ['r12-v-next-array', 'a /Next list of two actions'],
@@ -3019,11 +3030,20 @@ try {
         }
         for (const [fixture, title] of [
             ['r12-f-next-33', `${bound + 1} hops — one over the bound`],
-            ['r12-x-next-array-17', `${arrayBound + 1} hops through /Next arrays — one over theirs`],
+            ['r12-x-next-array-33', `${bound + 1} hops through /Next arrays — one over the bound, as for a direct chain`],
+            ['r12-x-next-array-34', `${bound + 2} hops through /Next arrays`],
+            ['r12-x-next-array-33-js', `${bound + 1} hops through /Next arrays, ending in a script`],
+            ['r12-x-next-array-indirect-33', `${bound + 1} hops through /Next arrays held by objects of their own`],
+            ['r12-x-next-inline-33', `${bound + 1} hops with every /Next written as the action itself`],
+            ['r12-x-next-array-wide-last-33', `${bound + 1} hops through /Next lists of three, the chain last`],
+            ['r12-x-next-array-wide-first-33', `${bound + 1} hops through /Next lists of three, the chain first`],
             ['r12-f-next-33-js', `${bound + 1} hops, ending in a script`],
             ['r12-g-next-array-bad-member', 'a /Next list with a member that is not an action'],
+            ['r12-g-next-array-nested', 'a /Next list inside a /Next list — not a shape the depth correction widens'],
             ['r12-h-next-cycle', 'a chain that comes back to where it started'],
             ['r12-h-next-self', 'an action whose /Next is itself'],
+            ['r12-h-next-cycle-array', 'a chain of /Next lists that comes back to where it started'],
+            ['r12-h-next-self-array', 'an action whose /Next lists itself'],
         ]) {
             const r = await call('r12Readability', fixture);
             check(`${fixture}: ${title} is refused by at least one reader, and Extract says so at planning`,
@@ -3036,10 +3056,25 @@ try {
                 && m.pages === partnerPages,
                 `intake=${verdict?.result} run=${m.run} pages=${m.pages}`);
         }
-        for (const fixture of ['r12-f-next-33', 'r12-x-next-array-17']) {
+        for (const fixture of [
+            'r12-f-next-33', 'r12-x-next-array-33', 'r12-x-next-array-34', 'r12-x-next-array-indirect-33',
+            'r12-x-next-inline-33', 'r12-x-next-array-wide-last-33', 'r12-x-next-array-wide-first-33',
+            'r12-h-next-cycle-array', 'r12-h-next-self-array',
+        ]) {
             const r = await call('r12Readability', fixture);
             check(`${fixture}: both readers refuse it — the second no longer refuses less, or more, than the first`,
                 r.js === 'UNSCANNABLE' && r.readability === UNSCAN, `js=${r.js} readability=${r.readability}`);
+        }
+        // A list inside a list is refused by the JavaScript assessment, which is what
+        // Extract's plan and Merge's intake ask first; the depth correction leaves
+        // that where it was. The destinations reader steps over a member that is not
+        // an action, exactly as it did before, and it is not asked to be the one that
+        // refuses this shape.
+        {
+            const r = await call('r12Readability', 'r12-g-next-array-nested');
+            check('r12-g-next-array-nested: the JavaScript assessment refuses a list inside a list, and so do Extract and intake',
+                r.js === 'UNSCANNABLE' && r.extract === UNSCAN && r.requires.length === 0,
+                `js=${r.js} readability=${r.readability} extract=${r.extract}`);
         }
 
         // ---- the confirmation that is still asked, and the one that is not -----
@@ -3058,7 +3093,28 @@ try {
                 && !over.first.losses.some((l) => l.kind === 'attachments')
                 && over.run === 'READY' && over.pages === partnerPages && over.markers?.[PAYLOAD] === false,
                 `requires=${over.first.requires.join(',')} run=${over.run} pages=${over.pages}`);
-            for (const fixture of ['r12-g-next-array-bad-member-att', 'r12-h-next-cycle-att']) {
+            // The same two questions for a chain written as /Next lists (Round 12A):
+            // 17 hops used to be refused here and is a valid source with an ordinary
+            // confirmation; 33 is still excluded before anything is asked.
+            const seenList = await call('r12Merge', ['r12-x-next-array-17-att', 'merge-b'], [PAYLOAD]);
+            check('r12-x-next-array-17-att: a valid 17-hop chain of /Next lists and an attachment is accepted, and the attachment is asked about',
+                seenList.intake.every((i) => i.result === 'ACCEPTED') && seenList.first.requires.includes('attachments'),
+                `intake=${seenList.intake.map((i) => i.result).join(',')} requires=${seenList.first.requires.join(',')}`);
+            check('r12-x-next-array-17-att: and once agreed to, it merges, with the attachment gone',
+                seenList.run === 'READY' && seenList.pages === partnerPages + 1 && seenList.markers?.[PAYLOAD] === false
+                && seenList.independent?.javascript === 0,
+                `run=${seenList.run} pages=${seenList.pages} payload=${seenList.markers?.[PAYLOAD]}`);
+            const overList = await call('r12Merge', ['r12-x-next-array-33-att', 'merge-b'], [PAYLOAD]);
+            check('r12-x-next-array-33-att: one hop over the bound, as /Next lists, is excluded before the attachment is asked about',
+                overList.intake.find((i) => i.id === 'r12-x-next-array-33-att')?.result === UNSCAN
+                && overList.first.requires.length === 0
+                && !overList.first.losses.some((l) => l.kind === 'attachments')
+                && overList.run === 'READY' && overList.pages === partnerPages && overList.markers?.[PAYLOAD] === false,
+                `requires=${overList.first.requires.join(',')} run=${overList.run} pages=${overList.pages}`);
+            for (const fixture of [
+                'r12-g-next-array-bad-member-att', 'r12-h-next-cycle-att',
+                'r12-g-next-array-nested-att', 'r12-h-next-cycle-array-att',
+            ]) {
                 const m = await call('r12Merge', [fixture, 'merge-b'], [PAYLOAD]);
                 check(`${fixture}: an unreadable chain and an attachment is excluded before anything is asked`,
                     m.intake.find((i) => i.id === fixture)?.result === UNSCAN && m.first.requires.length === 0
@@ -3070,7 +3126,8 @@ try {
         // ---- a script at the end of a chain is removed at the bound --------------
         for (const [fixture, marker, title] of [
             ['r12-e-next-32-js', 'M6R12_E32', `a script ${bound} hops down a chain`],
-            ['r12-x-next-array-16-js', 'M6R12_X16', `a script ${arrayBound} hops down a chain of /Next arrays`],
+            ['r12-x-next-array-16-js', 'M6R12_X16', 'a script 16 hops down a chain of /Next arrays'],
+            ['r12-x-next-array-32-js', 'M6R12_X32', `a script ${bound} hops down a chain of /Next arrays — the bound, as for a direct chain`],
             ['r12-v-next-array-js', 'M6R12_V1', 'a script in a /Next list'],
         ]) {
             const e = await call('r9Extract', fixture, [0], null, [marker]);
@@ -3088,18 +3145,24 @@ try {
         // ---- the sweep: every length, both shapes, every reader and every step ---
         //
         // The bound is not a claim about the fixtures above. For every length from
-        // nothing to well past the bound, in both shapes, ending in a URI or in a
-        // script, the JavaScript assessment, the readability, Extract's plan,
-        // Merge's intake and the run all give the same answer, and the answer
-        // changes exactly where the bound says it does: `bound` hops for a direct
-        // /Next, half that for /Next arrays, whose container is a level of its own.
-        for (const [shape, limit] of [['direct', bound], ['array', arrayBound]]) {
+        // nothing to well past the bound, in every spelling of /Next, ending in a
+        // URI or in a script, the JavaScript assessment, the readability, Extract's
+        // plan, Merge's intake and the run all give the same answer, and the answer
+        // changes exactly where the bound says it does: `bound` hops, inclusive, for
+        // a direct /Next and for every /Next list alike. The list is a
+        // representation and not a hop (Round 12A); before it, a list's bound was
+        // half of that.
+        const SHAPES = ['direct', 'inline', 'array', 'array-indirect', 'array-wide-last', 'array-wide-first'];
+        const swept = {};
+        for (const shape of SHAPES) {
             for (const endJs of [false, true]) {
                 const off = [];
                 let read = 0;
+                const results = [];
                 for (let hops = 0; hops <= bound + 8; hops += 1) {
-                    const expected = hops <= limit;
+                    const expected = hops <= bound;
                     const s = await call('r12Sweep', shape, hops, endJs);
+                    results.push(s);
                     const agrees = (s.js === 'SAFE') === expected
                         && (s.readability === 'READABLE') === expected
                         && s.extract === (expected ? 'READY' : UNSCAN)
@@ -3110,11 +3173,61 @@ try {
                     if (expected && agrees) read += 1;
                     if (!agrees) off.push(`${hops}:${JSON.stringify(s)}`);
                 }
+                swept[`${shape}:${endJs}`] = results;
                 check(`sweep: ${shape} /Next chains ending in ${endJs ? 'a script' : 'a URI'}, 0..${bound + 8} hops — `
-                    + `both readers, Extract, Merge intake and the run agree, and the bound is ${limit} hops, inclusive`,
-                    off.length === 0 && read === limit + 1,
+                    + `both readers, Extract, Merge intake and the run agree, and the bound is ${bound} hops, inclusive`,
+                    off.length === 0 && read === bound + 1,
                     off.length === 0 ? `${read} lengths read` : off.slice(0, 2).join(' | ').slice(0, 300));
             }
+        }
+
+        // ---- direct and list: the same answer at every length -----------------------
+        //
+        // Not only that each spelling meets the bound, but that no spelling answers
+        // differently from the direct chain about anything — a reader that counted
+        // the container would differ from it at exactly the lengths where it
+        // counted. The wide shapes add siblings beside the chain: a sibling is one
+        // hop below the list that holds it, and it is no hop for another sibling,
+        // so a list of three costs what a list of one does.
+        for (const shape of SHAPES.filter((s) => s !== 'direct')) {
+            for (const endJs of [false, true]) {
+                const direct = swept[`direct:${endJs}`];
+                const differs = [];
+                swept[`${shape}:${endJs}`].forEach((s, hops) => {
+                    if (JSON.stringify(s) !== JSON.stringify(direct[hops])) differs.push(hops);
+                });
+                check(`parity: ${shape} /Next chains ending in ${endJs ? 'a script' : 'a URI'} answer exactly as direct ones do, at every length 0..${bound + 8}`,
+                    differs.length === 0, `differs at ${differs.join(',')}`);
+            }
+        }
+        // The lengths that matter, named: nothing, one, either side of what a list
+        // used to cost, either side of the bound, and past it.
+        for (const hops of [0, 1, 15, 16, 17, 31, 32, 33, 34]) {
+            const expected = hops <= bound;
+            const cells = [];
+            for (const endJs of [false, true]) {
+                for (const shape of ['direct', 'array']) cells.push([shape, endJs, swept[`${shape}:${endJs}`][hops]]);
+            }
+            const wrong = cells.filter(([, , s]) => !(
+                (s.js === 'SAFE') === expected && (s.readability === 'READABLE') === expected
+                && s.extract === (expected ? 'READY' : UNSCAN) && s.intake === (expected ? 'ACCEPTED' : UNSCAN)
+                && s.run === 'READY' && s.after?.pages === partnerPages + (expected ? 1 : 0) && s.after?.javascript === 0));
+            const unequal = ['false', 'true'].filter((e) => JSON.stringify(swept[`direct:${e}`][hops]) !== JSON.stringify(swept[`array:${e}`][hops]));
+            check(`matrix: ${hops} hops — direct and /Next list give one answer at every reader and step, and it is ${expected ? 'read to the end' : UNSCAN}`,
+                wrong.length === 0 && unequal.length === 0,
+                `wrong=${wrong.map(([sh, e]) => `${sh}${e ? '-js' : ''}`).join(',')} unequal=${unequal.join(',')}`);
+        }
+        // A list inside a list is not an action graph, and correcting the depth did
+        // not make it one: it is refused at every length, next to the boundary too.
+        {
+            const off = [];
+            for (const hops of [1, 2, 16, 17, 32, 33]) {
+                const s = await call('r12Sweep', 'nested-array', hops, false);
+                if (!(s.js === 'UNSCANNABLE' && s.extract === UNSCAN && s.intake === UNSCAN
+                    && s.run === 'READY' && s.after?.pages === partnerPages)) off.push(`${hops}:${JSON.stringify(s)}`);
+            }
+            check('control: a /Next list inside a /Next list is refused at 1, 2, 16, 17, 32 and 33 hops, by the JavaScript assessment, Extract and intake',
+                off.length === 0, off.slice(0, 2).join(' | ').slice(0, 300));
         }
 
         // ---- the run-time backstop, and the invariant it now has nothing to disagree about
@@ -3136,7 +3249,7 @@ try {
             if (p.intake === UNSCAN) refusedUnscannable += 1;
         }
         check(`parity: of every fixture there is (${everything.length}), none that Merge accepted at intake stops the run as ${UNSCAN}`,
-            stopped.length === 0 && everything.length >= 385, stopped.join(', ') || `${accepted} accepted`);
+            stopped.length === 0 && everything.length >= 407, stopped.join(', ') || `${accepted} accepted`);
         probe('parity: the sweep is not vacuous — it met sources Merge accepted and sources it refused as unscannable',
             accepted >= 100 && refusedUnscannable >= 10, `accepted=${accepted} unscannable=${refusedUnscannable}`);
 

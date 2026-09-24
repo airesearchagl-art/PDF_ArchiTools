@@ -22,13 +22,18 @@
  * it is a script — so any refusal is the reader's and not the sanitizer's, and
  * `-js` variants end the chain in a script to prove it is removed at the bound.
  *
- * The X family walks the same boundary through `/Next` **arrays**, whose
- * container is a level of its own in both scanners: 16 hops are read and 17 are
- * refused, in both.
+ * The X family walks the same boundary through `/Next` **arrays** (Round 12A).
+ * The container is a representation and not a hop, so the boundary is the direct
+ * chain's exactly: 32 hops are read and 33 are refused, whether each `/Next`
+ * names one action, lists one, lists one through an indirect array, or lists
+ * three of which only one goes on. Until 12A the container cost a unit, and a
+ * chain written as lists was refused after 16 hops. The `inline` fixtures write
+ * each `/Next` as the action itself rather than a reference to it.
  *
  * The G and H families are the shapes that must stay refused whatever the depth
- * arithmetic: a `/Next` list with a member that is not an action, and cycles.
- * The V family is the valid shapes beside them.
+ * arithmetic: a `/Next` list with a member that is not an action, a list inside
+ * a list, and cycles, in both spellings. The V family is the valid shapes beside
+ * them.
  *
  * Written by hand, like Rounds 7 to 11: pdf-lib normalises most of these shapes
  * away.
@@ -163,14 +168,46 @@ write('r12-c-widget-dangling-aa', onePage({
 /**
  * A chain of `hops` `/Next` hops — `hops + 1` actions — held by an annotation's
  * `/A`. The first action is object 40 and the last is object `40 + hops`. `end`
- * is the last action; `shape` is how each `/Next` is written.
+ * is the last action; `shape` is how each `/Next` is written. Every shape has the
+ * same Action graph — a path of `hops + 1` actions — and differs only in how a
+ * `/Next` is spelled:
+ *
+ *   direct           `/Next 41 0 R`
+ *   array            `/Next [41 0 R]`
+ *   array-indirect   `/Next 300 0 R`, where object 300 is `[41 0 R]`
+ *   array-wide-last  `/Next [L1 L2 41 0 R]`: two leaf siblings, then the chain
+ *   array-wide-first `/Next [41 0 R L1 L2]`: the chain, then two leaf siblings
+ *   inline           `/Next << … >>`: the next action written in place
+ *
+ * The siblings are one hop below the action that lists them, exactly as the
+ * chain's own next action is, and no sibling is a hop for another.
  */
 function chain(hops, { end = URI(), shape = 'direct', ...spec } = {}) {
     const extra = { 8: LINK('/A 40 0 R'), ...(spec.extra ?? {}) };
+    if (shape === 'inline') {
+        const inline = (i) => (i === hops ? end : URI(` /Next ${inline(i + 1)}`));
+        extra[40] = inline(0);
+        return build({ ...spec, page: ' /Annots [8 0 R]', extra });
+    }
     for (let i = 0; i <= hops; i += 1) {
-        const last = i === hops;
-        const next = shape === 'array' ? ` /Next [${41 + i} 0 R]` : ` /Next ${41 + i} 0 R`;
-        extra[40 + i] = last ? end : URI(next);
+        if (i === hops) {
+            extra[40 + i] = end;
+            continue;
+        }
+        const child = `${41 + i} 0 R`;
+        const [l1, l2] = [`${200 + 2 * i} 0 R`, `${201 + 2 * i} 0 R`];
+        let next;
+        if (shape === 'direct') next = ` /Next ${child}`;
+        else if (shape === 'array') next = ` /Next [${child}]`;
+        else if (shape === 'array-indirect') {
+            next = ` /Next ${300 + i} 0 R`;
+            extra[300 + i] = `[${child}]`;
+        } else if (shape === 'array-wide-last' || shape === 'array-wide-first') {
+            next = shape === 'array-wide-last' ? ` /Next [${l1} ${l2} ${child}]` : ` /Next [${child} ${l1} ${l2}]`;
+            extra[200 + 2 * i] = URI();
+            extra[201 + 2 * i] = URI();
+        } else throw new Error(`unknown shape ${shape}`);
+        extra[40 + i] = URI(next);
     }
     return build({ ...spec, page: ' /Annots [8 0 R]', extra });
 }
@@ -183,9 +220,23 @@ write('r12-f-next-33', chain(33));
 write('r12-f-next-33-att', chain(33, { attachment: true }));
 write('r12-f-next-33-js', chain(33, { end: JS_ACTION('M6R12_F33') }));
 
-// X: the same boundary through /Next arrays — the container is a level of its own.
-for (const hops of [16, 17]) write(`r12-x-next-array-${hops}`, chain(hops, { shape: 'array' }));
+// X: the same boundary through /Next arrays — the container is a representation,
+// not a hop, so it is the direct chain's boundary: 32 read, 33 refused.
+for (const hops of [15, 16, 17, 31, 32, 33, 34]) write(`r12-x-next-array-${hops}`, chain(hops, { shape: 'array' }));
 write('r12-x-next-array-16-js', chain(16, { shape: 'array', end: JS_ACTION('M6R12_X16') }));
+write('r12-x-next-array-32-js', chain(32, { shape: 'array', end: JS_ACTION('M6R12_X32') }));
+write('r12-x-next-array-33-js', chain(33, { shape: 'array', end: JS_ACTION('M6R12_X33') }));
+write('r12-x-next-array-17-att', chain(17, { shape: 'array', attachment: true }));
+write('r12-x-next-array-33-att', chain(33, { shape: 'array', attachment: true }));
+// The other spellings of the same graph, on both sides of the bound.
+for (const [name, shape] of [
+    ['array-indirect', 'array-indirect'],
+    ['inline', 'inline'],
+    ['array-wide-last', 'array-wide-last'],
+    ['array-wide-first', 'array-wide-first'],
+]) {
+    for (const hops of [32, 33]) write(`r12-x-next-${name}-${hops}`, chain(hops, { shape }));
+}
 
 // ---------------------------------------------------------------------------
 // G, H — shapes that stay refused whatever the depth arithmetic
@@ -200,6 +251,15 @@ const cycle = { page: ' /Annots [8 0 R]', extra: { 6: URI(' /Next 7 0 R'), 7: UR
 write('r12-h-next-cycle', build({ ...cycle }));
 write('r12-h-next-cycle-att', build({ attachment: true, ...cycle }));
 write('r12-h-next-self', build({ page: ' /Annots [8 0 R]', extra: { 6: URI(' /Next 6 0 R'), 8: LINK('/A 6 0 R') } }));
+/** A list inside a list is not a shape the contract reads, at any depth (Round 12A control). */
+const nestedList = { page: ' /Annots [8 0 R]', extra: { 6: URI(' /Next [[7 0 R]]'), 7: URI(), 8: LINK('/A 6 0 R') } };
+write('r12-g-next-array-nested', build({ ...nestedList }));
+write('r12-g-next-array-nested-att', build({ attachment: true, ...nestedList }));
+/** The same cycles, written as /Next lists: correcting the depth must not make them readable. */
+const cycleList = { page: ' /Annots [8 0 R]', extra: { 6: URI(' /Next [7 0 R]'), 7: URI(' /Next [6 0 R]'), 8: LINK('/A 6 0 R') } };
+write('r12-h-next-cycle-array', build({ ...cycleList }));
+write('r12-h-next-cycle-array-att', build({ attachment: true, ...cycleList }));
+write('r12-h-next-self-array', build({ page: ' /Annots [8 0 R]', extra: { 6: URI(' /Next [6 0 R]'), 8: LINK('/A 6 0 R') } }));
 
 // ---------------------------------------------------------------------------
 // V — the valid shapes beside them

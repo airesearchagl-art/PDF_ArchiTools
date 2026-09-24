@@ -1031,9 +1031,14 @@ export function rebuildDestinations(
  * accepted and this one refused after the person had already agreed to the
  * losses.
  *
- * A `/Next` **array** costs one more unit than a single `/Next`, for the array
- * container, exactly as it does in `javascript.ts`. Both scanners agree on that
- * too, and the gate walks chains of both shapes across the boundary to prove it.
+ * A `/Next` **array** costs nothing more than a single `/Next`. The container is
+ * a representation and not a hop: each member is one hop below the action that
+ * holds the list, and the members of one list are siblings, not a queue. So a
+ * chain of 32 hops is read whether each `/Next` names one action or lists one.
+ * `javascript.ts` reads a `/Next` list the same way, and the gate walks chains of
+ * every shape across the boundary to prove the two agree. (Round 12A. The
+ * container used to cost a unit in both scanners, and a chain written as lists
+ * was refused after 16 hops.)
  *
  * This is an internal mechanism bound. It is not a product limit and is not part
  * of the B4 policy.
@@ -1093,16 +1098,16 @@ function collectActionPageRefs(
 
     if (resolved instanceof PDFArray) {
         // Under `/Next` an array is a list of actions; under a destination key
-        // it is the destination itself. Only the key says which. The array is a
-        // level of its own, so its members are one deeper than a single action
-        // would have been.
+        // it is the destination itself. Only the key says which. The array is not
+        // a hop: its members are read at the depth a single action under this
+        // `/Next` would have been, which is `depth`, the same as a scalar's.
         if (key === 'Next') {
             for (let i = 0; i < resolved.size(); i += 1) {
                 const item = look(doc, resolved.get(i));
                 if (!(item instanceof PDFDict)) continue;
                 collectFromActionDict(
                     doc, item, `${where} /Next[${i}]`, fromIndex, pageIndexOf,
-                    out, unreadable, depth + 1, new Set(seen),
+                    out, unreadable, depth, new Set(seen),
                 );
             }
         }

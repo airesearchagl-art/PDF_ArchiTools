@@ -799,6 +799,28 @@ try {
     check('r12-d-next-17-att: and once agreed to, the merge is written — it used to stop the whole Merge',
         downloadedNames().length === beforeLong + 1, `${downloadedNames().length - beforeLong} new file(s)`);
 
+    // Round 12A: the same chain written as /Next lists. The list is a representation
+    // and not a hop, so a person meets the same source: 17 hops used to be left out
+    // of a Merge as unreadable when each /Next held a list, and were read when each
+    // held an action.
+    await openMerge();
+    const r12List = await page.$('input[type="file"]');
+    await r12List.uploadFile(fixture('r12-x-next-array-17-att'), fixture('merge-b'));
+    await settle(4000);
+    const rowsList = await mergeRows();
+    check('r12-x-next-array-17-att: a valid 17-hop chain of /Next lists is an ordinary source, not an unreadable one',
+        rowsList.every((r) => r.intake === 'ACCEPTED'), JSON.stringify(rowsList));
+    const beforeList = downloadedNames().length;
+    await clickMergeExport();
+    await settle(3000);
+    check('r12-x-next-array-17-att: its attachment is asked about, by name, before anything is written',
+        (await mergeNotice()).includes('CONFIRMATION_REQUIRED') && downloadedNames().length === beforeList,
+        `${downloadedNames().length - beforeList} new file(s)`);
+    await clickMergeExport();
+    await settle(6000);
+    check('r12-x-next-array-17-att: and once agreed to, the merge is written',
+        downloadedNames().length === beforeList + 1, `${downloadedNames().length - beforeList} new file(s)`);
+
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));
 

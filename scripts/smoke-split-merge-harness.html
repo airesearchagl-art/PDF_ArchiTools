@@ -2585,9 +2585,20 @@ function pdfFromObjects(objects) {
  * (`hops + 1` actions). `shape` is how each `/Next` is written, and `endJs` makes
  * the last action a script, so the sanitizer has something to remove at the
  * bound. Nothing else is in the document: any refusal is a reader's.
+ *
+ * Every shape but `nested-array` is the same Action graph, a path of `hops + 1`
+ * actions, spelled differently; a reader that answers differently for two of them
+ * is counting the spelling. `direct` is `/Next 41 0 R`; `array` is
+ * `/Next [41 0 R]`; `array-indirect` holds that list in an object of its own;
+ * `array-wide-last` and `array-wide-first` list two leaf siblings beside the
+ * chain's own next action, before it and after it; `inline` writes the next
+ * action in place. `nested-array` is `/Next [[41 0 R]]`, which is no action graph
+ * at all — a control that has to be refused at every length.
  */
 function chainBytes(hops, shape, endJs) {
     const uri = (tail = '') => `<< /Type /Action /S /URI /URI (https://example.invalid/)${tail} >>`;
+    const script = '<< /Type /Action /S /JavaScript /JS (app.alert\\(M6R12_SWEEP\\)) >>';
+    const end = () => (endJs ? script : uri());
     const o = new Map();
     o.set(1, '<< /Type /Catalog /Pages 2 0 R >>');
     o.set(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
@@ -2595,12 +2606,31 @@ function chainBytes(hops, shape, endJs) {
     const content = '0 1 0 rg 10 170 180 20 re f';
     o.set(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
     o.set(8, '<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A 40 0 R >>');
+    if (shape === 'inline') {
+        const inline = (i) => (i === hops ? end() : uri(` /Next ${inline(i + 1)}`));
+        o.set(40, inline(0));
+        return pdfFromObjects(o);
+    }
     for (let i = 0; i <= hops; i += 1) {
-        const last = i === hops;
-        const next = shape === 'array' ? ` /Next [${41 + i} 0 R]` : ` /Next ${41 + i} 0 R`;
-        o.set(40 + i, last
-            ? (endJs ? '<< /Type /Action /S /JavaScript /JS (app.alert\\(M6R12_SWEEP\\)) >>' : uri())
-            : uri(next));
+        if (i === hops) {
+            o.set(40 + i, end());
+            continue;
+        }
+        const child = `${41 + i} 0 R`;
+        const [l1, l2] = [`${200 + 2 * i} 0 R`, `${201 + 2 * i} 0 R`];
+        let next;
+        if (shape === 'direct') next = ` /Next ${child}`;
+        else if (shape === 'array') next = ` /Next [${child}]`;
+        else if (shape === 'nested-array') next = ` /Next [[${child}]]`;
+        else if (shape === 'array-indirect') {
+            next = ` /Next ${300 + i} 0 R`;
+            o.set(300 + i, `[${child}]`);
+        } else if (shape === 'array-wide-last' || shape === 'array-wide-first') {
+            next = shape === 'array-wide-last' ? ` /Next [${l1} ${l2} ${child}]` : ` /Next [${child} ${l1} ${l2}]`;
+            o.set(200 + 2 * i, uri());
+            o.set(201 + 2 * i, uri());
+        } else throw new Error(`unknown chain shape ${shape}`);
+        o.set(40 + i, uri(next));
     }
     return pdfFromObjects(o);
 }
