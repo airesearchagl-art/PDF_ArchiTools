@@ -1,0 +1,2878 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Split / Merge reliability — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** M6 orchestration over the synthetic corpus.
+ *
+ * Nothing here re-implements a check. The boundary, the planner, the detectors,
+ * the runners and the readback are the same modules the app ships; if this file
+ * and `src/utils/split-merge` disagree, the gate fails, which is the point.
+ *
+ * It runs in a real browser because two of the things being asserted — that the
+ * work happens in a Worker, and that a superseded run publishes nothing — are
+ * properties of the browser build rather than of the modules.
+ */
+import {
+    M6_STATUS,
+    INTAKE_RESULT,
+    LOAD_REFUSAL,
+    PROVISIONAL_POLICY,
+    MECHANISM_BOUNDS,
+    inspectLoadBoundary,
+    policyFrom,
+    assertEnforceablePolicy,
+    planExtract,
+    runExtract,
+    intakeSources,
+    planMerge,
+    runMerge,
+    mergeConfirmationFingerprint,
+    planStructuralGraph,
+    reachableGraph,
+    comparePlanWithActual,
+    readbackArtifact,
+    censusOptionalContent,
+    describeOptionalContent,
+    planOptionalContent,
+    readForm,
+    planFormForExtract,
+    scanJavaScript,
+    assessJavaScript,
+    assessSourceActionStructure,
+    sanitizeJavaScript,
+    censusJavaScript,
+    censusSignatures,
+    readSourceFacts,
+    measureDestinationInvariants,
+    rebuildDestinations,
+    extractOutputName,
+    mergeOutputName,
+    describeSelection,
+    extractInWorker,
+    mergeInWorker,
+    intakeInWorker,
+    workerAvailable,
+    censusIndirectObjects,
+    countByCensus,
+    CENSUS_BUDGET,
+    carriesJavaScript,
+    scrubAllJavaScript,
+    snapshotMetadata,
+    metadataGaps,
+    infoText,
+    checkArtifactInvariants,
+    contentDigest,
+    contentDigestJs,
+    UNNAMED_ATTACHMENT_LABEL,
+    verifySanitizedOptionalContent,
+    optionalContentSemantics,
+    classifyAttachments,
+} from '/src/utils/split-merge/index.ts';
+// Round 12B: how much reading the action walks do, counted rather than timed. The
+// index does not export it; a test measures the shape of the work through it.
+import {
+    actionTraversalCounts,
+    resetActionTraversalCounts,
+} from '/src/utils/split-merge/action-traversal.ts';
+import {
+    PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream, PDFRef, PDFString,
+} from 'pdf-lib';
+// Round 5's independent reader. PDF.js shares no code with pdf-lib: an
+// encoding defect in the writer cannot hide behind the same library's parser.
+import * as pdfjsLib from 'pdfjs-dist';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/m6-split-merge-production';
+const cache = new Map();
+
+async function bytesOf(name) {
+    if (!cache.has(name)) {
+        const response = await fetch(`${FIXTURES}/${name}.pdf`);
+        if (!response.ok) throw new Error(`fixture ${name} missing (${response.status})`);
+        // The dev server answers an unknown path with index.html at status 200,
+        // so `ok` does not mean the fixture is there. A gate that reads that
+        // HTML as a document refuses it as malformed and reports a defect in
+        // the product instead of a missing input. The type is the tell: a
+        // fixture is served as a PDF even when its bytes are deliberately not
+        // one, which is why this cannot check for a `%PDF-` header.
+        const type = response.headers.get('content-type') || '';
+        if (type.includes('text/html')) {
+            throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+        }
+        cache.set(name, new Uint8Array(await response.arrayBuffer()));
+    }
+    // A fresh copy each time: several of these get transferred to a worker.
+    const held = cache.get(name);
+    const copy = new Uint8Array(held.length);
+    copy.set(held);
+    return copy;
+}
+
+/** Every value that crosses back to the driver has to survive JSON. */
+const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+
+window.__m6 = {
+    constants: () => plainly({
+        status: M6_STATUS,
+        intake: INTAKE_RESULT,
+        refusal: LOAD_REFUSAL,
+        policy: PROVISIONAL_POLICY,
+        mechanismBounds: MECHANISM_BOUNDS,
+        workerAvailable: workerAvailable(),
+    }),
+
+    /** The pre-parse boundary, on raw bytes, with optional limit overrides. */
+    boundary: async (name, overrides) => {
+        const policy = policyFrom(overrides ? { loadBoundary: overrides } : {});
+        const verdict = inspectLoadBoundary(await bytesOf(name), policy.loadBoundary);
+        return plainly({
+            verdict: verdict.verdict,
+            code: verdict.code ?? null,
+            stage: verdict.stage,
+            reason: verdict.reason ?? null,
+            stats: verdict.stats,
+        });
+    },
+
+    /** Whether the policy validator rejects a limit that cannot refuse. */
+    policyRejects: (patch) => {
+        try {
+            assertEnforceablePolicy({ ...PROVISIONAL_POLICY, ...patch });
+            return { rejected: false };
+        } catch (error) {
+            return { rejected: true, message: String(error.message) };
+        }
+    },
+
+    facts: async (name) => {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        return plainly(readSourceFacts(doc, bytes.length));
+    },
+
+    plan: async (name, selection, options = {}) => {
+        const plan = await planExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            ...options,
+            policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
+        });
+        return plainly({
+            status: plan.status,
+            reason: plan.reason ?? null,
+            structural: plan.structural,
+            losses: plan.losses,
+            requiresConfirmation: plan.requiresConfirmation,
+            detail: plan.detail ?? null,
+            facts: plan.facts,
+        });
+    },
+
+    extract: async (name, selection, options = {}) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: options.confirmedLosses,
+            destinationPolicy: options.destinationPolicy,
+            policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
+        });
+        return plainly({
+            status: result.status,
+            reason: result.reason ?? null,
+            outputName: result.outputName,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            planned: result.planned,
+            actual: result.actual,
+            readback: result.readback,
+            losses: result.losses,
+            detail: result.detail ?? null,
+        });
+    },
+
+    /** The same extract, driven through the disposable Worker. */
+    extractViaWorker: async (name, selection) => {
+        const handle = extractInWorker(await bytesOf(name), {
+            sourceName: `${name}.pdf`,
+            selection,
+            destinationPolicy: 'E2',
+        });
+        const result = await handle.promise;
+        return plainly({
+            status: result.status,
+            outputName: result.outputName,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            readback: result.readback,
+        });
+    },
+
+    /** Start a run in a Worker, cancel it immediately, and see what comes back. */
+    extractCancelled: async (name, selection) => {
+        const handle = extractInWorker(await bytesOf(name), {
+            sourceName: `${name}.pdf`,
+            selection,
+            destinationPolicy: 'E2',
+        });
+        handle.cancel();
+        const result = await Promise.race([
+            handle.promise,
+            new Promise((resolve) => setTimeout(() => resolve({ status: 'NO_ANSWER', bytes: null }), 4000)),
+        ]);
+        return plainly({ status: result.status, published: Boolean(result.bytes) });
+    },
+
+    intake: async (names, types = {}) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({
+                id: name,
+                name: `${name}.pdf`,
+                type: types[name] ?? 'application/pdf',
+                bytes: await bytesOf(name),
+            });
+        }
+        return plainly(await intakeSources(inputs));
+    },
+
+    merge: async (names, options = {}) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({
+                id: name,
+                name: `${name}.pdf`,
+                type: options.types?.[name] ?? 'application/pdf',
+                bytes: await bytesOf(name),
+            });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            ...options,
+            policy: options.policyOverrides ? policyFrom(options.policyOverrides) : undefined,
+        });
+        return plainly({
+            planStatus: plan.status,
+            status: result.status,
+            reason: result.reason ?? null,
+            outputName: result.outputName,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result, pages: r.pageCount })),
+            cumulative: result.cumulative,
+            readback: result.readback,
+            renamedFields: result.renamedFields,
+            detail: result.detail ?? null,
+        });
+    },
+
+    mergeViaWorker: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeInWorker(inputs.map((i) => ({ ...i })), undefined).promise;
+        const plan = planMerge(intake, {});
+        const result = await mergeInWorker(inputs, plan, {
+            metadataPolicy: 'M4',
+            collisionPolicy: 'rename',
+        }).promise;
+        return plainly({
+            status: result.status,
+            outputBytes: result.bytes ? result.bytes.length : null,
+            readback: result.readback,
+        });
+    },
+
+    /**
+     * A5, measured directly: the planner's count against the real copy.
+     *
+     * Deliberately not routed through `runExtract`, so the gate sees the two
+     * numbers itself rather than the run's opinion of whether they matched.
+     */
+    planVersusCopy: async (name, selection) => {
+        const bytes = await bytesOf(name);
+        const source = await PDFDocument.load(bytes, { updateMetadata: false });
+
+        // The same transformation the Extract plan applies, so what is counted
+        // is the graph that will be copied.
+        const { planDestinations, stripInternalDestinations } =
+            await import('/src/utils/split-merge/destinations.ts');
+        const destinations = planDestinations(source, selection);
+        stripInternalDestinations(source, destinations, selection);
+
+        const predicted = await planStructuralGraph(source, selection);
+
+        const out = await PDFDocument.create({ updateMetadata: false });
+        let before = 0;
+        let beforeBytes = 0;
+        for (const [, obj] of out.context.enumerateIndirectObjects()) {
+            before += 1;
+            if (obj instanceof PDFRawStream) beforeBytes += obj.contents.length;
+        }
+        const copied = await out.copyPages(source, selection);
+        let after = 0;
+        let afterBytes = 0;
+        for (const [, obj] of out.context.enumerateIndirectObjects()) {
+            after += 1;
+            if (obj instanceof PDFRawStream) afterBytes += obj.contents.length;
+        }
+        copied.forEach((p) => out.addPage(p));
+        const actual = reachableGraph(out, out.getPageIndices());
+
+        return plainly({
+            predicted,
+            registeredObjects: after - before,
+            registeredStreamBytes: afterBytes - beforeBytes,
+            comparison: comparePlanWithActual(predicted, actual),
+        });
+    },
+
+    /** What today's code does, for contrast. No E2, no readback, no refusal. */
+    baseline: async (name, selection) => {
+        const source = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const out = await PDFDocument.create({ updateMetadata: false });
+        const copied = await out.copyPages(source, selection);
+        copied.forEach((p) => out.addPage(p));
+        const bytes = await out.save();
+        return plainly(await readbackArtifact(bytes));
+    },
+
+    optionalContent: async (name, selection) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const description = describeOptionalContent(doc, selection);
+        return plainly({
+            present: description.present,
+            unsupported: description.unsupported,
+            groups: description.groups.map((g) => g.name),
+            plan: planOptionalContent(description).status,
+        });
+    },
+
+    form: async (name, selection) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const form = readForm(doc);
+        const plan = planFormForExtract(form, selection);
+        return plainly({
+            present: form.present,
+            outsideSubset: form.outsideSubset,
+            fields: form.fields.map((f) => ({ name: f.name, ft: f.ft, value: f.value })),
+            plan: plan.status,
+            code: plan.code ?? null,
+        });
+    },
+
+    javascript: async (name) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const scan = scanJavaScript(doc);
+        // The artifact-wide number comes from the census, which is the only
+        // thing in the package that claims to have looked everywhere.
+        const census = censusJavaScript(doc);
+        return plainly({
+            reachable: scan.count,
+            artifactWide: census.complete ? census.value.length : null,
+            complete: scan.complete,
+            incomplete: scan.incomplete,
+        });
+    },
+
+    /** Names, which M6-H14 made deterministic and self-describing. */
+    names: (sourceName, selection, mergeNames) => plainly({
+        extract: extractOutputName(sourceName, selection),
+        selection: describeSelection(selection),
+        merge: mergeOutputName(mergeNames),
+    }),
+
+    /** Whether an artifact still holds tagging or an attachment. */
+    artifactStructure: async (name, selection) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: ['tagging', 'attachments'],
+        });
+        if (!result.bytes) return plainly({ status: result.status });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        let structParents = 0;
+        for (const page of doc.getPages()) {
+            if (page.node.get(PDFName.of('StructParents')) !== undefined) structParents += 1;
+        }
+        let filespecs = 0;
+        for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+            const type = obj?.get?.(PDFName.of('Type'))?.asString?.();
+            if (type === '/Filespec') filespecs += 1;
+        }
+        return plainly({
+            status: result.status,
+            structTreeRoot: doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined,
+            structParents,
+            filespecs,
+            destinations: measureDestinationInvariants(doc),
+            losses: result.losses.map((l) => l.kind),
+        });
+    },
+};
+
+/**
+ * An INDEPENDENT artifact walker.
+ *
+ * Deliberately written here rather than imported from `src/utils/split-merge`.
+ * The production scanner is the thing under test: three of the Independent
+ * Review's findings were cases where it reported zero about a file that carried
+ * the thing. An oracle that asked the same code the same question would have
+ * agreed with it every time.
+ */
+function walkEverything(doc) {
+    const out = {
+        javascript: 0,
+        fileAttachmentAnnots: 0,
+        filespecsWithEF: 0,
+        efCarriers: 0,
+        embeddedFileStreams: 0,
+        orphanPages: 0,
+        strayPageRefs: 0,
+        structTreeRoot: false,
+        markInfo: false,
+        structParents: 0,
+        structParent: 0,
+        objects: 0,
+    };
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    const inTree = new Set(doc.getPages().map((pg) => pg.ref.tag));
+    out.structTreeRoot = doc.catalog.get(PDFName.of('StructTreeRoot')) !== undefined;
+    out.markInfo = doc.catalog.get(PDFName.of('MarkInfo')) !== undefined;
+
+    const seen = new Set();
+    const walk = (value, depth) => {
+        if (!value || depth > 200) return;
+        if (seen.has(value)) return;
+        seen.add(value);
+        const dict = value instanceof PDFDict
+            ? value
+            : (value?.dict instanceof PDFDict ? value.dict : null);
+        if (dict) {
+            if (nameOf(dict.get(PDFName.of('S'))) === '/JavaScript'
+                || dict.get(PDFName.of('JS')) !== undefined) out.javascript += 1;
+            if (nameOf(dict.get(PDFName.of('Subtype'))) === '/FileAttachment') {
+                out.fileAttachmentAnnots += 1;
+            }
+            if (nameOf(dict.get(PDFName.of('Type'))) === '/Filespec'
+                && dict.get(PDFName.of('EF')) !== undefined) out.filespecsWithEF += 1;
+            // Any `/EF` at all, declared or not: the semantic carrier.
+            if (dict.get(PDFName.of('EF')) !== undefined) out.efCarriers += 1;
+            if (nameOf(dict.get(PDFName.of('Type'))) === '/EmbeddedFile') {
+                out.embeddedFileStreams += 1;
+            }
+            if (dict.get(PDFName.of('StructParents')) !== undefined) out.structParents += 1;
+            if (dict.get(PDFName.of('StructParent')) !== undefined) out.structParent += 1;
+            for (const [, entry] of dict.entries()) walk(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) {
+            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+        }
+    };
+
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        out.objects += 1;
+        const type = obj?.get?.(PDFName.of('Type'))?.asString?.();
+        if (type === '/Page' && !inTree.has(ref.tag)) out.orphanPages += 1;
+        walk(obj, 0);
+    }
+
+    // A page reference that does not resolve into this document's own tree.
+    const strayRef = (raw) => {
+        if (!(raw instanceof PDFRef)) return false;
+        let target;
+        try { target = doc.context.lookup(raw); } catch { return false; }
+        if (!(target instanceof PDFDict)) return false;
+        if (nameOf(target.get(PDFName.of('Type'))) !== '/Page') return false;
+        return !inTree.has(raw.tag);
+    };
+    const actionSeen = new Set();
+    const walkAction = (raw, depth) => {
+        if (depth > 64) return;
+        let action = raw;
+        if (raw instanceof PDFRef) { try { action = doc.context.lookup(raw); } catch { return; } }
+        if (!(action instanceof PDFDict) || actionSeen.has(action)) return;
+        actionSeen.add(action);
+        let dest = action.get(PDFName.of('D'));
+        if (dest instanceof PDFRef) { try { dest = doc.context.lookup(dest); } catch { dest = null; } }
+        if (dest instanceof PDFArray && strayRef(dest.get(0))) out.strayPageRefs += 1;
+        let next = action.get(PDFName.of('Next'));
+        if (next instanceof PDFRef) { try { next = doc.context.lookup(next); } catch { next = null; } }
+        if (next instanceof PDFArray) {
+            for (let i = 0; i < next.size(); i += 1) walkAction(next.get(i), depth + 1);
+        } else if (next) walkAction(next, depth + 1);
+    };
+    const walkAa = (owner) => {
+        let aa = owner.get(PDFName.of('AA'));
+        if (aa instanceof PDFRef) { try { aa = doc.context.lookup(aa); } catch { aa = null; } }
+        if (!(aa instanceof PDFDict)) return;
+        for (const [, entry] of aa.entries()) walkAction(entry, 0);
+    };
+    for (const pg of doc.getPages()) {
+        walkAa(pg.node);
+        let annots = pg.node.get(PDFName.of('Annots'));
+        if (annots instanceof PDFRef) { try { annots = doc.context.lookup(annots); } catch { annots = null; } }
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            let annot = annots.get(i);
+            if (annot instanceof PDFRef) { try { annot = doc.context.lookup(annot); } catch { continue; } }
+            if (!(annot instanceof PDFDict)) continue;
+            if (strayRef(annot.get(PDFName.of('P')))) out.strayPageRefs += 1;
+            let d = annot.get(PDFName.of('Dest'));
+            if (d instanceof PDFRef) { try { d = doc.context.lookup(d); } catch { d = null; } }
+            if (d instanceof PDFArray && strayRef(d.get(0))) out.strayPageRefs += 1;
+            walkAction(annot.get(PDFName.of('A')), 0);
+            walkAa(annot);
+        }
+    }
+    out.taggingRemnants = (out.structTreeRoot ? 1 : 0) + (out.markInfo ? 1 : 0)
+        + out.structParents + out.structParent;
+    return out;
+}
+
+/**
+ * The gate's own `/Names /Dests` reader: `/Kids` and `<< /D [...] >>` included.
+ *
+ * Written here rather than imported, for the same reason `walkEverything` is.
+ * RF-R3-5 was a production reader that could not see two standard shapes, and a
+ * gate that asked that reader whether they survived would have agreed with it.
+ */
+function gateReadNames(doc) {
+    const out = [];
+    const names = doc.catalog.lookup(PDFName.of('Names'));
+    if (!(names instanceof PDFDict)) return out;
+    const pageTags = doc.getPages().map((page) => page.ref.tag);
+    const walk = (node, depth) => {
+        if (depth > 64) return;
+        const dict = node instanceof PDFRef ? doc.context.lookup(node) : node;
+        if (!(dict instanceof PDFDict)) return;
+        const leaf = dict.lookup(PDFName.of('Names'));
+        if (leaf instanceof PDFArray) {
+            for (let i = 0; i + 1 < leaf.size(); i += 2) {
+                const key = leaf.lookup(i);
+                const label = typeof key?.decodeText === 'function' ? key.decodeText() : String(key);
+                let value = leaf.lookup(i + 1);
+                if (value instanceof PDFDict) value = value.lookup(PDFName.of('D'));
+                let targetIndex = null;
+                if (value instanceof PDFArray) {
+                    const first = value.get(0);
+                    if (first instanceof PDFRef) targetIndex = pageTags.indexOf(first.tag);
+                }
+                out.push({ name: label, targetIndex });
+            }
+        }
+        const kids = dict.lookup(PDFName.of('Kids'));
+        if (kids instanceof PDFArray) {
+            for (let i = 0; i < kids.size(); i += 1) walk(kids.get(i), depth + 1);
+        }
+    };
+    walk(names.lookup(PDFName.of('Dests')), 0);
+    return out;
+}
+
+/** The gate's own read of `/OCProperties`, field by field. */
+function gateReadOcConfig(doc) {
+    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    if (!(oc instanceof PDFDict)) return { present: false };
+    const d = oc.lookup(PDFName.of('D'));
+    const ocgs = oc.lookup(PDFName.of('OCGs'));
+    const groups = [];
+    if (ocgs instanceof PDFArray) {
+        for (let i = 0; i < ocgs.size(); i += 1) {
+            const g = ocgs.lookup(i);
+            if (g instanceof PDFDict) {
+                const n = g.lookup(PDFName.of('Name'));
+                groups.push(typeof n?.decodeText === 'function' ? n.decodeText() : String(n));
+            }
+        }
+    }
+    if (!(d instanceof PDFDict)) return { present: true, hasD: false, groups };
+    const nameValue = d.lookup(PDFName.of('Name'));
+    const baseValue = d.lookup(PDFName.of('BaseState'));
+    const orderValue = d.lookup(PDFName.of('Order'));
+    const onValue = d.lookup(PDFName.of('ON'));
+    const offValue = d.lookup(PDFName.of('OFF'));
+    return {
+        present: true,
+        hasD: true,
+        groups,
+        keys: [...d.entries()].map((entry) => entry[0].asString()),
+        name: nameValue === undefined || nameValue === null
+            ? null
+            : (typeof nameValue.decodeText === 'function' ? nameValue.decodeText() : String(nameValue)),
+        baseState: baseValue === undefined || baseValue === null
+            ? null
+            : String(baseValue.asString ? baseValue.asString() : baseValue),
+        order: orderValue instanceof PDFArray ? orderValue.size() : null,
+        on: onValue instanceof PDFArray ? onValue.size() : null,
+        off: offValue instanceof PDFArray ? offValue.size() : null,
+    };
+}
+
+/** Whether a literal marker appears in the serialized bytes. */
+function bytesContain(bytes, marker) {
+    const needle = new TextEncoder().encode(marker);
+    outer: for (let i = 0; i + needle.length <= bytes.length; i += 1) {
+        for (let j = 0; j < needle.length; j += 1) {
+            if (bytes[i + j] !== needle[j]) continue outer;
+        }
+        return true;
+    }
+    return false;
+}
+
+Object.assign(window.__m6, {
+    /** Extract, then inspect the artifact with the independent walker. */
+    extractAndInspect: async (name, selection, marker, options = {}) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: options.confirmedLosses ?? ['tagging', 'attachments'],
+            destinationPolicy: options.destinationPolicy,
+        });
+        if (!result.bytes) {
+            return plainly({ status: result.status, reason: result.reason ?? null, independent: null });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            status: result.status,
+            outputName: result.outputName,
+            losses: result.losses,
+            production: result.readback,
+            independent: walkEverything(doc),
+            markerInBytes: marker ? bytesContain(result.bytes, marker) : null,
+        });
+    },
+
+    /** Merge, then inspect the artifact with the independent walker. */
+    mergeAndInspect: async (names, marker, options = {}) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, options);
+        // A confirmation is bound to the plan it was given for (RF-R3-3), so
+        // the gate confirms the way the app does rather than by passing kinds.
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+            ...options,
+        });
+        if (!result.bytes) {
+            return plainly({
+                status: result.status,
+                reason: result.reason ?? null,
+                intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+                independent: null,
+            });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const oc = describeOptionalContent(doc, null);
+        return plainly({
+            status: result.status,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+            losses: result.losses,
+            production: result.readback,
+            independent: walkEverything(doc),
+            markerInBytes: marker ? bytesContain(result.bytes, marker) : null,
+            optionalContent: {
+                present: oc.present,
+                groups: oc.groups.map((g) => g.name),
+                unsupported: oc.unsupported,
+            },
+        });
+    },
+
+    /** The Info dictionary and XMP of an extracted artifact, read back. */
+    extractMetadata: async (name, selection) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        if (!result.bytes) return plainly({ status: result.status, reason: result.reason ?? null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const info = {};
+        const infoRef = doc.context.trailerInfo.Info;
+        const dict = infoRef ? doc.context.lookup(infoRef) : null;
+        if (dict instanceof PDFDict) {
+            for (const [key, value] of dict.entries()) {
+                const resolved = value instanceof PDFRef ? doc.context.lookup(value) : value;
+                info[key.asString().replace(/^\//, '')] =
+                    typeof resolved?.decodeText === 'function' ? resolved.decodeText() : String(resolved);
+            }
+        }
+        return plainly({
+            status: result.status,
+            info,
+            hasXmp: doc.catalog.get(PDFName.of('Metadata')) !== undefined,
+            xmpMarkerInBytes: bytesContain(result.bytes, 'M6_XMP_MARKER'),
+        });
+    },
+
+    /**
+     * A Merge where one requested source was never decided.
+     *
+     * BLK-4: intake used to answer `[]` when the worker failed, and a Merge built
+     * from that list omitted files the person chose while reporting success. The
+     * `NOT_DECIDED` record here is what the hardened client now synthesises for
+     * an input the worker never answered for, so this drives the same shape.
+     */
+    mergeUndecided: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const damaged = intake.map((r, i) => (i === intake.length - 1
+            ? { ...r, result: 'NOT_DECIDED', reason: 'このファイルは確認が完了しませんでした。' }
+            : r));
+        const plan = planMerge(damaged, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,});
+        return plainly({
+            planStatus: plan.status,
+            status: result.status,
+            reason: result.reason ?? plan.reason ?? null,
+            bytes: result.bytes ? result.bytes.length : null,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+        });
+    },
+
+    /**
+     * A Merge driven with intake facts that claim every source is fine.
+     *
+     * The promoted ADV-7: main-thread intake facts are UX facts. In a worker they
+     * arrive as a message, and a message is not an authority. This hands the run
+     * an ACCEPTED record for a source whose bytes hold a form outside the adopted
+     * envelope, and the run has to refuse on what it reads rather than on what it
+     * was told.
+     */
+    mergeWithFalseIntake: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        // RF-R4-5 made the record's content digest part of what the run checks,
+        // and a record without one is refused before its facts are looked at.
+        // So the forgery here carries the TRUE digest of the bytes — the
+        // stronger adversary — and the run still has to refuse on what it
+        // reads, which is what this probe exists to show.
+        const lying = [];
+        for (const i of inputs) {
+            lying.push({
+                id: i.id,
+                name: i.name,
+                sizeBytes: i.bytes.length,
+                result: 'ACCEPTED',
+                pageCount: 1,
+                pageTreeWalks: true,
+                hasAcroForm: false,
+                fieldNames: [],
+                hasOptionalContent: false,
+                hasStructTree: false,
+                hasAttachments: false,
+                attachments: [],
+                contentDigest: await sha256Independent(i.bytes),
+                info: {},
+            });
+        }
+        const plan = planMerge(lying, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,});
+        return plainly({
+            planStatus: plan.status,
+            status: result.status,
+            reason: result.reason ?? null,
+            bytes: result.bytes ? result.bytes.length : null,
+        });
+    },
+
+    /** A Merge run WITHOUT confirming what the plan says needs confirming. */
+    /** Extract, then read the artifact's named destinations independently. */
+    extractNamedDestinations: async (name, selection) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        const base = {
+            status: result.status,
+            reason: result.reason ?? null,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        };
+        if (!result.bytes) return plainly(base);
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({ ...base, names: gateReadNames(doc) });
+    },
+
+    /** Merge, then read the artifact's named destinations independently. */
+    mergeNamedDestinations: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        const base = {
+            status: result.status,
+            reason: result.reason ?? null,
+            intake: result.intake.map((r) => ({ name: r.name, result: r.result })),
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        };
+        if (!result.bytes) return plainly(base);
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({ ...base, names: gateReadNames(doc) });
+    },
+
+    /**
+     * The merged artifact's `/OCProperties /D`, read field by field.
+     *
+     * RF-R3-1 passed every existing check because they counted groups. The
+     * configuration those groups are shown under was gone.
+     */
+    mergeOptionalContentConfig: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        if (!result.bytes) {
+            return plainly({ status: result.status, reason: result.reason ?? null, config: null });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({ status: result.status, config: gateReadOcConfig(doc) });
+    },
+
+    /** The same, read off a source, so the gate can compare like with like. */
+    sourceOptionalContentConfig: async (name) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        return plainly(gateReadOcConfig(doc));
+    },
+
+    /**
+     * What a Merge does with a confirmation that was given for a different plan.
+     *
+     * `mutate` names how the input set changes after the confirmation: the
+     * fingerprint is taken from the first plan and offered to the second.
+     */
+    mergeStaleConfirmation: async (names, mutate) => {
+        const build = async (list) => {
+            const inputs = [];
+            for (const name of list) {
+                inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+            }
+            const intake = await intakeSources(inputs);
+            return { inputs, plan: planMerge(intake, {}) };
+        };
+        const first = await build(names);
+        const firstFingerprint = mergeConfirmationFingerprint(first.plan);
+
+        let secondNames = names;
+        if (mutate === 'add') secondNames = [...names, 'merge-a'];
+        else if (mutate === 'remove') secondNames = names.slice(0, names.length - 1);
+        else if (mutate === 'reorder') secondNames = [...names].reverse();
+        const second = await build(secondNames);
+        const secondFingerprint = mergeConfirmationFingerprint(second.plan);
+
+        const result = await runMerge(second.inputs, second.plan, {
+            confirmedLosses: first.plan.requiresConfirmation,
+            confirmedFingerprint: firstFingerprint,
+        });
+        return plainly({
+            mutate,
+            fingerprintChanged: firstFingerprint !== secondFingerprint,
+            requiresConfirmation: second.plan.requiresConfirmation,
+            status: result.status,
+            bytes: result.bytes ? result.bytes.length : null,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        });
+    },
+
+    /** What intake says about a source's attachments, and what is really there. */
+    attachmentFacts: async (name) => {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const facts = readSourceFacts(doc, 0);
+        return plainly({
+            hasAttachments: facts.hasAttachments,
+            attachmentNames: facts.attachmentNames,
+            attachmentsComplete: facts.attachmentsComplete,
+            independent: walkEverything(doc),
+        });
+    },
+
+    /**
+     * What a reconstruction does when it is handed something it cannot apply.
+     *
+     * The same half of the contract the census-refusal probe exists for: every
+     * document in the corpus produces an empty `unapplied`, so asserting on
+     * them proves only that the happy path works. This drives the reconstruction
+     * with a plan that names a page the output does not have, which is the
+     * state the old `continue` turned into a successful count.
+     */
+    rebuildUnapplied: async () => {
+        const out = await PDFDocument.create({ updateMetadata: false });
+        out.addPage();
+        const impossible = {
+            rebuild: [{
+                fromIndex: 0, annotIndex: 0, holderIsAction: false,
+                targetIndex: 7, tail: [],
+            }],
+            survivingNames: [{
+                name: 'M6_NOWHERE',
+                key: { text: 'M6_NOWHERE', bytes: new TextEncoder().encode('M6_NOWHERE'), token: null },
+                targetIndex: 9,
+                tail: [],
+            }],
+            losses: [],
+            unreadable: [],
+            duplicateNames: [],
+        };
+        const outcome = rebuildDestinations(out, impossible, [0]);
+        const control = rebuildDestinations(
+            out,
+            { rebuild: [], survivingNames: [], losses: [], unreadable: [], duplicateNames: [] },
+            [0],
+        );
+        return plainly({
+            rebuilt: outcome.rebuilt,
+            unapplied: outcome.unapplied,
+            controlUnapplied: control.unapplied,
+        });
+    },
+
+    mergeUnconfirmed: async (names) => {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {});
+        return plainly({
+            requiresConfirmation: plan.requiresConfirmation,
+            status: result.status,
+            bytes: result.bytes ? result.bytes.length : null,
+            losses: result.losses,
+        });
+    },
+
+    /**
+     * A census driven past its own budget, to prove what it does then.
+     *
+     * The whole architectural claim of round 3 is that a census ends COMPLETE
+     * or REFUSED. Asserting that on documents it can cover proves only the
+     * first half. This builds a document with direct nesting deeper than the
+     * budget and asks for the same JavaScript count — the answer must be a
+     * refusal, and the refusal must reach the scrubber, not a zero.
+     *
+     * These bytes would never get past the pre-parse Load Boundary, which
+     * refuses at a far shallower nesting cap. That is the point: this is the
+     * behaviour of the layer behind the gate, tested without the gate.
+     */
+    censusDeepDirect: async (depth) => {
+        const doc = await PDFDocument.create({ updateMetadata: false });
+        doc.addPage();
+        let node = doc.context.obj({
+            Type: 'Action', S: 'JavaScript', JS: PDFString.of('app.alert(1)'),
+        });
+        for (let i = 0; i < depth; i += 1) node = doc.context.obj([node]);
+        doc.catalog.set(PDFName.of('M6Deep'), doc.context.register(node));
+        const walked = censusIndirectObjects(doc, () => undefined);
+        const counted = countByCensus(doc, ({ dict }) => carriesJavaScript(dict));
+        const scrub = scrubAllJavaScript(doc);
+        return plainly({
+            depth,
+            maxDirectDepth: CENSUS_BUDGET.maxDirectDepth,
+            censusComplete: walked.complete,
+            censusReason: walked.complete ? null : walked.reason,
+            countComplete: counted.complete,
+            count: counted.complete ? counted.value : null,
+            scrubComplete: scrub.complete,
+            scrubbed: scrub.complete ? scrub.scrubbed : null,
+            // Round 10 distinguishes the two ways a scrub can decline: the
+            // census could not be proven complete, or it was complete and the
+            // carrier could not be proven to be an action.
+            scrubUnsafe: scrub.complete ? false : Boolean(scrub.unsafe),
+            scrubReason: scrub.complete ? null : scrub.reason,
+        });
+    },
+
+    /** A metadata snapshot, and whether the artifact's XMP still decodes. */
+    metadataRoundTrip: async (name, selection) => {
+        const source = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const snapshot = snapshotMetadata(source);
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        if (!result.bytes) return plainly({ status: result.status });
+        const artifact = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const after = snapshotMetadata(artifact);
+        const text = (u8) => new TextDecoder().decode(u8 ?? new Uint8Array());
+        return plainly({
+            status: result.status,
+            gaps: metadataGaps(snapshot, artifact),
+            sourceFilters: snapshot.xmp ? snapshot.xmp.filters : [],
+            sourceDecodable: snapshot.xmp ? snapshot.xmp.decodable : null,
+            artifactFilters: after.xmp ? after.xmp.filters : [],
+            artifactDecodable: after.xmp ? after.xmp.decodable : null,
+            xmpEqual: text(snapshot.xmp && snapshot.xmp.decoded)
+                === text(after.xmp && after.xmp.decoded),
+            markerInDecoded: text(after.xmp && after.xmp.decoded)
+                .includes('M6R3_XMP_FLATE_MARKER'),
+            title: after.info.Title ? infoText(after.info.Title) : null,
+        });
+    },
+
+    /**
+     * Whether `copyPages` ran at all.
+     *
+     * RF-H asks for a refusal BEFORE the copy, not a readback after it. A
+     * status alone cannot tell those apart, so the copy is counted for the
+     * duration of one run and the method put back afterwards.
+     */
+    extractCountingCopies: async (name, selection) => {
+        const original = PDFDocument.prototype.copyPages;
+        let calls = 0;
+        PDFDocument.prototype.copyPages = function counted(...args) {
+            calls += 1;
+            return original.apply(this, args);
+        };
+        try {
+            const result = await runExtract(await bytesOf(name), {
+                selection, sourceName: `${name}.pdf`,
+                confirmedLosses: ['tagging', 'attachments'],
+            });
+            return plainly({ status: result.status, copyPagesCalls: calls });
+        } finally {
+            PDFDocument.prototype.copyPages = original;
+        }
+    },
+
+    /** Facts a refusal depends on, for the inherited-signature cases. */
+    signatureFacts: async (name) => {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const facts = readSourceFacts(doc, bytes.length);
+        return plainly({
+            hasSignatureField: facts.hasSignatureField,
+            hasAppliedSignature: facts.hasAppliedSignature,
+            names: facts.signatureFieldNames,
+        });
+    },
+});
+
+// ============================================================================
+// Round 5 — independent oracles
+//
+// The fourth Independent FULL Re-Review found that a pdf-lib writer read back by
+// pdf-lib's own parser could not show the encoding defect it had. So everything
+// below asks readers that share no code with the production writer: PDF.js for
+// what a person sees, this project's Load Boundary for whether the bytes are a
+// document at all, and small readers written here rather than imported.
+// ============================================================================
+
+/** SHA-256 from Web Crypto, never from the module under test. */
+async function sha256Independent(bytes) {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** A PDF.js document over a private copy of the bytes. */
+async function pdfjsOpen(bytes) {
+    const data = new Uint8Array(bytes.length);
+    data.set(bytes);
+    return pdfjsLib.getDocument({ data, isEvalSupported: false, verbosity: 0 }).promise;
+}
+
+/** A destination PDF.js returned, as the index of the page it names. */
+async function pdfjsPageOf(doc, dest) {
+    let explicit = dest;
+    if (typeof dest === 'string') explicit = await doc.getDestination(dest);
+    if (!Array.isArray(explicit) || explicit.length === 0) return null;
+    const target = explicit[0];
+    if (Number.isInteger(target)) return target;
+    try {
+        return await doc.getPageIndex(target);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * What PDF.js reads: field names and values, named destinations and their
+ * pages, the optional-content configuration's name and order, and where every
+ * link on every page goes.
+ */
+async function pdfjsRead(bytes) {
+    const doc = await pdfjsOpen(bytes);
+    try {
+        const out = { pages: doc.numPages, fields: {}, destinations: {}, oc: null, links: [], info: null };
+        const meta = await doc.getMetadata();
+        out.info = meta?.info
+            ? Object.fromEntries(['Title', 'Author', 'Subject', 'Creator'].map((k) => [k, meta.info[k] ?? null]))
+            : null;
+        const fields = await doc.getFieldObjects();
+        for (const [name, widgets] of Object.entries(fields ?? {})) {
+            out.fields[name] = widgets
+                .filter((w) => w.type !== undefined && w.type !== '')
+                .map((w) => ({ type: w.type, value: w.value }));
+        }
+        const dests = await doc.getDestinations();
+        for (const [name, dest] of Object.entries(dests ?? {})) {
+            out.destinations[name] = await pdfjsPageOf(doc, dest);
+        }
+        const config = await doc.getOptionalContentConfig();
+        out.oc = config ? { name: config.name ?? null, order: config.getOrder() ?? null } : null;
+        for (let i = 1; i <= doc.numPages; i += 1) {
+            const page = await doc.getPage(i);
+            for (const annot of await page.getAnnotations()) {
+                if (annot.subtype !== 'Link') continue;
+                out.links.push({
+                    page: i - 1,
+                    target: annot.dest !== undefined && annot.dest !== null
+                        ? await pdfjsPageOf(doc, annot.dest)
+                        : null,
+                });
+            }
+        }
+        return out;
+    } finally {
+        await doc.destroy();
+    }
+}
+
+/**
+ * PDF.js looking a name up by its RAW BYTES, on a fresh document.
+ *
+ * `getDestination` first binary-searches the name tree comparing byte strings,
+ * and only then falls back to a map keyed by decoded text. A raw id whose
+ * decoded text differs from its bytes cannot be rescued by that fallback, so a
+ * hit is proof the binary search found it — which is proof of the order. Fresh
+ * per lookup, because once the fallback map exists PDF.js answers from it.
+ */
+async function pdfjsRawLookup(bytes, rawKey) {
+    const doc = await pdfjsOpen(bytes);
+    try {
+        const dest = await doc.getDestination(rawKey);
+        return dest ? await pdfjsPageOf(doc, dest) : null;
+    } finally {
+        await doc.destroy();
+    }
+}
+
+/**
+ * The bytes of a string object, decoded here.
+ *
+ * pdf-lib hands over the characters between the delimiters; the escapes are
+ * undone by this gate's own code, not by the module that wrote them.
+ */
+function gateStringBytes(value) {
+    const raw = typeof value?.asString === 'function' ? value.asString() : '';
+    const out = [];
+    if (value instanceof PDFHexString) {
+        const digits = raw.replace(/[\s\0]/g, '');
+        for (let i = 0; i < digits.length; i += 2) out.push(parseInt((digits[i] + (digits[i + 1] ?? '0')), 16));
+        return out;
+    }
+    for (let i = 0; i < raw.length; i += 1) {
+        const c = raw[i];
+        if (c !== '\\') { out.push(raw.charCodeAt(i)); continue; }
+        const e = raw[++i];
+        const simple = { n: 10, r: 13, t: 9, b: 8, f: 12 };
+        if (e in simple) out.push(simple[e]);
+        else if (e === '\r') { if (raw[i + 1] === '\n') i += 1; }
+        else if (e === '\n') { /* continuation */ }
+        else if (e >= '0' && e <= '7') {
+            let digits = e;
+            while (digits.length < 3 && raw[i + 1] >= '0' && raw[i + 1] <= '7') digits += raw[++i];
+            out.push(parseInt(digits, 8) & 0xff);
+        } else out.push(e.charCodeAt(0));
+    }
+    return out;
+}
+
+const latin1Of = (bytes) => String.fromCharCode(...bytes);
+const compareBytes = (a, b) => {
+    for (let i = 0; i < Math.min(a.length, b.length); i += 1) if (a[i] !== b[i]) return a[i] - b[i];
+    return a.length - b.length;
+};
+
+/** Every `/Names /Dests` key in the order written, as bytes, per leaf. */
+function gateNameKeys(doc) {
+    const leaves = [];
+    const names = doc.catalog.lookup(PDFName.of('Names'));
+    if (!(names instanceof PDFDict)) return leaves;
+    const walk = (node, depth) => {
+        if (depth > 64) return;
+        const dict = node instanceof PDFRef ? doc.context.lookup(node) : node;
+        if (!(dict instanceof PDFDict)) return;
+        const leaf = dict.lookup(PDFName.of('Names'));
+        if (leaf instanceof PDFArray) {
+            const keys = [];
+            for (let i = 0; i + 1 < leaf.size(); i += 2) keys.push(gateStringBytes(leaf.lookup(i)));
+            leaves.push(keys);
+        }
+        const kids = dict.lookup(PDFName.of('Kids'));
+        if (kids instanceof PDFArray) for (let i = 0; i < kids.size(); i += 1) walk(kids.get(i), depth + 1);
+    };
+    walk(names.lookup(PDFName.of('Dests')), 0);
+    return leaves;
+}
+
+/** Every dictionary in the artifact, streams' included, reached from every object. */
+function forEachDict(doc, visit) {
+    const seen = new Set();
+    const walk = (value, depth) => {
+        if (!value || depth > 200 || seen.has(value)) return;
+        seen.add(value);
+        const dict = value instanceof PDFDict ? value : (value?.dict instanceof PDFDict ? value.dict : null);
+        if (dict) {
+            visit(dict);
+            for (const [, entry] of dict.entries()) walk(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+    };
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) walk(obj, 0);
+}
+
+const SIG_PAYLOAD_HEX = Array.from('M6R5_SIG_PAYLOAD', (c) => c.charCodeAt(0).toString(16).toUpperCase()).join('');
+
+/** Signature remnants, counted by this gate. */
+function gateSignatures(doc, bytes) {
+    const out = { byteRange: 0, typeSig: 0, ftSig: 0, dictValues: 0 };
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    forEachDict(doc, (dict) => {
+        if (dict.get(PDFName.of('ByteRange')) !== undefined) out.byteRange += 1;
+        if (['/Sig', '/DocTimeStamp'].includes(nameOf(dict.get(PDFName.of('Type'))))) out.typeSig += 1;
+        if (nameOf(dict.get(PDFName.of('FT'))) === '/Sig') out.ftSig += 1;
+        const v = dict.get(PDFName.of('V'));
+        const resolved = v instanceof PDFRef ? doc.context.lookup(v) : v;
+        if (resolved instanceof PDFDict) out.dictValues += 1;
+    });
+    out.appearanceMarker = bytesContain(bytes, 'M6R5_SIG_APPEARANCE');
+    out.payloadMarker = bytesContain(bytes, SIG_PAYLOAD_HEX);
+    return out;
+}
+
+/** Inputs with distinct ids, so the same file can be merged with itself. */
+async function uniqueInputs(names) {
+    const inputs = [];
+    for (let i = 0; i < names.length; i += 1) {
+        inputs.push({
+            id: `${names[i]}#${i}`,
+            name: `${names[i]}.pdf`,
+            type: 'application/pdf',
+            bytes: await bytesOf(names[i]),
+        });
+    }
+    return inputs;
+}
+
+/**
+ * Everything the round-5 gate asserts about one produced artifact.
+ *
+ * READY must mean serialization succeeded: the bytes pass the Load Boundary when
+ * fed back in, PDF.js opens them, and the text PDF.js shows is the text the
+ * sources showed.
+ */
+async function fidelityReport(sources, result) {
+    const base = {
+        status: result.status,
+        reason: result.reason ?? null,
+        detail: result.detail ?? null,
+        losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        sources: [],
+    };
+    for (const bytes of sources) base.sources.push(await pdfjsRead(bytes));
+    if (!result.bytes) return base;
+
+    const boundary = inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary);
+    let output = null;
+    let pdfjsError = null;
+    try {
+        output = await pdfjsRead(result.bytes);
+    } catch (error) {
+        pdfjsError = String(error?.message ?? error);
+    }
+    const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+    const leaves = gateNameKeys(doc);
+    const keys = leaves.flat();
+    const leavesAscending = leaves.every((leaf) => leaf.every(
+        (key, i) => i === 0 || compareBytes(leaf[i - 1], key) < 0,
+    ));
+    const rawLookups = [];
+    for (const key of keys) {
+        const raw = latin1Of(key);
+        rawLookups.push({ raw, page: await pdfjsRawLookup(result.bytes, raw) });
+    }
+    return {
+        ...base,
+        boundary: boundary.verdict,
+        boundaryCode: boundary.code ?? null,
+        pdfjsError,
+        output,
+        keyCount: keys.length,
+        leavesAscending,
+        rawLookups,
+        readback: result.readback ?? null,
+    };
+}
+
+Object.assign(window.__m6, {
+    /** BLK-R4-1: an Extract, read by PDF.js on both sides and fed back through the boundary. */
+    fidelityExtract: async (name, selection) => {
+        const source = await bytesOf(name);
+        const result = await runExtract(await bytesOf(name), {
+            selection, sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        return plainly(await fidelityReport([source], result));
+    },
+
+    /** BLK-R4-1: a Merge, the same way. The same file may appear twice. */
+    fidelityMerge: async (names, options = {}) => {
+        const inputs = await uniqueInputs(names);
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+            ...options,
+        });
+        const report = await fidelityReport(inputs.map((i) => i.bytes), result);
+        report.intake = result.intake.map((r) => ({ name: r.name, result: r.result, reason: r.reason ?? null }));
+        report.renamedFields = result.renamedFields ?? [];
+        return plainly(report);
+    },
+
+    /**
+     * The oracle, fed the old defect.
+     *
+     * The writer this round replaced, reproduced exactly: decoded text wrapped
+     * in `PDFString.of`. If PDF.js reads back what was meant, the gate could not
+     * tell a fixed writer from a broken one.
+     */
+    oracleProbe: async () => {
+        const doc = await PDFDocument.create({ updateMetadata: false });
+        const page = doc.addPage([300, 300]);
+        const widget = doc.context.register(doc.context.obj({
+            Type: 'Annot', Subtype: 'Widget', FT: PDFName.of('Tx'),
+            T: PDFString.of('〨〩ぜ名'), V: PDFString.of('a)b'), Rect: [10, 10, 200, 40],
+        }));
+        page.node.set(PDFName.of('Annots'), doc.context.obj([widget]));
+        doc.catalog.set(PDFName.of('AcroForm'), doc.context.register(doc.context.obj({ Fields: [widget] })));
+        const bytes = await doc.save({ useObjectStreams: false });
+        let read = null;
+        let error = null;
+        try { read = await pdfjsRead(bytes); } catch (e) { error = String(e?.message ?? e); }
+        return plainly({
+            fields: read ? read.fields : null,
+            error,
+            boundary: inspectLoadBoundary(bytes, PROVISIONAL_POLICY.loadBoundary).verdict,
+        });
+    },
+
+    /** RF-R4-4: an Extract of a signature case, inspected by this gate. */
+    signatureExtract: async (name) => {
+        const result = await runExtract(await bytesOf(name), {
+            selection: [0], sourceName: `${name}.pdf`, confirmedLosses: ['tagging', 'attachments'],
+        });
+        const base = {
+            status: result.status,
+            reason: result.reason ?? null,
+            detail: result.detail ?? null,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+        };
+        if (!result.bytes) return plainly(base);
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            production: result.readback?.signatureRemnants ?? null,
+            gate: gateSignatures(doc, result.bytes),
+            boundary: inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary).verdict,
+        });
+    },
+
+    /**
+     * RF-R4-4: a Merge of a signature case beside an ordinary file — once
+     * through intake, and once with a forged ACCEPTED record (true digest,
+     * true facts, result overwritten) so the run itself has to refuse.
+     */
+    signatureMerge: async (name) => {
+        const inputs = [
+            { id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) },
+            { id: 'merge-b', name: 'merge-b.pdf', type: 'application/pdf', bytes: await bytesOf('merge-b') },
+        ];
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        const forgedIntake = intake.map((r) => ({ ...r, result: 'ACCEPTED', reason: undefined }));
+        const forgedPlan = planMerge(forgedIntake, {});
+        const forged = await runMerge(inputs, forgedPlan, {
+            confirmedLosses: forgedPlan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(forgedPlan),
+        });
+        let gate = null;
+        let outputPages = null;
+        if (result.bytes) {
+            const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+            gate = gateSignatures(doc, result.bytes);
+            outputPages = doc.getPageCount();
+        }
+        return plainly({
+            intake: intake.map((r) => ({ name: r.name, result: r.result })),
+            status: result.status,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null })),
+            outputPages,
+            production: result.readback?.signatureRemnants ?? null,
+            gate,
+            forgedStatus: forged.status,
+            forgedBytes: forged.bytes ? forged.bytes.length : null,
+        });
+    },
+
+    /** The new readback invariant, fed a signed document directly. */
+    signatureInvariantProbe: async (name) => {
+        const bytes = await bytesOf(name);
+        const facts = await readbackArtifact(bytes);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const breach = checkArtifactInvariants(facts, doc.getPageCount());
+        return plainly({ signatureRemnants: facts.signatureRemnants, invariant: breach?.invariant ?? null });
+    },
+
+    /**
+     * RF-R4-5: a run whose bytes are not the bytes its plan was made from.
+     *
+     * `src` is intaken from one file and run from another (or forged), beside
+     * an ordinary second source. The confirmation offered is the one the app
+     * would offer: every gated kind, bound to the plan's own fingerprint.
+     */
+    runtimeAuthority: async (scenario, viaWorker = false) => {
+        const scenarios = {
+            'attachment-appears': { intake: 'merge-b', run: 'with-attachment' },
+            'attachment-forged': {
+                intake: 'r5-att-secret', run: 'r5-att-secret',
+                forge: (r) => ({ ...r, hasAttachments: false, attachments: [] }),
+            },
+            'tagging-appears': { intake: 'merge-b', run: 'tagged' },
+            'tagging-forged': {
+                intake: 'tagged', run: 'tagged', forge: (r) => ({ ...r, hasStructTree: false }),
+            },
+            'content-swap': { intake: 'r5-att-same-name-a', run: 'r5-att-same-name-b' },
+            unchanged: { intake: 'r5-att-same-name-a', run: 'r5-att-same-name-a' },
+        };
+        const s = scenarios[scenario];
+        const intakeOf = async (id, name, bytes) =>
+            (await intakeSources([{ id, name, type: 'application/pdf', bytes }]))[0];
+        const src = await intakeOf('src', 'src.pdf', await bytesOf(s.intake));
+        const other = await intakeOf('other', 'merge-a.pdf', await bytesOf('merge-a'));
+        const plan = planMerge([s.forge ? s.forge(src) : src, other], {});
+        const confirmation = {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        };
+        const inputs = [
+            { id: 'src', name: 'src.pdf', type: 'application/pdf', bytes: await bytesOf(s.run) },
+            { id: 'other', name: 'merge-a.pdf', type: 'application/pdf', bytes: await bytesOf('merge-a') },
+        ];
+        const result = viaWorker
+            ? await mergeInWorker(inputs, plan, {
+                metadataPolicy: 'M4', collisionPolicy: 'rename', ...confirmation,
+            }).promise
+            : await runMerge(inputs, plan, confirmation);
+        return plainly({
+            scenario,
+            viaWorker,
+            planRequires: plan.requiresConfirmation,
+            status: result.status,
+            bytes: result.bytes ? result.bytes.length : null,
+            mismatches: result.detail?.mismatches ?? null,
+            payloadA: result.bytes ? bytesContain(result.bytes, 'M6R5_SAME_A_PAYLOAD') : null,
+            payloadB: result.bytes ? bytesContain(result.bytes, 'M6R5_SAME_B_PAYLOAD') : null,
+        });
+    },
+
+    /** RF-R4-6: what a Merge confirmation names, and what the run then removes. */
+    mergeDisclosure: async (names, markers = []) => {
+        const inputs = await uniqueInputs(names);
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        return plainly({
+            requires: plan.requiresConfirmation,
+            gated: plan.losses.filter((l) => l.kind === 'attachments').map((l) => l.what ?? null),
+            unnamedLabel: UNNAMED_ATTACHMENT_LABEL,
+            status: result.status,
+            markers: Object.fromEntries(markers.map((m) => [m, result.bytes ? bytesContain(result.bytes, m) : null])),
+        });
+    },
+
+    /** The digest the run trusts, against Web Crypto, over fixtures and random bytes. */
+    digestParity: async () => {
+        const samples = [];
+        for (const name of ['merge-a', 'r5-form-text', 'with-attachment']) samples.push(await bytesOf(name));
+        for (const length of [0, 1, 55, 56, 63, 64, 65, 1000, 70_000]) {
+            const bytes = new Uint8Array(length);
+            for (let i = 0; i < length; i += 65536) crypto.getRandomValues(bytes.subarray(i, Math.min(length, i + 65536)));
+            samples.push(bytes);
+        }
+        const disagreements = [];
+        for (const bytes of samples) {
+            const reference = await sha256Independent(bytes);
+            if (reference !== contentDigestJs(bytes) || reference !== await contentDigest(bytes)) {
+                disagreements.push(bytes.length);
+            }
+        }
+        return plainly({ samples: samples.length, disagreements });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 6 oracles. RF-R5-1, RF-R5-2, RF-R5-3.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every annotation in an artifact, read by PDF.js, with where its link goes.
+ *
+ * The question RF-R5-1 asks is not "did it return READY" but "is the annotation
+ * that survived the one the plan was about". PDF.js answers it without sharing
+ * a line with the writer.
+ */
+async function pdfjsAnnots(bytes) {
+    const doc = await pdfjsOpen(bytes);
+    try {
+        const pages = [];
+        for (let i = 1; i <= doc.numPages; i += 1) {
+            const page = await doc.getPage(i);
+            const annots = await page.getAnnotations();
+            const rows = [];
+            for (const a of annots) {
+                rows.push({
+                    subtype: a.subtype,
+                    fieldName: a.fieldName ?? null,
+                    fieldValue: a.fieldValue ?? null,
+                    target: a.subtype === 'Link' ? await pdfjsPageOf(doc, a.dest) : null,
+                });
+            }
+            pages.push(rows);
+        }
+        return pages;
+    } finally {
+        await doc.destroy();
+    }
+}
+
+/**
+ * `/P` on every annotation, checked against the artifact's own page tree.
+ *
+ * A reconstruction that put the reference back in the wrong place, or did not
+ * put it back at all, shows up here and nowhere in a status.
+ */
+function gatePageRefs(doc) {
+    const out = { annots: 0, withP: 0, pointingIntoTree: 0, dangling: 0 };
+    const inTree = new Set(doc.getPages().map((p) => p.ref.tag));
+    for (const page of doc.getPages()) {
+        const annots = page.node.lookup(PDFName.of('Annots'));
+        if (!(annots instanceof PDFArray)) continue;
+        for (let i = 0; i < annots.size(); i += 1) {
+            const annot = doc.context.lookup(annots.get(i));
+            if (!(annot instanceof PDFDict)) continue;
+            out.annots += 1;
+            const p = annot.get(PDFName.of('P'));
+            if (p === undefined) continue;
+            out.withP += 1;
+            if (p instanceof PDFRef && inTree.has(p.tag)) out.pointingIntoTree += 1;
+            else out.dangling += 1;
+        }
+    }
+    return out;
+}
+
+/**
+ * Signature remnants by this gate's own semantics. RF-R5-3.
+ *
+ * Written here rather than imported, and deliberately context-aware in the same
+ * way the production rule claims to be: `/Contents` counts only on a dictionary
+ * some field points at with `/V`, because a page's `/Contents` is its content
+ * stream. A detector that counted the key would fail the two controls.
+ */
+function gateRemnants(doc) {
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    const valueTags = new Set();
+    const valueDicts = new Set();
+    forEachDict(doc, (dict) => {
+        const v = dict.get(PDFName.of('V'));
+        if (v instanceof PDFRef) valueTags.add(v.tag);
+        else if (v instanceof PDFDict) valueDicts.add(v);
+    });
+    /**
+     * `/FT`, resolved up `/Parent` — this gate's own walk, bounded and
+     * cycle-aware. A signature widget whose type lives on its parent is still a
+     * signature widget, and H1 says none may be in an artifact.
+     */
+    const inheritedFt = (dict) => {
+        const seen = new Set();
+        let current = dict;
+        for (let depth = 0; depth < 32 && current instanceof PDFDict; depth += 1) {
+            const own = nameOf(current.get(PDFName.of('FT')));
+            if (own) return own;
+            const parent = current.get(PDFName.of('Parent'));
+            if (parent instanceof PDFRef) {
+                if (seen.has(parent.tag)) return '';
+                seen.add(parent.tag);
+                current = doc.context.lookup(parent);
+            } else {
+                current = parent;
+            }
+        }
+        return '';
+    };
+
+    let count = 0;
+    const reasons = [];
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        const roots = [];
+        const walk = (value, depth) => {
+            if (depth > 32) return;
+            const dict = value instanceof PDFDict
+                ? value
+                : (value?.dict instanceof PDFDict ? value.dict : null);
+            if (!dict) return;
+            roots.push({ dict, depth });
+            for (const [, entry] of dict.entries()) {
+                if (entry instanceof PDFDict) walk(entry, depth + 1);
+                else if (entry instanceof PDFArray) {
+                    for (let i = 0; i < entry.size(); i += 1) walk(entry.get(i), depth + 1);
+                }
+            }
+        };
+        walk(obj, 0);
+        for (const { dict, depth } of roots) {
+            const isValue = (depth === 0 && valueTags.has(ref.tag)) || valueDicts.has(dict);
+            const type = nameOf(dict.get(PDFName.of('Type')));
+            const isWidget = nameOf(dict.get(PDFName.of('Subtype'))) === '/Widget';
+            let why = null;
+            if (nameOf(dict.get(PDFName.of('FT'))) === '/Sig') why = '/FT /Sig';
+            else if (isWidget && inheritedFt(dict) === '/Sig') why = 'a widget inheriting /FT /Sig';
+            else if (type === '/Sig' || type === '/DocTimeStamp') why = `/Type ${type}`;
+            else if (dict.get(PDFName.of('ByteRange')) !== undefined) why = '/ByteRange';
+            else if (isValue && dict.get(PDFName.of('Contents')) !== undefined) why = 'value /Contents';
+            if (why) {
+                count += 1;
+                reasons.push(`${ref.tag}${depth ? `+${depth}` : ''} ${why}`);
+            }
+        }
+    }
+    return { count, reasons };
+}
+
+Object.assign(window.__m6, {
+    /** RF-R5-1: what survived an Extract, and whether it is the right one. */
+    annotPlanStability: async (name, selection, confirmed = []) => {
+        const bytes = await bytesOf(name);
+        const result = await runExtract(bytes, {
+            selection,
+            sourceName: `${name}.pdf`,
+            confirmedLosses: confirmed,
+        });
+        const out = {
+            status: result.status,
+            reason: result.reason ?? null,
+            unapplied: result.detail?.unapplied ?? null,
+            removedAnnotations: result.detail?.removedAnnotations ?? null,
+            signatureRemnants: result.readback?.signatureRemnants ?? null,
+            unreachableObjects: result.readback?.unreachableObjects ?? null,
+            boundary: null,
+            annots: null,
+            pageRefs: null,
+            payloadMarker: null,
+        };
+        if (result.bytes) {
+            out.boundary = inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary).verdict;
+            out.annots = await pdfjsAnnots(result.bytes);
+            out.pageRefs = gatePageRefs(await PDFDocument.load(result.bytes, { updateMetadata: false }));
+            out.payloadMarker = bytesContain(result.bytes, 'R6SIGPAYLOAD');
+        }
+        return plainly(out);
+    },
+
+    /** RF-R5-1, the Merge door: a file-attachment annotation removed after planning. */
+    annotPlanStabilityMerge: async (names, marker) => {
+        const inputs = await uniqueInputs(names);
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        const out = {
+            status: result.status,
+            reason: result.reason ?? null,
+            unapplied: result.detail?.unapplied ?? null,
+            annots: null,
+            pageRefs: null,
+            payloadMarker: null,
+        };
+        if (result.bytes) {
+            out.annots = await pdfjsAnnots(result.bytes);
+            out.pageRefs = gatePageRefs(await PDFDocument.load(result.bytes, { updateMetadata: false }));
+            out.payloadMarker = bytesContain(result.bytes, marker);
+        }
+        return plainly(out);
+    },
+
+    /** RF-R5-2: what the supported-subset reader says about a `/DA` it cannot read. */
+    daEnvelope: async (name) => {
+        const bytes = await bytesOf(name);
+        const extract = await runExtract(bytes, { selection: [0], sourceName: `${name}.pdf` });
+        const inputs = await uniqueInputs([name]);
+        const intake = await intakeSources(inputs);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const form = readForm(doc);
+        return plainly({
+            status: extract.status,
+            reason: extract.reason ?? null,
+            bytes: extract.bytes !== null,
+            intake: intake[0].result,
+            outsideSubset: form.outsideSubset,
+            readable: form.readable,
+        });
+    },
+
+    /** RF-R5-3: the remnant detector, on a document shaped like an output. */
+    signatureRemnantLayer: async (name) => {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const census = censusSignatures(doc);
+        const readback = await readbackArtifact(bytes);
+        return plainly({
+            production: census.complete ? census.value : null,
+            productionComplete: census.complete,
+            productionReason: census.complete ? null : census.reason,
+            readbackRemnants: readback.signatureRemnants,
+            readbackCensusComplete: readback.censusComplete,
+            gate: gateRemnants(doc),
+        });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 7 — indirect stream /Length, and the narrow optional-content envelope
+// ---------------------------------------------------------------------------
+
+/** The written bytes as text, so the oracle can read them as a reader would. */
+const r7Latin1 = (bytes) => {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += String.fromCharCode(bytes[i]);
+    return out;
+};
+
+/**
+ * An oracle over the written bytes, sharing no code with the writer.
+ *
+ * It reads the serialized objects itself: every `stream` keyword is found, the
+ * `/Length` in the dictionary just above it is read, and the bytes actually
+ * between `stream` and `endstream` are counted. A `/Length` still written as a
+ * reference, or one that disagrees with the bytes, is reported rather than
+ * inferred from anything the production readback says.
+ */
+function serializedStreams(bytes) {
+    const text = r7Latin1(bytes);
+    const objects = [...text.matchAll(/(\d+)\s+(\d+)\s+obj\b/g)].map((m) => ({
+        num: Number(m[1]), at: m.index, end: m.index + m[0].length,
+    }));
+    let streams = 0;
+    let indirectLengths = 0;
+    let lengthMismatches = 0;
+    for (let i = 0; i < objects.length; i += 1) {
+        const from = objects[i].end;
+        const to = i + 1 < objects.length ? objects[i + 1].at : text.length;
+        const body = text.slice(from, to);
+        const sm = body.match(/\bstream\r?\n/);
+        if (!sm) continue;
+        streams += 1;
+        const header = body.slice(0, sm.index);
+        if (/\/Length\s+\d+\s+\d+\s+R/.test(header)) {
+            indirectLengths += 1;
+            continue;
+        }
+        const lm = header.match(/\/Length\s+(\d+)/);
+        const declared = lm ? Number(lm[1]) : -1;
+        const start = sm.index + sm[0].length;
+        const endIndex = body.indexOf('endstream', start);
+        if (endIndex < 0) { lengthMismatches += 1; continue; }
+        // `endstream` is preceded by an EOL that is not part of the data.
+        let stop = endIndex;
+        if (body[stop - 1] === '\n') stop -= 1;
+        if (body[stop - 1] === '\r') stop -= 1;
+        if (declared !== stop - start) lengthMismatches += 1;
+    }
+    return { objects: objects.length, streams, indirectLengths, lengthMismatches };
+}
+
+/** Whether pdf.js — a different parser entirely — can open the artifact. */
+async function pdfjsOpens(bytes) {
+    try {
+        const copy = new Uint8Array(bytes.length);
+        copy.set(bytes);
+        const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+        const pages = doc.numPages;
+        await doc.destroy();
+        return { ok: true, pages };
+    } catch (error) {
+        return { ok: false, pages: 0, error: String(error && error.message ? error.message : error) };
+    }
+}
+
+/** What the artifact itself says about its optional content, read with pdf-lib. */
+async function ocOutputFacts(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    if (!(oc instanceof PDFDict)) {
+        // An artifact with no configuration still has to be described, because
+        // "no configuration" plus a live `/OC` is the defect, not the absence
+        // of one. Every count below is present, so a caller reading one of them
+        // never reads `undefined` as zero.
+        let ocOnForms = 0;
+        for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+            if (!(obj instanceof PDFRawStream)) continue;
+            const sub = obj.dict.get(PDFName.of('Subtype'));
+            if (!(sub instanceof PDFName) || sub.asString() !== '/Form') continue;
+            if (obj.dict.get(PDFName.of('OC')) !== undefined) ocOnForms += 1;
+        }
+        return {
+            ocProperties: false,
+            outGroups: 0,
+            dKeys: [],
+            asPresent: false,
+            asEntries: 0,
+            asDangling: 0,
+            rbGroups: -1,
+            forms: 0,
+            ocOnForms,
+            // With nothing registered, every `/OC` on a form is one a viewer
+            // cannot resolve.
+            danglingOc: ocOnForms,
+            ocmdSurvivors: 0,
+            onDangling: 0,
+            offDangling: 0,
+            orderDangling: 0,
+        };
+    }
+    const groups = oc.lookup(PDFName.of('OCGs'));
+    const registered = new Set();
+    if (groups instanceof PDFArray) {
+        for (let i = 0; i < groups.size(); i += 1) {
+            const r = groups.get(i);
+            if (r instanceof PDFRef) registered.add(r.tag);
+        }
+    }
+    const d = oc.lookup(PDFName.of('D'));
+    const dDict = d instanceof PDFDict ? d : null;
+    const as = dDict ? dDict.lookup(PDFName.of('AS')) : undefined;
+    const rb = dDict ? dDict.lookup(PDFName.of('RBGroups')) : undefined;
+
+    let forms = 0;
+    let ocOnForms = 0;
+    let danglingOc = 0;
+    let ocmdSurvivors = 0;
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+        if (!(obj instanceof PDFRawStream)) continue;
+        const sub = obj.dict.get(PDFName.of('Subtype'));
+        if (!(sub instanceof PDFName) || sub.asString() !== '/Form') continue;
+        forms += 1;
+        const ref = obj.dict.get(PDFName.of('OC'));
+        if (ref === undefined) continue;
+        ocOnForms += 1;
+        if (!(ref instanceof PDFRef) || !registered.has(ref.tag)) danglingOc += 1;
+        const target = ref instanceof PDFRef ? doc.context.lookup(ref) : undefined;
+        if (target instanceof PDFDict) {
+            const t = target.get(PDFName.of('Type'));
+            if (t instanceof PDFName && t.asString() === '/OCMD') ocmdSurvivors += 1;
+        }
+    }
+    // Every group /AS names must be one the artifact registers.
+    let asEntries = 0;
+    let asDangling = 0;
+    if (as instanceof PDFArray) {
+        asEntries = as.size();
+        for (let i = 0; i < as.size(); i += 1) {
+            const entry = as.lookup(i);
+            if (!(entry instanceof PDFDict)) { asDangling += 1; continue; }
+            const list = entry.lookup(PDFName.of('OCGs'));
+            if (!(list instanceof PDFArray)) { asDangling += 1; continue; }
+            for (let j = 0; j < list.size(); j += 1) {
+                const r = list.get(j);
+                if (!(r instanceof PDFRef) || !registered.has(r.tag)) asDangling += 1;
+            }
+        }
+    }
+    // `/ON`, `/OFF` and `/Order` read raw, so the gate has its own answer about
+    // the configuration rather than only the production census's.
+    const listDangling = (key) => {
+        const list = dDict ? dDict.lookup(PDFName.of(key)) : undefined;
+        if (!(list instanceof PDFArray)) return 0;
+        let bad = 0;
+        const walk = (node, depth) => {
+            if (depth > 32) { bad += 1; return; }
+            if (node instanceof PDFRef) {
+                if (!registered.has(node.tag)) bad += 1;
+                return;
+            }
+            const value = node instanceof PDFRef ? undefined : node;
+            if (value instanceof PDFArray) {
+                for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+            }
+        };
+        for (let i = 0; i < list.size(); i += 1) walk(list.get(i), 0);
+        return bad;
+    };
+
+    return {
+        ocProperties: true,
+        outGroups: registered.size,
+        dKeys: dDict ? dDict.keys().map((k) => k.asString()).sort() : [],
+        asPresent: as !== undefined,
+        asEntries,
+        asDangling,
+        rbGroups: rb instanceof PDFArray ? rb.size() : (rb === undefined ? -1 : -2),
+        forms,
+        ocOnForms,
+        danglingOc,
+        ocmdSurvivors,
+        onDangling: listDangling('ON'),
+        offDangling: listDangling('OFF'),
+        orderDangling: listDangling('Order'),
+    };
+}
+
+/**
+ * The independent visibility oracle.
+ *
+ * pdf.js decides what a layer shows from the document's own `/OCProperties`.
+ * The failure this expansion exists to prevent is an artifact whose `/OC`
+ * survived while `/OCProperties` did not: pdf.js then knows no groups at all,
+ * `isVisible` answers true for everything, and a layer the author turned off is
+ * drawn. So the groups pdf.js finds, and what it says about each, are read from
+ * the source and from the artifact and compared.
+ */
+async function pdfjsVisibility(bytes) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const config = await doc.getOptionalContentConfig();
+    // pdfjs-dist 5.4.449 exposes the configuration as `getOrder()` +
+    // `getGroup(id)`; with no `/Order` the former is simply the group ids.
+    const order = (config.getOrder() || []).filter((id) => typeof id === 'string');
+    const states = {};
+    for (const id of order) {
+        const group = config.getGroup(id);
+        states[(group && group.name) || id] = config.isVisible({ type: 'OCG', id });
+    }
+    // A pixel from the middle of the square the fixture's form draws.
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport, optionalContentConfigPromise: Promise.resolve(config) }).promise;
+    const px = context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
+    await doc.destroy();
+    return {
+        groupCount: order.length,
+        states,
+        pixel: [px[0], px[1], px[2]],
+        painted: !(px[0] > 240 && px[1] > 240 && px[2] > 240),
+    };
+}
+
+Object.assign(window.__m6, {
+    async r7Length(name, selection) {
+        const source = await bytesOf(name);
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        if (!result.bytes) {
+            return plainly({
+                status: result.status,
+                reason: result.reason ?? null,
+                unreachable: null,
+                pageCount: null,
+                serialized: { objects: 0, streams: 0, indirectLengths: -1, lengthMismatches: -1 },
+                sourceSerialized: serializedStreams(source),
+                pdfjs: { ok: false, pages: 0 },
+                userUnitLive: false,
+            });
+        }
+        const readback = await readbackArtifact(result.bytes);
+        // `r7-len-shared` points a second, legitimate key at the same number.
+        // Canonicalizing `/Length` must not take that number with it.
+        const outDoc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const firstPage = outDoc.getPages()[0];
+        const userUnit = firstPage ? firstPage.node.lookup(PDFName.of('UserUnit')) : undefined;
+        return plainly({
+            status: result.status,
+            unreachable: readback.unreachableObjects,
+            pageCount: readback.pageCount,
+            complete: readback.complete,
+            serialized: serializedStreams(result.bytes),
+            sourceSerialized: serializedStreams(source),
+            pdfjs: await pdfjsOpens(result.bytes),
+            outputBytes: result.bytes.length,
+            userUnitLive: userUnit !== undefined && userUnit !== null,
+        });
+    },
+
+    async r7MergeLength(names) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        if (plan.status !== M6_STATUS.READY) {
+            return plainly({ plan: plan.status, reason: plan.reason ?? null, run: null });
+        }
+        const result = await runMerge(inputs, plan, { policy: PROVISIONAL_POLICY });
+        if (!result.bytes) {
+            return plainly({ plan: plan.status, run: result.status, reason: result.reason ?? null });
+        }
+        const readback = await readbackArtifact(result.bytes);
+        return plainly({
+            plan: plan.status,
+            run: result.status,
+            unreachable: readback.unreachableObjects,
+            pageCount: readback.pageCount,
+            serialized: serializedStreams(result.bytes),
+            pdfjs: await pdfjsOpens(result.bytes),
+            output: await ocOutputFacts(result.bytes),
+        });
+    },
+
+    async r7Oc(name, selection) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        const described = describeOptionalContent(
+            await PDFDocument.load(source, { updateMetadata: false }),
+            selection,
+        );
+        if (plan.status !== M6_STATUS.READY) {
+            return plainly({
+                plan: plan.status,
+                reason: plan.reason ?? null,
+                unsupported: described.unsupported,
+                usages: described.xobjectUsages.length,
+                run: null,
+            });
+        }
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        const out = result.bytes ? await ocOutputFacts(result.bytes) : null;
+        const readback = result.bytes ? await readbackArtifact(result.bytes) : null;
+        return plainly({
+            plan: plan.status,
+            reason: null,
+            unsupported: described.unsupported,
+            usages: described.xobjectUsages.length,
+            viaOcmd: described.xobjectUsages.filter((u) => u.viaOcmd).length,
+            autoStates: described.autoStates.length,
+            emptyRbGroups: described.emptyRbGroups,
+            run: result.status,
+            runReason: result.reason ?? null,
+            unreachable: readback ? readback.unreachableObjects : null,
+            output: out,
+            // RF-R8-1: what the production output census says about the same
+            // artifact the raw reader above just described.
+            oc: readback ? {
+                uses: readback.optionalContentUses,
+                registeredGroups: readback.optionalContentRegisteredGroups,
+                danglingUses: readback.optionalContentDanglingUses,
+                unregisteredUses: readback.optionalContentUnregisteredUses,
+                ocmdSurvivors: readback.optionalContentOcmdSurvivors,
+                configErrors: readback.optionalContentConfigErrors,
+                detail: readback.optionalContentDetail,
+            } : null,
+            censusComplete: readback ? readback.censusComplete : null,
+            pdfjs: result.bytes ? await pdfjsOpens(result.bytes) : null,
+        });
+    },
+
+    /**
+     * RF-R8-1's direct layer test: an artifact shape handed straight to the
+     * output census and to the invariants, with no Extract in between. The
+     * backstop has to hold on documents this tool would never write, because
+     * that is the only situation in which a backstop matters.
+     */
+    async r8Census(name) {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const census = censusOptionalContent(doc);
+        const facts = await readbackArtifact(bytes);
+        const breach = checkArtifactInvariants(facts, facts.pageCount);
+        return plainly({
+            complete: census.complete,
+            reason: census.complete ? null : census.reason,
+            value: census.complete ? census.value : null,
+            censusComplete: facts.censusComplete,
+            censusRefusal: facts.censusRefusal ?? null,
+            invariant: breach ? breach.invariant : null,
+            invariantReason: breach ? breach.reason : null,
+            raw: await ocOutputFacts(bytes),
+        });
+    },
+
+    async r7Visibility(name, selection) {
+        const source = await bytesOf(name);
+        const before = await pdfjsVisibility(source);
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+        });
+        if (!result.bytes) return plainly({ status: result.status, before, after: null });
+        const after = await pdfjsVisibility(result.bytes);
+        return plainly({ status: result.status, before, after });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 9 — attachment / optional-content semantic safety
+// ---------------------------------------------------------------------------
+
+/**
+ * The colour pdf.js paints at named points, by page and user-space position.
+ *
+ * Round 9's defects were all "READY, and the page looks different": a hidden
+ * layer drawn, a drawing gone. The only honest oracle for that is the picture,
+ * read where the fixture put each thing — not a production count.
+ */
+async function rasterAt(bytes, points) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const out = [];
+    const rendered = new Map();
+    for (const { page = 1, x, y } of points) {
+        if (page > doc.numPages) { out.push('no page'); continue; }
+        if (!rendered.has(page)) {
+            const pg = await doc.getPage(page);
+            const viewport = pg.getViewport({ scale: 1 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            await pg.render({ canvasContext: context, viewport }).promise;
+            rendered.set(page, { context, viewport });
+        }
+        const { context, viewport } = rendered.get(page);
+        const [cx, cy] = viewport.convertToViewportPoint(x, y);
+        const d = context.getImageData(Math.floor(cx), Math.floor(cy), 1, 1).data;
+        out.push(d[2] > 200 && d[0] < 80 && d[1] < 80 ? 'blue'
+            : d[0] > 200 && d[1] < 80 && d[2] < 80 ? 'red'
+                : d[1] > 200 && d[0] < 80 && d[2] < 80 ? 'green'
+                    : d[0] > 240 && d[1] > 240 && d[2] > 240 ? 'white'
+                        : `rgb(${d[0]},${d[1]},${d[2]})`);
+    }
+    await doc.destroy();
+    return out;
+}
+
+/**
+ * Round 11's independent oracles. PDF.js shares no code with pdf-lib, so an
+ * operator that is gone from the drawing is seen by a reader that never
+ * touched the sanitizer.
+ */
+async function opNames(bytes) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const pg = await doc.getPage(1);
+    const list = await pg.getOperatorList();
+    const names = Object.fromEntries(Object.entries(pdfjsLib.OPS).map(([k, v]) => [v, k]));
+    await doc.destroy();
+    return list.fnArray.map((f) => names[f] ?? String(f));
+}
+
+/**
+ * References that name an object the document does not hold, counted by the
+ * gate's own walk: a resource whose target was deleted is not a JavaScript
+ * count, and nothing the production readback measures would notice it.
+ */
+function danglingRefs(doc) {
+    let count = 0;
+    const seen = new Set();
+    const walk = (value, depth) => {
+        if (!value || depth > 200 || seen.has(value)) return;
+        if (value instanceof PDFRef) {
+            let target;
+            try { target = doc.context.lookup(value); } catch { target = undefined; }
+            if (target === undefined) count += 1;
+            return;
+        }
+        seen.add(value);
+        const dict = value instanceof PDFDict ? value : (value?.dict instanceof PDFDict ? value.dict : null);
+        if (dict) {
+            for (const [, entry] of dict.entries()) walk(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) {
+            for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+        }
+    };
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) walk(obj, 0);
+    return count;
+}
+
+/** What the first page's resource categories resolve to, by name. */
+function resourceKinds(doc) {
+    const lookup = (v) => { try { return v instanceof PDFRef ? doc.context.lookup(v) : v; } catch { return undefined; } };
+    const resources = lookup(doc.getPages()[0].node.get(PDFName.of('Resources')));
+    const out = {};
+    if (!(resources instanceof PDFDict)) return out;
+    for (const category of ['ExtGState', 'Properties']) {
+        const group = lookup(resources.get(PDFName.of(category)));
+        if (!(group instanceof PDFDict)) continue;
+        out[category] = {};
+        for (const [key, value] of group.entries()) {
+            const target = lookup(value);
+            out[category][key.asString().replace(/^\//, '')] = target instanceof PDFDict ? 'dict' : String(target === undefined ? 'missing' : 'other');
+        }
+    }
+    return out;
+}
+
+/**
+ * The gate's own optional-content audit of an artifact — every `/OC`, every
+ * `/Properties` entry, and the configuration envelope — written here rather
+ * than imported, so it cannot share a blind spot with `censusOptionalContent`.
+ */
+function rawOcAudit(doc) {
+    const nameOf = (v) => (typeof v?.asString === 'function' ? v.asString() : '');
+    const lookup = (v) => { try { return v instanceof PDFRef ? doc.context.lookup(v) : v; } catch { return undefined; } };
+    const dictOf = (v) => (v instanceof PDFDict ? v : (v?.dict instanceof PDFDict ? v.dict : null));
+    const out = {
+        registered: 0, ocKeys: 0, ocBad: 0, propsOc: 0, propsBad: 0, propsDangling: 0, propsOcmd: 0,
+        onOffOverlap: 0, dExtraKeys: [], ocPropsExtraKeys: [], baseStateBad: false, asBad: 0,
+    };
+    const ocp = dictOf(lookup(doc.catalog.get(PDFName.of('OCProperties'))));
+    const registered = new Set();
+    let d = null;
+    if (ocp) {
+        const groups = lookup(ocp.get(PDFName.of('OCGs')));
+        if (groups instanceof PDFArray) {
+            for (let i = 0; i < groups.size(); i += 1) {
+                const g = groups.get(i);
+                if (g instanceof PDFRef && nameOf(dictOf(lookup(g))?.get(PDFName.of('Type'))) === '/OCG') registered.add(g.tag);
+            }
+        }
+        out.ocPropsExtraKeys = [...ocp.keys()].map((k) => k.asString()).filter((k) => k !== '/OCGs' && k !== '/D');
+        d = dictOf(lookup(ocp.get(PDFName.of('D'))));
+    }
+    out.registered = registered.size;
+    if (d) {
+        const allowed = ['/Order', '/ON', '/OFF', '/Name', '/BaseState', '/AS', '/RBGroups'];
+        out.dExtraKeys = [...d.keys()].map((k) => k.asString()).filter((k) => !allowed.includes(k));
+        const base = d.get(PDFName.of('BaseState'));
+        out.baseStateBad = base !== undefined && nameOf(lookup(base)) !== '/ON';
+        const tags = (key) => {
+            const list = lookup(d.get(PDFName.of(key)));
+            const set = new Set();
+            if (list instanceof PDFArray) for (let i = 0; i < list.size(); i += 1) { const m = list.get(i); if (m instanceof PDFRef) set.add(m.tag); }
+            return set;
+        };
+        const on = tags('ON');
+        for (const t of tags('OFF')) if (on.has(t)) out.onOffOverlap += 1;
+        const as = lookup(d.get(PDFName.of('AS')));
+        if (as instanceof PDFArray) {
+            for (let i = 0; i < as.size(); i += 1) {
+                const e = dictOf(lookup(as.get(i)));
+                if (!e) { out.asBad += 1; continue; }
+                const keysOk = [...e.keys()].every((k) => ['/Event', '/Category', '/OCGs'].includes(k.asString()));
+                const eventOk = ['/View', '/Print', '/Export'].includes(nameOf(lookup(e.get(PDFName.of('Event')))));
+                const cat = lookup(e.get(PDFName.of('Category')));
+                let catOk = cat instanceof PDFArray;
+                if (catOk) for (let c = 0; c < cat.size(); c += 1) if (!(cat.get(c) instanceof PDFName)) catOk = false;
+                if (!keysOk || !eventOk || !catOk) out.asBad += 1;
+            }
+        }
+    }
+    const seen = new Set();
+    const visit = (value, depth) => {
+        if (!value || depth > 200 || value instanceof PDFRef || seen.has(value)) return;
+        seen.add(value);
+        const dict = dictOf(value);
+        if (dict) {
+            const oc = dict.get(PDFName.of('OC'));
+            if (oc !== undefined && String(oc) !== 'null') {
+                out.ocKeys += 1;
+                if (!(oc instanceof PDFRef) || !registered.has(oc.tag)) out.ocBad += 1;
+            }
+            const props = lookup(dict.get(PDFName.of('Properties')));
+            if (props instanceof PDFDict) {
+                for (const [, entry] of props.entries()) {
+                    const target = lookup(entry);
+                    if (entry instanceof PDFRef && target === undefined) { out.propsDangling += 1; continue; }
+                    const type = nameOf(dictOf(target)?.get(PDFName.of('Type')));
+                    if (type === '/OCMD') { out.propsOcmd += 1; continue; }
+                    if (type !== '/OCG') continue;
+                    out.propsOc += 1;
+                    if (!(entry instanceof PDFRef) || !registered.has(entry.tag)) out.propsBad += 1;
+                }
+            }
+            for (const [, entry] of dict.entries()) visit(entry, depth + 1);
+            return;
+        }
+        if (value instanceof PDFArray) for (let i = 0; i < value.size(); i += 1) visit(value.get(i), depth + 1);
+    };
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) visit(obj, 0);
+    return out;
+}
+
+/** Load, apply one destructive mutation, describe again — the comparator's input. */
+function mutateOptionalContent(doc, mutation) {
+    const ocp = doc.catalog.lookup(PDFName.of('OCProperties'));
+    const d = ocp instanceof PDFDict ? ocp.lookup(PDFName.of('D')) : null;
+    const page = doc.getPages()[0].node;
+    const res = page.lookup(PDFName.of('Resources'));
+    if (mutation === 'drop-off' && d instanceof PDFDict) d.delete(PDFName.of('OFF'));
+    if (mutation === 'add-on' && d instanceof PDFDict) {
+        const groups = ocp.lookup(PDFName.of('OCGs'));
+        d.set(PDFName.of('ON'), doc.context.obj([groups.get(0)]));
+    }
+    if (mutation === 'drop-property' && res instanceof PDFDict) {
+        const props = res.lookup(PDFName.of('Properties'));
+        if (props instanceof PDFDict) props.delete(PDFName.of('MC0'));
+    }
+    if (mutation === 'rename-group') {
+        const groups = ocp.lookup(PDFName.of('OCGs'));
+        groups.lookup(0).set(PDFName.of('Name'), PDFString.of('Renamed'));
+    }
+    if (mutation === 'drop-form-oc' && res instanceof PDFDict) {
+        const xobjects = res.lookup(PDFName.of('XObject'));
+        const form = xobjects instanceof PDFDict ? xobjects.lookup(PDFName.of('Fm0')) : null;
+        if (form?.dict instanceof PDFDict) form.dict.delete(PDFName.of('OC'));
+    }
+    if (mutation === 'basestate' && d instanceof PDFDict) d.delete(PDFName.of('BaseState'));
+}
+
+Object.assign(window.__m6, {
+    /**
+     * Extract, confirming exactly what the plan asked for — so an attachment
+     * that is proven an attachment is removed, and anything else is judged by
+     * the refusal, not by a confirmation. Every result is read three ways: the
+     * production status, the gate's own walkers, and pdf.js at named points.
+     */
+    async r9Extract(name, selection, points, markers = []) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+        });
+        const before = points ? await rasterAt(source, points) : null;
+        if (!result.bytes) {
+            return plainly({
+                plan: plan.status, requires: plan.requiresConfirmation ?? [], planDetail: plan.detail ?? null,
+                run: result.status, runDetail: result.detail ?? null, bytes: null, before, after: null,
+                // A refusal still has a source, and a probe that the source
+                // really holds what the refusal is about needs to read it.
+                sourceMarkers: Object.fromEntries(markers.map((m) => [m, bytesContain(source, m)])),
+            });
+        }
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            plan: plan.status,
+            requires: plan.requiresConfirmation ?? [],
+            run: result.status,
+            bytes: result.bytes.length,
+            before,
+            after: points ? await rasterAt(result.bytes, points) : null,
+            losses: result.losses.map((l) => l.kind),
+            independent: walkEverything(doc),
+            audit: rawOcAudit(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+            sourceMarkers: Object.fromEntries(markers.map((m) => [m, bytesContain(source, m)])),
+        });
+    },
+
+    /** Merge, confirming what the plan asked for, bound to its fingerprint. */
+    async r9Merge(names, points, markers = []) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const first = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const options = {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: first.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(first),
+        };
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, options);
+        const base = {
+            intake: intake.map((r) => ({ name: r.id, result: r.result })),
+            plan: plan.status,
+            order: plan.order ?? [],
+            run: result.status,
+            runDetail: result.bytes ? null : (result.detail ?? null),
+        };
+        if (!result.bytes) return plainly({ ...base, bytes: null, after: null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            bytes: result.bytes.length,
+            pages: doc.getPageCount(),
+            after: points ? await rasterAt(result.bytes, points) : null,
+            independent: walkEverything(doc),
+            audit: rawOcAudit(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /**
+     * Round 11: Extract, read by an oracle that never consulted the
+     * sanitizer — the operators PDF.js draws, the references the artifact holds
+     * that name nothing, and what the page's resources resolve to. The same
+     * reads are taken of the source, so "unchanged" is a comparison and not a
+     * belief.
+     */
+    async r11Artifact(name, selection, points, markers = []) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const result = await runExtract(source, {
+            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+        });
+        const sourceDoc = await PDFDocument.load(source, { updateMetadata: false });
+        const base = {
+            plan: plan.status,
+            requires: plan.requiresConfirmation ?? [],
+            planDetail: plan.detail ?? null,
+            run: result.status,
+            sourceOps: await opNames(source),
+            sourceResources: resourceKinds(sourceDoc),
+            before: points ? await rasterAt(source, points) : null,
+            sourceMarkers: Object.fromEntries(markers.map((m) => [m, bytesContain(source, m)])),
+        };
+        if (!result.bytes) return plainly({ ...base, bytes: null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            bytes: result.bytes.length,
+            ops: await opNames(result.bytes),
+            resources: resourceKinds(doc),
+            dangling: danglingRefs(doc),
+            after: points ? await rasterAt(result.bytes, points) : null,
+            independent: walkEverything(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /**
+     * Round 11 (RF-R10R-1): one unmodified source, asked the JavaScript question
+     * by everything that asks it — the source facts planning reads, the shared
+     * assessment, the sanitizer and the scrub. On one immutable source they
+     * cannot answer differently, and this is where that is measured.
+     */
+    async r11Assess(name) {
+        const bytes = await bytesOf(name);
+        const fresh = () => PDFDocument.load(bytes, { updateMetadata: false });
+        const doc = await fresh();
+        const facts = readSourceFacts(doc, bytes.length);
+        const assessed = assessJavaScript(doc);
+        const sanitized = sanitizeJavaScript(await fresh());
+        const scrubbed = scrubAllJavaScript(await fresh());
+        return plainly({
+            facts: facts.javascript.status,
+            assessed: assessed.status,
+            sanitize: sanitized.status,
+            scrub: scrubbed.complete ? 'OK' : (scrubbed.unsafe ? 'UNSAFE' : 'INCOMPLETE'),
+        });
+    },
+
+    /** An artifact shape straight into the census and the invariants. */
+    async r9Census(name) {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const census = censusOptionalContent(doc);
+        const facts = await readbackArtifact(bytes);
+        const breach = checkArtifactInvariants(facts, facts.pageCount);
+        return plainly({
+            complete: census.complete,
+            value: census.complete ? census.value : null,
+            invariant: breach ? breach.invariant : null,
+            audit: rawOcAudit(doc),
+            raster: await rasterAt(bytes, [{ x: 100, y: 100 }]),
+        });
+    },
+
+    /**
+     * RF-R9-1's comparator, fed a real before/after: the same loaded document
+     * described, mutated the way a destructive sanitizer would, described again.
+     */
+    async r9OcVerify(name, mutation) {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const before = describeOptionalContent(doc, null);
+        const twice = describeOptionalContent(doc, null);
+        const deterministic = JSON.stringify(optionalContentSemantics(before))
+            === JSON.stringify(optionalContentSemantics(twice));
+        mutateOptionalContent(doc, mutation);
+        const after = describeOptionalContent(doc, null);
+        const verdict = verifySanitizedOptionalContent(before, after);
+        return plainly({ deterministic, verdict });
+    },
+
+    /** The source-side optional-content reading, for the refusal reasons. */
+    async r9Describe(name, selection) {
+        const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const oc = describeOptionalContent(doc, selection);
+        const attach = classifyAttachments(doc);
+        return plainly({
+            unsupported: oc.unsupported,
+            usages: oc.xobjectUsages.map((u) => ({ path: u.path, formRef: u.formRef, ocRef: u.ocRef })),
+            attachmentsUnsafe: attach.complete ? attach.value.unsafe : ['(incomplete)'],
+        });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 12 (RF-R11R-1): Merge asks whether a source's actions can be read
+// ---------------------------------------------------------------------------
+
+/** A document from explicit numbered objects, built in the page so a sweep can cover every length. */
+function pdfFromObjects(objects) {
+    const nums = [...objects.keys()].sort((a, b) => a - b);
+    const max = nums[nums.length - 1];
+    let body = '%PDF-1.7\n';
+    const offsets = new Map();
+    for (const n of nums) {
+        offsets.set(n, body.length);
+        body += `${n} 0 obj\n${objects.get(n)}\nendobj\n`;
+    }
+    const xrefAt = body.length;
+    body += `xref\n0 ${max + 1}\n0000000000 65535 f \n`;
+    for (let n = 1; n <= max; n += 1) {
+        body += offsets.has(n)
+            ? `${String(offsets.get(n)).padStart(10, '0')} 00000 n \n`
+            : '0000000000 65535 f \n';
+    }
+    body += `trailer\n<< /Size ${max + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+    const out = new Uint8Array(body.length);
+    for (let i = 0; i < body.length; i += 1) out[i] = body.charCodeAt(i) & 0xff;
+    return out;
+}
+
+/**
+ * A page whose first annotation's `/A` starts a chain of `hops` `/Next` hops
+ * (`hops + 1` actions). `shape` is how each `/Next` is written, and `endJs` makes
+ * the last action a script, so the sanitizer has something to remove at the
+ * bound. Nothing else is in the document: any refusal is a reader's.
+ *
+ * Every shape but `nested-array` is the same Action graph, a path of `hops + 1`
+ * actions, spelled differently; a reader that answers differently for two of them
+ * is counting the spelling. `direct` is `/Next 41 0 R`; `array` is
+ * `/Next [41 0 R]`; `array-indirect` holds that list in an object of its own;
+ * `array-wide-last` and `array-wide-first` list two leaf siblings beside the
+ * chain's own next action, before it and after it; `inline` writes the next
+ * action in place. `nested-array` is `/Next [[41 0 R]]`, which is no action graph
+ * at all — a control that has to be refused at every length.
+ */
+function chainBytes(hops, shape, endJs) {
+    const uri = (tail = '') => `<< /Type /Action /S /URI /URI (https://example.invalid/)${tail} >>`;
+    const script = '<< /Type /Action /S /JavaScript /JS (app.alert\\(M6R12_SWEEP\\)) >>';
+    const end = () => (endJs ? script : uri());
+    const o = new Map();
+    o.set(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    o.set(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    o.set(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R /Annots [8 0 R] >>');
+    const content = '0 1 0 rg 10 170 180 20 re f';
+    o.set(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    o.set(8, '<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A 40 0 R >>');
+    if (shape === 'inline') {
+        const inline = (i) => (i === hops ? end() : uri(` /Next ${inline(i + 1)}`));
+        o.set(40, inline(0));
+        return pdfFromObjects(o);
+    }
+    for (let i = 0; i <= hops; i += 1) {
+        if (i === hops) {
+            o.set(40 + i, end());
+            continue;
+        }
+        const child = `${41 + i} 0 R`;
+        const [l1, l2] = [`${200 + 2 * i} 0 R`, `${201 + 2 * i} 0 R`];
+        let next;
+        if (shape === 'direct') next = ` /Next ${child}`;
+        else if (shape === 'array') next = ` /Next [${child}]`;
+        else if (shape === 'nested-array') next = ` /Next [[${child}]]`;
+        else if (shape === 'array-indirect') {
+            next = ` /Next ${300 + i} 0 R`;
+            o.set(300 + i, `[${child}]`);
+        } else if (shape === 'array-wide-last' || shape === 'array-wide-first') {
+            next = shape === 'array-wide-last' ? ` /Next [${l1} ${l2} ${child}]` : ` /Next [${child} ${l1} ${l2}]`;
+            o.set(200 + 2 * i, uri());
+            o.set(201 + 2 * i, uri());
+        } else throw new Error(`unknown chain shape ${shape}`);
+        o.set(40 + i, uri(next));
+    }
+    return pdfFromObjects(o);
+}
+
+Object.assign(window.__m6, {
+    /**
+     * Merge as a person meets it — the intake, the plan they are asked to agree
+     * to *before* agreeing, and the run — with the sources named. Everything a
+     * confirmation is about is returned: which losses the first plan presents
+     * and for which file, so "nobody was asked about the excluded source" is a
+     * measurement of the plan and not an inference from the outcome.
+     */
+    async r12Merge(names, markers = []) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const first = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const options = {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: first.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(first),
+        };
+        const plan = planMerge(intake, options);
+        const result = await runMerge(inputs, plan, options);
+        const base = {
+            intake: intake.map((r) => ({ id: r.id, name: r.name, result: r.result, reason: r.reason ?? null })),
+            first: {
+                status: first.status,
+                requires: first.requiresConfirmation ?? [],
+                losses: (first.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? '', why: l.why ?? '' })),
+            },
+            plan: plan.status,
+            order: plan.order ?? [],
+            run: result.status,
+            runDetail: result.bytes ? null : (result.detail ?? null),
+            sourceMarkers: Object.fromEntries(await Promise.all(names.map(async (n) => {
+                const bytes = await bytesOf(n);
+                return [n, Object.fromEntries(markers.map((m) => [m, bytesContain(bytes, m)]))];
+            }))),
+        };
+        if (!result.bytes) return plainly({ ...base, bytes: null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        return plainly({
+            ...base,
+            bytes: result.bytes.length,
+            pages: doc.getPageCount(),
+            independent: walkEverything(doc),
+            markers: Object.fromEntries(markers.map((m) => [m, bytesContain(result.bytes, m)])),
+        });
+    },
+
+    /**
+     * What each reader of a source's actions says about it, and what Extract's
+     * plan says. The JavaScript assessment and the destinations-side readability
+     * are different readers, and RF-R11R-1 was a source the first accepted and the
+     * second refused, so both are reported side by side.
+     */
+    async r12Readability(name) {
+        const bytes = await bytesOf(name);
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const readability = assessSourceActionStructure(doc);
+        const plan = await planExtract(bytes, { selection: [0], sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        return plainly({
+            js: assessJavaScript(doc).status,
+            readability: readability.status,
+            unreadable: readability.status === 'READABLE' ? [] : readability.unreadable,
+            extract: plan.status,
+            requires: plan.requiresConfirmation ?? [],
+        });
+    },
+
+    /**
+     * One chain of an exact length, asked of every reader and every step: both
+     * scanners, Extract's plan, Merge's intake beside a clean source, and the
+     * run. Built in the page so the gate can walk every length across the bound.
+     */
+    async r12Sweep(shape, hops, endJs) {
+        const bytes = chainBytes(hops, shape, endJs);
+        const partner = await bytesOf('merge-b');
+        const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+        const plan = await planExtract(bytes, { selection: [0], sourceName: 'chain.pdf', policy: PROVISIONAL_POLICY });
+        const inputs = [
+            { id: 'clean', name: 'clean.pdf', type: 'application/pdf', bytes: partner },
+            { id: 'chain', name: 'chain.pdf', type: 'application/pdf', bytes: bytes },
+        ];
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const merged = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const run = await runMerge(inputs, merged, {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: merged.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(merged),
+        });
+        let after = null;
+        if (run.bytes) {
+            const out = await PDFDocument.load(run.bytes, { updateMetadata: false });
+            after = { pages: out.getPageCount(), javascript: walkEverything(out).javascript };
+        }
+        return plainly({
+            js: assessJavaScript(doc).status,
+            readability: assessSourceActionStructure(doc).status,
+            extract: plan.status,
+            intake: intake.find((r) => r.id === 'chain')?.result ?? null,
+            run: run.status,
+            after,
+        });
+    },
+
+    /**
+     * The run-time backstop's agreement with intake, one source at a time:
+     * what intake said about `name`, and what the run then did with it beside a
+     * source that is fine. Cheap enough to ask of every fixture there is.
+     */
+    async r12Parity(name) {
+        const inputs = [
+            { id: 'clean', name: 'clean.pdf', type: 'application/pdf', bytes: await bytesOf('merge-b') },
+            { id: 'x', name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) },
+        ];
+        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
+        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const run = await runMerge(inputs, plan, {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        return plainly({ intake: intake.find((r) => r.id === 'x')?.result ?? null, run: run.status });
+    },
+
+    /**
+     * A source whose bytes are not the bytes intake saw: intake reads `seen`, the
+     * run is handed `run` under the same id. The run-time check is the backstop
+     * for exactly this, and has to still refuse.
+     */
+    async r12Swap(seen, run) {
+        const seenInput = { id: 'x', name: 'x.pdf', type: 'application/pdf', bytes: await bytesOf(seen) };
+        const runInput = { id: 'x', name: 'x.pdf', type: 'application/pdf', bytes: await bytesOf(run) };
+        const intake = await intakeSources([seenInput], { policy: PROVISIONAL_POLICY });
+        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const result = await runMerge([runInput], plan, {
+            policy: PROVISIONAL_POLICY,
+            confirmedLosses: plan.requiresConfirmation ?? [],
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        return plainly({ intake: intake[0].result, plan: plan.status, run: result.status, bytes: result.bytes ? result.bytes.length : null });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 12B: a /Next fan-out is read once per action, not once per path
+// ---------------------------------------------------------------------------
+
+/**
+ * A page whose annotations' `/A` name the roots of a graph of actions, built in
+ * the page so a sweep can cover every depth and width. `spec.nodes[i]` is action
+ * `i`: `kind` is `uri`, `js` or `goto`; `next` is the list of actions it names,
+ * in order, duplicates and back edges allowed; `form` is how that list is written
+ * (`single` — only when there is exactly one — `inline`, or `indirect`, an object
+ * of its own); `junk` adds a member that is not an action (`bad`, the number 42) or
+ * names nothing (`dangling`). `spec.roots` are the actions the annotations name.
+ */
+function graphBytes(spec) {
+    const at = (i) => 40 + i * 2;
+    const o = new Map();
+    o.set(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    o.set(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    const annots = spec.roots.map((_, k) => `${8 + k} 0 R`).join(' ');
+    o.set(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R /Annots [${annots}] >>`);
+    const content = '0 1 0 rg 10 170 180 20 re f';
+    o.set(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    spec.roots.forEach((root, k) => {
+        o.set(8 + k, `<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A ${at(root)} 0 R >>`);
+    });
+    spec.nodes.forEach((node, i) => {
+        const body = node.kind === 'js'
+            ? '/S /JavaScript /JS (app.alert\\(M6R12B_GRAPH\\))'
+            : node.kind === 'goto' ? '/S /GoTo /D [3 0 R /Fit]' : '/S /URI /URI (https://example.invalid/)';
+        const members = node.next.map((j) => `${at(j)} 0 R`);
+        if (node.junk === 'bad') members.push('42');
+        if (node.junk === 'dangling') members.push('9999 0 R');
+        let next = '';
+        if (members.length > 0) {
+            if (node.form === 'single' && members.length === 1) {
+                next = ` /Next ${members[0]}`;
+            } else if (node.form === 'indirect') {
+                o.set(at(i) + 1, `[${members.join(' ')}]`);
+                next = ` /Next ${at(i) + 1} 0 R`;
+            } else {
+                next = ` /Next [${members.join(' ')}]`;
+            }
+        }
+        o.set(at(i), `<< /Type /Action ${body}${next} >>`);
+    });
+    return pdfFromObjects(o);
+}
+
+/** What each reader says about one document, how much reading it did, and how long it took. */
+async function readActions(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    resetActionTraversalCounts();
+    const t0 = performance.now();
+    const js = assessJavaScript(doc);
+    const jsMs = performance.now() - t0;
+    const jsCounts = { ...actionTraversalCounts.javascript };
+    resetActionTraversalCounts();
+    const t1 = performance.now();
+    const readability = assessSourceActionStructure(doc);
+    const readMs = performance.now() - t1;
+    const readCounts = { ...actionTraversalCounts.destinations };
+    const plan = await planExtract(bytes, { selection: [0], sourceName: 'graph.pdf', policy: PROVISIONAL_POLICY });
+    return {
+        js: js.status,
+        jsDetail: js.status === 'UNSCANNABLE' ? js.incomplete : [],
+        readability: readability.status,
+        readDetail: readability.status === 'READABLE' ? [] : readability.unreadable,
+        extract: plan.status,
+        jsCounts,
+        readCounts,
+        jsMs,
+        readMs,
+    };
+}
+
+Object.assign(window.__m6, {
+    /** A fixture file, asked of both readers and counted. */
+    async r12bFile(name) {
+        return plainly(await readActions(await bytesOf(name)));
+    },
+
+    /** A graph described in the page, asked of both readers and counted. */
+    async r12bGraph(spec) {
+        return plainly(await readActions(graphBytes(spec)));
+    },
+});
+
+document.getElementById('state').textContent = 'ready';
+window.__m6Ready = true;
+</script>
+</body>
