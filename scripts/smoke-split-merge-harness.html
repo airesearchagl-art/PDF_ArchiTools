@@ -71,6 +71,12 @@ import {
     optionalContentSemantics,
     classifyAttachments,
 } from '/src/utils/split-merge/index.ts';
+// Round 12B: how much reading the action walks do, counted rather than timed. The
+// index does not export it; a test measures the shape of the work through it.
+import {
+    actionTraversalCounts,
+    resetActionTraversalCounts,
+} from '/src/utils/split-merge/action-traversal.ts';
 import {
     PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRawStream, PDFRef, PDFString,
 } from 'pdf-lib';
@@ -2776,6 +2782,93 @@ Object.assign(window.__m6, {
             confirmedFingerprint: mergeConfirmationFingerprint(plan),
         });
         return plainly({ intake: intake[0].result, plan: plan.status, run: result.status, bytes: result.bytes ? result.bytes.length : null });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// Round 12B: a /Next fan-out is read once per action, not once per path
+// ---------------------------------------------------------------------------
+
+/**
+ * A page whose annotations' `/A` name the roots of a graph of actions, built in
+ * the page so a sweep can cover every depth and width. `spec.nodes[i]` is action
+ * `i`: `kind` is `uri`, `js` or `goto`; `next` is the list of actions it names,
+ * in order, duplicates and back edges allowed; `form` is how that list is written
+ * (`single` — only when there is exactly one — `inline`, or `indirect`, an object
+ * of its own); `junk` adds a member that is not an action (`bad`, the number 42) or
+ * names nothing (`dangling`). `spec.roots` are the actions the annotations name.
+ */
+function graphBytes(spec) {
+    const at = (i) => 40 + i * 2;
+    const o = new Map();
+    o.set(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    o.set(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    const annots = spec.roots.map((_, k) => `${8 + k} 0 R`).join(' ');
+    o.set(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R /Annots [${annots}] >>`);
+    const content = '0 1 0 rg 10 170 180 20 re f';
+    o.set(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    spec.roots.forEach((root, k) => {
+        o.set(8 + k, `<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A ${at(root)} 0 R >>`);
+    });
+    spec.nodes.forEach((node, i) => {
+        const body = node.kind === 'js'
+            ? '/S /JavaScript /JS (app.alert\\(M6R12B_GRAPH\\))'
+            : node.kind === 'goto' ? '/S /GoTo /D [3 0 R /Fit]' : '/S /URI /URI (https://example.invalid/)';
+        const members = node.next.map((j) => `${at(j)} 0 R`);
+        if (node.junk === 'bad') members.push('42');
+        if (node.junk === 'dangling') members.push('9999 0 R');
+        let next = '';
+        if (members.length > 0) {
+            if (node.form === 'single' && members.length === 1) {
+                next = ` /Next ${members[0]}`;
+            } else if (node.form === 'indirect') {
+                o.set(at(i) + 1, `[${members.join(' ')}]`);
+                next = ` /Next ${at(i) + 1} 0 R`;
+            } else {
+                next = ` /Next [${members.join(' ')}]`;
+            }
+        }
+        o.set(at(i), `<< /Type /Action ${body}${next} >>`);
+    });
+    return pdfFromObjects(o);
+}
+
+/** What each reader says about one document, how much reading it did, and how long it took. */
+async function readActions(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    resetActionTraversalCounts();
+    const t0 = performance.now();
+    const js = assessJavaScript(doc);
+    const jsMs = performance.now() - t0;
+    const jsCounts = { ...actionTraversalCounts.javascript };
+    resetActionTraversalCounts();
+    const t1 = performance.now();
+    const readability = assessSourceActionStructure(doc);
+    const readMs = performance.now() - t1;
+    const readCounts = { ...actionTraversalCounts.destinations };
+    const plan = await planExtract(bytes, { selection: [0], sourceName: 'graph.pdf', policy: PROVISIONAL_POLICY });
+    return {
+        js: js.status,
+        jsDetail: js.status === 'UNSCANNABLE' ? js.incomplete : [],
+        readability: readability.status,
+        readDetail: readability.status === 'READABLE' ? [] : readability.unreadable,
+        extract: plan.status,
+        jsCounts,
+        readCounts,
+        jsMs,
+        readMs,
+    };
+}
+
+Object.assign(window.__m6, {
+    /** A fixture file, asked of both readers and counted. */
+    async r12bFile(name) {
+        return plainly(await readActions(await bytesOf(name)));
+    },
+
+    /** A graph described in the page, asked of both readers and counted. */
+    async r12bGraph(spec) {
+        return plainly(await readActions(graphBytes(spec)));
     },
 });
 

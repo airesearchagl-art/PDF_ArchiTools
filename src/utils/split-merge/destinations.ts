@@ -34,6 +34,7 @@
 import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNull, PDFRef, PDFString } from 'pdf-lib';
 import type { PDFDocument } from 'pdf-lib';
 import type { LossRecord } from './contracts';
+import { ActionTraversal } from './action-traversal';
 import { MECHANISM_BOUNDS } from './policy';
 import { comparePdfBytes, pdfTextObject, readNameIdentifier, readPdfText } from './pdf-text';
 import type { PdfRead, PdfText } from './pdf-text';
@@ -1077,7 +1078,7 @@ function collectActionPageRefs(
     out: PageRefSite[],
     unreadable: string[],
     depth: number,
-    seen: Set<string>,
+    traversal: ActionTraversal,
 ): void {
     const raw = holder.get(PDFName.of(key));
     // Nothing is there to read, so the depth it would have been read at is not a
@@ -1087,12 +1088,10 @@ function collectActionPageRefs(
         unreadable.push(`${where}: action chain deeper than ${ACTION_CHAIN_BOUND}`);
         return;
     }
-    if (raw instanceof PDFRef) {
-        if (seen.has(raw.tag)) {
-            unreadable.push(`${where}: cyclic action chain`);
-            return;
-        }
-        seen.add(raw.tag);
+    // A cycle is refused before anything is skipped for having been read.
+    if (raw instanceof PDFRef && traversal.isActive(raw.tag)) {
+        unreadable.push(`${where}: cyclic action chain`);
+        return;
     }
     const resolved = look(doc, raw);
 
@@ -1102,13 +1101,24 @@ function collectActionPageRefs(
         // a hop: its members are read at the depth a single action under this
         // `/Next` would have been, which is `depth`, the same as a scalar's.
         if (key === 'Next') {
-            for (let i = 0; i < resolved.size(); i += 1) {
-                const item = look(doc, resolved.get(i));
-                if (!(item instanceof PDFDict)) continue;
-                collectFromActionDict(
-                    doc, item, `${where} /Next[${i}]`, fromIndex, pageIndexOf,
-                    out, unreadable, depth, new Set(seen),
-                );
+            // An indirect list is a node like an indirect action: read once per
+            // depth, and a cycle if it is reached while it is being read. Round 12B.
+            const held = raw instanceof PDFRef ? raw : null;
+            if (held && !traversal.begin(held.tag, depth)) return;
+            let finished = false;
+            try {
+                for (let i = 0; i < resolved.size(); i += 1) {
+                    const member = resolved.get(i);
+                    const item = look(doc, member);
+                    if (!(item instanceof PDFDict)) continue;
+                    collectAction(
+                        doc, item, member, `${where} /Next[${i}]`, fromIndex, pageIndexOf,
+                        out, unreadable, depth, traversal,
+                    );
+                }
+                finished = true;
+            } finally {
+                if (held) traversal.end(held.tag, depth, finished);
             }
         }
         return;
@@ -1116,9 +1126,47 @@ function collectActionPageRefs(
     if (!(resolved instanceof PDFDict)) return;
     // The action is at the depth of the entry that holds it: stepping into it is
     // not a hop, and only stepping from it to its `/Next` is.
-    collectFromActionDict(
-        doc, resolved, where, fromIndex, pageIndexOf, out, unreadable, depth, seen,
+    collectAction(
+        doc, resolved, raw, where, fromIndex, pageIndexOf, out, unreadable, depth, traversal,
     );
+}
+
+/**
+ * One action, by whatever names it. An indirect action is read once per depth it
+ * is reached at that has not been read at already, and refused as a cycle if it is
+ * reached while it is being read; a direct dictionary has no identity to remember
+ * and is read wherever whatever holds it is read. Round 12B: this is what stops a
+ * list that names the same action twice from being read twice, and the action
+ * after it four times.
+ */
+function collectAction(
+    doc: PDFDocument,
+    action: PDFDict,
+    raw: unknown,
+    where: string,
+    fromIndex: number,
+    pageIndexOf: (ref: PDFRef) => number | null,
+    out: PageRefSite[],
+    unreadable: string[],
+    depth: number,
+    traversal: ActionTraversal,
+): void {
+    if (!(raw instanceof PDFRef)) {
+        collectFromActionDict(doc, action, where, fromIndex, pageIndexOf, out, unreadable, depth, traversal);
+        return;
+    }
+    if (traversal.isActive(raw.tag)) {
+        unreadable.push(`${where}: cyclic action chain`);
+        return;
+    }
+    if (!traversal.begin(raw.tag, depth)) return;
+    let finished = false;
+    try {
+        collectFromActionDict(doc, action, where, fromIndex, pageIndexOf, out, unreadable, depth, traversal);
+        finished = true;
+    } finally {
+        traversal.end(raw.tag, depth, finished);
+    }
 }
 
 function collectFromActionDict(
@@ -1130,13 +1178,15 @@ function collectFromActionDict(
     out: PageRefSite[],
     unreadable: string[],
     depth: number,
-    seen: Set<string>,
+    traversal: ActionTraversal,
 ): void {
     if (depth > ACTION_CHAIN_BOUND) {
         unreadable.push(`${where}: action chain deeper than ${ACTION_CHAIN_BOUND}`);
         return;
     }
-    if (nameOf(action.get(PDFName.of('S'))) === '/GoTo') {
+    // The action's own page reference is taken once for this walk, however many
+    // paths — or depths — reached it.
+    if (nameOf(action.get(PDFName.of('S'))) === '/GoTo' && traversal.firstTime(action)) {
         const raw = action.get(PDFName.of('D'));
         const dest = look(doc, raw);
         if (dest instanceof PDFArray) {
@@ -1158,7 +1208,7 @@ function collectFromActionDict(
     }
     collectActionPageRefs(
         doc, action, 'Next', `${where} /Next`, fromIndex, pageIndexOf,
-        out, unreadable, depth + 1, seen,
+        out, unreadable, depth + 1, traversal,
     );
 }
 
@@ -1183,7 +1233,10 @@ function collectAdditionalActions(
         collectActionPageRefs(
             doc, aa, key.asString().replace(/^\//, ''),
             `${where} /AA ${key.asString()}`, fromIndex, pageIndexOf,
-            out, unreadable, 0, new Set(),
+            // One walk per entry: what a walk has read is not shared with the next
+            // root, because every root reports the page references it reaches — a
+            // shared action is a loss on each page that links to it.
+            out, unreadable, 0, new ActionTraversal('destinations'),
         );
     }
 }
@@ -1234,7 +1287,8 @@ export function collectSourcePageRefs(
             }
 
             collectActionPageRefs(
-                doc, annot, 'A', `${where} /A`, index, pageIndexOf, sites, unreadable, 0, new Set(),
+                doc, annot, 'A', `${where} /A`, index, pageIndexOf, sites, unreadable, 0,
+                new ActionTraversal('destinations'),
             );
             collectAdditionalActions(doc, annot, where, index, pageIndexOf, sites, unreadable);
         }

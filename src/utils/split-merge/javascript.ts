@@ -26,6 +26,7 @@
  */
 import { PDFArray, PDFDict, PDFName, PDFRef, PDFStream } from 'pdf-lib';
 import type { PDFDocument, PDFPage } from 'pdf-lib';
+import { ActionTraversal } from './action-traversal';
 import { CENSUS_BUDGET, censusIndirectObjects, reachableRefTags } from './census';
 import type { CensusNode, CensusOutcome } from './census';
 import { MECHANISM_BOUNDS } from './policy';
@@ -231,6 +232,13 @@ interface WalkSink {
     found: FoundAction[];
     positions: Set<string>;
     idOf: IdOf;
+    /**
+     * Which actions this walk is reading and which it has read, so an action that
+     * many paths reach is read once per depth and not once per path. Round 12B.
+     * One for the whole walk: what an action leads to does not depend on which
+     * root reached it, and every *site* is recorded before this is asked.
+     */
+    traversal: ActionTraversal;
 }
 
 /**
@@ -246,20 +254,53 @@ type PositionVia = 'openaction' | 'a' | 'aa' | 'next';
 export const positionKey = (idOf: IdOf, holder: object, key: string, index?: number): string =>
     index === undefined ? `${idOf(holder)}#${key}` : `${idOf(holder)}#${key}#${index}`;
 
+/**
+ * What follows an action: whatever its `/Next` holds, one hop below it.
+ *
+ * An indirect action is read through the traversal, once per depth it is reached
+ * at that has not been read at already (see `action-traversal.ts`), so a list
+ * that names the same action twice reads it once and not twice. An action that is
+ * being read now and is reached again is a cycle, and is refused before anything
+ * is skipped for having been read. A direct dictionary has no identity to remember
+ * and is read wherever whatever holds it is read.
+ *
+ * The caller has recorded the *site* — the holder and key that name this action —
+ * before asking. Skipping what follows an action never skips a site, and the
+ * sites below it were recorded the first time.
+ */
+function walkNext(
+    doc: PDFDocument,
+    action: PDFDict,
+    raw: unknown,
+    sink: WalkSink,
+    depth: number,
+): void {
+    if (!(raw instanceof PDFRef)) {
+        walkAction(doc, action, 'Next', sink, depth + 1, 'next');
+        return;
+    }
+    if (!sink.traversal.begin(raw.tag, depth)) return;
+    let finished = false;
+    try {
+        walkAction(doc, action, 'Next', sink, depth + 1, 'next');
+        finished = true;
+    } finally {
+        sink.traversal.end(raw.tag, depth, finished);
+    }
+}
+
 function walkActionValue(
     doc: PDFDocument,
     raw: unknown,
     owner: { holder: PDFArray; key: number; inArray: true },
     sink: WalkSink,
     depth: number,
-    seen: Set<string>,
 ): void {
     if (depth > MECHANISM_BOUNDS.maxActionDepth) {
         throw new Unscannable(`action chain deeper than ${MECHANISM_BOUNDS.maxActionDepth}`);
     }
-    if (raw instanceof PDFRef) {
-        if (seen.has(raw.tag)) throw new Unscannable('cyclic action chain');
-        seen.add(raw.tag);
+    if (raw instanceof PDFRef && sink.traversal.isActive(raw.tag)) {
+        throw new Unscannable('cyclic action chain');
     }
     const action = look(doc, raw);
     if (!(action instanceof PDFDict)) {
@@ -268,7 +309,7 @@ function walkActionValue(
     if (actionCarriesJavaScript(action)) {
         sink.found.push({ ...owner, ref: raw instanceof PDFRef ? raw : null });
     }
-    walkAction(doc, action, 'Next', sink, depth + 1, seen, 'next');
+    walkNext(doc, action, raw, sink, depth);
 }
 
 function walkAction(
@@ -277,7 +318,6 @@ function walkAction(
     key: string,
     sink: WalkSink,
     depth: number,
-    seen: Set<string>,
     via: PositionVia,
 ): void {
     const raw = holder.get(PDFName.of(key));
@@ -302,22 +342,36 @@ function walkAction(
         // Any other list keeps the level its container has always cost — it is
         // not a shape the format defines, and it is not what this is about.
         const memberDepth = key === 'Next' ? depth : depth + 1;
-        for (let i = 0; i < resolved.size(); i += 1) {
-            walkActionValue(
-                doc,
-                resolved.get(i),
-                { holder: resolved, key: i, inArray: true },
-                sink,
-                memberDepth,
-                new Set(seen),
-            );
+        // An indirect list is a node like an indirect action: reached again while it
+        // is being read, it is a cycle, and read at a depth it has been read at, it
+        // has nothing new. (Round 12B. A list whose members are direct dictionaries
+        // that name the list again is a cycle with no indirect action in it, and the
+        // only thing that used to stop it was the depth bound, after 2^33 paths.)
+        const held = raw instanceof PDFRef ? raw : null;
+        if (held) {
+            if (sink.traversal.isActive(held.tag)) throw new Unscannable('cyclic action chain');
+            if (!sink.traversal.begin(held.tag, memberDepth)) return;
+        }
+        let finished = false;
+        try {
+            for (let i = 0; i < resolved.size(); i += 1) {
+                walkActionValue(
+                    doc,
+                    resolved.get(i),
+                    { holder: resolved, key: i, inArray: true },
+                    sink,
+                    memberDepth,
+                );
+            }
+            finished = true;
+        } finally {
+            if (held) sink.traversal.end(held.tag, memberDepth, finished);
         }
         return;
     }
 
-    if (raw instanceof PDFRef) {
-        if (seen.has(raw.tag)) throw new Unscannable('cyclic action chain');
-        seen.add(raw.tag);
+    if (raw instanceof PDFRef && sink.traversal.isActive(raw.tag)) {
+        throw new Unscannable('cyclic action chain');
     }
     if (!(resolved instanceof PDFDict)) {
         throw new Unscannable(`${key} is neither an action nor a destination`);
@@ -331,7 +385,7 @@ function walkAction(
         // detaches the action, and deleting the object is what removes it.
         sink.found.push({ holder, key, ref: raw instanceof PDFRef ? raw : null });
     }
-    walkAction(doc, resolved, 'Next', sink, depth + 1, seen, 'next');
+    walkNext(doc, resolved, raw, sink, depth);
 }
 
 /**
@@ -349,7 +403,7 @@ function walkAdditionalActions(
     if (aa === undefined) return;
     if (!(aa instanceof PDFDict)) throw new Unscannable('/AA is not a dictionary');
     for (const [key] of aa.entries()) {
-        walkAction(doc, aa, key.asString().replace(/^\//, ''), sink, depth, new Set(), 'aa');
+        walkAction(doc, aa, key.asString().replace(/^\//, ''), sink, depth, 'aa');
     }
 }
 
@@ -399,7 +453,7 @@ function walkJavaScriptNameTree(
 export function walkActions(doc: PDFDocument, idOf: IdOf = makeIdOf()): ActionWalk {
     const found: FoundAction[] = [];
     const incomplete: string[] = [];
-    const sink: WalkSink = { found, positions: new Set(), idOf };
+    const sink: WalkSink = { found, positions: new Set(), idOf, traversal: new ActionTraversal('javascript') };
 
     const site = (label: string, fn: () => void): void => {
         try {
@@ -411,7 +465,7 @@ export function walkActions(doc: PDFDocument, idOf: IdOf = makeIdOf()): ActionWa
     };
 
     site('catalog /OpenAction', () =>
-        walkAction(doc, doc.catalog, 'OpenAction', sink, 0, new Set(), 'openaction'));
+        walkAction(doc, doc.catalog, 'OpenAction', sink, 0, 'openaction'));
     site('catalog /AA', () => walkAdditionalActions(doc, doc.catalog, sink, 0));
     site('catalog /Names /JavaScript', () => {
         const names = look(doc, doc.catalog.get(PDFName.of('Names')));
@@ -438,7 +492,7 @@ export function walkActions(doc: PDFDocument, idOf: IdOf = makeIdOf()): ActionWa
             for (let i = 0; i < annots.size(); i += 1) {
                 const annot = look(doc, annots.get(i));
                 if (!(annot instanceof PDFDict)) continue;
-                walkAction(doc, annot, 'A', sink, 0, new Set(), 'a');
+                walkAction(doc, annot, 'A', sink, 0, 'a');
                 walkAdditionalActions(doc, annot, sink, 0);
             }
         });
@@ -464,7 +518,7 @@ export function walkActions(doc: PDFDocument, idOf: IdOf = makeIdOf()): ActionWa
                     throw new Unscannable('field ancestry deeper than the bound');
                 }
                 visited.add(current);
-                walkAction(doc, current, 'A', sink, 0, new Set(), 'a');
+                walkAction(doc, current, 'A', sink, 0, 'a');
                 walkAdditionalActions(doc, current, sink, 0);
                 current = look(doc, current.get(PDFName.of('Parent')));
             }
@@ -476,7 +530,7 @@ export function walkActions(doc: PDFDocument, idOf: IdOf = makeIdOf()): ActionWa
             for (const raw of entries) {
                 const field = look(doc, raw);
                 if (!(field instanceof PDFDict)) continue;
-                walkAction(doc, field, 'A', sink, 0, new Set(), 'a');
+                walkAction(doc, field, 'A', sink, 0, 'a');
                 walkAdditionalActions(doc, field, sink, 0);
                 walkFieldAncestors(field);
                 const kids = look(doc, field.get(PDFName.of('Kids')));

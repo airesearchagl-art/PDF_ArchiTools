@@ -3264,6 +3264,317 @@ try {
         }
     }
 
+    // ---- 67. Round 12B: a /Next fan-out is read once per action, not once per path
+    //
+    // Both readers of an action's structure followed `/Next` path by path. A list
+    // that names the same action twice made two paths, the action after it four,
+    // and the one after that eight, so a document with a few dozen actions could
+    // hold more paths than either reader could walk before the worker's timeout —
+    // with every action in it valid. The gate measures the shape of the work, not
+    // the clock: how many times an action or list was *read*, against how many
+    // there are. The clock is a second, generous protection; on a slow host it is
+    // the count that decides.
+    console.log('\n=== 67. Round 12B a /Next fan-out is read once per action ===');
+    {
+        const UNSCAN = 'UNSCANNABLE_ACTIONS';
+        const bound = constants.mechanismBounds.maxActionDepth;
+        const CLOCK_MS = 5000;
+        const merge = await call('r12Merge', ['merge-b'], []);
+        const partnerPages = merge.pages;
+
+        // The same chain written once, as a graph description, for every depth.
+        const chainSpec = (levels, end = 'uri') => ({
+            roots: [0],
+            nodes: Array.from({ length: levels + 1 }, (_, i) => ({
+                kind: i === levels ? end : 'uri',
+                next: i === levels ? [] : [i + 1],
+                form: 'single',
+            })),
+        });
+        // Each `/Next` names the following action `width` times.
+        const fanSpec = (levels, width, { end = 'uri', form = 'inline' } = {}) => ({
+            roots: [0],
+            nodes: Array.from({ length: levels + 1 }, (_, i) => ({
+                kind: i === levels ? end : 'uri',
+                next: i === levels ? [] : Array(width).fill(i + 1),
+                form,
+            })),
+        });
+
+        // ---- named fan-out documents ----------------------------------------
+        for (const [fixture, levels, width, accepted, title] of [
+            ['r12b-f1-fan2-16', 16, 2, true, 'fan-out 2, 16 levels'],
+            ['r12b-f2-fan2-24', 24, 2, true, 'fan-out 2, 24 levels'],
+            ['r12b-f3-fan2-32', 32, 2, true, `fan-out 2, ${bound} levels — the bound`],
+            ['r12b-f3-fan2-32-js', 32, 2, true, `fan-out 2, ${bound} levels, ending in a script`],
+            ['r12b-f4-fan3-16', 16, 3, true, 'fan-out 3, 16 levels'],
+            ['r12b-f4-fan3-16-indirect', 16, 3, true, 'fan-out 3, 16 levels, every list an object of its own'],
+            ['r12b-f4-fan2-16-goto', 16, 2, true, 'fan-out 2, 16 levels, ending in a link to a page'],
+            ['r12b-f5-siblings-64', 5, 64, true, 'one action naming the same child 64 times, five levels down'],
+            ['r12b-f10-fan2-33', 33, 2, false, `fan-out 2, ${bound + 1} levels — one over the bound`],
+            ['r12b-f10-fan2-33-js', 33, 2, false, `fan-out 2, ${bound + 1} levels, ending in a script`],
+        ]) {
+            const r = await call('r12bFile', fixture);
+            const read = accepted
+                ? r.js === 'SAFE' && r.readability === 'READABLE' && r.extract === 'READY'
+                : r.js === 'UNSCANNABLE' && r.readability === UNSCAN && r.extract === UNSCAN;
+            check(`${fixture}: ${title} is ${accepted ? 'read to the end by both readers' : 'refused by both readers'}, as the same chain written once is`,
+                read, `js=${r.js} readability=${r.readability} extract=${r.extract}`);
+            // The actions in it: levels + 1, and as many lists again when every list is an object.
+            const actions = 2 * (levels + 1);
+            check(`${fixture}: and neither reader reads more than twice as many actions as the document holds, however many paths reach them`,
+                r.jsCounts.expanded <= actions && r.readCounts.expanded <= actions,
+                `javascript=${r.jsCounts.expanded} destinations=${r.readCounts.expanded} of ${actions}`);
+            if (accepted) {
+                check(`${fixture}: and the repeats were suppressed, not read`,
+                    r.jsCounts.suppressed >= levels - 1 && r.readCounts.suppressed >= levels - 1,
+                    `javascript=${r.jsCounts.suppressed} destinations=${r.readCounts.suppressed}`);
+            }
+            check(`${fixture}: and it took no time to say so (a generous clock, second to the count)`,
+                r.jsMs < CLOCK_MS && r.readMs < CLOCK_MS, `${r.jsMs.toFixed(0)} ms, ${r.readMs.toFixed(0)} ms`);
+        }
+
+        // ---- the work does not depend on the width ----------------------------
+        //
+        // A fan-out reads exactly what the same chain written once reads. This is the
+        // claim in one line: the count is a property of the actions, and a list that
+        // names each of them a hundred times changes nothing.
+        for (const width of [2, 3, 8, 100]) {
+            const once = await call('r12bGraph', chainSpec(20));
+            const many = await call('r12bGraph', fanSpec(20, width));
+            check(`width ${width}: a chain of 20 hops with each /Next naming the next action ${width} times reads what the chain written once reads`,
+                many.jsCounts.expanded === once.jsCounts.expanded && many.readCounts.expanded === once.readCounts.expanded
+                && many.js === once.js && many.readability === once.readability,
+                `once=${once.jsCounts.expanded}/${once.readCounts.expanded} many=${many.jsCounts.expanded}/${many.readCounts.expanded}`);
+        }
+
+        // ---- every depth, three widths, ending in a URI and in a script -------
+        for (const [width, form] of [[2, 'inline'], [3, 'inline'], [8, 'indirect']]) {
+            for (const end of ['uri', 'js']) {
+                const off = [];
+                let read = 0;
+                let most = 0;
+                for (let levels = 0; levels <= bound + 8; levels += 1) {
+                    const expected = levels <= bound;
+                    const s = await call('r12bGraph', fanSpec(levels, width, { end, form }));
+                    most = Math.max(most, s.jsCounts.expanded, s.readCounts.expanded);
+                    const agrees = (s.js === 'SAFE') === expected
+                        && (s.readability === 'READABLE') === expected
+                        && s.extract === (expected ? 'READY' : UNSCAN)
+                        && s.jsCounts.expanded <= 2 * (levels + 1)
+                        && s.readCounts.expanded <= 2 * (levels + 1);
+                    if (expected && agrees) read += 1;
+                    if (!agrees) off.push(`${levels}:${JSON.stringify(s)}`);
+                }
+                check(`sweep: fan-out ${width} (${form} lists) ending in ${end === 'js' ? 'a script' : 'a URI'}, 0..${bound + 8} levels — `
+                    + `both readers and Extract agree, the bound is ${bound} hops inclusive, and there are no more than twice as many reads as actions`,
+                    off.length === 0 && read === bound + 1,
+                    off.length === 0 ? `${read} lengths read, at most ${most} expansions` : off.slice(0, 1).join(' | ').slice(0, 300));
+            }
+        }
+
+        // ---- shared actions that are not fan-out; and the two orders ---------------
+        for (const [fixture, accepted, title] of [
+            ['r12b-d-diamond', true, 'a diamond'],
+            ['r12b-d-diamond-js', true, 'a diamond ending in a script'],
+            ['r12b-d-ladder-16', true, `sixteen diamonds in series (${bound} hops, 65536 paths)`],
+            ['r12b-d-ladder-16-js', true, 'the same, ending in a script'],
+            ['r12b-d-ladder-17', false, `seventeen diamonds in series (${bound + 2} hops)`],
+            ['r12b-o-shallow-first-ok', true, `a shared action reached first by the short route, then the long one — ${bound} hops`],
+            ['r12b-o-deep-first-ok', true, `the same with the long route listed first — ${bound} hops`],
+            ['r12b-o-shallow-first-over', false, `a shared action reached first by the short route, then the long one — ${bound + 1} hops`],
+            ['r12b-o-deep-first-over', false, `the same with the long route listed first — ${bound + 1} hops`],
+        ]) {
+            const r = await call('r12bFile', fixture);
+            const read = accepted
+                ? r.js === 'SAFE' && r.readability === 'READABLE' && r.extract === 'READY'
+                : r.js === 'UNSCANNABLE' && r.readability === UNSCAN && r.extract === UNSCAN;
+            check(`${fixture}: ${title} is ${accepted ? 'read to the end' : 'refused'} by both readers`,
+                read, `js=${r.js} readability=${r.readability} extract=${r.extract}`);
+            check(`${fixture}: and neither reader does more than a small multiple of the work its actions need`,
+                r.jsCounts.expanded <= 160 && r.readCounts.expanded <= 160,
+                `javascript=${r.jsCounts.expanded} destinations=${r.readCounts.expanded}`);
+        }
+        {
+            const [a, b] = [await call('r12bFile', 'r12b-o-shallow-first-over'), await call('r12bFile', 'r12b-o-deep-first-over')];
+            const [c, d] = [await call('r12bFile', 'r12b-o-shallow-first-ok'), await call('r12bFile', 'r12b-o-deep-first-ok')];
+            check('order: the same graph refuses in both orders when its long route does not fit, and accepts in both when it does',
+                a.js === b.js && a.readability === b.readability && a.extract === b.extract
+                && c.js === d.js && c.readability === d.readability && c.extract === d.extract
+                && a.js === 'UNSCANNABLE' && c.js === 'SAFE',
+                `over: ${a.js}/${b.js} ok: ${c.js}/${d.js}`);
+            // The reading that has to happen: an action met at depth 1 and again at depth 29
+            // is read again at 29, because what is below it may not fit from there. The
+            // shallow-first order is the one that has to; the deep-first one has read the
+            // deepest already and skips the shallow arrival.
+            check('order: an action reached again, deeper, is read again — the shallow-first order does more reading than the deep-first one',
+                c.jsCounts.expanded > d.jsCounts.expanded && c.readCounts.expanded > d.readCounts.expanded,
+                `javascript ${c.jsCounts.expanded} > ${d.jsCounts.expanded}, destinations ${c.readCounts.expanded} > ${d.readCounts.expanded}`);
+        }
+
+        // ---- cycles: refused, and refused for being cycles -----------------------
+        for (const [fixture, title] of [
+            ['r12b-c-fan-cycle', 'a ten-action fan-out chain whose last action names the first'],
+            ['r12b-c-mutual', 'two actions that each name the other twice'],
+            ['r12b-c-list-cycle', 'an indirect list whose members are direct dictionaries that name the list'],
+        ]) {
+            const r = await call('r12bFile', fixture);
+            check(`${fixture}: ${title} is refused by both readers`,
+                r.js === 'UNSCANNABLE' && r.readability === UNSCAN && r.extract === UNSCAN,
+                `js=${r.js} readability=${r.readability} extract=${r.extract}`);
+            check(`${fixture}: and it is refused as a cycle, in both, and in a handful of reads`,
+                r.jsDetail.join(' ').includes('cyclic') && r.readDetail.join(' ').includes('cyclic')
+                && r.jsCounts.expanded <= 12 && r.readCounts.expanded <= 12,
+                `${r.jsDetail.join(' | ').slice(0, 60)} :: ${r.readDetail.join(' | ').slice(0, 60)} (${r.jsCounts.expanded}/${r.readCounts.expanded} reads)`);
+        }
+
+        // ---- the semantics do not move -----------------------------------------
+        for (const [fixture, marker, title] of [
+            ['r12b-f3-fan2-32-js', 'M6R12B_F3', `a script ${bound} levels down a fan-out`],
+            ['r12b-d-diamond-js', 'M6R12B_D', 'a script at the end of a diamond'],
+            ['r12b-d-ladder-16-js', 'M6R12B_L16', 'a script at the end of sixteen diamonds'],
+        ]) {
+            const e = await call('r9Extract', fixture, [0], [{ x: 100, y: 100 }], [marker]);
+            probe(`${fixture}: the source really holds the script`, e.sourceMarkers[marker] === true);
+            check(`${fixture}: Extract removes ${title}, and draws what it drew`,
+                e.run === 'READY' && e.markers[marker] === false && e.independent.javascript === 0
+                && JSON.stringify(e.after) === JSON.stringify(e.before),
+                `run=${e.run} javascript=${e.independent?.javascript}`);
+            const m = await call('r12Merge', [fixture, 'merge-b'], [marker]);
+            check(`${fixture}: and so does Merge, beside a clean source`,
+                m.run === 'READY' && m.pages === partnerPages + 1 && m.markers[marker] === false
+                && m.independent.javascript === 0, `run=${m.run} pages=${m.pages}`);
+        }
+        {
+            const e = await call('r9Extract', 'r12b-f4-fan2-16-goto', [0], [{ x: 100, y: 100 }], []);
+            check('r12b-f4-fan2-16-goto: a link to a page at the end of a fan-out is dropped once, and the copy holds no page it was not asked for',
+                e.run === 'READY' && e.independent.orphanPages === 0 && e.independent.strayPageRefs === 0
+                && e.losses.filter((k) => k === 'internal-links').length === 1
+                && JSON.stringify(e.after) === JSON.stringify(e.before),
+                `run=${e.run} losses=${e.losses.join(',')}`);
+            // Sharing what has been read must not merge what is lost: two annotations that name
+            // one action are two links, each a loss on its own annotation.
+            const two = await call('r9Extract', 'r12b-s-two-roots-goto', [0], null, []);
+            check('r12b-s-two-roots-goto: one action reached from two annotations is a loss on each, not one loss for both',
+                two.run === 'READY' && two.losses.filter((k) => k === 'internal-links').length === 2,
+                `run=${two.run} losses=${two.losses.join(',')}`);
+        }
+        for (const fixture of ['r12b-f3-fan2-32', 'r12b-f4-fan3-16', 'r12b-d-ladder-16']) {
+            const m = await call('r12Merge', [fixture, 'merge-b'], []);
+            check(`${fixture}: Merge accepts it at intake and writes both sources`,
+                m.intake.every((i) => i.result === 'ACCEPTED') && m.run === 'READY' && m.pages === partnerPages + 1,
+                `intake=${m.intake.map((i) => i.result).join(',')} run=${m.run} pages=${m.pages}`);
+        }
+        for (const fixture of ['r12b-f10-fan2-33', 'r12b-c-fan-cycle', 'r12b-c-list-cycle', 'r12b-d-ladder-17', 'r12b-o-deep-first-over']) {
+            const m = await call('r12Merge', [fixture, 'merge-b'], []);
+            check(`${fixture}: Merge excludes it at intake by name, and writes the other source`,
+                m.intake.find((i) => i.id === fixture)?.result === UNSCAN && m.run === 'READY'
+                && m.order.join(',') === 'merge-b' && m.pages === partnerPages && m.first.requires.length === 0,
+                `intake=${m.intake.find((i) => i.id === fixture)?.result} run=${m.run} pages=${m.pages}`);
+        }
+
+        // ---- an independent reference ---------------------------------------
+        //
+        // The verdict is a property of the graph: refused if a cycle can be reached, or a
+        // path of more than `bound` hops, or — for the JavaScript reader, which asks
+        // more of a member — a member that is not an action. Written here, from the
+        // definition, with no walker in it, and asked of graphs of every shape a
+        // seeded generator makes: fan-out, shared, shortcut, cyclic, duplicated, both
+        // orders, direct and indirect lists, a member that is a number or names nothing.
+        {
+            const prng = (seed) => () => {
+                seed = (seed + 0x6D2B79F5) | 0;
+                let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+            const rnd = prng(20260925);
+            const int = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+            const chance = (p) => rnd() < p;
+            const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
+            const makeGraph = () => {
+                const family = pick(['random', 'shortcut', 'shortcut', 'dup', 'fan', 'fan', 'cyclic']);
+                const n = family === 'shortcut' ? int(28, 40) : family === 'fan' ? int(4, 38) : family === 'dup' ? int(6, 20) : int(3, 14);
+                const nodes = [];
+                for (let i = 0; i < n; i += 1) {
+                    const kind = chance(0.12) ? 'js' : chance(0.3) ? 'goto' : 'uri';
+                    let next = [];
+                    if (i < n - 1 || family === 'cyclic') {
+                        if (family === 'shortcut') {
+                            next = [i + 1];
+                            if (chance(0.2)) {
+                                const far = int(i + 2, Math.min(n - 1, i + 12));
+                                if (far > i + 1 && far < n) next = chance(0.5) ? [far, i + 1] : [i + 1, far];
+                            }
+                        } else if (family === 'fan') {
+                            next = Array(int(1, 5)).fill(Math.min(n - 1, i + 1));
+                        } else if (family === 'dup') {
+                            const t = Math.min(n - 1, i + 1 + (chance(0.3) ? 1 : 0));
+                            next = Array(int(1, 4)).fill(t);
+                            if (chance(0.3)) next.push(Math.min(n - 1, i + 2));
+                        } else if (family === 'cyclic') {
+                            next = [chance(0.4) ? int(0, n - 1) : Math.min(n - 1, i + 1)];
+                            if (chance(0.3)) next.push(int(0, n - 1));
+                        } else {
+                            for (let m = int(0, 3); m > 0; m -= 1) next.push(chance(0.85) ? Math.min(n - 1, i + int(1, 3)) : int(0, n - 1));
+                        }
+                    }
+                    nodes.push({ kind, next, form: pick(['single', 'inline', 'inline', 'indirect']), junk: chance(0.04) ? pick(['bad', 'dangling']) : null });
+                }
+                return { family, roots: chance(0.25) ? [0, int(0, n - 1)] : [0], nodes };
+            };
+            /** Refused if a cycle is reachable or a path has more than `bound` hops. */
+            const reference = (g) => {
+                const state = new Map();               // 1 = on the path, 2 = done
+                const height = new Map();
+                let cyclic = false;
+                const visit = (v) => {
+                    if (state.get(v) === 2) return height.get(v);
+                    if (state.get(v) === 1) { cyclic = true; return 0; }
+                    state.set(v, 1);
+                    let h = 0;
+                    for (const w of g.nodes[v].next) h = Math.max(h, 1 + visit(w));
+                    state.set(v, 2);
+                    height.set(v, h);
+                    return h;
+                };
+                let longest = 0;
+                const reached = new Set();
+                for (const r of g.roots) longest = Math.max(longest, visit(r));
+                const walk = (v) => { if (reached.has(v)) return; reached.add(v); g.nodes[v].next.forEach(walk); };
+                g.roots.forEach(walk);
+                const junk = [...reached].some((v) => g.nodes[v].junk !== null);
+                return { readability: cyclic || longest > bound, js: cyclic || longest > bound || junk, reads: 2 * (reached.size + 1) * (bound + 1) };
+            };
+            let agree = 0;
+            let refusedGraphs = 0;
+            let cyclicGraphs = 0;
+            let over = 0;
+            let biggest = 0;
+            const off = [];
+            const COUNT = 400;
+            for (let k = 0; k < COUNT; k += 1) {
+                const g = makeGraph();
+                const want = reference(g);
+                const got = await call('r12bGraph', g);
+                const ok = (got.js === 'UNSCANNABLE') === want.js
+                    && (got.readability === UNSCAN) === want.readability
+                    && got.extract === (want.js || want.readability ? UNSCAN : 'READY')
+                    && got.jsCounts.expanded <= want.reads && got.readCounts.expanded <= want.reads;
+                biggest = Math.max(biggest, got.jsCounts.expanded, got.readCounts.expanded);
+                if (want.js) refusedGraphs += 1;
+                if (g.family === 'cyclic' && want.js) cyclicGraphs += 1;
+                if (ok) agree += 1;
+                else if (off.length < 2) off.push(JSON.stringify({ family: g.family, want, got }).slice(0, 320));
+            }
+            over = refusedGraphs;
+            check(`reference: ${COUNT} seeded graphs — fan-out, shared, shortcut, cyclic, duplicated, both orders — every verdict of both readers and of Extract is the one the definition gives, and no walk reads an action more than ${bound + 1} times`,
+                agree === COUNT, agree === COUNT ? `${agree} agree, at most ${biggest} expansions` : off.join(' | '));
+            probe('reference: the generator is not vacuous — it makes graphs the definition accepts, graphs it refuses, and cyclic ones',
+                refusedGraphs >= 60 && refusedGraphs <= COUNT - 60 && cyclicGraphs >= 10, `refused=${over} of ${COUNT}, cyclic refused=${cyclicGraphs}`);
+        }
+    }
+
     // ---- 34. local only ------------------------------------------------------
     console.log('\n=== 34. local only ===');
     check('no request left the machine', external.length === 0, external.join(', '));
