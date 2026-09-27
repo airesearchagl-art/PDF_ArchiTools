@@ -10,7 +10,12 @@
  * depended on evaluation order.
  *
  * Every production PDF.js entry point is covered here: the annotator, the
- * comparator, split/merge's extract and merge, and the processor's monochrome.
+ * comparator, split/merge's extract, and the processor's monochrome.
+ *
+ * split/merge's **merge** was a fifth until M6. It now reads page counts
+ * through pdf-lib during intake, inside a disposable Worker, so it opens no
+ * PDF.js document. It is still driven below and asserted to fetch nothing,
+ * for the same reason 最適化 is.
  *
  * 最適化 used to be a fifth: it rasterised every page through PDF.js. Since M5
  * it is a lossless re-save that never renders, so it fetches no worker at all.
@@ -269,13 +274,20 @@ try {
     await settle(2500);
 
     const merged = await page.evaluate(() => document.body.textContent ?? '');
-    // The page counts of the two documents are what the merge path reads
-    // through PDF.js, so seeing them is seeing the worker having run.
+    // The page counts still have to appear — that is the merge path having read
+    // both documents — but since M6 it reads them through **pdf-lib**, during
+    // intake, inside the disposable Worker. It no longer opens a PDF.js document
+    // at all.
     check('both documents were read and their page counts shown',
         /3\s*(ページ|page)/i.test(merged) && /2\s*(ページ|page)/i.test(merged),
         merged.includes('3') && merged.includes('2') ? 'page counts present' : 'NOT FOUND');
-    check('and the worker came from this app',
-        localWorkerCount() > before,
+    // Treated the way 最適化 is treated below, and for the same reason: a path
+    // that stopped using PDF.js is kept in the list and asserted to fetch
+    // nothing, rather than quietly dropped. Dropping it would leave "every
+    // PDF.js path is local" resting on a list that no longer says what the app
+    // does — and would hide a future change that started fetching one again.
+    check('and merge fetches no PDF.js worker at all, because it no longer uses one',
+        localWorkerCount() === before,
         `${localWorkerCount() - before} request(s) to ${WORKER}`);
 
     // ---- the comparator ---------------------------------------------------
@@ -404,8 +416,8 @@ try {
         } catch { return false; }
     };
     const external = requests.filter(isExternal);
-    check('every worker request was same-origin', localWorkerCount() >= 4,
-        `${localWorkerCount()} request(s) to ${WORKER} across four PDF.js paths`);
+    check('every worker request was same-origin', localWorkerCount() >= 3,
+        `${localWorkerCount()} request(s) to ${WORKER} across three PDF.js paths`);
     probe('not one went to unpkg', unpkgCount() === 0,
         unpkgCount() === 0 ? '0 requests' : `${unpkgCount()} requests`);
     probe('nor anywhere else off-origin', external.length === 0,
@@ -427,7 +439,9 @@ try {
     for (const [file, calls] of [
         ['src/components/PdfViewer.tsx', 1],
         ['src/components/PdfComparator.tsx', 1],
-        ['src/components/PdfSplitMerge.tsx', 2],
+        // One since M6, not two: extract still renders page thumbnails through
+        // PDF.js, and merge reads its page counts through pdf-lib instead.
+        ['src/components/PdfSplitMerge.tsx', 1],
         // The Processor's PDF.js use moved here when the orchestration was
         // split out; `pdf-processor.ts` is now a facade that renders nothing.
         ['src/utils/processor/runners.ts', 1],

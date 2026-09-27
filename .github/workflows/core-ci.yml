@@ -106,6 +106,19 @@ jobs:
           node scripts/make-annotator-save-fixtures.mjs
           node scripts/make-comparator-fixtures.mjs
           node scripts/make-processor-fixtures.mjs
+          node scripts/make-m6-split-merge-fixtures.mjs
+          node scripts/make-m6-remediation-fixtures.mjs
+          node scripts/make-m6-round3-fixtures.mjs
+          node scripts/make-m6-round4-fixtures.mjs
+          node scripts/make-m6-round5-fixtures.mjs
+          node scripts/make-m6-round6-fixtures.mjs
+          node scripts/make-m6-round7-fixtures.mjs
+          node scripts/make-m6-round8-fixtures.mjs
+          node scripts/make-m6-round9-fixtures.mjs
+          node scripts/make-m6-round10-fixtures.mjs
+          node scripts/make-m6-round11-fixtures.mjs
+          node scripts/make-m6-round12-fixtures.mjs
+          node scripts/make-m6-round12b-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -180,6 +193,28 @@ jobs:
       # visible only by driving the built app.
       - name: Processor UI ownership
         run: node scripts/smoke-processor-ui.mjs
+
+      # Split / Merge, whose old contract was "it produced bytes, so it worked".
+      # Most of what this asserts is that the tool refuses, by name, before it
+      # has touched anything: a pre-parse load boundary that stops a decode bomb
+      # without materialising it, a structural cap checked before the copy, an
+      # applied signature, XFA, a form outside the proven subset, optional
+      # content behind a soft mask. Where it does produce bytes, the bytes are
+      # reopened and counted — the defect this milestone exists for is an
+      # artifact that looked right and carried pages nobody selected.
+      - name: Split / Merge reliability
+        run: node scripts/smoke-split-merge-reliability.mjs
+
+      # The module gate proves the contract; this proves the wiring. Every
+      # finding it exists for was only visible in the built app: a slow upload
+      # finishing after a fast one so the name and the content came from
+      # different files, a confirmation that could not name the attachment it
+      # was asking about, PDF.js parsing input the Load Boundary had not
+      # passed, a safety notice the footer covered, a confirmation list
+      # truncated above the loss it was gating, and an intake that dropped
+      # files the person had picked when it was superseded mid-flight.
+      - name: Split / Merge UI
+        run: node scripts/smoke-split-merge-ui.mjs
 
       # Every PDF.js path in the app, not just the Annotator's: which worker a
       # feature fetches is a property of the built bundle and of module

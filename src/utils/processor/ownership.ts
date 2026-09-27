@@ -17,9 +17,9 @@
 import { PLAN_STATUS, ProcessorError, snapshotKey } from './contracts';
 import type { RunSnapshot } from './contracts';
 
-export interface RunToken {
+export interface RunToken<S = RunSnapshot> {
     readonly generation: number;
-    readonly snapshot: RunSnapshot;
+    readonly snapshot: S;
     readonly key: string;
     /** False as soon as anything relevant changed, or the component went away. */
     isCurrent(): boolean;
@@ -28,21 +28,51 @@ export interface RunToken {
 }
 
 /**
- * One owner per Processor instance.
+ * How a superseded run is reported. One per owner, so a feature can raise its
+ * own typed failure without this module knowing about it.
+ */
+export type CancellationFactory = () => Error;
+
+const processorCancellation: CancellationFactory = () => new ProcessorError(
+    '設定またはファイルが変更されたため、この処理は中止しました。',
+    PLAN_STATUS.CANCELLED,
+);
+
+/**
+ * One owner per feature instance.
  *
  * Generations are monotonic, so a token from an earlier run can never become
  * current again — which is what makes "check again before publishing" a real
  * guarantee rather than a hope about timing.
+ *
+ * **Generalized for M6-H13**, which adopted extending this beyond the Processor
+ * rather than writing a second copy of it. The two things that were Processor-
+ * specific are now injected: how a snapshot becomes a key, and which typed error
+ * a superseded run raises. Both default to exactly what the Processor passed
+ * implicitly before, so `new RunOwnership()` in `PdfTools.tsx` keeps its meaning
+ * and its behaviour unchanged.
  */
-export class RunOwnership {
+export class RunOwnership<S = RunSnapshot> {
     private generation = 0;
 
     private currentKey: string | null = null;
 
+    private readonly keyOf: (snapshot: S) => string;
+
+    private readonly cancellation: CancellationFactory;
+
+    constructor(
+        keyOf: (snapshot: S) => string = snapshotKey as unknown as (snapshot: S) => string,
+        cancellation: CancellationFactory = processorCancellation,
+    ) {
+        this.keyOf = keyOf;
+        this.cancellation = cancellation;
+    }
+
     /** Start a run and take a token for it. Any earlier token is now stale. */
-    begin(snapshot: RunSnapshot): RunToken {
+    begin(snapshot: S): RunToken<S> {
         this.generation += 1;
-        this.currentKey = snapshotKey(snapshot);
+        this.currentKey = this.keyOf(snapshot);
         const mine = this.generation;
         const key = this.currentKey;
         // Arrow functions capture `this` lexically, so the token stays bound to
@@ -54,10 +84,7 @@ export class RunOwnership {
             isCurrent: () => this.generation === mine && this.currentKey === key,
             assertCurrent: () => {
                 if (this.generation !== mine || this.currentKey !== key) {
-                    throw new ProcessorError(
-                        '設定またはファイルが変更されたため、この処理は中止しました。',
-                        PLAN_STATUS.CANCELLED,
-                    );
+                    throw this.cancellation();
                 }
             },
         };
@@ -73,7 +100,7 @@ export class RunOwnership {
     }
 
     /** Whether the snapshot a confirmation was given for is still the live one. */
-    matches(snapshot: RunSnapshot): boolean {
-        return this.currentKey === snapshotKey(snapshot);
+    matches(snapshot: S): boolean {
+        return this.currentKey === this.keyOf(snapshot);
     }
 }
