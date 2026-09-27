@@ -171,17 +171,22 @@ try {
         objstmBomb.verdict === 'REFUSE' && objstmBomb.code === 'OBJECT_STREAM_OBJECT_CAP',
         `${objstmBomb.code}`);
 
-    // B4 adopted v1 boundary: maxXrefEntries = 250,000. The declared-count
-    // check is the only thing under test — whatever the loader does once it
-    // tries to decode a bomb's deliberately tiny payload is unrelated, so the
-    // at/under assertion only requires this specific cap did not fire.
-    const xref249999 = await call('boundary', 'xref-entry-249999');
+    // B4 adopted v1 boundary: maxXrefEntries = 250,000. Built in memory (see
+    // `xrefEntryBombBytes` in the harness) rather than as a written fixture:
+    // at and under the cap this declared-count check does not fire, and the
+    // bytes are not a real loadable document, so they must never enter the
+    // "everything" sweep below, which walks every file in test-fixtures
+    // through the real intake pipeline. The declared-count check is the only
+    // thing under test here — whatever the loader would do next with a real
+    // decode is unrelated, so the at/under assertion only requires this
+    // specific cap did not fire.
+    const xref249999 = await call('xrefEntryBoundary', 249_999);
     check('249,999 declared xref entries does not hit the cap',
         xref249999.code !== 'XREF_ENTRY_CAP', `${xref249999.verdict} ${xref249999.code ?? ''}`);
-    const xref250000 = await call('boundary', 'xref-entry-250000');
+    const xref250000 = await call('xrefEntryBoundary', 250_000);
     check('250,000 declared xref entries, exactly at the cap, does not hit it',
         xref250000.code !== 'XREF_ENTRY_CAP', `${xref250000.verdict} ${xref250000.code ?? ''}`);
-    const xref250001 = await call('boundary', 'xref-entry-250001');
+    const xref250001 = await call('xrefEntryBoundary', 250_001);
     check('250,001 declared xref entries is refused as XREF_ENTRY_CAP',
         xref250001.verdict === 'REFUSE' && xref250001.code === 'XREF_ENTRY_CAP',
         `${xref250001.verdict} ${xref250001.code ?? ''}`);

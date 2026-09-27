@@ -508,14 +508,19 @@ async function main() {
     write('decode-bomb-large', decodeBomb(4_000_000));
     write('xref-entry-bomb', xrefEntryBomb(5_000_000));
     write('objstm-object-bomb', objectStreamObjectBomb(500_000));
-    // B4 adopted v1 boundary: maxXrefEntries = 250,000, at the cap and one
-    // either side. The declared /Size is the only thing these three probe —
-    // whatever happens once the loader tries to decode the (deliberately tiny)
-    // stream content is not this cap's concern.
-    write('xref-entry-249999', xrefEntryBomb(249_999));
-    write('xref-entry-250000', xrefEntryBomb(250_000));
-    write('xref-entry-250001', xrefEntryBomb(250_001));
-    // B4 adopted v1 boundary: maxObjectsPerObjectStream = 10,000, likewise.
+    // The B4 maxXrefEntries boundary (249,999 / 250,000 / 250,001) is NOT
+    // written here. At and under the adopted cap, this declared-count check
+    // does not fire, and the fixture is not a real loadable document (its
+    // trailer's /Root points at the XRef stream dict, not a Catalog) — every
+    // other file in this directory either loads for real or is refused before
+    // full parsing, and the "everything" sweep in the reliability gate walks
+    // every file here through the real intake pipeline. Un-refused-but-fake
+    // bytes crash pdf-lib's page-tree computation there. The harness builds
+    // these three byte sequences in memory instead (mirroring xrefEntryBomb),
+    // and calls the Load Boundary directly, off this directory.
+    // B4 adopted v1 boundary: maxObjectsPerObjectStream = 10,000. These three
+    // all refuse before full parsing (MALFORMED_SYNTAX under/at the cap,
+    // OBJECT_STREAM_OBJECT_CAP over it), so they are safe to keep as files.
     write('objstm-object-9999', objectStreamObjectBomb(9_999));
     write('objstm-object-10000', objectStreamObjectBomb(10_000));
     write('objstm-object-10001', objectStreamObjectBomb(10_001));

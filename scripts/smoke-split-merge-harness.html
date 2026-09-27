@@ -118,6 +118,35 @@ async function bytesOf(name) {
 /** Every value that crosses back to the driver has to survive JSON. */
 const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
 
+/**
+ * Builds an xref-entry-bomb's bytes in memory, for the B4 `maxXrefEntries`
+ * boundary — mirrors `xrefEntryBomb()` in `make-m6-split-merge-fixtures.mjs`.
+ *
+ * At and under the adopted cap, the declared-count check does not fire, and
+ * this is not a real loadable document (its trailer's /Root points at the
+ * XRef stream dict, not a Catalog). Every fixture the `test-fixtures`
+ * directory holds either loads for real or is refused before full parsing —
+ * the "everything" sweep further down walks every file there through the
+ * real intake pipeline, and un-refused-but-fake bytes crash pdf-lib's
+ * page-tree computation. So this boundary is checked directly, off that
+ * directory, rather than through a written fixture. `XREF_BOMB_PAYLOAD` is
+ * `pako.deflate(new Uint8Array(12))`, precomputed (it is fixed and
+ * deterministic) so the harness needs no `pako` import of its own.
+ */
+const XREF_BOMB_PAYLOAD = new Uint8Array([120, 156, 99, 96, 64, 0, 0, 0, 12, 0, 1]);
+function xrefEntryBombBytes(entries) {
+    const enc = new TextEncoder();
+    const head = enc.encode('%PDF-1.7\n1 0 obj\n'
+        + `<< /Type /XRef /Size ${entries} /W [1 2 1] /Length ${XREF_BOMB_PAYLOAD.length} /Filter /FlateDecode >>\nstream\n`);
+    const tail = enc.encode('\nendstream\nendobj\n'
+        + 'trailer\n<< /Size 2 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n');
+    const out = new Uint8Array(head.length + XREF_BOMB_PAYLOAD.length + tail.length);
+    out.set(head, 0);
+    out.set(XREF_BOMB_PAYLOAD, head.length);
+    out.set(tail, head.length + XREF_BOMB_PAYLOAD.length);
+    return out;
+}
+
 window.__m6 = {
     constants: () => plainly({
         status: M6_STATUS,
@@ -139,6 +168,15 @@ window.__m6 = {
             reason: verdict.reason ?? null,
             stats: verdict.stats,
         });
+    },
+
+    /**
+     * The B4 `maxXrefEntries` boundary, on bytes built in memory (see
+     * `xrefEntryBombBytes` above) — never written to `test-fixtures`.
+     */
+    xrefEntryBoundary: (entries) => {
+        const verdict = inspectLoadBoundary(xrefEntryBombBytes(entries), ADOPTED_POLICY.loadBoundary);
+        return plainly({ verdict: verdict.verdict, code: verdict.code ?? null });
     },
 
     /** Whether the policy validator rejects a limit that cannot refuse. */
