@@ -15,10 +15,10 @@
  * requires the Load Boundary verification again before M6's safety is treated as
  * holding (H11-B3-3, H11-B3-6).
  *
- * **Product limit values are provisional.** Blocker B4 — product load policy,
+ * **Product limit values are adopted v1.** Blocker B4 — product load policy,
  * real-drawing compatibility, and the post-load structural product caps — is
- * OPEN, and blocks Ready, merge, release and production enablement. It does not
- * block implementation. See `policy.ts`.
+ * CLOSED (Human decision, `B4_HUMAN_ADOPTED_V1`, 2026-09-27). These remain
+ * refusal ceilings, not supported-capacity promises. See `policy.ts`.
  */
 export {
     M6_STATUS,
@@ -57,10 +57,10 @@ export type {
 } from './contracts';
 
 export {
-    PROVISIONAL_POLICY,
-    PROVISIONAL_LOAD_BOUNDARY_LIMITS,
-    PROVISIONAL_STRUCTURAL_CAPS,
-    PROVISIONAL_MAX_OUTPUT_BYTES,
+    ADOPTED_POLICY,
+    ADOPTED_LOAD_BOUNDARY_LIMITS,
+    ADOPTED_STRUCTURAL_CAPS,
+    ADOPTED_MAX_OUTPUT_BYTES,
     MECHANISM_BOUNDS,
     policyFrom,
     assertEnforceablePolicy,

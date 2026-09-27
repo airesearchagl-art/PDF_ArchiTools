@@ -170,6 +170,81 @@ try {
     check('an object-stream object bomb is refused',
         objstmBomb.verdict === 'REFUSE' && objstmBomb.code === 'OBJECT_STREAM_OBJECT_CAP',
         `${objstmBomb.code}`);
+
+    // B4 adopted v1 boundary: maxXrefEntries = 250,000. The declared-count
+    // check is the only thing under test — whatever the loader does once it
+    // tries to decode a bomb's deliberately tiny payload is unrelated, so the
+    // at/under assertion only requires this specific cap did not fire.
+    const xref249999 = await call('boundary', 'xref-entry-249999');
+    check('249,999 declared xref entries does not hit the cap',
+        xref249999.code !== 'XREF_ENTRY_CAP', `${xref249999.verdict} ${xref249999.code ?? ''}`);
+    const xref250000 = await call('boundary', 'xref-entry-250000');
+    check('250,000 declared xref entries, exactly at the cap, does not hit it',
+        xref250000.code !== 'XREF_ENTRY_CAP', `${xref250000.verdict} ${xref250000.code ?? ''}`);
+    const xref250001 = await call('boundary', 'xref-entry-250001');
+    check('250,001 declared xref entries is refused as XREF_ENTRY_CAP',
+        xref250001.verdict === 'REFUSE' && xref250001.code === 'XREF_ENTRY_CAP',
+        `${xref250001.verdict} ${xref250001.code ?? ''}`);
+
+    // B4 adopted v1 boundary: maxObjectsPerObjectStream = 10,000, same shape.
+    const objstm9999 = await call('boundary', 'objstm-object-9999');
+    check('9,999 declared object-stream objects does not hit the cap',
+        objstm9999.code !== 'OBJECT_STREAM_OBJECT_CAP', `${objstm9999.verdict} ${objstm9999.code ?? ''}`);
+    const objstm10000 = await call('boundary', 'objstm-object-10000');
+    check('10,000 declared object-stream objects, exactly at the cap, does not hit it',
+        objstm10000.code !== 'OBJECT_STREAM_OBJECT_CAP', `${objstm10000.verdict} ${objstm10000.code ?? ''}`);
+    const objstm10001 = await call('boundary', 'objstm-object-10001');
+    check('10,001 declared object-stream objects is refused as OBJECT_STREAM_OBJECT_CAP',
+        objstm10001.verdict === 'REFUSE' && objstm10001.code === 'OBJECT_STREAM_OBJECT_CAP',
+        `${objstm10001.verdict} ${objstm10001.code ?? ''}`);
+
+    // B4 adopted v1 structural-cap boundaries, at the planner level: a
+    // synthetic StructuralPlan needs no PDF to reach an exact count or byte
+    // total, so these bind precisely to the adopted numbers.
+    for (const [label, term, atCap, overCap, cumulative] of [
+        ['maxCopiedObjects', 'destinationObjects', 250_000, 250_001, false],
+        ['maxCopierEntries', 'copierEntries', 2_000_000, 2_000_001, false],
+        ['maxDuplicatedStreamBytes', 'streamBytes', 512 * 1024 * 1024, 512 * 1024 * 1024 + 1, false],
+        ['maxSingleStreamBytes', 'maxStreamBytes', 128 * 1024 * 1024, 128 * 1024 * 1024 + 1, false],
+        ['maxCumulativeCopiedObjects', 'destinationObjects', 500_000, 500_001, true],
+        ['maxCumulativeStreamBytes', 'streamBytes', 1024 * 1024 * 1024, 1024 * 1024 * 1024 + 1, true],
+    ]) {
+        const atBreach = await call('structuralCapCheck', { [term]: atCap }, cumulative);
+        check(`${label}: exactly at the cap (${fmt(atCap)}) does not breach`,
+            atBreach === null, JSON.stringify(atBreach));
+        const overBreach = await call('structuralCapCheck', { [term]: overCap }, cumulative);
+        check(`${label}: one over the cap (${fmt(overCap)}) breaches`,
+            overBreach !== null && overBreach.cap === (cumulative
+                ? { destinationObjects: 500_000, streamBytes: 1024 * 1024 * 1024 }[term]
+                : { destinationObjects: 250_000, copierEntries: 2_000_000,
+                    streamBytes: 512 * 1024 * 1024, maxStreamBytes: 128 * 1024 * 1024 }[term]),
+            JSON.stringify(overBreach));
+    }
+
+    // B4 policy snapshot: the shipped numeric values are exactly the adopted
+    // ones, so a future edit to policy.ts trips this before it ships.
+    const lb = constants.policy.loadBoundary;
+    const sc = constants.policy.structural;
+    check('adopted Load Boundary limits match B4_HUMAN_ADOPTED_V1',
+        lb.maxInputBytes === 268435456
+            && lb.maxDecodedBytesPerStream === 134217728
+            && lb.maxDecodedBytesTotal === 268435456
+            && lb.maxDecodeStreams === 4096
+            && lb.maxXrefEntries === 250_000
+            && lb.maxObjectsPerObjectStream === 10_000
+            && lb.maxNestingDepth === 64,
+        JSON.stringify(lb));
+    check('adopted structural caps match B4_HUMAN_ADOPTED_V1',
+        sc.maxCopiedObjects === 250_000
+            && sc.maxDuplicatedStreamBytes === 536870912
+            && sc.maxSingleStreamBytes === 134217728
+            && sc.maxCopierEntries === 2_000_000
+            && sc.maxCumulativeCopiedObjects === 500_000
+            && sc.maxCumulativeStreamBytes === 1073741824,
+        JSON.stringify(sc));
+    check('adopted output ceiling is 256 MiB, independently owned from M5 (A7)',
+        constants.policy.output.maxOutputBytes === 268435456,
+        `${constants.policy.output.maxOutputBytes}`);
     const tooBig = await call('boundary', 'nav-4p', { maxInputBytes: 16 });
     check('the raw input ceiling refuses before anything is read',
         tooBig.verdict === 'REFUSE' && tooBig.code === 'INPUT_TOO_LARGE'
@@ -479,8 +554,8 @@ try {
     check('pako is 2.1.0, the version the bounded inflate evidence is bound to',
         pako === '2.1.0', String(pako));
     note('pako as pdf-lib resolves it', `${pakoUnderPdfLib} — unchanged by M6's direct dependency`);
-    check('the shipped policy is still marked provisional, pending B4',
-        constants.policy.provisional === true && constants.policy.origin === 'PROVISIONAL_PRE_B4',
+    check('the shipped policy is the adopted v1 policy, B4 closed',
+        constants.policy.provisional === false && constants.policy.origin === 'B4_HUMAN_ADOPTED_V1',
         `${constants.policy.origin}`);
 
     // ---- 13. BLK-1: artifact-wide JavaScript, measured independently --------

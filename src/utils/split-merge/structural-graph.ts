@@ -230,8 +230,9 @@ const formatMiB = (n: number): string => `${(n / (1024 * 1024)).toFixed(1)} MiB`
  * `copyPages`.
  *
  * H11-EXTRACT-3: exceeding a cap is a typed refusal raised **before** the copy
- * starts, not an error discovered during it. The caps themselves are provisional
- * until B4 closes; the check is not.
+ * starts, not an error discovered during it. The caps themselves are adopted
+ * v1 product policy (B4, CLOSED); the check has always been the mechanism, not
+ * the value.
  */
 export function checkStructuralCaps(
     plan: StructuralPlan,

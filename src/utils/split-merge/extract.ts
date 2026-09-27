@@ -43,7 +43,7 @@ import {
     UNSCANNABLE_ACTIONS_REASON_JA,
 } from './contracts';
 import { inspectLoadBoundary } from './load-boundary';
-import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
+import { assertEnforceablePolicy, ADOPTED_POLICY } from './policy';
 import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
 import {
@@ -156,7 +156,7 @@ export async function planExtract(
     sourceBytes: Uint8Array,
     options: ExtractOptions,
 ): Promise<ExtractPlan> {
-    const policy = options.policy ?? PROVISIONAL_POLICY;
+    const policy = options.policy ?? ADOPTED_POLICY;
     assertEnforceablePolicy(policy);
     const destinationPolicy = options.destinationPolicy ?? 'E2';
     // Source page order, always. The UI offers no reordering, and a person who
@@ -674,7 +674,7 @@ export async function runExtract(
     sourceBytes: Uint8Array,
     options: ExtractOptions,
 ): Promise<ExtractResult> {
-    const policy = options.policy ?? PROVISIONAL_POLICY;
+    const policy = options.policy ?? ADOPTED_POLICY;
     const outputName = extractOutputName(options.sourceName, options.selection);
     const stillOurs = options.stillOurs ?? (() => true);
 

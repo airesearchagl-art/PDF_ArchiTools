@@ -508,6 +508,17 @@ async function main() {
     write('decode-bomb-large', decodeBomb(4_000_000));
     write('xref-entry-bomb', xrefEntryBomb(5_000_000));
     write('objstm-object-bomb', objectStreamObjectBomb(500_000));
+    // B4 adopted v1 boundary: maxXrefEntries = 250,000, at the cap and one
+    // either side. The declared /Size is the only thing these three probe —
+    // whatever happens once the loader tries to decode the (deliberately tiny)
+    // stream content is not this cap's concern.
+    write('xref-entry-249999', xrefEntryBomb(249_999));
+    write('xref-entry-250000', xrefEntryBomb(250_000));
+    write('xref-entry-250001', xrefEntryBomb(250_001));
+    // B4 adopted v1 boundary: maxObjectsPerObjectStream = 10,000, likewise.
+    write('objstm-object-9999', objectStreamObjectBomb(9_999));
+    write('objstm-object-10000', objectStreamObjectBomb(10_000));
+    write('objstm-object-10001', objectStreamObjectBomb(10_001));
     write('ambiguous-name-escape', ambiguousNameEscape());
     write('indirect-type-on-stream', indirectTypeOnStream());
     write('unexpected-bytes', unexpectedBytes());

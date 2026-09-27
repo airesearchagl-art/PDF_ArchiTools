@@ -48,7 +48,7 @@ import {
     UNSCANNABLE_ACTIONS_REASON_JA,
 } from './contracts';
 import { inspectLoadBoundary } from './load-boundary';
-import { assertEnforceablePolicy, PROVISIONAL_POLICY } from './policy';
+import { assertEnforceablePolicy, ADOPTED_POLICY } from './policy';
 import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
 import {
@@ -417,7 +417,7 @@ export async function intakeSources(
     inputs: MergeInput[],
     options: MergeOptions = {},
 ): Promise<IntakeRecord[]> {
-    const policy = options.policy ?? PROVISIONAL_POLICY;
+    const policy = options.policy ?? ADOPTED_POLICY;
     assertEnforceablePolicy(policy);
     const stillOurs = options.stillOurs ?? (() => true);
     const records: IntakeRecord[] = [];
@@ -629,7 +629,7 @@ export async function runMerge(
     plan: MergePlan,
     options: MergeOptions = {},
 ): Promise<MergeResult> {
-    const policy = options.policy ?? PROVISIONAL_POLICY;
+    const policy = options.policy ?? ADOPTED_POLICY;
     assertEnforceablePolicy(policy);
     const stillOurs = options.stillOurs ?? (() => true);
     const byId = new Map(inputs.map((i) => [i.id, i]));

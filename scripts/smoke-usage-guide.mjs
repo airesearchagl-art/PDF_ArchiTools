@@ -369,7 +369,7 @@ try {
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
     check('and the newest entries are the ones just added',
-        historyDates[0] === '20260908',
+        historyDates[0] === '20260927',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
     check('the Word entry is still there below them',
         historyText.includes('Word') && historyText.includes('1.5.0'));

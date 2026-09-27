@@ -1,35 +1,38 @@
 /**
- * The limits M6 enforces — and the reason every number in this file is
- * provisional.
+ * The limits M6 enforces — adopted as v1 product policy at the B4 Human Gate
+ * (2026-09-27, `B4_HUMAN_ADOPTED_V1`).
  *
- * Two different things are written down here, and conflating them is exactly
- * what the Human Gate forbade:
+ * Two different things are written down here:
  *
  *   the MECHANISM   where a limit is checked, what happens when it is exceeded,
  *                   and that exceeding it is a typed refusal raised before the
  *                   work rather than an error after it. ADOPTED
  *                   (H11-B3-1, H11-EXTRACT-3, H11-MERGE-4).
  *
- *   the VALUES      what each limit actually is. NOT ADOPTED. They are product
- *                   choices, they are decided at blocker B4, and B4 is OPEN.
+ *   the VALUES      what each limit actually is. ADOPTED at blocker B4. B4 was
+ *                   OPEN while these were unmeasured guesses; the Human closed
+ *                   it against the 14-document B4 corpus evidence.
  *
- * So the values below are `PROVISIONAL_POLICY`, they are named that everywhere
- * they are used, and `policy.provisional` is true. Nothing in this codebase may
- * treat them as final, and B4's `forbiddenBeforeClosure` puts Ready, merge,
- * release and production enablement behind closing it.
+ * So the values below are `ADOPTED_POLICY`, they are named that everywhere
+ * they are used, and `policy.provisional` is false. They are refusal
+ * ceilings, not supported-capacity promises: the 14-document corpus is
+ * sufficient to adopt these as conservative v1 safety guardrails, but it is
+ * not a statistical sample of architectural PDFs, a capacity certification,
+ * or evidence that documents near these limits will work acceptably.
  *
- * Three rules the values obey, from the record:
+ * Three rules the values still obey, from the record:
  *
  *   - They are NOT the research test values promoted to product defaults
- *     (H11-B3-2). Where a provisional value coincides with one, it is because
- *     the same order of magnitude is the only defensible starting point, and it
- *     is still labelled provisional rather than adopted.
+ *     (H11-B3-2). Where an adopted value coincides with one, it is because
+ *     the same order of magnitude is the only defensible starting point.
  *   - They are NOT derived from browser heap sizes, page counts, file sizes, or
  *     M5's 512 MiB / 1 GiB / 2 GiB memory presets. Those presets stay
- *     DO NOT ADOPT (H11-MERGE-5, H11-EXTRACT-3).
+ *     DO NOT ADOPT (H11-MERGE-5, H11-EXTRACT-3) — M6 owns its output ceiling
+ *     independently of M5 (A7, CLOSED: independent ownership, same v1 value).
  *   - They are injectable. A gate drives its own limits so a fixture can reach
- *     a boundary case without the product shipping a fixture's number, and B4
- *     can replace the whole policy without touching a check.
+ *     a boundary case without the product shipping a fixture's number, and any
+ *     future policy revision can replace the whole policy without touching a
+ *     check.
  */
 
 /**
@@ -96,9 +99,11 @@ export interface M6Policy {
     structural: StructuralCaps;
     output: OutputCeiling;
     /**
-     * True for every policy this repository ships today. It stays true until
-     * B4 closes and a Human adopts values. Code may read it; code may not
-     * branch on it to relax a check.
+     * Whether this exact policy object is the Human-adopted v1 default. False
+     * on `ADOPTED_POLICY`, the value this repository ships. An override built
+     * by `policyFrom()` keeps it true, because a gate's per-test values were
+     * never an adoption. Code may read it; code may not branch on it to relax
+     * a check.
      */
     provisional: boolean;
     /** Where these numbers came from, for the manifest and the gate. */
@@ -106,58 +111,63 @@ export interface M6Policy {
 }
 
 /**
- * Provisional limits — NOT ADOPTED PRODUCT VALUES.
+ * Adopted v1 Load Boundary limits — Human decision, B4 Human Gate, 2026-09-27.
  *
  * Chosen to be safe rather than permissive, because a conservative refusal is a
  * compatibility cost and an under-count is a safety failure. Which of them a
- * real architectural drawing trips is unmeasured; that measurement is B4's
- * closure evidence, and it is the reason these are not final.
+ * real architectural drawing trips near the edge remains unmeasured — the
+ * instrumentation to observe the actual per-object-stream maximum `/N` and the
+ * actual load nesting depth does not exist yet — but that gap is a non-blocking
+ * follow-up, not a reason to withhold v1 adoption.
  */
-export const PROVISIONAL_LOAD_BOUNDARY_LIMITS: LoadBoundaryLimits = {
+export const ADOPTED_LOAD_BOUNDARY_LIMITS: LoadBoundaryLimits = {
     maxInputBytes: 256 * 1024 * 1024,
     maxDecodedBytesPerStream: 128 * 1024 * 1024,
-    maxDecodedBytesTotal: 512 * 1024 * 1024,
+    maxDecodedBytesTotal: 256 * 1024 * 1024,
     maxDecodeStreams: 4096,
-    maxXrefEntries: 2_000_000,
-    maxObjectsPerObjectStream: 100_000,
+    maxXrefEntries: 250_000,
+    maxObjectsPerObjectStream: 10_000,
     maxNestingDepth: 64,
     inflateChunkBytes: 16384,
 };
 
 /**
- * Provisional structural caps — NOT ADOPTED PRODUCT VALUES.
+ * Adopted v1 structural caps — Human decision, B4 Human Gate, 2026-09-27.
  *
- * B4 `mustDecide` names four of these explicitly: max copied object count, max
- * duplicated or reachable stream bytes, max single reachable stream bytes per
- * Extract, and the Merge cumulative structural cap values.
+ * `maxCopierEntries` is an independent policy term by Human decision: it is
+ * NOT derived from `maxCopiedObjects` or any fixed ratio, and v1 introduces no
+ * separate `maxCumulativeCopierEntries` term — the existing Merge behavior
+ * that applies this global cap to cumulative planning is unchanged.
+ * `maxSingleStreamBytes` likewise gets no separate cumulative term; Merge
+ * cumulative stream volume stays independently bounded by
+ * `maxCumulativeStreamBytes`.
  */
-export const PROVISIONAL_STRUCTURAL_CAPS: StructuralCaps = {
-    maxCopiedObjects: 2_000_000,
-    maxDuplicatedStreamBytes: 1024 * 1024 * 1024,
-    maxSingleStreamBytes: 256 * 1024 * 1024,
-    maxCopierEntries: 4_000_000,
-    maxCumulativeCopiedObjects: 4_000_000,
-    maxCumulativeStreamBytes: 2 * 1024 * 1024 * 1024,
+export const ADOPTED_STRUCTURAL_CAPS: StructuralCaps = {
+    maxCopiedObjects: 250_000,
+    maxDuplicatedStreamBytes: 512 * 1024 * 1024,
+    maxSingleStreamBytes: 128 * 1024 * 1024,
+    maxCopierEntries: 2_000_000,
+    maxCumulativeCopiedObjects: 500_000,
+    maxCumulativeStreamBytes: 1024 * 1024 * 1024,
 };
 
 /**
- * The provisional actual-output ceiling — mechanism ADOPTED, value NOT.
+ * The adopted actual-output ceiling — mechanism and value both ADOPTED.
  *
- * M6-H11 adopted an actual-artifact output ceiling and deferred one question:
- * whether M6 shares M5's `MAX_OUTPUT_BYTES` or takes an independently gated
- * value. The research recommended sharing; the Human has not decided, and A7
- * moved the numeric value into B4. So this constant is deliberately declared
- * here rather than imported from M5's `budget.ts`: importing it would make the
- * two share a value by construction and quietly answer the deferred question.
+ * A7 (Human decision, CLOSED): M5 and M6 output ceilings remain INDEPENDENTLY
+ * OWNED even though both are 256 MiB in v1. This constant stays declared here
+ * rather than imported from M5's `budget.ts`, and M5 does not import this one
+ * — a shared numeric value is not a shared policy, because the two modules'
+ * distinct growth and failure modes may need independent future changes.
  */
-export const PROVISIONAL_MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
+export const ADOPTED_MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
 
-export const PROVISIONAL_POLICY: M6Policy = {
-    loadBoundary: PROVISIONAL_LOAD_BOUNDARY_LIMITS,
-    structural: PROVISIONAL_STRUCTURAL_CAPS,
-    output: { maxOutputBytes: PROVISIONAL_MAX_OUTPUT_BYTES },
-    provisional: true,
-    origin: 'PROVISIONAL_PRE_B4',
+export const ADOPTED_POLICY: M6Policy = {
+    loadBoundary: ADOPTED_LOAD_BOUNDARY_LIMITS,
+    structural: ADOPTED_STRUCTURAL_CAPS,
+    output: { maxOutputBytes: ADOPTED_MAX_OUTPUT_BYTES },
+    provisional: false,
+    origin: 'B4_HUMAN_ADOPTED_V1',
 };
 
 /** A deep partial, so a caller can override one limit without restating a policy. */
@@ -169,17 +179,18 @@ export interface M6PolicyOverrides {
 }
 
 /**
- * Build a policy from the provisional one plus overrides.
+ * Build a policy from the adopted one plus overrides.
  *
  * This is how a gate reaches a boundary case: it lowers a limit until a fixture
  * trips it, and the product never ships that number. `provisional` stays true
- * whatever is passed, because nothing a caller supplies is an adoption either.
+ * whatever is passed, because a gate's per-test values were never an adoption
+ * either — only `ADOPTED_POLICY` itself is the shipped v1 default.
  */
 export function policyFrom(overrides: M6PolicyOverrides = {}): M6Policy {
     return {
-        loadBoundary: { ...PROVISIONAL_LOAD_BOUNDARY_LIMITS, ...overrides.loadBoundary },
-        structural: { ...PROVISIONAL_STRUCTURAL_CAPS, ...overrides.structural },
-        output: { maxOutputBytes: PROVISIONAL_MAX_OUTPUT_BYTES, ...overrides.output },
+        loadBoundary: { ...ADOPTED_LOAD_BOUNDARY_LIMITS, ...overrides.loadBoundary },
+        structural: { ...ADOPTED_STRUCTURAL_CAPS, ...overrides.structural },
+        output: { maxOutputBytes: ADOPTED_MAX_OUTPUT_BYTES, ...overrides.output },
         provisional: true,
         origin: overrides.origin ?? 'INJECTED',
     };

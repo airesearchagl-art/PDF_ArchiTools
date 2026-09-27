@@ -256,7 +256,7 @@ try {
         const geo = await noticeGeometry();
         check(`the B4 notice is present and readable at ${label} (${width}px)`,
             Boolean(geo) && geo.visible && geo.width > 0 && geo.height > 0
-            && geo.text.includes('B4 未決定'),
+            && geo.text.includes('B4_HUMAN_ADOPTED_V1'),
             geo ? `${Math.round(geo.width)}x${Math.round(geo.height)}` : 'NOT FOUND');
         check(`and nothing covers it at ${label}`,
             Boolean(geo) && geo.covered === false,

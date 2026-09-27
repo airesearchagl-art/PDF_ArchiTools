@@ -19,7 +19,7 @@ import {
     M6_STATUS,
     INTAKE_RESULT,
     LOAD_REFUSAL,
-    PROVISIONAL_POLICY,
+    ADOPTED_POLICY,
     MECHANISM_BOUNDS,
     inspectLoadBoundary,
     policyFrom,
@@ -33,6 +33,9 @@ import {
     planStructuralGraph,
     reachableGraph,
     comparePlanWithActual,
+    checkStructuralCaps,
+    checkCumulativeCaps,
+    EMPTY_STRUCTURAL_PLAN,
     readbackArtifact,
     censusOptionalContent,
     describeOptionalContent,
@@ -120,7 +123,7 @@ window.__m6 = {
         status: M6_STATUS,
         intake: INTAKE_RESULT,
         refusal: LOAD_REFUSAL,
-        policy: PROVISIONAL_POLICY,
+        policy: ADOPTED_POLICY,
         mechanismBounds: MECHANISM_BOUNDS,
         workerAvailable: workerAvailable(),
     }),
@@ -141,11 +144,28 @@ window.__m6 = {
     /** Whether the policy validator rejects a limit that cannot refuse. */
     policyRejects: (patch) => {
         try {
-            assertEnforceablePolicy({ ...PROVISIONAL_POLICY, ...patch });
+            assertEnforceablePolicy({ ...ADOPTED_POLICY, ...patch });
             return { rejected: false };
         } catch (error) {
             return { rejected: true, message: String(error.message) };
         }
+    },
+
+    /**
+     * B4 boundary tests for the structural caps, at the planner level.
+     *
+     * `checkStructuralCaps`/`checkCumulativeCaps` are pure functions of a
+     * `StructuralPlan` and the caps — no PDF is needed to reach an exact
+     * boundary, synthetic or otherwise. `cumulative` selects the Merge
+     * cumulative check (`maxCumulativeCopiedObjects`/`maxCumulativeStreamBytes`)
+     * over the per-Extract one.
+     */
+    structuralCapCheck: (planPatch, cumulative = false) => {
+        const plan = { ...EMPTY_STRUCTURAL_PLAN, ...planPatch };
+        const breach = cumulative
+            ? checkCumulativeCaps(plan, ADOPTED_POLICY.structural)
+            : checkStructuralCaps(plan, ADOPTED_POLICY.structural);
+        return plainly(breach);
     },
 
     facts: async (name) => {
@@ -1298,7 +1318,7 @@ async function fidelityReport(sources, result) {
     for (const bytes of sources) base.sources.push(await pdfjsRead(bytes));
     if (!result.bytes) return base;
 
-    const boundary = inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary);
+    const boundary = inspectLoadBoundary(result.bytes, ADOPTED_POLICY.loadBoundary);
     let output = null;
     let pdfjsError = null;
     try {
@@ -1379,7 +1399,7 @@ Object.assign(window.__m6, {
         return plainly({
             fields: read ? read.fields : null,
             error,
-            boundary: inspectLoadBoundary(bytes, PROVISIONAL_POLICY.loadBoundary).verdict,
+            boundary: inspectLoadBoundary(bytes, ADOPTED_POLICY.loadBoundary).verdict,
         });
     },
 
@@ -1400,7 +1420,7 @@ Object.assign(window.__m6, {
             ...base,
             production: result.readback?.signatureRemnants ?? null,
             gate: gateSignatures(doc, result.bytes),
-            boundary: inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary).verdict,
+            boundary: inspectLoadBoundary(result.bytes, ADOPTED_POLICY.loadBoundary).verdict,
         });
     },
 
@@ -1705,7 +1725,7 @@ Object.assign(window.__m6, {
             payloadMarker: null,
         };
         if (result.bytes) {
-            out.boundary = inspectLoadBoundary(result.bytes, PROVISIONAL_POLICY.loadBoundary).verdict;
+            out.boundary = inspectLoadBoundary(result.bytes, ADOPTED_POLICY.loadBoundary).verdict;
             out.annots = await pdfjsAnnots(result.bytes);
             out.pageRefs = gatePageRefs(await PDFDocument.load(result.bytes, { updateMetadata: false }));
             out.payloadMarker = bytesContain(result.bytes, 'R6SIGPAYLOAD');
@@ -2010,7 +2030,7 @@ Object.assign(window.__m6, {
     async r7Length(name, selection) {
         const source = await bytesOf(name);
         const result = await runExtract(source, {
-            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY,
         });
         if (!result.bytes) {
             return plainly({
@@ -2048,12 +2068,12 @@ Object.assign(window.__m6, {
         for (const name of names) {
             inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
         }
-        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
-        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const intake = await intakeSources(inputs, { policy: ADOPTED_POLICY });
+        const plan = planMerge(intake, { policy: ADOPTED_POLICY });
         if (plan.status !== M6_STATUS.READY) {
             return plainly({ plan: plan.status, reason: plan.reason ?? null, run: null });
         }
-        const result = await runMerge(inputs, plan, { policy: PROVISIONAL_POLICY });
+        const result = await runMerge(inputs, plan, { policy: ADOPTED_POLICY });
         if (!result.bytes) {
             return plainly({ plan: plan.status, run: result.status, reason: result.reason ?? null });
         }
@@ -2072,7 +2092,7 @@ Object.assign(window.__m6, {
     async r7Oc(name, selection) {
         const source = await bytesOf(name);
         const plan = await planExtract(source, {
-            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY,
         });
         const described = describeOptionalContent(
             await PDFDocument.load(source, { updateMetadata: false }),
@@ -2088,7 +2108,7 @@ Object.assign(window.__m6, {
             });
         }
         const result = await runExtract(source, {
-            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY,
         });
         const out = result.bytes ? await ocOutputFacts(result.bytes) : null;
         const readback = result.bytes ? await readbackArtifact(result.bytes) : null;
@@ -2148,7 +2168,7 @@ Object.assign(window.__m6, {
         const source = await bytesOf(name);
         const before = await pdfjsVisibility(source);
         const result = await runExtract(source, {
-            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY,
         });
         if (!result.bytes) return plainly({ status: result.status, before, after: null });
         const after = await pdfjsVisibility(result.bytes);
@@ -2387,9 +2407,9 @@ Object.assign(window.__m6, {
      */
     async r9Extract(name, selection, points, markers = []) {
         const source = await bytesOf(name);
-        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY });
         const result = await runExtract(source, {
-            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY,
             confirmedLosses: plan.requiresConfirmation ?? [],
         });
         const before = points ? await rasterAt(source, points) : null;
@@ -2424,10 +2444,10 @@ Object.assign(window.__m6, {
         for (const name of names) {
             inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
         }
-        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
-        const first = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const intake = await intakeSources(inputs, { policy: ADOPTED_POLICY });
+        const first = planMerge(intake, { policy: ADOPTED_POLICY });
         const options = {
-            policy: PROVISIONAL_POLICY,
+            policy: ADOPTED_POLICY,
             confirmedLosses: first.requiresConfirmation ?? [],
             confirmedFingerprint: mergeConfirmationFingerprint(first),
         };
@@ -2462,9 +2482,9 @@ Object.assign(window.__m6, {
      */
     async r11Artifact(name, selection, points, markers = []) {
         const source = await bytesOf(name);
-        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY });
         const result = await runExtract(source, {
-            selection, sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY,
+            selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY,
             confirmedLosses: plan.requiresConfirmation ?? [],
         });
         const sourceDoc = await PDFDocument.load(source, { updateMetadata: false });
@@ -2654,10 +2674,10 @@ Object.assign(window.__m6, {
         for (const name of names) {
             inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
         }
-        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
-        const first = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const intake = await intakeSources(inputs, { policy: ADOPTED_POLICY });
+        const first = planMerge(intake, { policy: ADOPTED_POLICY });
         const options = {
-            policy: PROVISIONAL_POLICY,
+            policy: ADOPTED_POLICY,
             confirmedLosses: first.requiresConfirmation ?? [],
             confirmedFingerprint: mergeConfirmationFingerprint(first),
         };
@@ -2700,7 +2720,7 @@ Object.assign(window.__m6, {
         const bytes = await bytesOf(name);
         const doc = await PDFDocument.load(bytes, { updateMetadata: false });
         const readability = assessSourceActionStructure(doc);
-        const plan = await planExtract(bytes, { selection: [0], sourceName: `${name}.pdf`, policy: PROVISIONAL_POLICY });
+        const plan = await planExtract(bytes, { selection: [0], sourceName: `${name}.pdf`, policy: ADOPTED_POLICY });
         return plainly({
             js: assessJavaScript(doc).status,
             readability: readability.status,
@@ -2719,15 +2739,15 @@ Object.assign(window.__m6, {
         const bytes = chainBytes(hops, shape, endJs);
         const partner = await bytesOf('merge-b');
         const doc = await PDFDocument.load(bytes, { updateMetadata: false });
-        const plan = await planExtract(bytes, { selection: [0], sourceName: 'chain.pdf', policy: PROVISIONAL_POLICY });
+        const plan = await planExtract(bytes, { selection: [0], sourceName: 'chain.pdf', policy: ADOPTED_POLICY });
         const inputs = [
             { id: 'clean', name: 'clean.pdf', type: 'application/pdf', bytes: partner },
             { id: 'chain', name: 'chain.pdf', type: 'application/pdf', bytes: bytes },
         ];
-        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
-        const merged = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const intake = await intakeSources(inputs, { policy: ADOPTED_POLICY });
+        const merged = planMerge(intake, { policy: ADOPTED_POLICY });
         const run = await runMerge(inputs, merged, {
-            policy: PROVISIONAL_POLICY,
+            policy: ADOPTED_POLICY,
             confirmedLosses: merged.requiresConfirmation ?? [],
             confirmedFingerprint: mergeConfirmationFingerprint(merged),
         });
@@ -2756,10 +2776,10 @@ Object.assign(window.__m6, {
             { id: 'clean', name: 'clean.pdf', type: 'application/pdf', bytes: await bytesOf('merge-b') },
             { id: 'x', name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) },
         ];
-        const intake = await intakeSources(inputs, { policy: PROVISIONAL_POLICY });
-        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const intake = await intakeSources(inputs, { policy: ADOPTED_POLICY });
+        const plan = planMerge(intake, { policy: ADOPTED_POLICY });
         const run = await runMerge(inputs, plan, {
-            policy: PROVISIONAL_POLICY,
+            policy: ADOPTED_POLICY,
             confirmedLosses: plan.requiresConfirmation ?? [],
             confirmedFingerprint: mergeConfirmationFingerprint(plan),
         });
@@ -2774,10 +2794,10 @@ Object.assign(window.__m6, {
     async r12Swap(seen, run) {
         const seenInput = { id: 'x', name: 'x.pdf', type: 'application/pdf', bytes: await bytesOf(seen) };
         const runInput = { id: 'x', name: 'x.pdf', type: 'application/pdf', bytes: await bytesOf(run) };
-        const intake = await intakeSources([seenInput], { policy: PROVISIONAL_POLICY });
-        const plan = planMerge(intake, { policy: PROVISIONAL_POLICY });
+        const intake = await intakeSources([seenInput], { policy: ADOPTED_POLICY });
+        const plan = planMerge(intake, { policy: ADOPTED_POLICY });
         const result = await runMerge([runInput], plan, {
-            policy: PROVISIONAL_POLICY,
+            policy: ADOPTED_POLICY,
             confirmedLosses: plan.requiresConfirmation ?? [],
             confirmedFingerprint: mergeConfirmationFingerprint(plan),
         });
@@ -2846,7 +2866,7 @@ async function readActions(bytes) {
     const readability = assessSourceActionStructure(doc);
     const readMs = performance.now() - t1;
     const readCounts = { ...actionTraversalCounts.destinations };
-    const plan = await planExtract(bytes, { selection: [0], sourceName: 'graph.pdf', policy: PROVISIONAL_POLICY });
+    const plan = await planExtract(bytes, { selection: [0], sourceName: 'graph.pdf', policy: ADOPTED_POLICY });
     return {
         js: js.status,
         jsDetail: js.status === 'UNSCANNABLE' ? js.incomplete : [],

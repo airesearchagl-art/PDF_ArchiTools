@@ -51,7 +51,7 @@ import {
     GENERIC_REFUSAL_JA,
     inspectLoadBoundary,
     INTAKE_LABEL_JA,
-    PROVISIONAL_POLICY,
+    ADOPTED_POLICY,
 } from '../utils/split-merge';
 
 import type {
@@ -296,7 +296,7 @@ export const PdfSplitMerge: React.FC = () => {
             const bytes = new Uint8Array(buffer);
 
             // The pre-parse boundary, before any parser sees the bytes.
-            const verdict = inspectLoadBoundary(bytes, PROVISIONAL_POLICY.loadBoundary);
+            const verdict = inspectLoadBoundary(bytes, ADOPTED_POLICY.loadBoundary);
             if (!token.isCurrent()) return;
             if (verdict.verdict === 'REFUSE') {
                 setExtractFile(file);
@@ -1074,7 +1074,7 @@ export const PdfSplitMerge: React.FC = () => {
                     margin: '12px 0 8px',
                 }}
             >
-                安全上の上限値は暫定です（B4 未決定 / {PROVISIONAL_POLICY.origin}）。
+                安全上の上限値は採用済みの v1 ポリシーです（{ADOPTED_POLICY.origin}）。これらは拒否の基準値であり、対応能力を保証するものではありません。
             </div>
             <VersionFooter
                 toolName="splitMerge"
