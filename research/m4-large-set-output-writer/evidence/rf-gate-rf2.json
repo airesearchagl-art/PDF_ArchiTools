@@ -1,0 +1,846 @@
+{
+ "run": "rf2",
+ "head": "2ef5f5aef738f37677d40f6b01b9772b2e470dd0",
+ "srcDirty": false,
+ "reusedComposites": {
+  "from": "evidence/gate-g1.json",
+  "head": "572ecca2e9e21e4c0258e3b7f04ebc4625dbbfcb",
+  "match": {
+   "dpi150": true,
+   "dpi300": true,
+   "dpi450": true
+  }
+ },
+ "structural": {
+  "unit": [
+   {
+    "input": "uniform random bytes",
+    "inputBytes": 400000,
+    "encodedBytes": 400041,
+    "bound": 400048,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 0,
+    "blocksStored": 7
+   },
+   {
+    "input": "random 9-state nibbles",
+    "inputBytes": 400000,
+    "encodedBytes": 400013,
+    "bound": 400048,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 7,
+    "blocksStored": 0
+   },
+   {
+    "input": "all paper",
+    "inputBytes": 300000,
+    "encodedBytes": 1911,
+    "bound": 300036,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 5,
+    "blocksStored": 0
+   },
+   {
+    "input": "row-periodic",
+    "inputBytes": 300000,
+    "encodedBytes": 5960,
+    "bound": 300036,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 5,
+    "blocksStored": 0
+   },
+   {
+    "input": "row wider than the window (no row matches)",
+    "inputBytes": 200000,
+    "encodedBytes": 200011,
+    "bound": 200030,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 4,
+    "blocksStored": 0
+   },
+   {
+    "input": "exactly one block",
+    "inputBytes": 65535,
+    "encodedBytes": 425,
+    "bound": 65547,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 2,
+    "blocksStored": 0
+   },
+   {
+    "input": "one block + 1",
+    "inputBytes": 65536,
+    "encodedBytes": 426,
+    "bound": 65554,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 2,
+    "blocksStored": 0
+   },
+   {
+    "input": "empty",
+    "inputBytes": 0,
+    "encodedBytes": 8,
+    "bound": 12,
+    "withinBound": true,
+    "roundTrip": true,
+    "blocksFixed": 1,
+    "blocksStored": 0
+   }
+  ],
+  "cells": {
+   "dpi150/idx4m-own": {
+    "fileBytes": 1069532,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "owned",
+     "owned",
+     "owned",
+     "owned",
+     "owned"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     141691,
+     147041,
+     265149,
+     255382,
+     256190
+    ],
+    "bounds": [
+     8724184,
+     8724184,
+     8724184,
+     8726374,
+     8726374
+    ],
+    "fallbacks": [
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "dpi150/idx4m-guard": {
+    "fileBytes": 520711,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "platform",
+     "platform",
+     "platform",
+     "platform",
+     "platform"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     63840,
+     68826,
+     116856,
+     132812,
+     134301
+    ],
+    "bounds": [
+     8724184,
+     8724184,
+     8724184,
+     8726374,
+     8726374
+    ],
+    "fallbacks": [
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "dpi150/idx4m-guard-expanding": {
+    "fileBytes": 1069532,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "owned (fallback)",
+     "owned (fallback)",
+     "owned (fallback)",
+     "owned (fallback)",
+     "owned (fallback)"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     141691,
+     147041,
+     265149,
+     255382,
+     256190
+    ],
+    "bounds": [
+     8724184,
+     8724184,
+     8724184,
+     8726374,
+     8726374
+    ],
+    "fallbacks": [
+     "platform output exceeded the owned bound N",
+     "platform output exceeded the owned bound N",
+     "platform output exceeded the owned bound N",
+     "platform output exceeded the owned bound N",
+     "platform output exceeded the owned bound N"
+    ]
+   },
+   "dpi150/idx4m-guard-throwing": {
+    "fileBytes": 1069532,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "owned (fallback)",
+     "owned (fallback)",
+     "owned (fallback)",
+     "owned (fallback)",
+     "owned (fallback)"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     141691,
+     147041,
+     265149,
+     255382,
+     256190
+    ],
+    "bounds": [
+     8724184,
+     8724184,
+     8724184,
+     8726374,
+     8726374
+    ],
+    "fallbacks": [
+     "platform compressor failed: simulated compressor failure",
+     "platform compressor failed: simulated compressor failure",
+     "platform compressor failed: simulated compressor failure",
+     "platform compressor failed: simulated compressor failure",
+     "platform compressor failed: simulated compressor failure"
+    ]
+   },
+   "dpi300/idx4m-own": {
+    "fileBytes": 2842729,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "owned",
+     "owned",
+     "owned",
+     "owned",
+     "owned"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     405799,
+     419584,
+     680815,
+     664376,
+     668076
+    ],
+    "bounds": [
+     34877694,
+     34877694,
+     34877694,
+     34885584,
+     34885584
+    ],
+    "fallbacks": [
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "dpi300/idx4m-guard": {
+    "fileBytes": 1148669,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "platform",
+     "platform",
+     "platform",
+     "platform",
+     "platform"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     145706,
+     155587,
+     246438,
+     296701,
+     300158
+    ],
+    "bounds": [
+     34877694,
+     34877694,
+     34877694,
+     34885584,
+     34885584
+    ],
+    "fallbacks": [
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "dpi450/idx4m-own": {
+    "fileBytes": 5166882,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "owned",
+     "owned",
+     "owned",
+     "owned",
+     "owned"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     772226,
+     795354,
+     1210513,
+     1187962,
+     1196730
+    ],
+    "bounds": [
+     78478524,
+     78478524,
+     78478524,
+     78477642,
+     78477642
+    ],
+    "fallbacks": [
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "dpi450/idx4m-guard": {
+    "fileBytes": 1844718,
+    "verifyOk": true,
+    "pixelMismatches": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "encoders": [
+     "platform",
+     "platform",
+     "platform",
+     "platform",
+     "platform"
+    ],
+    "withinBound": true,
+    "encodedBytes": [
+     243927,
+     259815,
+     389954,
+     470099,
+     476829
+    ],
+    "bounds": [
+     78478524,
+     78478524,
+     78478524,
+     78477642,
+     78477642
+    ],
+    "fallbacks": [
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   }
+  },
+  "model": [
+   "150/2m/1p peak=158 outBound=8.3 mem=YYY out<=256=true",
+   "150/2m/2p peak=166.3 outBound=16.7 mem=YYY out<=256=true",
+   "150/2m/3p peak=174.6 outBound=25 mem=YYY out<=256=true",
+   "150/2m/4p peak=183 outBound=33.3 mem=YYY out<=256=true",
+   "150/2m/5p peak=191.3 outBound=41.6 mem=YYY out<=256=true",
+   "150/3m/1p peak=182.9 outBound=16.7 mem=YYY out<=256=true",
+   "150/3m/2p peak=199.6 outBound=33.3 mem=YYY out<=256=true",
+   "150/3m/3p peak=216.2 outBound=50 mem=YYY out<=256=true",
+   "150/3m/4p peak=232.9 outBound=66.6 mem=YYY out<=256=true",
+   "150/3m/5p peak=249.5 outBound=83.3 mem=YYY out<=256=true",
+   "150/4m/1p peak=207.9 outBound=25 mem=YYY out<=256=true",
+   "150/4m/2p peak=232.9 outBound=50 mem=YYY out<=256=true",
+   "150/4m/3p peak=257.8 outBound=74.9 mem=YYY out<=256=true",
+   "150/4m/4p peak=282.8 outBound=99.9 mem=YYY out<=256=true",
+   "150/4m/5p peak=307.8 outBound=124.9 mem=YYY out<=256=true",
+   "300/2m/1p peak=631.8 outBound=33.3 mem=nYY out<=256=true",
+   "300/2m/2p peak=665.1 outBound=66.5 mem=nYY out<=256=true",
+   "300/2m/3p peak=698.4 outBound=99.8 mem=nYY out<=256=true",
+   "300/2m/4p peak=731.6 outBound=133.1 mem=nYY out<=256=true",
+   "300/2m/5p peak=764.9 outBound=166.4 mem=nYY out<=256=true",
+   "300/3m/1p peak=731.6 outBound=66.5 mem=nYY out<=256=true",
+   "300/3m/2p peak=798.1 outBound=133.1 mem=nYY out<=256=true",
+   "300/3m/3p peak=864.7 outBound=199.6 mem=nYY out<=256=true",
+   "300/3m/4p peak=931.2 outBound=266.2 mem=nYY out<=256=false",
+   "300/3m/5p peak=997.7 outBound=332.7 mem=nYY out<=256=false",
+   "300/4m/1p peak=831.4 outBound=99.8 mem=nYY out<=256=true",
+   "300/4m/2p peak=931.2 outBound=199.6 mem=nYY out<=256=true",
+   "300/4m/3p peak=1031 outBound=299.4 mem=nnY out<=256=false",
+   "300/4m/4p peak=1130.8 outBound=399.2 mem=nnY out<=256=false",
+   "300/4m/5p peak=1230.6 outBound=499 mem=nnY out<=256=false",
+   "450/2m/1p peak=1421.6 outBound=74.9 mem=nnY out<=256=true",
+   "450/2m/2p peak=1496.5 outBound=149.7 mem=nnY out<=256=true",
+   "450/2m/3p peak=1571.3 outBound=224.6 mem=nnY out<=256=true",
+   "450/2m/4p peak=1646.2 outBound=299.4 mem=nnY out<=256=false",
+   "450/2m/5p peak=1721 outBound=374.2 mem=nnY out<=256=false",
+   "450/3m/1p peak=1646.1 outBound=149.7 mem=nnY out<=256=true",
+   "450/3m/2p peak=1795.8 outBound=299.4 mem=nnY out<=256=false",
+   "450/3m/3p peak=1945.5 outBound=449.1 mem=nnY out<=256=false",
+   "450/3m/4p peak=2095.2 outBound=598.8 mem=nnn out<=256=false",
+   "450/3m/5p peak=2244.9 outBound=748.5 mem=nnn out<=256=false",
+   "450/4m/1p peak=1870.6 outBound=224.6 mem=nnY out<=256=true",
+   "450/4m/2p peak=2095.2 outBound=449.1 mem=nnn out<=256=false",
+   "450/4m/3p peak=2319.7 outBound=673.6 mem=nnn out<=256=false",
+   "450/4m/4p peak=2544.2 outBound=898.2 mem=nnn out<=256=false",
+   "450/4m/5p peak=2768.8 outBound=1122.7 mem=nnn out<=256=false"
+  ],
+  "modelConstants": {
+   "PAGE_OBJECTS": 4096,
+   "DOC_OVERHEAD": 16384,
+   "noticeBound": 6531336,
+   "noticePeak": 17399680,
+   "noticeScratch": 408093
+  },
+  "rf02": [
+   {
+    "members": 2,
+    "ok": true,
+    "errors": [],
+    "planStatuses": [
+     "1:READY_TO_COMPARE",
+     "2:READY_TO_COMPARE",
+     "3:GEOMETRY_MISMATCH",
+     "4:READY_TO_COMPARE",
+     "5:READY_TO_COMPARE"
+    ],
+    "sequence": [
+     "p1/s1/CHANGE",
+     "p2/s1/MATCH",
+     "p3/GEOMETRY_MISMATCH",
+     "p4/s1/CHANGE",
+     "p5/s1/MATCH"
+    ],
+    "candidateBytes": 150022,
+    "jsPdfBytes": 45700907,
+    "pages": [
+     {
+      "size": "595.68x841.92",
+      "image": "1241x1754",
+      "hash": "3b7c83a35baca7bf",
+      "encodedBytes": 14645,
+      "bound": 1091096
+     },
+     {
+      "size": "1190.88x841.92",
+      "image": "2481x1754",
+      "hash": "e61c64273c63e184",
+      "encodedBytes": 21806,
+      "bound": 2178678
+     },
+     {
+      "size": "620x877",
+      "image": "1240x1754",
+      "hash": "4499ed97f38a6297",
+      "encodedBytes": 73292,
+      "bound": 6527240
+     },
+     {
+      "size": "841.92x1190.88",
+      "image": "1754x2481",
+      "hash": "5f9d7492dc43824f",
+      "encodedBytes": 22319,
+      "bound": 2178528
+     },
+     {
+      "size": "841.92x595.68",
+      "image": "1754x1241",
+      "hash": "ef302a546c90eeb9",
+      "encodedBytes": 14053,
+      "bound": 1089706
+     }
+    ]
+   },
+   {
+    "members": 3,
+    "ok": true,
+    "errors": [],
+    "planStatuses": [
+     "1:READY_TO_COMPARE",
+     "2:READY_TO_COMPARE",
+     "3:GEOMETRY_MISMATCH",
+     "4:READY_TO_COMPARE",
+     "5:MISSING_PAGE"
+    ],
+    "sequence": [
+     "p1/s1/CHANGE",
+     "p1/s2/MATCH",
+     "p2/s1/MATCH",
+     "p2/s2/CHANGE",
+     "p3/GEOMETRY_MISMATCH",
+     "p4/s1/CHANGE",
+     "p4/s2/MATCH",
+     "p5/MISSING_PAGE"
+    ],
+    "candidateBytes": 254420,
+    "jsPdfBytes": 78337510,
+    "pages": [
+     {
+      "size": "595.68x841.92",
+      "image": "1241x1754",
+      "hash": "3b7c83a35baca7bf",
+      "encodedBytes": 14645,
+      "bound": 1091096
+     },
+     {
+      "size": "595.68x841.92",
+      "image": "1241x1754",
+      "hash": "81f34a65394516ba",
+      "encodedBytes": 14425,
+      "bound": 1091096
+     },
+     {
+      "size": "1190.88x841.92",
+      "image": "2481x1754",
+      "hash": "e61c64273c63e184",
+      "encodedBytes": 21806,
+      "bound": 2178678
+     },
+     {
+      "size": "1190.88x841.92",
+      "image": "2481x1754",
+      "hash": "fda93ac53664af2a",
+      "encodedBytes": 22030,
+      "bound": 2178678
+     },
+     {
+      "size": "620x877",
+      "image": "1240x1754",
+      "hash": "4499ed97f38a6297",
+      "encodedBytes": 73292,
+      "bound": 6527240
+     },
+     {
+      "size": "841.92x1190.88",
+      "image": "1754x2481",
+      "hash": "5f9d7492dc43824f",
+      "encodedBytes": 22319,
+      "bound": 2178528
+     },
+     {
+      "size": "841.92x1190.88",
+      "image": "1754x2481",
+      "hash": "e8ee9954cea4de8e",
+      "encodedBytes": 22082,
+      "bound": 2178528
+     },
+     {
+      "size": "620x877",
+      "image": "1240x1754",
+      "hash": "0b93bb0c00096afe",
+      "encodedBytes": 57888,
+      "bound": 6527240
+     }
+    ]
+   },
+   {
+    "members": 4,
+    "ok": true,
+    "errors": [],
+    "planStatuses": [
+     "1:READY_TO_COMPARE",
+     "2:READY_TO_COMPARE",
+     "3:GEOMETRY_MISMATCH",
+     "4:READY_TO_COMPARE",
+     "5:MISSING_PAGE"
+    ],
+    "sequence": [
+     "p1/s1/CHANGE",
+     "p1/s2/MATCH",
+     "p1/s3/CHANGE",
+     "p2/s1/MATCH",
+     "p2/s2/CHANGE",
+     "p2/s3/CHANGE",
+     "p3/GEOMETRY_MISMATCH",
+     "p4/s1/CHANGE",
+     "p4/s2/MATCH",
+     "p4/s3/MATCH",
+     "p5/MISSING_PAGE"
+    ],
+    "candidateBytes": 315330,
+    "jsPdfBytes": 110979550,
+    "pages": [
+     {
+      "size": "595.68x841.92",
+      "image": "1241x1754",
+      "hash": "3b7c83a35baca7bf",
+      "encodedBytes": 14645,
+      "bound": 1091096
+     },
+     {
+      "size": "595.68x841.92",
+      "image": "1241x1754",
+      "hash": "81f34a65394516ba",
+      "encodedBytes": 14425,
+      "bound": 1091096
+     },
+     {
+      "size": "595.68x841.92",
+      "image": "1241x1754",
+      "hash": "32fd5086b3fb49f5",
+      "encodedBytes": 14645,
+      "bound": 1091096
+     },
+     {
+      "size": "1190.88x841.92",
+      "image": "2481x1754",
+      "hash": "e61c64273c63e184",
+      "encodedBytes": 21806,
+      "bound": 2178678
+     },
+     {
+      "size": "1190.88x841.92",
+      "image": "2481x1754",
+      "hash": "fda93ac53664af2a",
+      "encodedBytes": 22030,
+      "bound": 2178678
+     },
+     {
+      "size": "1190.88x841.92",
+      "image": "2481x1754",
+      "hash": "0d576d5b7d02bbeb",
+      "encodedBytes": 22030,
+      "bound": 2178678
+     },
+     {
+      "size": "620x877",
+      "image": "1240x1754",
+      "hash": "4499ed97f38a6297",
+      "encodedBytes": 73292,
+      "bound": 6527240
+     },
+     {
+      "size": "841.92x1190.88",
+      "image": "1754x2481",
+      "hash": "5f9d7492dc43824f",
+      "encodedBytes": 22319,
+      "bound": 2178528
+     },
+     {
+      "size": "841.92x1190.88",
+      "image": "1754x2481",
+      "hash": "e8ee9954cea4de8e",
+      "encodedBytes": 22082,
+      "bound": 2178528
+     },
+     {
+      "size": "841.92x1190.88",
+      "image": "1754x2481",
+      "hash": "e8ee9954cea4de8e",
+      "encodedBytes": 22082,
+      "bound": 2178528
+     },
+     {
+      "size": "620x877",
+      "image": "1240x1754",
+      "hash": "0b93bb0c00096afe",
+      "encodedBytes": 57888,
+      "bound": 6527240
+     }
+    ]
+   }
+  ]
+ },
+ "measuredOnly": {
+  "steps": [
+   {
+    "name": "bundle production comparator",
+    "exitCode": 0,
+    "ms": 218
+   },
+   {
+    "name": "dpi150 idx4m-own",
+    "exitCode": 0,
+    "ms": 2006
+   },
+   {
+    "name": "dpi150 idx4m-guard",
+    "exitCode": 0,
+    "ms": 1894
+   },
+   {
+    "name": "dpi150 idx4m-guard-expanding",
+    "exitCode": 0,
+    "ms": 1963
+   },
+   {
+    "name": "dpi150 idx4m-guard-throwing",
+    "exitCode": 0,
+    "ms": 1850
+   },
+   {
+    "name": "dpi300 idx4m-own",
+    "exitCode": 0,
+    "ms": 6765
+   },
+   {
+    "name": "dpi300 idx4m-guard",
+    "exitCode": 0,
+    "ms": 6405
+   },
+   {
+    "name": "dpi450 idx4m-own",
+    "exitCode": 0,
+    "ms": 15349
+   },
+   {
+    "name": "dpi450 idx4m-guard",
+    "exitCode": 0,
+    "ms": 14882
+   },
+   {
+    "name": "dpi150 idx4m-own sink-only",
+    "exitCode": 0,
+    "ms": 1071
+   },
+   {
+    "name": "dpi300 idx4m-own sink-only",
+    "exitCode": 0,
+    "ms": 2055
+   },
+   {
+    "name": "dpi450 idx4m-own sink-only",
+    "exitCode": 0,
+    "ms": 4219
+   },
+   {
+    "name": "RF-01 owned-bound model",
+    "exitCode": 0,
+    "ms": 112
+   },
+   {
+    "name": "RF-02 engine-driven 2/3/4 members",
+    "exitCode": 0,
+    "ms": 15634
+   }
+  ],
+  "cells": {
+   "dpi150/idx4m-own": {
+    "totalMs": 385,
+    "sampledWriterPeakMiB": 95.45
+   },
+   "dpi150/idx4m-guard": {
+    "totalMs": 456,
+    "sampledWriterPeakMiB": 118.79
+   },
+   "dpi150/idx4m-guard-expanding": {
+    "totalMs": 521,
+    "sampledWriterPeakMiB": 111.49
+   },
+   "dpi150/idx4m-guard-throwing": {
+    "totalMs": 418,
+    "sampledWriterPeakMiB": 110.9
+   },
+   "dpi300/idx4m-own": {
+    "totalMs": 1423,
+    "sampledWriterPeakMiB": 411.66
+   },
+   "dpi300/idx4m-guard": {
+    "totalMs": 1697,
+    "sampledWriterPeakMiB": 511.91
+   },
+   "dpi450/idx4m-own": {
+    "totalMs": 3145,
+    "sampledWriterPeakMiB": 912.97
+   },
+   "dpi450/idx4m-guard": {
+    "totalMs": 3988,
+    "sampledWriterPeakMiB": 914.17
+   },
+   "sink:dpi150/idx4m-own": {
+    "totalMs": 278,
+    "sampledWriterPeakMiB": 15.82,
+    "fileBytes": 1069532
+   },
+   "sink:dpi300/idx4m-own": {
+    "totalMs": 990,
+    "sampledWriterPeakMiB": 20.8,
+    "fileBytes": 2842729
+   },
+   "sink:dpi450/idx4m-own": {
+    "totalMs": 2266,
+    "sampledWriterPeakMiB": 16.6,
+    "fileBytes": 5166882
+   }
+  }
+ },
+ "pass": true
+}

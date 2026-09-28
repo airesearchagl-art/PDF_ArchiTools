@@ -1,0 +1,299 @@
+{
+ "dpi": 150,
+ "runs": [
+  {
+   "members": 2,
+   "dpi": 150,
+   "planStatuses": [
+    "1:READY_TO_COMPARE",
+    "2:READY_TO_COMPARE",
+    "3:GEOMETRY_MISMATCH",
+    "4:READY_TO_COMPARE",
+    "5:READY_TO_COMPARE"
+   ],
+   "runStatus": "READY_TO_COMPARE",
+   "runReported": [
+    "ページ 3 — rf02-B.pdf: 1190.5x841.9pt vs 841.9x595.3pt（用紙が異なるため比較できません）"
+   ],
+   "expected": [
+    "p1/B/CHANGE",
+    "p2/B/MATCH",
+    "p3/GEOMETRY_MISMATCH",
+    "p4/B/CHANGE",
+    "p5/B/MATCH"
+   ],
+   "candidate": [
+    "p1/s1/CHANGE",
+    "p2/s1/MATCH",
+    "p3/GEOMETRY_MISMATCH",
+    "p4/s1/CHANGE",
+    "p5/s1/MATCH"
+   ],
+   "candidateBytes": 150022,
+   "jsPdfBytes": 45700907,
+   "pages": [
+    {
+     "size": "595.68x841.92",
+     "image": "1241x1754",
+     "hash": "3b7c83a35baca7bf",
+     "encodedBytes": 14645,
+     "bound": 1091096
+    },
+    {
+     "size": "1190.88x841.92",
+     "image": "2481x1754",
+     "hash": "e61c64273c63e184",
+     "encodedBytes": 21806,
+     "bound": 2178678
+    },
+    {
+     "size": "620x877",
+     "image": "1240x1754",
+     "hash": "4499ed97f38a6297",
+     "encodedBytes": 73292,
+     "bound": 6527240
+    },
+    {
+     "size": "841.92x1190.88",
+     "image": "1754x2481",
+     "hash": "5f9d7492dc43824f",
+     "encodedBytes": 22319,
+     "bound": 2178528
+    },
+    {
+     "size": "841.92x595.68",
+     "image": "1754x1241",
+     "hash": "ef302a546c90eeb9",
+     "encodedBytes": 14053,
+     "bound": 1089706
+    }
+   ],
+   "errors": [],
+   "ok": true
+  },
+  {
+   "members": 3,
+   "dpi": 150,
+   "planStatuses": [
+    "1:READY_TO_COMPARE",
+    "2:READY_TO_COMPARE",
+    "3:GEOMETRY_MISMATCH",
+    "4:READY_TO_COMPARE",
+    "5:MISSING_PAGE"
+   ],
+   "runStatus": "READY_TO_COMPARE",
+   "runReported": [
+    "ページ 3 — rf02-B.pdf: 1190.5x841.9pt vs 841.9x595.3pt（用紙が異なるため比較できません）",
+    "ページ 5 — rf02-C.pdf に対応ページがありません"
+   ],
+   "expected": [
+    "p1/B/CHANGE",
+    "p1/C/MATCH",
+    "p2/B/MATCH",
+    "p2/C/CHANGE",
+    "p3/GEOMETRY_MISMATCH",
+    "p4/B/CHANGE",
+    "p4/C/MATCH",
+    "p5/MISSING_PAGE"
+   ],
+   "candidate": [
+    "p1/s1/CHANGE",
+    "p1/s2/MATCH",
+    "p2/s1/MATCH",
+    "p2/s2/CHANGE",
+    "p3/GEOMETRY_MISMATCH",
+    "p4/s1/CHANGE",
+    "p4/s2/MATCH",
+    "p5/MISSING_PAGE"
+   ],
+   "candidateBytes": 254420,
+   "jsPdfBytes": 78337510,
+   "pages": [
+    {
+     "size": "595.68x841.92",
+     "image": "1241x1754",
+     "hash": "3b7c83a35baca7bf",
+     "encodedBytes": 14645,
+     "bound": 1091096
+    },
+    {
+     "size": "595.68x841.92",
+     "image": "1241x1754",
+     "hash": "81f34a65394516ba",
+     "encodedBytes": 14425,
+     "bound": 1091096
+    },
+    {
+     "size": "1190.88x841.92",
+     "image": "2481x1754",
+     "hash": "e61c64273c63e184",
+     "encodedBytes": 21806,
+     "bound": 2178678
+    },
+    {
+     "size": "1190.88x841.92",
+     "image": "2481x1754",
+     "hash": "fda93ac53664af2a",
+     "encodedBytes": 22030,
+     "bound": 2178678
+    },
+    {
+     "size": "620x877",
+     "image": "1240x1754",
+     "hash": "4499ed97f38a6297",
+     "encodedBytes": 73292,
+     "bound": 6527240
+    },
+    {
+     "size": "841.92x1190.88",
+     "image": "1754x2481",
+     "hash": "5f9d7492dc43824f",
+     "encodedBytes": 22319,
+     "bound": 2178528
+    },
+    {
+     "size": "841.92x1190.88",
+     "image": "1754x2481",
+     "hash": "e8ee9954cea4de8e",
+     "encodedBytes": 22082,
+     "bound": 2178528
+    },
+    {
+     "size": "620x877",
+     "image": "1240x1754",
+     "hash": "0b93bb0c00096afe",
+     "encodedBytes": 57888,
+     "bound": 6527240
+    }
+   ],
+   "errors": [],
+   "ok": true
+  },
+  {
+   "members": 4,
+   "dpi": 150,
+   "planStatuses": [
+    "1:READY_TO_COMPARE",
+    "2:READY_TO_COMPARE",
+    "3:GEOMETRY_MISMATCH",
+    "4:READY_TO_COMPARE",
+    "5:MISSING_PAGE"
+   ],
+   "runStatus": "READY_TO_COMPARE",
+   "runReported": [
+    "ページ 3 — rf02-B.pdf: 1190.5x841.9pt vs 841.9x595.3pt（用紙が異なるため比較できません）",
+    "ページ 5 — rf02-C.pdf に対応ページがありません"
+   ],
+   "expected": [
+    "p1/B/CHANGE",
+    "p1/C/MATCH",
+    "p1/D/CHANGE",
+    "p2/B/MATCH",
+    "p2/C/CHANGE",
+    "p2/D/CHANGE",
+    "p3/GEOMETRY_MISMATCH",
+    "p4/B/CHANGE",
+    "p4/C/MATCH",
+    "p4/D/MATCH",
+    "p5/MISSING_PAGE"
+   ],
+   "candidate": [
+    "p1/s1/CHANGE",
+    "p1/s2/MATCH",
+    "p1/s3/CHANGE",
+    "p2/s1/MATCH",
+    "p2/s2/CHANGE",
+    "p2/s3/CHANGE",
+    "p3/GEOMETRY_MISMATCH",
+    "p4/s1/CHANGE",
+    "p4/s2/MATCH",
+    "p4/s3/MATCH",
+    "p5/MISSING_PAGE"
+   ],
+   "candidateBytes": 315330,
+   "jsPdfBytes": 110979550,
+   "pages": [
+    {
+     "size": "595.68x841.92",
+     "image": "1241x1754",
+     "hash": "3b7c83a35baca7bf",
+     "encodedBytes": 14645,
+     "bound": 1091096
+    },
+    {
+     "size": "595.68x841.92",
+     "image": "1241x1754",
+     "hash": "81f34a65394516ba",
+     "encodedBytes": 14425,
+     "bound": 1091096
+    },
+    {
+     "size": "595.68x841.92",
+     "image": "1241x1754",
+     "hash": "32fd5086b3fb49f5",
+     "encodedBytes": 14645,
+     "bound": 1091096
+    },
+    {
+     "size": "1190.88x841.92",
+     "image": "2481x1754",
+     "hash": "e61c64273c63e184",
+     "encodedBytes": 21806,
+     "bound": 2178678
+    },
+    {
+     "size": "1190.88x841.92",
+     "image": "2481x1754",
+     "hash": "fda93ac53664af2a",
+     "encodedBytes": 22030,
+     "bound": 2178678
+    },
+    {
+     "size": "1190.88x841.92",
+     "image": "2481x1754",
+     "hash": "0d576d5b7d02bbeb",
+     "encodedBytes": 22030,
+     "bound": 2178678
+    },
+    {
+     "size": "620x877",
+     "image": "1240x1754",
+     "hash": "4499ed97f38a6297",
+     "encodedBytes": 73292,
+     "bound": 6527240
+    },
+    {
+     "size": "841.92x1190.88",
+     "image": "1754x2481",
+     "hash": "5f9d7492dc43824f",
+     "encodedBytes": 22319,
+     "bound": 2178528
+    },
+    {
+     "size": "841.92x1190.88",
+     "image": "1754x2481",
+     "hash": "e8ee9954cea4de8e",
+     "encodedBytes": 22082,
+     "bound": 2178528
+    },
+    {
+     "size": "841.92x1190.88",
+     "image": "1754x2481",
+     "hash": "e8ee9954cea4de8e",
+     "encodedBytes": 22082,
+     "bound": 2178528
+    },
+    {
+     "size": "620x877",
+     "image": "1240x1754",
+     "hash": "0b93bb0c00096afe",
+     "encodedBytes": 57888,
+     "bound": 6527240
+    }
+   ],
+   "errors": [],
+   "ok": true
+  }
+ ],
+ "ok": true
+}

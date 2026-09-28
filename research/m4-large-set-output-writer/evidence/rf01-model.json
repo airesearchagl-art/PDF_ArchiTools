@@ -1,0 +1,753 @@
+{
+ "classes": {
+  "OWNED": [
+   "per-image output bound (ownedDeflateBound of the filtered raster + page objects)",
+   "encoder scratch (fixed buffers)",
+   "runtime ceiling check before each append",
+   "stored-block fallback"
+  ],
+  "PRODUCTION": [
+   "kernel phases (estimatePhaseMemory)",
+   "engine-held masks during the sink (engineLiveDuringSink)",
+   "notice raster size (NOTICE_RASTER)"
+  ],
+  "PLATFORM": [
+   "canvas allocation up to the frame (checked in Chrome 143 at 450 dpi A1)",
+   "new Blob(chunks) makes at most one copy",
+   "CompressionStream: NOT assumed by the safety path"
+  ],
+  "MEASURED": [
+   "CompressionStream output sizes and fallback behaviour",
+   "RSS / timings (MeasuredOnly)"
+  ]
+ },
+ "constants": {
+  "PAGE_OBJECTS": 4096,
+  "DOC_OVERHEAD": 16384,
+  "noticeBound": 6531336,
+  "noticePeak": 17399680,
+  "noticeScratch": 408093
+ },
+ "rows": [
+  {
+   "dpi": 150,
+   "members": 2,
+   "pages": 1,
+   "items": 1,
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 42,
+   "outputBoundMiB": 8.3,
+   "jobPeakMiB": 158,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 2,
+   "pages": 2,
+   "items": 2,
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 42,
+   "outputBoundMiB": 16.7,
+   "jobPeakMiB": 166.3,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 2,
+   "pages": 3,
+   "items": 3,
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 42,
+   "outputBoundMiB": 25,
+   "jobPeakMiB": 174.6,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 2,
+   "pages": 4,
+   "items": 4,
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 42,
+   "outputBoundMiB": 33.3,
+   "jobPeakMiB": 183,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 2,
+   "pages": 5,
+   "items": 5,
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 42,
+   "outputBoundMiB": 41.6,
+   "jobPeakMiB": 191.3,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 3,
+   "pages": 1,
+   "items": 2,
+   "kernelPeakMiB": 166.3,
+   "sinkPeakMiB": 58.6,
+   "outputBoundMiB": 16.7,
+   "jobPeakMiB": 182.9,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 3,
+   "pages": 2,
+   "items": 4,
+   "kernelPeakMiB": 166.3,
+   "sinkPeakMiB": 58.6,
+   "outputBoundMiB": 33.3,
+   "jobPeakMiB": 199.6,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 3,
+   "pages": 3,
+   "items": 6,
+   "kernelPeakMiB": 166.3,
+   "sinkPeakMiB": 58.6,
+   "outputBoundMiB": 50,
+   "jobPeakMiB": 216.2,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 3,
+   "pages": 4,
+   "items": 8,
+   "kernelPeakMiB": 166.3,
+   "sinkPeakMiB": 58.6,
+   "outputBoundMiB": 66.6,
+   "jobPeakMiB": 232.9,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 3,
+   "pages": 5,
+   "items": 10,
+   "kernelPeakMiB": 166.3,
+   "sinkPeakMiB": 58.6,
+   "outputBoundMiB": 83.3,
+   "jobPeakMiB": 249.5,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 4,
+   "pages": 1,
+   "items": 3,
+   "kernelPeakMiB": 182.9,
+   "sinkPeakMiB": 75.2,
+   "outputBoundMiB": 25,
+   "jobPeakMiB": 207.9,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 4,
+   "pages": 2,
+   "items": 6,
+   "kernelPeakMiB": 182.9,
+   "sinkPeakMiB": 75.2,
+   "outputBoundMiB": 50,
+   "jobPeakMiB": 232.9,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 4,
+   "pages": 3,
+   "items": 9,
+   "kernelPeakMiB": 182.9,
+   "sinkPeakMiB": 75.2,
+   "outputBoundMiB": 74.9,
+   "jobPeakMiB": 257.8,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 4,
+   "pages": 4,
+   "items": 12,
+   "kernelPeakMiB": 182.9,
+   "sinkPeakMiB": 75.2,
+   "outputBoundMiB": 99.9,
+   "jobPeakMiB": 282.8,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 150,
+   "members": 4,
+   "pages": 5,
+   "items": 15,
+   "kernelPeakMiB": 182.9,
+   "sinkPeakMiB": 75.2,
+   "outputBoundMiB": 124.9,
+   "jobPeakMiB": 307.8,
+   "memoryAccepts": [
+    true,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 2,
+   "pages": 1,
+   "items": 1,
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 166.7,
+   "outputBoundMiB": 33.3,
+   "jobPeakMiB": 631.8,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 2,
+   "pages": 2,
+   "items": 2,
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 166.7,
+   "outputBoundMiB": 66.5,
+   "jobPeakMiB": 665.1,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 2,
+   "pages": 3,
+   "items": 3,
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 166.7,
+   "outputBoundMiB": 99.8,
+   "jobPeakMiB": 698.4,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 2,
+   "pages": 4,
+   "items": 4,
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 166.7,
+   "outputBoundMiB": 133.1,
+   "jobPeakMiB": 731.6,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 2,
+   "pages": 5,
+   "items": 5,
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 166.7,
+   "outputBoundMiB": 166.4,
+   "jobPeakMiB": 764.9,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 3,
+   "pages": 1,
+   "items": 2,
+   "kernelPeakMiB": 665,
+   "sinkPeakMiB": 233.2,
+   "outputBoundMiB": 66.5,
+   "jobPeakMiB": 731.6,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 3,
+   "pages": 2,
+   "items": 4,
+   "kernelPeakMiB": 665,
+   "sinkPeakMiB": 233.2,
+   "outputBoundMiB": 133.1,
+   "jobPeakMiB": 798.1,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 3,
+   "pages": 3,
+   "items": 6,
+   "kernelPeakMiB": 665,
+   "sinkPeakMiB": 233.2,
+   "outputBoundMiB": 199.6,
+   "jobPeakMiB": 864.7,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 3,
+   "pages": 4,
+   "items": 8,
+   "kernelPeakMiB": 665,
+   "sinkPeakMiB": 233.2,
+   "outputBoundMiB": 266.2,
+   "jobPeakMiB": 931.2,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 300,
+   "members": 3,
+   "pages": 5,
+   "items": 10,
+   "kernelPeakMiB": 665,
+   "sinkPeakMiB": 233.2,
+   "outputBoundMiB": 332.7,
+   "jobPeakMiB": 997.7,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 300,
+   "members": 4,
+   "pages": 1,
+   "items": 3,
+   "kernelPeakMiB": 731.5,
+   "sinkPeakMiB": 299.7,
+   "outputBoundMiB": 99.8,
+   "jobPeakMiB": 831.4,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 4,
+   "pages": 2,
+   "items": 6,
+   "kernelPeakMiB": 731.5,
+   "sinkPeakMiB": 299.7,
+   "outputBoundMiB": 199.6,
+   "jobPeakMiB": 931.2,
+   "memoryAccepts": [
+    false,
+    true,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 300,
+   "members": 4,
+   "pages": 3,
+   "items": 9,
+   "kernelPeakMiB": 731.5,
+   "sinkPeakMiB": 299.7,
+   "outputBoundMiB": 299.4,
+   "jobPeakMiB": 1031,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 300,
+   "members": 4,
+   "pages": 4,
+   "items": 12,
+   "kernelPeakMiB": 731.5,
+   "sinkPeakMiB": 299.7,
+   "outputBoundMiB": 399.2,
+   "jobPeakMiB": 1130.8,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 300,
+   "members": 4,
+   "pages": 5,
+   "items": 15,
+   "kernelPeakMiB": 731.5,
+   "sinkPeakMiB": 299.7,
+   "outputBoundMiB": 499,
+   "jobPeakMiB": 1230.6,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 2,
+   "pages": 1,
+   "items": 1,
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 374.5,
+   "outputBoundMiB": 74.9,
+   "jobPeakMiB": 1421.6,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 450,
+   "members": 2,
+   "pages": 2,
+   "items": 2,
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 374.5,
+   "outputBoundMiB": 149.7,
+   "jobPeakMiB": 1496.5,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 450,
+   "members": 2,
+   "pages": 3,
+   "items": 3,
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 374.5,
+   "outputBoundMiB": 224.6,
+   "jobPeakMiB": 1571.3,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 450,
+   "members": 2,
+   "pages": 4,
+   "items": 4,
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 374.5,
+   "outputBoundMiB": 299.4,
+   "jobPeakMiB": 1646.2,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 2,
+   "pages": 5,
+   "items": 5,
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 374.5,
+   "outputBoundMiB": 374.2,
+   "jobPeakMiB": 1721,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 3,
+   "pages": 1,
+   "items": 2,
+   "kernelPeakMiB": 1496.4,
+   "sinkPeakMiB": 524.2,
+   "outputBoundMiB": 149.7,
+   "jobPeakMiB": 1646.1,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 450,
+   "members": 3,
+   "pages": 2,
+   "items": 4,
+   "kernelPeakMiB": 1496.4,
+   "sinkPeakMiB": 524.2,
+   "outputBoundMiB": 299.4,
+   "jobPeakMiB": 1795.8,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 3,
+   "pages": 3,
+   "items": 6,
+   "kernelPeakMiB": 1496.4,
+   "sinkPeakMiB": 524.2,
+   "outputBoundMiB": 449.1,
+   "jobPeakMiB": 1945.5,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 3,
+   "pages": 4,
+   "items": 8,
+   "kernelPeakMiB": 1496.4,
+   "sinkPeakMiB": 524.2,
+   "outputBoundMiB": 598.8,
+   "jobPeakMiB": 2095.2,
+   "memoryAccepts": [
+    false,
+    false,
+    false
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 3,
+   "pages": 5,
+   "items": 10,
+   "kernelPeakMiB": 1496.4,
+   "sinkPeakMiB": 524.2,
+   "outputBoundMiB": 748.5,
+   "jobPeakMiB": 2244.9,
+   "memoryAccepts": [
+    false,
+    false,
+    false
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 4,
+   "pages": 1,
+   "items": 3,
+   "kernelPeakMiB": 1646.1,
+   "sinkPeakMiB": 673.8,
+   "outputBoundMiB": 224.6,
+   "jobPeakMiB": 1870.6,
+   "memoryAccepts": [
+    false,
+    false,
+    true
+   ],
+   "outputBoundWithinMaxOutput": true
+  },
+  {
+   "dpi": 450,
+   "members": 4,
+   "pages": 2,
+   "items": 6,
+   "kernelPeakMiB": 1646.1,
+   "sinkPeakMiB": 673.8,
+   "outputBoundMiB": 449.1,
+   "jobPeakMiB": 2095.2,
+   "memoryAccepts": [
+    false,
+    false,
+    false
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 4,
+   "pages": 3,
+   "items": 9,
+   "kernelPeakMiB": 1646.1,
+   "sinkPeakMiB": 673.8,
+   "outputBoundMiB": 673.6,
+   "jobPeakMiB": 2319.7,
+   "memoryAccepts": [
+    false,
+    false,
+    false
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 4,
+   "pages": 4,
+   "items": 12,
+   "kernelPeakMiB": 1646.1,
+   "sinkPeakMiB": 673.8,
+   "outputBoundMiB": 898.2,
+   "jobPeakMiB": 2544.2,
+   "memoryAccepts": [
+    false,
+    false,
+    false
+   ],
+   "outputBoundWithinMaxOutput": false
+  },
+  {
+   "dpi": 450,
+   "members": 4,
+   "pages": 5,
+   "items": 15,
+   "kernelPeakMiB": 1646.1,
+   "sinkPeakMiB": 673.8,
+   "outputBoundMiB": 1122.7,
+   "jobPeakMiB": 2768.8,
+   "memoryAccepts": [
+    false,
+    false,
+    false
+   ],
+   "outputBoundWithinMaxOutput": false
+  }
+ ]
+}
