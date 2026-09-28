@@ -28,6 +28,10 @@ No customer or real-project document is used or committed.
 | Real Chrome: A1 canvases, CompressionStream, PDF viewer | `harness/chrome-check.mjs` | `evidence/chrome-check.json`, `out/chrome/*.png` |
 | All of the above, clean, with Structural / MeasuredOnly split | `harness/gate.mjs --run gN` | `evidence/gate-gN.json` |
 | Compare two gate runs' Structural fields | `harness/gate.mjs --compare g1 g2` | exit 0 when identical |
+| RF-01: owned bounded DEFLATE (safety-authoritative encoder) | `harness/owned-deflate.mjs` | — |
+| RF-01: owned-bound budget model (OWNED / PRODUCTION / PLATFORM / MEASURED) | `harness/rf01-model.mjs` | `evidence/rf01-model.json` |
+| RF-02: production engine, 2/3/4 members, notices, mixed sheets, teed to jsPDF | `corpus/make-rf02-corpus.mjs`, `harness/rf02.mjs` | `evidence/rf02-<run>.json` |
+| RF focused gate (reuses SHA-bound composites after checking them) | `harness/rf-gate.mjs --run rfN` / `--compare rf1 rf2` | `evidence/rf-gate-<run>.json`, `evidence/rf01-<run>.jsonl` |
 | Image census of **any** PDF, locally, read-only | `harness/inspect-images.mjs <file.pdf>` | stdout only |
 
 Run from this directory, with the repository's `node_modules` available

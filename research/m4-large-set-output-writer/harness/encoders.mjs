@@ -10,6 +10,7 @@
  */
 import { Zlib, zlibSync } from 'fflate';
 import zlib from 'node:zlib';
+import { OwnedZlib, ownedDeflateBound } from './owned-deflate.mjs';
 
 // ---------------------------------------------------------------------------
 // PNG predictors (ISO 32000 7.4.4.4, PNG filter types 0-4), per row.
@@ -298,6 +299,143 @@ export async function encodeIndexedCompressionStream(rows, palette, bpc, { predi
         payload, encodedBytes, rawBytes: lineBytes * rows.height,
     };
 }
+
+// ---------------------------------------------------------------------------
+// RF-01: the owned, safety-authoritative path and the guarded platform path.
+// ---------------------------------------------------------------------------
+
+/** Filtered lines of a row source, one at a time (predictor 0 or 2 = Up). */
+function* filteredLines(rows, rowBytes, predictor, bpp) {
+    const line = new Uint8Array(rowBytes + (predictor ? 1 : 0));
+    const prev = new Uint8Array(rowBytes);
+    let havePrev = false;
+    for (let y = 0; y < rows.height; y += 1) {
+        const row = rows.row(y);
+        if (predictor) {
+            filterRow(predictor, row, havePrev ? prev : null, bpp, line);
+            prev.set(row);
+            havePrev = true;
+        } else {
+            line.set(row);
+        }
+        yield line;
+    }
+}
+
+/** Construction-owned bound of one image stream, before any byte is encoded. */
+export function imageStreamBound(rowBytes, height, predictor) {
+    return ownedDeflateBound((rowBytes + (predictor ? 1 : 0)) * height);
+}
+
+function ownedEncode(rows, rowBytes, predictor, bpp) {
+    const payload = [];
+    const z = new OwnedZlib(rowBytes + (predictor ? 1 : 0), (c) => payload.push(c));
+    for (const line of filteredLines(rows, rowBytes, predictor, bpp)) z.push(line);
+    const r = z.finish();
+    return { payload, encodedBytes: r.encodedBytes, rawBytes: r.inputBytes, bound: r.bound, blocksFixed: r.blocksFixed, blocksStored: r.blocksStored };
+}
+
+const indexedDict = (palette, bpc, predictor, width) =>
+    `/ColorSpace [/Indexed /DeviceRGB ${palette.length - 1} <${hex(palette)}>] /BitsPerComponent ${bpc} `
+    + `/Filter /FlateDecode${decodeParms(predictor, 1, bpc, width)}`;
+
+/** Owned path: bounded by construction, deterministic bytes and scratch. */
+export function encodeIndexedOwned(rows, palette, bpc, { predictor = 2 } = {}) {
+    return { width: rows.width, height: rows.height, dict: indexedDict(palette, bpc, predictor, rows.width), encoder: 'owned', ...ownedEncode(rows, rows.rowBytes, predictor, 1) };
+}
+
+/** Notices and other true-colour rasters: DeviceRGB through the owned encoder. */
+export function encodeRgbOwned(rows, { predictor = 2 } = {}) {
+    return {
+        width: rows.width, height: rows.height,
+        dict: `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode${decodeParms(predictor, 3, 8, rows.width)}`,
+        encoder: 'owned', ...ownedEncode(rows, rows.width * 3, predictor, 3),
+    };
+}
+
+/**
+ * Platform compressor as an optimiser only. Its bytes are counted as they
+ * arrive; the moment they exceed the owned bound, or the stream errors, the
+ * attempt is discarded and the page is re-encoded by the owned encoder. So
+ * the published stream is always <= the construction-owned bound, whatever the
+ * platform does. `makeStream` defaults to CompressionStream('deflate').
+ */
+export async function encodeIndexedGuarded(rows, palette, bpc, {
+    predictor = 2,
+    makeStream = () => new CompressionStream('deflate'),
+} = {}) {
+    const bound = imageStreamBound(rows.rowBytes, rows.height, predictor);
+    let payload = [];
+    let encodedBytes = 0;
+    let fallback = null;
+    let over = false;
+    try {
+        const cs = makeStream();
+        const writer = cs.writable.getWriter();
+        const reading = (async () => {
+            const reader = cs.readable.getReader();
+            for (;;) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                encodedBytes += value.length;
+                if (encodedBytes > bound) {
+                    over = true;
+                    await reader.cancel('over bound');
+                    break;
+                }
+                payload.push(value);
+            }
+        })();
+        // The reader's rejection is observed here; the failure itself surfaces
+        // through the writer and is handled below.
+        reading.catch(() => {});
+        const lineBytes = rows.rowBytes + (predictor ? 1 : 0);
+        const bandRows = Math.max(1, Math.floor(65536 / lineBytes));
+        const band = new Uint8Array(lineBytes * bandRows);
+        let inBand = 0;
+        for (const line of filteredLines(rows, rows.rowBytes, predictor, 1)) {
+            if (over) break;
+            band.set(line, inBand * lineBytes);
+            inBand += 1;
+            if (inBand === bandRows) {
+                await writer.write(band.slice(0, inBand * lineBytes));
+                inBand = 0;
+            }
+        }
+        if (!over) {
+            if (inBand) await writer.write(band.slice(0, inBand * lineBytes));
+            await writer.close();
+        } else {
+            await writer.abort('over bound').catch(() => {});
+        }
+        await reading;
+        if (over) fallback = `platform output exceeded the owned bound ${bound}`;
+    } catch (e) {
+        fallback = over
+            ? `platform output exceeded the owned bound ${bound}`
+            : `platform compressor failed: ${String(e?.message ?? e)}`;
+    }
+    if (fallback) {
+        payload = null;
+        const owned = encodeIndexedOwned(rows, palette, bpc, { predictor });
+        return { ...owned, encoder: 'owned (fallback)', fallback, attemptedBytes: encodedBytes };
+    }
+    return {
+        width: rows.width, height: rows.height, dict: indexedDict(palette, bpc, predictor, rows.width),
+        encoder: 'platform', payload, encodedBytes, rawBytes: (rows.rowBytes + (predictor ? 1 : 0)) * rows.height, bound, fallback: null,
+    };
+}
+
+/** Test doubles for a misbehaving platform compressor. */
+export const FAULTY_STREAMS = {
+    /** Emits twice as many bytes as it receives (never a valid stream; must never be published). */
+    expanding: () => new TransformStream({ transform(chunk, c) { c.enqueue(new Uint8Array(chunk.length * 2).fill(0xAB)); } }),
+    /** Errors after ~1 MiB of input. */
+    throwing: () => {
+        let seen = 0;
+        return new TransformStream({ transform(chunk, c) { seen += chunk.length; if (seen > 2 ** 20) throw new Error('simulated compressor failure'); c.enqueue(new Uint8Array(0)); } });
+    },
+};
 
 /** Lossy: a JPEG of the composite, embedded as DCTDecode. */
 export function encodeJpeg(jpegBytes, width, height) {

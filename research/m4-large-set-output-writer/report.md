@@ -20,6 +20,8 @@ M4 deferred topic **large-set Output Writer** の再開。関連: *Large real dr
 
 推奨: **Build**（小さな owned PDF writer）＋ プラットフォームの `CompressionStream('deflate')`（新規依存ゼロ）。jsPDF は Comparator 専用依存なので、Comparison PDF と Change Report の両方を移せば依存ごと外せる。
 
+> **RF-01 / RF-02 で改訂（§25–§27）**: 安全上の権威は owned bounded DEFLATE（推奨 B）に移し、`CompressionStream` は owned 上界でガードした任意の最適化（C）に格下げ。初回 Production は Comparison PDF Output Writer v2 のみ、Change Report は既存 jsPDF 経路に据え置き（DEFER）、jsPDF 削除はしない。
+
 **前回 M4 研究の H5 / H11 の緊張（「圧縮すると厳密なサイズ保証を失う」）は、spool なしで解ける**: 4-bit 行 + stored フォールバックにより、ページごとの出力は作業前に**決定的な上界**（≈ 0.5 B/px、現行 stored PNG の 1/8）で縛れる。その上界だけで判定しても 150 dpi × 5 p（41.6 MiB）と 300 dpi × 5 p（166.4 MiB）は現行の `MAX_OUTPUT_BYTES` 256 MiB に収まる（§14、§24）。
 
 ---
@@ -126,13 +128,15 @@ writer は全候補共通の試作 `harness/pdf-writer.mjs`（append-only、オ�
 | **jsPDF** | 3.0.4 導入済（最新 4.2.1, 2026-03） | MIT | ○ | ≈ 130 kB | `addImage` は PNG を全デコード後に再圧縮（Predictor 11–14 固定）。**圧縮済みストリームを渡す公開 API なし** | 文書全体を JS 文字列で保持、画像も binary string、`output()` は例外を握りつぶす | **却下** |
 | **pdf-lib** | 1.17.1（2021-11 以降更新なし、fork `@cantoo/pdf-lib` は活発） | MIT | ○ | ≈ 178 kB | `context.stream()` で任意 dict の生ストリームを登録可 | 全オブジェクトを `save()` まで保持、`save()` がファイル全体の単一バッファを確保 | **却下**（使うのは一部の機能だけ、本家は保守停止、公開時に全体コピー） |
 | **pdfkit** | 0.20.2（2026-08） | MIT | ○（browser build） | ≈ 212 kB（fontkit 大） | 非インターレース・αなし PNG の IDAT を Predictor 15 で素通し、ページごとフラッシュ | ストリーム出力可 | **保留**（Indexed 4-bit を PNG 化する手間、Buffer polyfill 問題、サイズ） |
-| **CompressionStream** | Web 標準 | — | Baseline widely available（2023-05〜、MDN）、Worker 可 | 0 | `'deflate'` = zlib 形式 = FlateDecode そのもの（実機で header `78 9C` を確認） | ストリーミング | **採用** |
+| **CompressionStream** | Web 標準 | — | Baseline widely available（2023-05〜、MDN）、Worker 可 | 0 | `'deflate'` = zlib 形式 = FlateDecode そのもの（実機で header `78 9C` を確認） | ストリーミング | ~~採用~~ ← **RF-01 で改訂**: 安全経路には採用しない（内部状態・出力上限は Web API の契約ではない）。owned 上界でガードした任意最適化としてのみ（§25） |
 | fflate | 0.8.3（2026-05） | MIT | ○ | ≈ 8–12 kB | 同期/ストリーム Zlib、レベル指定可 | ストリーミング | フォールバック候補（CS 非対応環境用）。本命は不要 |
 | pako | 3.0.2（2026-09, 3.x で breaking） | MIT+Zlib | ○ | ≈ 13.5 kB | ストリーム Deflate | — | 不要（pdf-lib 用に 2.1.0 が既にあるが使わない） |
 | fast-png / UPNG.js / @jsquash/* | — | MIT / Apache-2.0 | ○ | — | PNG エンコード | — | 不要（PNG コンテナは使わない） |
 | muhammara / hummus | — | — | **×**（native addon） | — | — | — | 対象外 |
 
 → **Build / Reuse / Hybrid 判定: Build**（owned writer、試作 ≈ 150 行）＋ **Reuse はプラットフォーム API（CompressionStream）のみ**。新規 npm 依存なし、jsPDF 依存を削除可能。
+
+> **RF-01 で改訂**: Build の中身は owned writer ＋ **owned bounded DEFLATE**（§25）。プラットフォーム API は安全経路に入れない。jsPDF 削除は Change Report 移行後（§26）。
 
 ## 9. 可逆圧縮の測定（Structural）
 
@@ -196,7 +200,7 @@ writer は全候補共通の試作 `harness/pdf-writer.mjs`（append-only、オ�
 | 項 | 現行 | 提案 |
 |---|---|---|
 | kernel 相 | `estimatePhaseMemory`（不変） | 同じ（不変） |
-| sink ピーク | 合成 RGBA + stored PNG + jsPDF ingest（inflate/unfilter/split/stringify）≈ 10 B/px 超 | engine が保持中のマスク + バンドバッファ（64 行）+ 圧縮器状態（上限 4 MiB）+ そのページの圧縮出力の**上界** |
+| sink ピーク | 合成 RGBA + stored PNG + jsPDF ingest（inflate/unfilter/split/stringify）≈ 10 B/px 超 | engine が保持中のマスク + バンドバッファ（64 行）+ 圧縮器状態（上限 4 MiB）+ そのページの圧縮出力の**上界** | ← RF-01: 「4 MiB」は CompressionStream の契約値ではない。改訂後は owned encoder の固定バッファ `encoderScratch`（§25） |
 | ページ後に残るもの | 3 B/px の binary string（150 dpi で 52.3 MB/page） | **圧縮済みチャンクのみ**（cs-up 実測 ≈ 104 KB/page @150 dpi） |
 | 公開時 | 保持画像 + 結合文字列 + ArrayBuffer + Blob（≈ 4 × 文書） | チャンク + Blob（2 × 文書、結合コピーなし） |
 | 5 p @150 dpi 全体ピーク | 1,050 MiB | 191 MiB（上界ベース） |
@@ -212,6 +216,7 @@ writer は全候補共通の試作 `harness/pdf-writer.mjs`（append-only、オ�
 1. DPI、ページ寸法、フレーム寸法（`ceil`）、既知のブラウザ制約（canvas 最大面積・辺長、`CompressionStream` の有無 → 無ければ `UNSUPPORTED` で拒否）。
 2. kernel 相（`estimatePhaseMemory`、不変）、work units（不変）。
 3. **ページごとの出力上界** `B(page) = max(zlibBound(raw), storedSize(raw)) + 4 KiB`、`raw = (ceil(w/2) + 1) × h`（4-bit 行 + 予測バイト）。Deflate の最悪膨張は実測でも `zlibBound` 以内（一様乱数 8 MiB: 8,390,314 ≤ 8,391,181）。万一超えたら writer はそのページを stored ブロックで出し直す（`png.ts` と同じ厳密サイズ）ので、**上界は構成的に保証**。
+   > **RF-01 で改訂**: `zlibBound` 以内という実測は zlib / fflate の振る舞いであり、ブラウザの `CompressionStream` 実装の契約ではない。上界の根拠は owned encoder の構成（ブロックごとに固定ハフマンと stored の小さい方）に置き換えた: `B = ownedDeflateBound(raw) + 4 KiB`（§25）。
 4. `jobPeak = max( max(kernel, sinkPeak) + ΣB,  2 × ΣB )` をメモリプリセットと比較。
 5. **`ΣB ≤ MAX_OUTPUT_BYTES`（256 MiB、値は据え置き）**。上界で判定するので、現行と同じく「作業前にすべて決まる」契約のまま。
 
@@ -254,6 +259,7 @@ writer は全候補共通の試作 `harness/pdf-writer.mjs`（append-only、オ�
 | プレビュー | なし（RGBA `paintPair` 経路を残す） | 既存 gate |
 | sink API | `onPair` が非同期化（`CompressionStream`）。ペアの受け渡しにマスク参照を追加 | 各 await 後に既存の取消/所有者チェック、マスク非改変を assert |
 | Change Report | レイアウト（A4 mm、クロップ、テキスト 2 行、通知）を owned writer で再実装 | 同じ PR で移行するなら jsPDF 削除まで一気に。分けるなら 2 つの container モデルが一時共存 |
+| （RF-02 改訂）Change Report | **初回は移行しない（DEFER）**。既存 jsPDF 経路と既存 budget の jsPDF 項を残す | §26 |
 | 通知ページ | Canvas で描いた日本語テキスト RGBA → DeviceRGB + Up + Flate（可逆） | 不透明 assert は維持 |
 | タイトル行 | Helvetica / WinAnsi。日本語ファイル名の扱いは現行 jsPDF と同等の制約（未測定） | 同等性を gate で確認、改善は別課題 |
 | ダウンロード | `doc.save` → `Blob` + `file-saver`（既存依存） | artifacts gate で実ダウンロードを再検証 |
@@ -269,7 +275,7 @@ writer は全候補共通の試作 `harness/pdf-writer.mjs`（append-only、オ�
 
 ## 19. Build / Reuse / Hybrid 推奨
 
-**Build**（owned writer）＋ **プラットフォーム API の再利用**（`CompressionStream`）。理由:
+**Build**（owned writer）＋ **プラットフォーム API の再利用**（`CompressionStream`）。理由:（**RF-01 で改訂 → §27**: Build = owned writer ＋ owned bounded DEFLATE）
 1. 必要な PDF 機能は Image XObject・Indexed 色空間・FlateDecode + Predictor・Type1 標準フォント 1 つ・xref だけで、試作は ≈ 150 行で pdf.js / pdf-lib / PDFium が開ける。
 2. どのライブラリも「圧縮済みの 4-bit Indexed ストリームを、保持も再コピーもせず、ページ単位で追記する」を素直には提供しない（jsPDF は不可、pdf-lib は全体バッファ化、pdfkit は PNG 経由）。
 3. 所有することで、上界・中断・非公開の各保証を予算モデルに直接束縛できる（現行 `png.ts` が encoder を所有したのと同じ理由）。
@@ -284,7 +290,7 @@ page N:
   [ファイル]   state rows ← (refMask, otherMask, dilations) 1 行ずつ
                → 4-bit Indexed（パレット = paintPair が塗る 9 状態）
                → PNG Up 予測（/Predictor 15）
-               → CompressionStream('deflate')（ストリーミング、64 行バンド）
+               → CompressionStream('deflate')（ストリーミング、64 行バンド）   ← RF-01 改訂: owned bounded DEFLATE（§27）
                → Runtime gate（実バイト累積 ≤ MAX_OUTPUT_BYTES）
                → Image XObject + 判定行 + Page を append-only チャンクへ
                → マスク等を解放
@@ -309,14 +315,14 @@ finish(): Pages / Catalog / xref / trailer → new Blob(chunks) → ダウンロ
 | `src/utils/comparator/engine.ts` | `PairResult` にマスク参照を追加、ファイル成果物では `paintPair` を呼ばない、非同期 sink の await 後に取消/所有者チェック |
 | `src/components/PdfComparator.tsx` | 保存を Blob ダウンロードに、見積り表示（§16）、実行時拒否の表示 |
 | `scripts/smoke-comparator.mjs` + harness html、`scripts/smoke-comparator-artifacts.mjs` + harness html、`scripts/make-comparator-fixtures.mjs` | gate の書き換えと A1 fixture 追加 |
-| `package.json` / `package-lock.json` | `jspdf` 削除（Change Report も移行する場合） |
+| `package.json` / `package-lock.json` | `jspdf` 削除（Change Report も移行する場合） | ← RF-02 改訂: 初回は削除しない |
 
 ## 22. 未解決事項（Human / 次段で決めること）
 
 1. **Acrobat の手法**: 実ファイルの元版と Acrobat 版に `node research/m4-large-set-output-writer/harness/inspect-images.mjs <pdf>` を各 1 回（ローカル・読み取り専用）。結果の共有は任意。
 2. **`MAX_OUTPUT_BYTES` の適用先**: 推奨は案 A「事前・上界 + 実行時・実バイト（多重防御）」。必須（150 dpi）と望ましい（300 dpi）の目標は案 A で満たせ、450 dpi は 3 ページまで。案 B「事前はメモリのみ、出力は実行時・実バイト」なら 450 dpi × 5 p も受理（§15）。
-3. **Change Report を同じ PR で移すか**（推奨: 同じ PR。jsPDF と旧コンテナモデルを一度に外せる）。
-4. **`CompressionStream` 非対応環境**: `UNSUPPORTED` で拒否（推奨、対象ブラウザは全対応）か、fflate 同梱か。
+3. **Change Report を同じ PR で移すか**（推奨: 同じ PR。jsPDF と旧コンテナモデルを一度に外せる）。 → **RF-02 で解決: DEFER**（§26）
+4. **`CompressionStream` 非対応環境**: `UNSUPPORTED` で拒否（推奨、対象ブラウザは全対応）か、fflate 同梱か。 → **RF-01 で解消**: 安全経路は CompressionStream に依存しない（§25）
 5. **タイトル行の日本語**: 現行同等で据え置くか、改善を別課題にするか。
 6. **300 dpi を 512 MiB に**入れたい場合は kernel の render 相（帯状 readback）の別課題になる。本件の範囲外。
 7. **Acrobat / PDFium のリーダー側メモリ**（450 dpi 全面画像）: Chrome では表示を確認。Acrobat は未検証。
@@ -324,6 +330,8 @@ finish(): Pages / Catalog / xref / trailer → new Blob(chunks) → ダウンロ
 ## 23. 実装規模見積り
 
 中規模、1 PR（または Comparison PDF → Change Report の 2 段）。新規 ≈ 400–500 行（writer + state raster）、置換 ≈ 400 行（artifacts / budget / engine / UI）、gate の書き換えが最大の塊（≈ 600–900 行、既存 gate が jsPDF 内部を検査しているため）。M4 / M6 の実績から、独立レビューは複数ラウンドを見込む。
+
+> **RF 改訂後の見積り（§27）**: Comparison PDF Output Writer v2 のみ。新規 ≈ 500–600 行（writer + state raster + owned DEFLATE）、置換 ≈ 300 行（Comparison PDF sink、budget の Comparison PDF 項、engine は変更なしでも可）、gate ≈ 500–700 行。
 
 ## 24. 前回 M4 研究（`research/m4-comparator-reliability-architecture`）との関係
 
@@ -342,6 +350,158 @@ finish(): Pages / Catalog / xref / trailer → new Blob(chunks) → ダウンロ
 | crash and tab-close orphan recovery | 該当なし（何も永続化しない。`finish()` 前は Blob も作らない） |
 | browser-local only | ○（外部送信なし、実 Chrome で canvas / CompressionStream / viewer 確認） |
 | no new dependency without human approval | ○ 新規依存なし（CompressionStream はプラットフォーム API） |
+
+---
+
+# Focused Repair（RF-01 / RF-02）
+
+起点 head `b9ca0ca`。エビデンス: `evidence/rf-gate-rf*.json`、`evidence/rf01-*.jsonl`、`evidence/rf02-*.json`、`evidence/rf01-model.json`。stage-1 の合成画像は再利用し、`rf-gate.mjs` が最初に `gate-g1.json`（`572ecca`）の構造値と一致することを確認してから進む（一致しなければ実行拒否）。§1–§24 の本文は歴史として残し、誇張していた箇所には改訂注記を付けた。
+
+## 25. RF-01 — CompressionStream の安全契約
+
+### 25.1 何が誇張だったか
+
+- `CompressionStream('deflate')` の出力サイズの上限も、内部の作業メモリも、**Web API の契約ではない**。§14 の `zlibBound` の実測は zlib / fflate の振る舞いであり、ブラウザ実装の保証ではなかった。
+- `model.mjs` の `COMPRESSOR_STATE = 4 MiB` は保守的に置いた定数で、どの仕様にも根拠がない。
+
+### 25.2 構成で所有する上界（owned bounded DEFLATE）
+
+`harness/owned-deflate.mjs`（≈ 200 行、依存なし）:
+
+- 入力を 65,535 bytes のブロックに切る。各ブロックでは次を行う。
+  - 字句化する。一致は距離 1（直前バイトの繰り返し）と距離 = 1 行分（真上のバイト）の 2 種類だけで、ハッシュ表を持たない。
+  - 固定ハフマン符号での正確なビット数を計算し、固定ハフマンと stored の**小さい方**を出力する。
+- したがって出力は `ownedDeflateBound(n) = 2 + 6·⌈n/65535⌉ + n + 4` を**構成上**超えない。`finish()` でもこの不等式を assert する。
+- 作業メモリは固定: `ownedDeflateScratchBytes(L) = (L + 65535) + 65535·4 + 65536`（履歴 1 行 + 1 ブロック + トークン列 + 出力チャンク 1 つ）。ページの大きさに比例する確保はない。
+- 単体テスト（`rf-gate` の `unit`、8 入力）は全件、zlib で展開して完全一致し、上界以内だった。
+  - 一様乱数: 400,041 ≤ 400,048、全ブロックが stored になる。
+  - 9 状態のランダム nibble: 400,013。
+  - 行幅が 32 KiB 窓を超える入力（行一致なし）、ブロック境界ちょうど・+1、空入力も含む。
+
+### 25.3 分類した安全契約
+
+| 区分 | 内容 | 安全上の扱い |
+|---|---|---|
+| **OWNED**（構成で決まる） | 画像 1 枚の出力上界 `ownedDeflateBound((rowBytes+1)·h) + 4 KiB`、encoder の固定バッファ `encoderScratch`、ページ追加前の実バイト上限チェック、stored への退避 | **決定的な上界。preflight はこれだけで判定する** |
+| **PRODUCTION**（既存 M4 契約） | kernel 相 `estimatePhaseMemory`、sink 中に engine が保持するマスク `engineLiveDuringSink`、`NOTICE_RASTER` | 既存のまま |
+| **PLATFORM**（前提、ここでは縛らない） | フレームサイズの canvas を確保できること（Chrome 143 で 450 dpi A1 を確認）、`new Blob(chunks)` のコピーは最大 1 回 | 前提として明示する。既存 M4 と同じ扱い |
+| **MEASURED**（証拠であって上界ではない） | `CompressionStream` の出力サイズとフォールバックの振る舞い、RSS・時間 | 報告のみ |
+
+### 25.4 ガード付き platform 経路（任意の最適化）
+
+`encodeIndexedGuarded`:
+
+1. 4-bit 状態ラスタを `CompressionStream` に流し、出てくるバイトを数える。
+2. owned 上界を超えた時点、またはストリームがエラーになった時点で、その試行を**破棄**し、同じ行を owned encoder で作り直す。
+3. 部分出力は発行しない（`ChunkedPdfWriter` は `finish()` まで何も公開しない）。
+
+故障注入の結果（150 dpi × 5 p、owned 上界 8,724,184 bytes/page）:
+
+| セル | 結果 |
+|---|---|
+| `guard`（Node の実 CompressionStream） | platform、520,711 bytes、画素不一致 0 |
+| `guard-expanding`（入力の 2 倍を吐くストリーム） | 全ページ owned にフォールバック、1,069,532 bytes、画素不一致 0、上界内 |
+| `guard-throwing`（1 MiB 後に例外） | 全ページ owned にフォールバック、1,069,532 bytes、画素不一致 0、上界内 |
+
+→ **CompressionStream の圧縮率が今の Chrome と違っても、あるいは失敗しても、出力の安全性は変わらない。**ただし platform 経路を使うとき、その**内部メモリは上界の外**に残る（PLATFORM 前提が 1 つ増える）。
+
+### 25.5 A / B / C の判定
+
+| 候補（5 p, 全ページ画素一致 0） | 150 dpi | 300 dpi | 450 dpi | writer 自身（sink-only, MeasuredOnly） | 出力上界 | メモリ上界 |
+|---|---:|---:|---:|---|---|---|
+| **B: owned bounded DEFLATE** | **1,069,532** | **2,842,729** | **5,166,882** | 18 / 22 / 16 MiB | owned | **owned** |
+| C: CS（owned ガード付き） | 520,711 | 1,148,669 | 1,844,718 | 21 / 27 / 35 MiB（g1 の cs-up） | owned | platform 前提 |
+| 参考: 現行 jsPDF | 261,549,245 | 0 byte（沈黙失敗） | 1 p で 470,736,676 | 761 MiB / — / — | — | — |
+
+- **推奨: B**（owned compressor を安全上の権威かつ既定の経路にする）。
+  - 出力もメモリも所有した算術で縛れる。
+  - どのブラウザでも同じバイト列になり、gate の再現性が上がる。
+  - **同期処理**なので sink を非同期化する必要がなく、engine の `onPair` 契約はそのまま使える。
+  - 代償はファイルが 2〜2.8 倍になることだが、150 dpi × 5 p で 1.07 MB、現行比でも 245 分の 1。
+- **C は後続の任意最適化**として温存する。ガードによって出力上界は保たれるが、内部メモリが PLATFORM 前提として予算の外に出ることを明示する。採るかどうかは Human 判断。
+- **A（CS を主経路、stored を退避先）は採らない**。安全経路のメモリが非公開の実装詳細に依存するため。
+
+### 25.6 改訂した予算モデル（`rf01-model.json`、OWNED + PRODUCTION のみ）
+
+| | 2 members | 3 members | 4 members |
+|---|---|---|---|
+| 150 dpi × 5 p | 191.3 MiB / 出力上界 41.6 MiB | 249.5 / 83.3 | 307.8 / 124.9 |
+| 300 dpi × 5 p | 764.9 / 166.4 | 997.7 / **332.7 (>256)** | 1,230.6 / **499.0 (>256)** |
+| 450 dpi × 5 p | 1,721.0 / **374.2 (>256)** | 2,244.9 / 748.5 | 2,768.8 / 1,122.7 |
+
+- 150 dpi は 2〜4 members の 5 ページすべてが **512 MiB** で受理され、出力上界も 256 MiB 以内。
+- 300 dpi × 5 p × 2 members は **1 GiB** で受理。3 members 以上では、案 A（上界で事前判定）だと出力上界が 256 MiB を超えるため、ページ数を減らす拒否になる（3 members は 3 p まで 199.6 MiB）。
+- 通知ページ（1240 × 1754 RGB）: 上界 6,531,336 bytes/枚、描画・読み戻し・エンコードのピーク 17,399,680 bytes（`rf01-model.json` の `constants`）。
+
+## 26. RF-02 — Production 機能面の網羅（Comparison PDF）
+
+### 26.1 方法
+
+`harness/rf02.mjs` で、**本番の `planComparison` + `runComparison` を無改変で**実行する。Node 用の shim は 2 つだけ（`document.createElement('canvas')` → @napi-rs/canvas、`window` → globalThis とタイマー版 `requestAnimationFrame`）。
+
+- 合成 fixture（`corpus/make-rf02-corpus.mjs`）: A4 縦 / A3 横 / A3 横 / A3 縦 / A4 横。
+  - B: p1 変更、p3 を A4 にした寸法不一致、p4 変更。
+  - C: p2 変更、p5 欠落。
+  - D: p1・p2・p5 変更。
+- 各 pair / page イベントを「候補 writer → 本番 jsPDF sink」の順に同じ実行へ分岐する。本番 sink が画素を解放するため、この順番にしている。
+- 候補 writer の内容:
+  - pair は 4-bit Indexed（パレットはペアごとに本番 `paintPair` から導出）を owned DEFLATE で書く。
+  - 通知は本番 `drawNotice` が描いた RGBA を DeviceRGB + Up + owned DEFLATE で書く。配置は `artifacts.ts:219-220` と同じ。
+
+### 26.2 結果（150 dpi、3 構成すべて ok）
+
+| members | 期待順序（fixture 仕様だけから導出） = 候補の出力 | 候補 bytes | 現行 jsPDF bytes |
+|---|---|---:|---:|
+| 2 | p1/B/CHANGE, p2/B/MATCH, **p3/GEOMETRY_MISMATCH**, p4/B/CHANGE, p5/B/MATCH | 150,022 | 45,700,907 |
+| 3 | p1/B/CHANGE, p1/C/MATCH, p2/B/MATCH, p2/C/CHANGE, **p3/GEOMETRY_MISMATCH**, p4/B/CHANGE, p4/C/MATCH, **p5/MISSING_PAGE** | 254,420 | 78,337,510 |
+| 4 | p1/B,C,D (CHANGE, MATCH, CHANGE), p2/B,C,D (MATCH, CHANGE, CHANGE), **p3/GEOMETRY_MISMATCH**, p4/B,C,D (CHANGE, MATCH, MATCH), **p5/MISSING_PAGE** | 315,330 | 110,979,550 |
+
+開き直し（pdf.js + pdf-lib）で全ページ次を満たした:
+
+- ページ数が正確に一致。「ソースページ → slot」の順序どおり。通知はソースページの位置どおり。pair の欠落・重複なし。
+- 判定行 `pN: rf02-A.pdf vs rf02-X.pdf — VERDICT` が期待と一致。
+- ページ寸法が元の用紙と `72/dpi` pt 以内で一致し、向き（縦横）も一致。通知ページは 620 × 877 pt。
+- **デコード画素のハッシュが engine の合成画像と一致**。さらに**同じ実行の本番 jsPDF 出力のデコード画素とも一致**（pair も通知も）。寸法・判定行・画像サイズも jsPDF 出力と一致。
+- 全画像が owned 上界以内。
+
+→ Comparison PDF の機能面（2/3/4 members、reference-pair 順序、MISSING_PAGE / GEOMETRY_MISMATCH 通知、縦横混在）で、候補 writer は現行 writer と**視覚的に同一の成果物**を出す。
+
+### 26.3 Change Report
+
+**A: 初回 Production から DEFER。** Change Report は既存の jsPDF 経路と既存 budget の jsPDF 項のまま据え置く。Change Report に同等のエビデンスはまだ無いので、同時移行は推奨しない。**jsPDF は削除しない**（Comparator の全成果物経路が移行するまで）。
+
+## 27. RF 後の推奨アーキテクチャ
+
+```
+Comparison PDF Output Writer v2（初回 Production の範囲）:
+  engine（無変更: plan / kernel / verdict / paintPair / onPair / onPage）
+  → sink v2（同期）:
+      pair   : 合成 RGBA（または将来はマスク）→ 4-bit 状態行（パレット = paintPair の 9 状態）
+               → Up 予測 → owned bounded DEFLATE（固定ハフマン | stored、ブロックごと）
+      notice : drawNotice RGBA → DeviceRGB → Up → owned bounded DEFLATE
+      → Runtime gate（実バイト + 4 KiB ≤ MAX_OUTPUT_BYTES、超過で abort・Blob なし）
+      → append-only チャンク → finish() → new Blob(chunks)
+  preflight: 既存 kernel 項 + OWNED 上界（画像ごと）+ OWNED scratch、ΣB ≤ 256 MiB（案 A）
+Change Report: 既存 jsPDF 経路のまま（DEFER）
+CompressionStream: 使わない（後続の任意最適化 C として、owned ガード付きでのみ検討）
+```
+
+初回の実装範囲では engine を変えずに済む。候補 writer は `pair.pixels`（合成 RGBA）から索引化しても画素一致を確認済み（§26）。マスクから直接エンコードして RGBA を省く最適化（§7 の `idx4m`）は後続の選択肢。
+
+改訂後、変更が見込まれる Production ファイル（初回）:
+
+| ファイル | 変更 |
+|---|---|
+| `src/utils/comparator/pdf-writer.ts`（新規） | append-only チャンク writer、`maxBytes`、`abort` |
+| `src/utils/comparator/deflate.ts`（新規） | owned bounded DEFLATE、`ownedDeflateBound`、`ownedDeflateScratchBytes` |
+| `src/utils/comparator/state-raster.ts`（新規） | `statePalette`（`paintPair` から導出）、RGBA → 4-bit 行、Up 予測 |
+| `src/utils/comparator/artifacts.ts` | `createComparisonPdf` だけを v2 に置換。`createChangeReport` は jsPDF のまま |
+| `src/utils/comparator/budget.ts` | Comparison PDF 用の項を OWNED 上界に置換。Change Report 用の jsPDF 項は残す |
+| `src/utils/comparator/contract.ts` | `MAX_OUTPUT_BYTES` の説明（事前は上界、実行時は実バイト）。値は据え置き |
+| `src/components/PdfComparator.tsx` | Comparison PDF の保存を Blob に、見積り表示、実行時拒否の表示 |
+| `scripts/smoke-comparator*.mjs` と各 harness | Comparison PDF 部分の検査を書き換え（Change Report 部分は残す） |
+
+変更しないもの: `engine.ts`、`mask.ts`、`png.ts`（Change Report が引き続き使う）、`package.json`（jsPDF は残す）。
 
 ---
 

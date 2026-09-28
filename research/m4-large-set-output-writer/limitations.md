@@ -79,3 +79,35 @@ Kept in the order they were found. Nothing here is rewritten after the fact.
    lint delta against the baseline is 0 and tracked research files have 0
    findings. This changed only the gate's bundle step after `g0b`; the final
    validation runs are from the committed head.
+
+## Focused repair RF-01 / RF-02 (from b9ca0ca)
+
+10. **Overstatement corrected (RF-01).** §14 of the report treated the measured
+    `zlibBound` behaviour and a 4 MiB compressor-state constant as if they bound
+    `CompressionStream`. Neither is a Web API contract. The safety model now
+    rests on the owned bounded DEFLATE (`harness/owned-deflate.mjs`); the
+    platform compressor is measured, guarded and optional. `model.mjs` keeps its
+    old arithmetic (it is bound to the g1/g2 evidence) with its header corrected;
+    `rf01-model.mjs` is the construction-owned model.
+11. **Owned DEFLATE is synchronous JavaScript.** At 450 dpi one A1 page encodes
+    in well under a second on this machine (MeasuredOnly); on a slow device the
+    main thread could be held for longer per page. The engine already yields per
+    pair; a production encoder should also yield between 64 KiB blocks. Not
+    measured on a low-end device.
+12. **Reused composites.** RF-01 cells read the stage-1 composites on disk
+    rather than re-rendering; `rf-gate.mjs` refuses to run unless their
+    structural fields equal those recorded in `evidence/gate-g1.json` (572ecca).
+13. **RF-02 runs the real engine in Node with two shims**: `document.createElement('canvas')`
+    → @napi-rs/canvas, and `window` → `globalThis` with a timer-based
+    `requestAnimationFrame`. Instrument defect found on the way: defining a bare
+    `window = { setTimeout }` makes pdf.js take its browser path and fail on
+    `requestAnimationFrame`, which the engine reports as `RENDER_FAILED` — the
+    shim, not the engine, was wrong.
+14. **RF-02 scope:** 150 dpi, tolerance 0, A4/A3 sheets, 2/3/4 members. The
+    notice pages are compared pixel-for-pixel with the production jsPDF output
+    of the same run, which also exercises `drawNotice` under @napi-rs/canvas
+    text rendering rather than a browser's.
+15. **Change Report is deferred**, so no Change Report evidence was produced;
+    its jsPDF path and the jsPDF container model stay.
+16. **`CompressionStream` memory in a browser remains unmeasured**; under the
+    recommendation (B) it is not on the safety path at all.

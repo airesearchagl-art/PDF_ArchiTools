@@ -1,10 +1,13 @@
 /**
  * (1) Worst-case compressed size: how far can Deflate expand the 4-bit state
- *     raster? Measured on adversarial inputs for fflate (levels 1/6/9) and the
- *     zlib behind CompressionStream (node:zlib, the same library Chrome uses).
+ *     raster? Measured on adversarial inputs for fflate (levels 1/6/9) and
+ *     node:zlib. This is measured behaviour of those libraries, not a contract
+ *     of any browser's CompressionStream (RF-01).
  * (2) The proposed two-layer budget, evaluated with the production kernel
  *     model (estimatePhaseMemory / engineLiveDuringSink) over the synthetic A1
  *     frames, next to today's preflight verdicts (evidence/budget-matrix.json).
+ *     COMPRESSOR_STATE below is a placeholder, not a bound; superseded by the
+ *     construction-owned model in rf01-model.mjs.
  *
  * Run: node harness/model.mjs  -> evidence/model.json
  */

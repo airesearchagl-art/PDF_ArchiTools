@@ -15,6 +15,7 @@ import { createCanvas, ImageData } from '@napi-rs/canvas';
 import { ChunkedPdfWriter } from './pdf-writer.mjs';
 import {
     rgbRows, statePalette, stateRowsFromMasks, indexedRowsFromComposite,
+    encodeIndexedOwned, encodeIndexedGuarded, FAULTY_STREAMS,
     encodeRgb, encodeIndexed, encodeIndexedCompressionStream, encodeJpeg, downsampledStateRows,
 } from './encoders.mjs';
 import { verifyPdf } from './verify.mjs';
@@ -154,7 +155,13 @@ if (WRITER === 'current') {
         } else if (WRITER.startsWith('idx4m-')) {
             // Indexed straight from the masks: no RGBA composite is ever built.
             const k = readMasks(m);
-            if (WRITER === 'idx4m-cs' || WRITER === 'idx4m-cs-up') {
+            if (WRITER === 'idx4m-own') {
+                image = encodeIndexedOwned(stateRowsFromMasks(k.ref, k.oth, k.dRef, k.dOth, m.width, m.height), palette, 4, { predictor: 2 });
+            } else if (WRITER.startsWith('idx4m-guard')) {
+                const fault = WRITER.split('idx4m-guard-')[1];
+                image = await encodeIndexedGuarded(stateRowsFromMasks(k.ref, k.oth, k.dRef, k.dOth, m.width, m.height), palette, 4,
+                    fault ? { predictor: 2, makeStream: FAULTY_STREAMS[fault] } : { predictor: 2 });
+            } else if (WRITER === 'idx4m-cs' || WRITER === 'idx4m-cs-up') {
                 image = await encodeIndexedCompressionStream(
                     stateRowsFromMasks(k.ref, k.oth, k.dRef, k.dOth, m.width, m.height), palette, 4,
                     { predictor: WRITER === 'idx4m-cs-up' ? 2 : 0 },
@@ -196,6 +203,8 @@ if (WRITER === 'current') {
             page: m.page, rawBytes: image.rawBytes, encodedBytes: image.encodedBytes,
             ratio: +(image.rawBytes / image.encodedBytes).toFixed(1),
             filterTypes: image.filterTypes ?? undefined,
+            encoder: image.encoder, fallback: image.fallback ?? undefined, bound: image.bound, withinBound: image.bound === undefined ? undefined : image.encodedBytes <= image.bound,
+            blocksFixed: image.blocksFixed, blocksStored: image.blocksStored,
             ms: Math.round(performance.now() - ts), retainedAfter: retained, rssAfter: mib(rssNow()),
         });
         image = null;
