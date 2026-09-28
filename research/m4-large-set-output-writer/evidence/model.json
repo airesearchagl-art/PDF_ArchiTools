@@ -1,0 +1,373 @@
+{
+ "bound": [
+  {
+   "input": "uniform random bytes (no raster can be worse)",
+   "rawBytes": 8388608,
+   "zlibBound": 8391181,
+   "fflateL1": 8390314,
+   "fflateL6": 8390314,
+   "fflateL9": 8390314,
+   "nodeZlibDefault": 8391179,
+   "maxOverRaw": 1.000306487083435,
+   "withinZlibBound": true
+  },
+  {
+   "input": "random 9-state nibbles (worst legal state raster)",
+   "rawBytes": 8388608,
+   "zlibBound": 8391181,
+   "fflateL1": 6808250,
+   "fflateL6": 6808206,
+   "fflateL9": 6808206,
+   "nodeZlibDefault": 6734229,
+   "maxOverRaw": 0.8116066455841064,
+   "withinZlibBound": true
+  },
+  {
+   "input": "all paper (best case)",
+   "rawBytes": 8388608,
+   "zlibBound": 8391181,
+   "fflateL1": 8199,
+   "fflateL6": 8199,
+   "fflateL9": 8199,
+   "nodeZlibDefault": 8163,
+   "maxOverRaw": 0.0009773969650268555,
+   "withinZlibBound": true
+  }
+ ],
+ "model": [
+  {
+   "dpi": 150,
+   "pages": 1,
+   "frame": "4969x3509",
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 45.6,
+   "outputWorstCaseMiB": 8.3,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 158,
+   "atPublishMiB": 16.7,
+   "jobPeakMiB": 158,
+   "acceptsAt": {
+    "512 MiB（推奨）": true,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "ACCEPT",
+    "1 GiB": "ACCEPT",
+    "2 GiB": "ACCEPT"
+   }
+  },
+  {
+   "dpi": 150,
+   "pages": 2,
+   "frame": "4969x3509",
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 45.6,
+   "outputWorstCaseMiB": 16.7,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 166.3,
+   "atPublishMiB": 33.3,
+   "jobPeakMiB": 166.3,
+   "acceptsAt": {
+    "512 MiB（推奨）": true,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "ACCEPT",
+    "1 GiB": "ACCEPT",
+    "2 GiB": "ACCEPT"
+   }
+  },
+  {
+   "dpi": 150,
+   "pages": 3,
+   "frame": "4969x3509",
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 45.6,
+   "outputWorstCaseMiB": 25,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 174.6,
+   "atPublishMiB": 50,
+   "jobPeakMiB": 174.6,
+   "acceptsAt": {
+    "512 MiB（推奨）": true,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "ACCEPT",
+    "2 GiB": "ACCEPT"
+   }
+  },
+  {
+   "dpi": 150,
+   "pages": 4,
+   "frame": "4969x3509",
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 45.6,
+   "outputWorstCaseMiB": 33.3,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 183,
+   "atPublishMiB": 66.6,
+   "jobPeakMiB": 183,
+   "acceptsAt": {
+    "512 MiB（推奨）": true,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_OUTPUT_BUDGET",
+    "2 GiB": "OVER_OUTPUT_BUDGET"
+   }
+  },
+  {
+   "dpi": 150,
+   "pages": 5,
+   "frame": "4969x3509",
+   "kernelPeakMiB": 149.7,
+   "sinkPeakMiB": 45.6,
+   "outputWorstCaseMiB": 41.6,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 191.3,
+   "atPublishMiB": 83.3,
+   "jobPeakMiB": 191.3,
+   "acceptsAt": {
+    "512 MiB（推奨）": true,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_OUTPUT_BUDGET"
+   }
+  },
+  {
+   "dpi": 300,
+   "pages": 1,
+   "frame": "9938x7017",
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 170.3,
+   "outputWorstCaseMiB": 33.3,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 631.8,
+   "atPublishMiB": 66.6,
+   "jobPeakMiB": 631.8,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_OUTPUT_BUDGET"
+   }
+  },
+  {
+   "dpi": 300,
+   "pages": 2,
+   "frame": "9938x7017",
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 170.3,
+   "outputWorstCaseMiB": 66.6,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 665.1,
+   "atPublishMiB": 133.1,
+   "jobPeakMiB": 665.1,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_OUTPUT_BUDGET"
+   }
+  },
+  {
+   "dpi": 300,
+   "pages": 3,
+   "frame": "9938x7017",
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 170.3,
+   "outputWorstCaseMiB": 99.8,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 698.4,
+   "atPublishMiB": 199.7,
+   "jobPeakMiB": 698.4,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 300,
+   "pages": 4,
+   "frame": "9938x7017",
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 170.3,
+   "outputWorstCaseMiB": 133.1,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 731.7,
+   "atPublishMiB": 266.2,
+   "jobPeakMiB": 731.7,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 300,
+   "pages": 5,
+   "frame": "9938x7017",
+   "kernelPeakMiB": 598.5,
+   "sinkPeakMiB": 170.3,
+   "outputWorstCaseMiB": 166.4,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 764.9,
+   "atPublishMiB": 332.8,
+   "jobPeakMiB": 764.9,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": true,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 450,
+   "pages": 1,
+   "frame": "14907x10526",
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 378.1,
+   "outputWorstCaseMiB": 74.9,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 1421.7,
+   "atPublishMiB": 149.8,
+   "jobPeakMiB": 1421.7,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": false,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 450,
+   "pages": 2,
+   "frame": "14907x10526",
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 378.1,
+   "outputWorstCaseMiB": 149.7,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 1496.5,
+   "atPublishMiB": 299.5,
+   "jobPeakMiB": 1496.5,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": false,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 450,
+   "pages": 3,
+   "frame": "14907x10526",
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 378.1,
+   "outputWorstCaseMiB": 224.6,
+   "outputBoundWithinMaxOutput": true,
+   "duringRunMiB": 1571.4,
+   "atPublishMiB": 449.2,
+   "jobPeakMiB": 1571.4,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": false,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 450,
+   "pages": 4,
+   "frame": "14907x10526",
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 378.1,
+   "outputWorstCaseMiB": 299.5,
+   "outputBoundWithinMaxOutput": false,
+   "duringRunMiB": 1646.2,
+   "atPublishMiB": 598.9,
+   "jobPeakMiB": 1646.2,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": false,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  },
+  {
+   "dpi": 450,
+   "pages": 5,
+   "frame": "14907x10526",
+   "kernelPeakMiB": 1346.8,
+   "sinkPeakMiB": 378.1,
+   "outputWorstCaseMiB": 374.3,
+   "outputBoundWithinMaxOutput": false,
+   "duringRunMiB": 1721.1,
+   "atPublishMiB": 748.7,
+   "jobPeakMiB": 1721.1,
+   "acceptsAt": {
+    "512 MiB（推奨）": false,
+    "1 GiB": false,
+    "2 GiB": true
+   },
+   "todayAt": {
+    "512 MiB（推奨）": "OVER_MEMORY_BUDGET",
+    "1 GiB": "OVER_MEMORY_BUDGET",
+    "2 GiB": "OVER_MEMORY_BUDGET"
+   }
+  }
+ ],
+ "constants": {
+  "COMPRESSOR_STATE": 4194304,
+  "DOC_OVERHEAD": 16384
+ }
+}

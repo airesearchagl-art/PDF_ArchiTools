@@ -1,0 +1,102 @@
+{
+ "chrome": "Chrome/143.0.7499.169",
+ "canvas": [
+  {
+   "dpi": 150,
+   "width": 4969,
+   "height": 3509,
+   "pixels": 17436221,
+   "readbackBytes": 69744884,
+   "ok": true,
+   "ms": 59,
+   "heapLimit": 4294967296
+  },
+  {
+   "dpi": 300,
+   "width": 9938,
+   "height": 7017,
+   "pixels": 69734946,
+   "readbackBytes": 278939784,
+   "ok": true,
+   "ms": 161,
+   "heapLimit": 4294967296
+  },
+  {
+   "dpi": 450,
+   "width": 14907,
+   "height": 10526,
+   "pixels": 156911082,
+   "readbackBytes": 627644328,
+   "ok": true,
+   "ms": 356,
+   "heapLimit": 4294967296
+  }
+ ],
+ "compressionStream": {
+  "inputBytes": 8719865,
+  "outputBytes": 24626,
+  "ms": 13,
+  "zlibHeader": [
+   120,
+   156
+  ]
+ },
+ "viewer": [
+  {
+   "tag": "dpi150",
+   "name": "current_p1-3.pdf",
+   "ms": 8241,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi150-current_p1-3.png"
+  },
+  {
+   "tag": "dpi150",
+   "name": "idx4m-up_p1-5.pdf",
+   "ms": 5219,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi150-idx4m-up_p1-5.png"
+  },
+  {
+   "tag": "dpi150",
+   "name": "idx4m-cs_p1-5.pdf",
+   "ms": 5221,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi150-idx4m-cs_p1-5.png"
+  },
+  {
+   "tag": "dpi300",
+   "name": "idx4m-up_p1-5.pdf",
+   "ms": 6108,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi300-idx4m-up_p1-5.png"
+  },
+  {
+   "tag": "dpi450",
+   "name": "idx4m-up_p1-5.pdf",
+   "ms": 8376,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi450-idx4m-up_p1-5.png"
+  },
+  {
+   "tag": "dpi450",
+   "name": "idx4m-cs-up_p1-5.pdf",
+   "ms": 8381,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi450-idx4m-cs-up_p1-5.png"
+  },
+  {
+   "tag": "dpi150",
+   "name": "jpeg-q75_p1-5.pdf",
+   "ms": 5250,
+   "loadError": null,
+   "embed": null,
+   "screenshot": "out\\chrome\\dpi150-jpeg-q75_p1-5.png"
+  }
+ ]
+}

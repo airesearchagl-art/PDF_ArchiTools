@@ -1,0 +1,2387 @@
+{
+ "run": "g2",
+ "head": "572ecca2e9e21e4c0258e3b7f04ebc4625dbbfcb",
+ "dirty": true,
+ "node": "v24.15.0",
+ "chrome": "Chrome/143.0.7499.169",
+ "structural": {
+  "composites": {
+   "dpi72": [
+    {
+     "page": 1,
+     "frame": "2386x1685",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 139799,
+     "colours": 2
+    },
+    {
+     "page": 2,
+     "frame": "2386x1685",
+     "verdict": "CHANGE",
+     "changePixels": 3572,
+     "inkPixels": 141994,
+     "colours": 4
+    },
+    {
+     "page": 3,
+     "frame": "2386x1685",
+     "verdict": "CHANGE",
+     "changePixels": 21,
+     "inkPixels": 262162,
+     "colours": 3
+    },
+    {
+     "page": 4,
+     "frame": "1685x2386",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 276895,
+     "colours": 2
+    },
+    {
+     "page": 5,
+     "frame": "1685x2386",
+     "verdict": "CHANGE",
+     "changePixels": 203,
+     "inkPixels": 277798,
+     "colours": 4
+    }
+   ],
+   "dpi150": [
+    {
+     "page": 1,
+     "frame": "4969x3509",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 489205,
+     "colours": 2
+    },
+    {
+     "page": 2,
+     "frame": "4969x3509",
+     "verdict": "CHANGE",
+     "changePixels": 11899,
+     "inkPixels": 496260,
+     "colours": 4
+    },
+    {
+     "page": 3,
+     "frame": "4969x3509",
+     "verdict": "CHANGE",
+     "changePixels": 69,
+     "inkPixels": 817509,
+     "colours": 3
+    },
+    {
+     "page": 4,
+     "frame": "3509x4969",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 672714,
+     "colours": 2
+    },
+    {
+     "page": 5,
+     "frame": "3509x4969",
+     "verdict": "CHANGE",
+     "changePixels": 5268,
+     "inkPixels": 679819,
+     "colours": 4
+    }
+   ],
+   "dpi300": [
+    {
+     "page": 1,
+     "frame": "9938x7017",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 1729273,
+     "colours": 2
+    },
+    {
+     "page": 2,
+     "frame": "9938x7017",
+     "verdict": "CHANGE",
+     "changePixels": 41789,
+     "inkPixels": 1756099,
+     "colours": 4
+    },
+    {
+     "page": 3,
+     "frame": "9938x7017",
+     "verdict": "CHANGE",
+     "changePixels": 238,
+     "inkPixels": 2795188,
+     "colours": 3
+    },
+    {
+     "page": 4,
+     "frame": "7017x9938",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 1856527,
+     "colours": 2
+    },
+    {
+     "page": 5,
+     "frame": "7017x9938",
+     "verdict": "CHANGE",
+     "changePixels": 29745,
+     "inkPixels": 1888928,
+     "colours": 4
+    }
+   ],
+   "dpi450": [
+    {
+     "page": 1,
+     "frame": "14907x10526",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 3757052,
+     "colours": 2
+    },
+    {
+     "page": 2,
+     "frame": "14907x10526",
+     "verdict": "CHANGE",
+     "changePixels": 93489,
+     "inkPixels": 3816796,
+     "colours": 4
+    },
+    {
+     "page": 3,
+     "frame": "14907x10526",
+     "verdict": "CHANGE",
+     "changePixels": 507,
+     "inkPixels": 5937176,
+     "colours": 3
+    },
+    {
+     "page": 4,
+     "frame": "10526x14907",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 3795114,
+     "colours": 2
+    },
+    {
+     "page": 5,
+     "frame": "10526x14907",
+     "verdict": "CHANGE",
+     "changePixels": 53336,
+     "inkPixels": 3857145,
+     "colours": 4
+    }
+   ],
+   "dpi150-tol0.15": [
+    {
+     "page": 1,
+     "frame": "4969x3509",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 489205,
+     "colours": 2
+    },
+    {
+     "page": 2,
+     "frame": "4969x3509",
+     "verdict": "CHANGE",
+     "changePixels": 10946,
+     "inkPixels": 496260,
+     "colours": 5
+    },
+    {
+     "page": 3,
+     "frame": "4969x3509",
+     "verdict": "CHANGE",
+     "changePixels": 69,
+     "inkPixels": 817509,
+     "colours": 3
+    },
+    {
+     "page": 4,
+     "frame": "3509x4969",
+     "verdict": "MATCH",
+     "changePixels": 0,
+     "inkPixels": 672714,
+     "colours": 2
+    },
+    {
+     "page": 5,
+     "frame": "3509x4969",
+     "verdict": "CHANGE",
+     "changePixels": 203,
+     "inkPixels": 679819,
+     "colours": 5
+    }
+   ]
+  },
+  "cells": {
+   "dpi150/current/1-3": {
+    "published": true,
+    "fileBytes": 156930668,
+    "jsPdfOutput": "156930668 bytes",
+    "encodedBytes": [
+     69754573,
+     69754573,
+     69754573
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/current/1-5": {
+    "published": true,
+    "fileBytes": 261549245,
+    "jsPdfOutput": "261549245 bytes",
+    "encodedBytes": [
+     69754573,
+     69754573,
+     69754573,
+     69756033,
+     69756033
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/rgb-flate/1-5": {
+    "published": true,
+    "fileBytes": 1281177,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     186114,
+     193742,
+     339326,
+     278636,
+     280015
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/rgb-up/1-5": {
+    "published": true,
+    "fileBytes": 828271,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     114937,
+     120560,
+     177879,
+     204489,
+     206678
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/rgb-paeth/1-5": {
+    "published": true,
+    "fileBytes": 810636,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     112970,
+     118813,
+     171012,
+     200716,
+     203397
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/rgb-adaptive/1-5": {
+    "published": true,
+    "fileBytes": 815602,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     113138,
+     118955,
+     171636,
+     202706,
+     205439
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4c-flate/1-5": {
+    "published": true,
+    "fileBytes": 662307,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     99260,
+     105048,
+     144561,
+     154225,
+     155521
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4c-up/1-5": {
+    "published": true,
+    "fileBytes": 552001,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     66428,
+     71389,
+     120366,
+     144181,
+     145561
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-flate/1-5": {
+    "published": true,
+    "fileBytes": 662307,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     99260,
+     105048,
+     144561,
+     154225,
+     155521
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-up/1-5": {
+    "published": true,
+    "fileBytes": 552001,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     66428,
+     71389,
+     120366,
+     144181,
+     145561
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-flate-L1/1-5": {
+    "published": true,
+    "fileBytes": 1072748,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     130811,
+     138751,
+     318762,
+     239861,
+     240869
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-flate-L9/1-5": {
+    "published": true,
+    "fileBytes": 564842,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     78965,
+     84070,
+     130801,
+     133137,
+     134178
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-cs/1-5": {
+    "published": true,
+    "fileBytes": 648738,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     99179,
+     104828,
+     150303,
+     144841,
+     145895
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-cs-up/1-5": {
+    "published": true,
+    "fileBytes": 520711,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     63840,
+     68826,
+     116856,
+     132812,
+     134301
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150/idx4m-down2/1-5": {
+    "published": true,
+    "fileBytes": 234663,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     32178,
+     34473,
+     55274,
+     54372,
+     54678
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "2485x1755",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "2485x1755",
+      "changeRecall": 0.9596,
+      "falseChange": 6057
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "2485x1755",
+      "changeRecall": 1,
+      "falseChange": 87
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "1755x2485",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "1755x2485",
+      "changeRecall": 0.926,
+      "falseChange": 5372
+     }
+    ]
+   },
+   "dpi150/jpeg-q90/1-5": {
+    "published": true,
+    "fileBytes": 3926323,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     493175,
+     526730,
+     919254,
+     987803,
+     996027
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "changeRecall": 0.4942,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "changeRecall": 0.058,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "changeRecall": 0.0114,
+      "falseChange": 0
+     }
+    ]
+   },
+   "dpi150/jpeg-q75/1-5": {
+    "published": true,
+    "fileBytes": 3029914,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     388130,
+     410944,
+     694706,
+     763125,
+     769675
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "changeRecall": 0.45,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "changeRecall": 0,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "changeRecall": 0.0066,
+      "falseChange": 0
+     }
+    ]
+   },
+   "dpi150-tol0.15/idx4m-flate/1-5": {
+    "published": true,
+    "fileBytes": 662625,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     99260,
+     105268,
+     144561,
+     154225,
+     155619
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi150-tol0.15/idx4c-flate/1-5": {
+    "published": true,
+    "fileBytes": 662525,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     99260,
+     105241,
+     144561,
+     154225,
+     155546
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.32",
+      "orientation": "landscape",
+      "image": "4969x3509",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.32x2385.12",
+      "orientation": "portrait",
+      "image": "3509x4969",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi72/idx4m-flate/1-5": {
+    "published": true,
+    "fileBytes": 218523,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     29363,
+     31627,
+     55156,
+     49227,
+     49537
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2386x1685",
+      "orientation": "landscape",
+      "image": "2386x1685",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2386x1685",
+      "orientation": "landscape",
+      "image": "2386x1685",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2386x1685",
+      "orientation": "landscape",
+      "image": "2386x1685",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1685x2386",
+      "orientation": "portrait",
+      "image": "1685x2386",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1685x2386",
+      "orientation": "portrait",
+      "image": "1685x2386",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/current/1-1": {
+    "published": true,
+    "fileBytes": 209208266,
+    "jsPdfOutput": "209208266 bytes",
+    "encodedBytes": [
+     278971341
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/current/1-5": {
+    "published": false,
+    "fileBytes": 0,
+    "jsPdfOutput": "undefined (error swallowed by jsPDF)",
+    "encodedBytes": [
+     278971341,
+     278971341,
+     278971341,
+     278974262,
+     278974262
+    ],
+    "verifyOk": null,
+    "verifyErrors": null,
+    "pages": null
+   },
+   "dpi300/rgb-up/1-5": {
+    "published": true,
+    "fileBytes": 2159825,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     331545,
+     343244,
+     441107,
+     518126,
+     522074
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/idx4m-flate/1-5": {
+    "published": true,
+    "fileBytes": 1831364,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     282661,
+     295293,
+     383610,
+     431748,
+     434358
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/idx4m-up/1-5": {
+    "published": true,
+    "fileBytes": 1203603,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     150333,
+     160805,
+     253472,
+     315910,
+     319004
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/idx4m-cs/1-5": {
+    "published": true,
+    "fileBytes": 1846676,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     281279,
+     294225,
+     400417,
+     432195,
+     434866
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/idx4m-cs-up/1-5": {
+    "published": true,
+    "fileBytes": 1148669,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     145706,
+     155587,
+     246438,
+     296701,
+     300158
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi300/jpeg-q90/1-5": {
+    "published": true,
+    "fileBytes": 10426707,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     1432467,
+     1508742,
+     2477950,
+     2491238,
+     2512970
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "changeRecall": 0.6698,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.08",
+      "orientation": "landscape",
+      "image": "9938x7017",
+      "changeRecall": 0.3866,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.08x2385.12",
+      "orientation": "portrait",
+      "image": "7017x9938",
+      "changeRecall": 0.631,
+      "falseChange": 0
+     }
+    ]
+   },
+   "dpi450/current/1-1": {
+    "published": true,
+    "fileBytes": 470736676,
+    "jsPdfOutput": "470736676 bytes",
+    "encodedBytes": [
+     627709983
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi450/rgb-up/1-5": {
+    "published": true,
+    "fileBytes": 4088305,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     669904,
+     693703,
+     861139,
+     925697,
+     934118
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi450/idx4m-flate/1-5": {
+    "published": true,
+    "fileBytes": 3255075,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     500393,
+     518892,
+     758979,
+     733869,
+     739238
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi450/idx4m-up/1-5": {
+    "published": true,
+    "fileBytes": 1920123,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     251558,
+     268569,
+     399996,
+     494801,
+     501105
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi450/idx4m-cs/1-5": {
+    "published": true,
+    "fileBytes": 3285418,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     500847,
+     518248,
+     787352,
+     734965,
+     740302
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi450/idx4m-cs-up/1-5": {
+    "published": true,
+    "fileBytes": 1844718,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     243927,
+     259815,
+     389954,
+     470099,
+     476829
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "pixelMismatches": 0,
+      "changeRecall": null
+     }
+    ]
+   },
+   "dpi450/jpeg-q90/1-5": {
+    "published": true,
+    "fileBytes": 18294051,
+    "jsPdfOutput": null,
+    "encodedBytes": [
+     2533382,
+     2665641,
+     4264244,
+     4388682,
+     4438752
+    ],
+    "verifyOk": true,
+    "verifyErrors": [],
+    "pages": [
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "changeRecall": 0.7869,
+      "falseChange": 0
+     },
+     {
+      "size": "2385.12x1684.16",
+      "orientation": "landscape",
+      "image": "14907x10526",
+      "changeRecall": 0.4635,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "changeRecall": null,
+      "falseChange": 0
+     },
+     {
+      "size": "1684.16x2385.12",
+      "orientation": "portrait",
+      "image": "10526x14907",
+      "changeRecall": 0.5549,
+      "falseChange": 0
+     }
+    ]
+   }
+  },
+  "preflightToday": [
+   "150/1p/512 MiB（推奨）: ACCEPT out=66.54 peak=333.4",
+   "150/1p/1 GiB: ACCEPT out=66.54 peak=333.4",
+   "150/1p/2 GiB: ACCEPT out=66.54 peak=333.4",
+   "150/2p/512 MiB（推奨）: ACCEPT out=133.06 peak=450.3",
+   "150/2p/1 GiB: ACCEPT out=133.06 peak=450.3",
+   "150/2p/2 GiB: ACCEPT out=133.06 peak=450.3",
+   "150/3p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=199.59 peak=650.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "150/3p/1 GiB: ACCEPT out=199.59 peak=650.2",
+   "150/3p/2 GiB: ACCEPT out=199.59 peak=650.2",
+   "150/4p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=266.11 peak=850.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "150/4p/1 GiB: OVER_OUTPUT_BUDGET out=266.11 peak=850.2 (先頭から 3 ページまで)",
+   "150/4p/2 GiB: OVER_OUTPUT_BUDGET out=266.11 peak=850.2 (先頭から 3 ページまで)",
+   "150/5p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=332.63 peak=1050.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "150/5p/1 GiB: OVER_MEMORY_BUDGET out=332.63 peak=1050.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "150/5p/2 GiB: OVER_OUTPUT_BUDGET out=332.63 peak=1050.2 (先頭から 3 ページまで)",
+   "300/1p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=266.06 peak=1333.3 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/1p/1 GiB: OVER_MEMORY_BUDGET out=266.06 peak=1333.3 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/1p/2 GiB: OVER_OUTPUT_BUDGET out=266.06 peak=1333.3",
+   "300/2p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=532.11 peak=1800.4 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/2p/1 GiB: OVER_MEMORY_BUDGET out=532.11 peak=1800.4 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/2p/2 GiB: OVER_OUTPUT_BUDGET out=532.11 peak=1800.4",
+   "300/3p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=798.16 peak=2600.1 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/3p/1 GiB: OVER_MEMORY_BUDGET out=798.16 peak=2600.1 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/3p/2 GiB: OVER_MEMORY_BUDGET out=798.16 peak=2600.1 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/4p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=1064.21 peak=3399.7 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/4p/1 GiB: OVER_MEMORY_BUDGET out=1064.21 peak=3399.7 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/4p/2 GiB: OVER_MEMORY_BUDGET out=1064.21 peak=3399.7 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/5p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=1330.26 peak=4199.3 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/5p/1 GiB: OVER_MEMORY_BUDGET out=1330.26 peak=4199.3 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "300/5p/2 GiB: OVER_MEMORY_BUDGET out=1330.26 peak=4199.3 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/1p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=598.65 peak=2999.9 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/1p/1 GiB: OVER_MEMORY_BUDGET out=598.65 peak=2999.9 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/1p/2 GiB: OVER_MEMORY_BUDGET out=598.65 peak=2999.9 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/2p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=1197.28 peak=4051 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/2p/1 GiB: OVER_MEMORY_BUDGET out=1197.28 peak=4051 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/2p/2 GiB: OVER_MEMORY_BUDGET out=1197.28 peak=4051 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/3p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=1795.91 peak=5850.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/3p/1 GiB: OVER_MEMORY_BUDGET out=1795.91 peak=5850.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/3p/2 GiB: OVER_MEMORY_BUDGET out=1795.91 peak=5850.2 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/4p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=2394.54 peak=7649.5 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/4p/1 GiB: OVER_MEMORY_BUDGET out=2394.54 peak=7649.5 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/4p/2 GiB: OVER_MEMORY_BUDGET out=2394.54 peak=7649.5 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/5p/512 MiB（推奨）: OVER_MEMORY_BUDGET out=2993.18 peak=9448.7 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/5p/1 GiB: OVER_MEMORY_BUDGET out=2993.18 peak=9448.7 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)",
+   "450/5p/2 GiB: OVER_MEMORY_BUDGET out=2993.18 peak=9448.7 (メモリ上限を変更するか、解像度・ページ範囲を選び直してください。)"
+  ],
+  "proposedModel": [
+   "150/1p peak=158 outWorst=8.3 memoryAccepts=YYY outBoundWithin256MiB=true",
+   "150/2p peak=166.3 outWorst=16.7 memoryAccepts=YYY outBoundWithin256MiB=true",
+   "150/3p peak=174.6 outWorst=25 memoryAccepts=YYY outBoundWithin256MiB=true",
+   "150/4p peak=183 outWorst=33.3 memoryAccepts=YYY outBoundWithin256MiB=true",
+   "150/5p peak=191.3 outWorst=41.6 memoryAccepts=YYY outBoundWithin256MiB=true",
+   "300/1p peak=631.8 outWorst=33.3 memoryAccepts=nYY outBoundWithin256MiB=true",
+   "300/2p peak=665.1 outWorst=66.6 memoryAccepts=nYY outBoundWithin256MiB=true",
+   "300/3p peak=698.4 outWorst=99.8 memoryAccepts=nYY outBoundWithin256MiB=true",
+   "300/4p peak=731.7 outWorst=133.1 memoryAccepts=nYY outBoundWithin256MiB=true",
+   "300/5p peak=764.9 outWorst=166.4 memoryAccepts=nYY outBoundWithin256MiB=true",
+   "450/1p peak=1421.7 outWorst=74.9 memoryAccepts=nnY outBoundWithin256MiB=true",
+   "450/2p peak=1496.5 outWorst=149.7 memoryAccepts=nnY outBoundWithin256MiB=true",
+   "450/3p peak=1571.4 outWorst=224.6 memoryAccepts=nnY outBoundWithin256MiB=true",
+   "450/4p peak=1646.2 outWorst=299.5 memoryAccepts=nnY outBoundWithin256MiB=false",
+   "450/5p peak=1721.1 outWorst=374.3 memoryAccepts=nnY outBoundWithin256MiB=false"
+  ],
+  "deflateBound": [
+   {
+    "input": "uniform random bytes (no raster can be worse)",
+    "withinZlibBound": true,
+    "fflateL6": 8390314,
+    "zlib": 8391179
+   },
+   {
+    "input": "random 9-state nibbles (worst legal state raster)",
+    "withinZlibBound": true,
+    "fflateL6": 6808206,
+    "zlib": 6734229
+   },
+   {
+    "input": "all paper (best case)",
+    "withinZlibBound": true,
+    "fflateL6": 8199,
+    "zlib": 8163
+   }
+  ],
+  "runtimeCeiling": {
+   "published": false,
+   "refused": {
+    "status": "OVER_OUTPUT_BUDGET (runtime)",
+    "message": "output 408541 bytes would exceed the runtime ceiling 300000 after 3 page(s)",
+    "requested": "pages 1-5 at 150 dpi",
+    "pagesCompleted": 3,
+    "projectedBytes": 408541,
+    "ceilingBytes": 300000
+   },
+   "fileExists": false
+  },
+  "chromeCanvas": [
+   {
+    "dpi": 150,
+    "frame": "4969x3509",
+    "ok": true
+   },
+   {
+    "dpi": 300,
+    "frame": "9938x7017",
+    "ok": true
+   },
+   {
+    "dpi": 450,
+    "frame": "14907x10526",
+    "ok": true
+   }
+  ],
+  "chromeCompressionStreamZlibHeader": [
+   120,
+   156
+  ],
+  "chromeViewerOpened": [
+   {
+    "file": "dpi150/current_p1-3.pdf",
+    "loadError": null
+   },
+   {
+    "file": "dpi150/idx4m-up_p1-5.pdf",
+    "loadError": null
+   },
+   {
+    "file": "dpi150/idx4m-cs_p1-5.pdf",
+    "loadError": null
+   },
+   {
+    "file": "dpi300/idx4m-up_p1-5.pdf",
+    "loadError": null
+   },
+   {
+    "file": "dpi450/idx4m-up_p1-5.pdf",
+    "loadError": null
+   },
+   {
+    "file": "dpi450/idx4m-cs-up_p1-5.pdf",
+    "loadError": null
+   },
+   {
+    "file": "dpi150/jpeg-q75_p1-5.pdf",
+    "loadError": null
+   }
+  ]
+ },
+ "measuredOnly": {
+  "steps": [
+   {
+    "name": "bundle production comparator",
+    "exitCode": 0,
+    "ms": 208
+   },
+   {
+    "name": "synthetic A1 corpus",
+    "exitCode": 0,
+    "ms": 5919
+   },
+   {
+    "name": "prepare 150 dpi tol 0",
+    "exitCode": 0,
+    "ms": 3211
+   },
+   {
+    "name": "prepare 300 dpi tol 0",
+    "exitCode": 0,
+    "ms": 10575
+   },
+   {
+    "name": "prepare 450 dpi tol 0",
+    "exitCode": 0,
+    "ms": 23616
+   },
+   {
+    "name": "prepare 72 dpi tol 0",
+    "exitCode": 0,
+    "ms": 1415
+   },
+   {
+    "name": "prepare 150 dpi tol 0.15",
+    "exitCode": 0,
+    "ms": 5029
+   },
+   {
+    "name": "production preflight matrix",
+    "exitCode": 0,
+    "ms": 102
+   },
+   {
+    "name": "writer matrix",
+    "exitCode": 0,
+    "ms": 275066
+   },
+   {
+    "name": "writer-own memory (sink-only)",
+    "exitCode": 0,
+    "ms": 52340
+   },
+   {
+    "name": "runtime ceiling abort",
+    "exitCode": 0,
+    "ms": 794
+   },
+   {
+    "name": "model + deflate bound",
+    "exitCode": 0,
+    "ms": 1774
+   },
+   {
+    "name": "chrome canvas / viewer",
+    "exitCode": 0,
+    "ms": 48853
+   }
+  ],
+  "cells": {
+   "dpi150/current/1-3": {
+    "totalMs": 3727,
+    "peakOverBaselineMiB": 788.77,
+    "sampledWriterPeakMiB": 788.37
+   },
+   "dpi150/current/1-5": {
+    "totalMs": 6444,
+    "peakOverBaselineMiB": 1093.29,
+    "sampledWriterPeakMiB": 1092.96
+   },
+   "dpi150/rgb-flate/1-5": {
+    "totalMs": 1675,
+    "peakOverBaselineMiB": 275.17,
+    "sampledWriterPeakMiB": 275.04
+   },
+   "dpi150/rgb-up/1-5": {
+    "totalMs": 2305,
+    "peakOverBaselineMiB": 274.95,
+    "sampledWriterPeakMiB": 252.52
+   },
+   "dpi150/rgb-paeth/1-5": {
+    "totalMs": 2527,
+    "peakOverBaselineMiB": 275.46,
+    "sampledWriterPeakMiB": 267.18
+   },
+   "dpi150/rgb-adaptive/1-5": {
+    "totalMs": 4782,
+    "peakOverBaselineMiB": 274.71,
+    "sampledWriterPeakMiB": 257.66
+   },
+   "dpi150/idx4c-flate/1-5": {
+    "totalMs": 1102,
+    "peakOverBaselineMiB": 248.31,
+    "sampledWriterPeakMiB": 248.31
+   },
+   "dpi150/idx4c-up/1-5": {
+    "totalMs": 1155,
+    "peakOverBaselineMiB": 247.89,
+    "sampledWriterPeakMiB": 237.43
+   },
+   "dpi150/idx4m-flate/1-5": {
+    "totalMs": 571,
+    "peakOverBaselineMiB": 132.64,
+    "sampledWriterPeakMiB": 130.65
+   },
+   "dpi150/idx4m-up/1-5": {
+    "totalMs": 627,
+    "peakOverBaselineMiB": 166.27,
+    "sampledWriterPeakMiB": 149.45
+   },
+   "dpi150/idx4m-flate-L1/1-5": {
+    "totalMs": 470,
+    "peakOverBaselineMiB": 149.45,
+    "sampledWriterPeakMiB": 148.96
+   },
+   "dpi150/idx4m-flate-L9/1-5": {
+    "totalMs": 936,
+    "peakOverBaselineMiB": 132.38,
+    "sampledWriterPeakMiB": 120.46
+   },
+   "dpi150/idx4m-cs/1-5": {
+    "totalMs": 364,
+    "peakOverBaselineMiB": 122.38,
+    "sampledWriterPeakMiB": 112.76
+   },
+   "dpi150/idx4m-cs-up/1-5": {
+    "totalMs": 429,
+    "peakOverBaselineMiB": 122.64,
+    "sampledWriterPeakMiB": 121.77
+   },
+   "dpi150/idx4m-down2/1-5": {
+    "totalMs": 496,
+    "peakOverBaselineMiB": 160.91,
+    "sampledWriterPeakMiB": 160.91
+   },
+   "dpi150/jpeg-q90/1-5": {
+    "totalMs": 838,
+    "peakOverBaselineMiB": 598.87,
+    "sampledWriterPeakMiB": 598
+   },
+   "dpi150/jpeg-q75/1-5": {
+    "totalMs": 809,
+    "peakOverBaselineMiB": 597.62,
+    "sampledWriterPeakMiB": 597.62
+   },
+   "dpi150-tol0.15/idx4m-flate/1-5": {
+    "totalMs": 2382,
+    "peakOverBaselineMiB": 197.03,
+    "sampledWriterPeakMiB": 195.51
+   },
+   "dpi150-tol0.15/idx4c-flate/1-5": {
+    "totalMs": 1116,
+    "peakOverBaselineMiB": 248.64,
+    "sampledWriterPeakMiB": 248.32
+   },
+   "dpi72/idx4m-flate/1-5": {
+    "totalMs": 188,
+    "peakOverBaselineMiB": 88.34,
+    "sampledWriterPeakMiB": 86.58
+   },
+   "dpi300/current/1-1": {
+    "totalMs": 5164,
+    "peakOverBaselineMiB": 1539.72,
+    "sampledWriterPeakMiB": 1539.72
+   },
+   "dpi300/current/1-5": {
+    "totalMs": 24221,
+    "peakOverBaselineMiB": 2041.61,
+    "sampledWriterPeakMiB": 2040.72
+   },
+   "dpi300/rgb-up/1-5": {
+    "totalMs": 7665,
+    "peakOverBaselineMiB": 848.74,
+    "sampledWriterPeakMiB": 830.43
+   },
+   "dpi300/idx4m-flate/1-5": {
+    "totalMs": 1863,
+    "peakOverBaselineMiB": 415.08,
+    "sampledWriterPeakMiB": 404.48
+   },
+   "dpi300/idx4m-up/1-5": {
+    "totalMs": 2059,
+    "peakOverBaselineMiB": 440.95,
+    "sampledWriterPeakMiB": 438.82
+   },
+   "dpi300/idx4m-cs/1-5": {
+    "totalMs": 1246,
+    "peakOverBaselineMiB": 512.66,
+    "sampledWriterPeakMiB": 498.29
+   },
+   "dpi300/idx4m-cs-up/1-5": {
+    "totalMs": 1559,
+    "peakOverBaselineMiB": 426.46,
+    "sampledWriterPeakMiB": 425.93
+   },
+   "dpi300/jpeg-q90/1-5": {
+    "totalMs": 3114,
+    "peakOverBaselineMiB": 2351.35,
+    "sampledWriterPeakMiB": 2351.09
+   },
+   "dpi450/current/1-1": {
+    "totalMs": 12024,
+    "peakOverBaselineMiB": 3299.56,
+    "sampledWriterPeakMiB": 3296.9
+   },
+   "dpi450/rgb-up/1-5": {
+    "totalMs": 17440,
+    "peakOverBaselineMiB": 1831.57,
+    "sampledWriterPeakMiB": 1811.24
+   },
+   "dpi450/idx4m-flate/1-5": {
+    "totalMs": 3853,
+    "peakOverBaselineMiB": 946.7,
+    "sampledWriterPeakMiB": 942.17
+   },
+   "dpi450/idx4m-up/1-5": {
+    "totalMs": 4225,
+    "peakOverBaselineMiB": 947.3,
+    "sampledWriterPeakMiB": 944.48
+   },
+   "dpi450/idx4m-cs/1-5": {
+    "totalMs": 2632,
+    "peakOverBaselineMiB": 914.55,
+    "sampledWriterPeakMiB": 907.74
+   },
+   "dpi450/idx4m-cs-up/1-5": {
+    "totalMs": 3410,
+    "peakOverBaselineMiB": 913.91,
+    "sampledWriterPeakMiB": 905.98
+   },
+   "dpi450/jpeg-q90/1-5": {
+    "totalMs": 7427,
+    "peakOverBaselineMiB": 5268.83,
+    "sampledWriterPeakMiB": 5268.57
+   },
+   "sink:dpi150/current/1-3": {
+    "totalMs": 3509,
+    "sampledWriterPeakMiB": 590.03,
+    "peakOverBaselineMiB": 590.55,
+    "fileBytes": 156930668
+   },
+   "sink:dpi150/current/1-5": {
+    "totalMs": 5988,
+    "sampledWriterPeakMiB": 761.12,
+    "peakOverBaselineMiB": 761.46,
+    "fileBytes": 261549245
+   },
+   "sink:dpi150/idx4m-up/1-5": {
+    "totalMs": 553,
+    "sampledWriterPeakMiB": 33.13,
+    "peakOverBaselineMiB": 37.79,
+    "fileBytes": 552001
+   },
+   "sink:dpi150/idx4m-cs/1-5": {
+    "totalMs": 538,
+    "sampledWriterPeakMiB": 22.77,
+    "peakOverBaselineMiB": 33.21,
+    "fileBytes": 648738
+   },
+   "sink:dpi150/idx4m-cs-up/1-5": {
+    "totalMs": 744,
+    "sampledWriterPeakMiB": 21.46,
+    "peakOverBaselineMiB": 49.79,
+    "fileBytes": 520711
+   },
+   "sink:dpi300/current/1-1": {
+    "totalMs": 5002,
+    "sampledWriterPeakMiB": 1269.98,
+    "peakOverBaselineMiB": 1273.96,
+    "fileBytes": 209208266
+   },
+   "sink:dpi300/idx4m-up/1-5": {
+    "totalMs": 1872,
+    "sampledWriterPeakMiB": 54.81,
+    "peakOverBaselineMiB": 66.44,
+    "fileBytes": 1203603
+   },
+   "sink:dpi300/idx4m-cs/1-5": {
+    "totalMs": 888,
+    "sampledWriterPeakMiB": 27.19,
+    "peakOverBaselineMiB": 66.43,
+    "fileBytes": 1846676
+   },
+   "sink:dpi300/idx4m-cs-up/1-5": {
+    "totalMs": 1170,
+    "sampledWriterPeakMiB": 27.45,
+    "peakOverBaselineMiB": 66.46,
+    "fileBytes": 1148669
+   },
+   "sink:dpi450/current/1-1": {
+    "totalMs": 11412,
+    "sampledWriterPeakMiB": 2700.63,
+    "peakOverBaselineMiB": 2703.18,
+    "fileBytes": 470736676
+   },
+   "sink:dpi450/idx4m-up/1-5": {
+    "totalMs": 3793,
+    "sampledWriterPeakMiB": 79.88,
+    "peakOverBaselineMiB": 149.56,
+    "fileBytes": 1920123
+   },
+   "sink:dpi450/idx4m-cs/1-5": {
+    "totalMs": 2003,
+    "sampledWriterPeakMiB": 31.55,
+    "peakOverBaselineMiB": 149.56,
+    "fileBytes": 3285418
+   },
+   "sink:dpi450/idx4m-cs-up/1-5": {
+    "totalMs": 2558,
+    "sampledWriterPeakMiB": 35.81,
+    "peakOverBaselineMiB": 149.57,
+    "fileBytes": 1844718
+   }
+  },
+  "chromeCanvasMs": [
+   59,
+   161,
+   356
+  ],
+  "chromeViewerMs": [
+   8241,
+   5219,
+   5221,
+   6108,
+   8376,
+   8381,
+   5250
+  ],
+  "chromeCompressionStream": {
+   "inputBytes": 8719865,
+   "outputBytes": 24626,
+   "ms": 13,
+   "zlibHeader": [
+    120,
+    156
+   ]
+  }
+ },
+ "pass": true
+}
