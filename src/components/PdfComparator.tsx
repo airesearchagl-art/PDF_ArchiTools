@@ -4,7 +4,9 @@ import {
     ARTIFACT,
     ARTIFACT_ITEM,
     DEFAULT_MEMORY_BUDGET_BYTES,
+    MAX_OUTPUT_BYTES,
     MEMORY_BUDGET_PRESETS,
+    OutputCeilingError,
     PLAN,
     RESULT,
     SPATIAL_TOLERANCE_DISCLOSURE,
@@ -17,17 +19,47 @@ import {
     runComparison,
     taskBoundary,
     type ArtifactKind,
+    type ComparisonPdfSink,
     type ComparisonSettings,
     type JobResult,
     type MemberSource,
     type PairResult,
     type PageResult,
     type Refusal,
+    type RunSignal,
 } from '../utils/comparator';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Eye, EyeOff, Download, Settings, FileText } from 'lucide-react';
 import { VersionFooter } from './VersionFooter';
 import { TOOL_VERSIONS } from '../config/versions';
 import { configurePdfWorker } from '../utils/pdf-worker-source';
+
+/** What the export would cost, as the preflight priced it. Shown, never enforced here. */
+interface ExportEstimate {
+    dpi: number;
+    pages: number[];
+    sheetMm: [number, number] | null;
+    jobPeak: number;
+    memoryLimit: number;
+    outputBound: number;
+    refusal: Refusal | null;
+}
+
+/** "1–3, 5" from [1, 2, 3, 5]. */
+function describePages(pages: number[]): string {
+    const parts: string[] = [];
+    for (let i = 0; i < pages.length; i += 1) {
+        let j = i;
+        while (j + 1 < pages.length && pages[j + 1] === pages[j] + 1) j += 1;
+        parts.push(j > i ? `${pages[i]}–${pages[j]}` : String(pages[i]));
+        i = j;
+    }
+    return parts.join(', ');
+}
+
+type RunSinks = {
+    onPair?: (pair: PairResult) => void | Promise<void>;
+    onPage?: (page: PageResult) => void | Promise<void>;
+};
 
 // Config for the 4 slots
 const SLOTS = [
@@ -66,6 +98,7 @@ export const PdfComparator: React.FC = () => {
     const [exportScope, setExportScope] = useState<'all' | 'current' | 'range'>('all');
     const [exportRange, setExportRange] = useState('');
     const [showExportSettings, setShowExportSettings] = useState(false);
+    const [exportEstimate, setExportEstimate] = useState<ExportEstimate | null>(null);
 
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -347,9 +380,12 @@ export const PdfComparator: React.FC = () => {
             if (part.includes('-')) {
                 const [start, end] = part.split('-').map(Number);
                 if (!Number.isNaN(start) && !Number.isNaN(end)) {
-                    for (let k = Math.min(start, end); k <= Math.max(start, end); k += 1) {
-                        if (k >= 1 && k <= numPages) unique.add(k);
-                    }
+                    // Clamped before iterating, not inside the loop: the export
+                    // estimate reads this on every keystroke, and "1-1e15" or
+                    // "1-Infinity" must not walk to the end of the number line.
+                    const first = Math.max(1, Math.ceil(Math.min(start, end)));
+                    const last = Math.min(numPages, Math.floor(Math.max(start, end)));
+                    for (let k = first; k <= last; k += 1) unique.add(k);
                 }
             } else {
                 const p = Number(part);
@@ -369,10 +405,9 @@ export const PdfComparator: React.FC = () => {
     const planAndRun = async (
         pages: number[],
         artifact: ArtifactKind,
-        sinks: {
-            onPair?: (pair: PairResult) => void | Promise<void>;
-            onPage?: (page: PageResult) => void | Promise<void>;
-        } = {},
+        // A sink that must stop with the run is built from the run's own
+        // signal, which exists only once the token below is captured.
+        sinks: RunSinks | ((signal: RunSignal) => RunSinks) = {},
     ): Promise<{ run: JobResult; isOwner: () => boolean } | null> => {
         // Captured once, and carried through presentation and publication. A
         // check that re-reads the current generation and compares it with
@@ -386,11 +421,12 @@ export const PdfComparator: React.FC = () => {
             return null;
         }
         setRefusal(null);
-        const run = await runComparison(plan, members, signalFor(token), {
+        const signal = signalFor(token);
+        const run = await runComparison(plan, members, signal, {
             onProgress: (done, total) => setExportingProgress({
                 current: done, total,
             }),
-            ...sinks,
+            ...(typeof sinks === 'function' ? sinks(signal) : sinks),
         });
         if (run.abandoned || token !== generationRef.current) return null;
         if (run.status === PLAN.RENDER_FAILED) {
@@ -403,6 +439,52 @@ export const PdfComparator: React.FC = () => {
         }
         return { run, isOwner: () => token === generationRef.current };
     };
+
+    // What the export would cost, while the settings are open. Planning only:
+    // no run, no token, nothing rendered. A later change supersedes it.
+    useEffect(() => {
+        if (!showExportSettings || activeIndices.length < 2) {
+            setExportEstimate(null);
+            return;
+        }
+        const pages = requestedPages();
+        if (pages.length === 0) {
+            setExportEstimate(null);
+            return;
+        }
+        let current = true;
+        const { members, settings } = buildJob(pages, ARTIFACT.COMPARISON_PDF);
+        planComparison(members, settings).then((plan) => {
+            if (!current) return;
+            let sheet: [number, number] | null = null;
+            let area = 0;
+            for (const p of plan.pages) {
+                if (!p.frame) continue;
+                const mm: [number, number] = [p.frame.widthPt * 25.4 / 72, p.frame.heightPt * 25.4 / 72];
+                if (mm[0] * mm[1] > area) {
+                    area = mm[0] * mm[1];
+                    sheet = mm;
+                }
+            }
+            setExportEstimate({
+                dpi: settings.dpi,
+                pages,
+                sheetMm: sheet,
+                jobPeak: plan.preflight.jobPeak,
+                memoryLimit: settings.memoryBudgetBytes,
+                outputBound: plan.preflight.output.outputBytes,
+                refusal: plan.refusal,
+            });
+        }).catch(() => {
+            if (current) setExportEstimate(null);
+        });
+        return () => { current = false; };
+        // The inputs themselves, not buildJob: buildJob closes over a fresh
+        // activeIndices array every render, so depending on it would re-plan
+        // (and re-render) forever. requestedPages reads the scope fields.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showExportSettings, files, pdfs, visible, dpi, toleranceMm, memoryBudgetBytes,
+        matchColor, matchOpacity, exportScope, exportRange, pageNumber, numPages]);
 
     // Handle PDF Download
     const handleDownload = async () => {
@@ -418,26 +500,56 @@ export const PdfComparator: React.FC = () => {
 
         setBusy(true);
         setExportingProgress({ current: 0, total: pages.length });
+        // The colours the pairs are painted with, so the file's palette is
+        // exactly what the compositor paints.
+        const { members, settings } = buildJob(pages, ARTIFACT.COMPARISON_PDF);
+        const paint = {
+            referenceColor: members[0].color,
+            colorBySlot: new Map(members.slice(1).map((m) => [m.slot, m.color] as const)),
+            matchColor: settings.matchColor,
+            matchOpacity: settings.matchOpacity,
+        };
+        const built: { sink: ComparisonPdfSink | null } = { sink: null };
         try {
-            // The sink. Each visual is painted, encoded, appended and released
-            // before the next one is produced, and every page nobody could
-            // compare is written as a notice in its own place -- in the sequence
-            // the preflight priced, because it is the same code the gates run.
-            const sink = createComparisonPdf(dpi);
-            const outcome = await planAndRun(
-                pages, ARTIFACT.COMPARISON_PDF,
-                { onPair: sink.onPair, onPage: sink.onPage },
-            );
-            if (!outcome) return;
+            // The sink. Each visual is encoded, appended and released before the
+            // next one is produced, and every page nobody could compare is
+            // written as a notice in its own place -- in the sequence the
+            // preflight priced, because it is the same code the gates run. It
+            // yields while it encodes and stops if this run is superseded.
+            const outcome = await planAndRun(pages, ARTIFACT.COMPARISON_PDF, (signal) => {
+                const sink = createComparisonPdf(dpi, { paint, signal });
+                built.sink = sink;
+                return { onPair: sink.onPair, onPage: sink.onPage };
+            });
+            const sink = built.sink;
+            if (!outcome || !sink || sink.cancelled) {
+                sink?.abort();
+                return;
+            }
 
             // The last thing before the bytes leave, against the token this run
             // captured — and after a task boundary, so anything the user did
             // while the container was assembled has been delivered.
             await taskBoundary();
-            if (!outcome.isOwner()) return;
+            if (!outcome.isOwner()) {
+                sink.abort();
+                return;
+            }
             const baseName = files[activeIndices[0]]?.name.replace(/\.pdf$/i, '') ?? 'comparison';
             sink.save(`comparison_${baseName}_${dpi}dpi.pdf`);
         } catch (error) {
+            built.sink?.abort();
+            if (error instanceof OutputCeilingError) {
+                // Typed, with what was asked for: nothing was written, and
+                // nothing is reduced to make it fit.
+                setRefusal({
+                    status: PLAN.OVER_OUTPUT_BUDGET,
+                    reason: `出力が上限 ${formatBytes(MAX_OUTPUT_BYTES)} を超えるため中止しました`
+                        + `（${error.pagesWritten} ページ書き込み時点）。ファイルは作成されていません。`,
+                    requested: `${dpi} DPI・ページ ${describePages(pages)}`,
+                });
+                return;
+            }
             console.error('Export failed', error);
             alert('エクスポートに失敗しました: ' + (error as Error).message);
         } finally {
@@ -851,6 +963,35 @@ export const PdfComparator: React.FC = () => {
                                         現在: {formatBytes(memoryBudgetBytes)}
                                     </div>
                                 </div>
+
+                                {/* What this export would cost. The output size is
+                                    a guaranteed ceiling, never a prediction. */}
+                                {exportEstimate && (
+                                    <div data-testid="export-estimate" style={{
+                                        marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #eee',
+                                        fontSize: '0.75em', color: '#444', lineHeight: 1.6,
+                                    }}>
+                                        <div>解像度: {exportEstimate.dpi} DPI</div>
+                                        <div>ページ: {exportEstimate.pages.length} ページ（{describePages(exportEstimate.pages)}）</div>
+                                        {exportEstimate.sheetMm && (
+                                            <div>用紙（最大）: {Math.round(exportEstimate.sheetMm[0])} × {Math.round(exportEstimate.sheetMm[1])} mm</div>
+                                        )}
+                                        <div data-testid="export-estimate-memory">
+                                            作業メモリ: 推定最大 {formatBytes(exportEstimate.jobPeak)}（上限 {formatBytes(exportEstimate.memoryLimit)}）
+                                        </div>
+                                        <div data-testid="export-estimate-output">
+                                            出力サイズ 最大 {formatBytes(exportEstimate.outputBound)}（安全上限）。実際のサイズは図面内容により小さくなります。
+                                        </div>
+                                        <div data-testid="export-estimate-status" style={{
+                                            fontWeight: 'bold',
+                                            color: exportEstimate.refusal ? '#b71c1c' : '#00796b',
+                                        }}>
+                                            状態: {exportEstimate.refusal
+                                                ? `この設定では出力できません — ${exportEstimate.refusal.reason}`
+                                                : '出力できます'}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

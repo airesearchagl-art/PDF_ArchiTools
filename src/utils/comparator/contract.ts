@@ -141,11 +141,19 @@ export const COMPARISON_ALGORITHM = 'separable-dilation' as const;
 /**
  * The finished output one operation may hold.
  *
- * The M4 sink is the memory-resident container, so every produced visual is
- * live until the artifact is saved. Under the owned encoder's ~4.001 bytes per
- * pixel that is about seven A4 pages at 300 dpi with two members — a known
- * limitation, and not one to be solved by quietly switching to an encoder whose
- * size cannot be bounded.
+ * Both files are memory-resident containers, so every produced visual is live
+ * until the artifact is saved.
+ *
+ *   - Comparison PDF (Output Writer v2): each item is charged its owned
+ *     DEFLATE stream bound plus its page objects, before the run; the writer
+ *     then counts the actual bytes against the same ceiling and drops a file
+ *     that would pass it (nothing is published). The bound is about 0.5 byte
+ *     per pixel, so A1 at 150 dpi is ~8.3 MiB a page — five A1 pages of two
+ *     members fit with room to spare. The value is not raised to make a job
+ *     fit: a job whose *bound* exceeds it is refused, whatever the drawing
+ *     would actually compress to.
+ *   - Change Report: still the stored PNG at ~4.001 bytes per pixel, priced
+ *     against the jsPDF container.
  *
  * Every item the artifact will contain counts against it, not only the
  * comparisons: a page nobody could compare is written as a notice image, and a

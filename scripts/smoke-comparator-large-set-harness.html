@@ -1,0 +1,334 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Comparator large-set Comparison PDF — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** Comparator engine and the production Comparison
+ * PDF writer (Output Writer v2). Not part of the app.
+ *
+ * Every file written here is reopened by pdf.js, which shares no code with the
+ * writer, and every claim is measured in what it decodes to.
+ */
+import * as pdfjsLib from 'pdfjs-dist';
+import {
+  ARTIFACT, DEFAULT_MEMORY_BUDGET_BYTES, MAX_OUTPUT_BYTES, NOTICE_RASTER, PLAN,
+  planComparison, runComparison, createComparisonPdf, drawNotice, noticeLines,
+  jsPdfFileBytes, JSPDF_CONTAINER, OutputCeilingError,
+} from '/src/utils/comparator/index.ts';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+const FIXTURES = '/test-fixtures/comparator-large';
+const COLOURS = [[0, 0, 1], [1, 0, 0], [0, 0.5, 0], [0.9, 0.7, 0]];
+const MATCH = [0xC0 / 255, 0xC0 / 255, 0xC0 / 255];
+const GIB = 1024 * 1024 * 1024;
+const docs = new Map();
+
+async function open(name) {
+  if (!docs.has(name)) {
+    const data = new Uint8Array(await (await fetch(`${FIXTURES}/${name}.pdf`)).arrayBuffer());
+    docs.set(name, await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise);
+  }
+  return docs.get(name);
+}
+
+async function membersOf(names) {
+  const out = [];
+  for (let i = 0; i < names.length; i += 1) {
+    out.push({ slot: i, label: `${names[i]}.pdf`, pdf: await open(names[i]), color: COLOURS[i] });
+  }
+  return out;
+}
+
+function settingsFor(pages, dpi, limit) {
+  return {
+    pages, dpi, toleranceMm: 0, memoryBudgetBytes: limit,
+    matchColor: MATCH, matchOpacity: 0.7, artifact: ARTIFACT.COMPARISON_PDF,
+  };
+}
+
+function paintFor(set, s) {
+  return {
+    referenceColor: set[0].color,
+    colorBySlot: new Map(set.slice(1).map((m) => [m.slot, m.color])),
+    matchColor: s.matchColor,
+    matchOpacity: s.matchOpacity,
+  };
+}
+
+async function sha(bytes) {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return [...d.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function rgbHash(rgba) {
+  const rgb = new Uint8Array((rgba.length / 4) * 3);
+  for (let p = 0, q = 0; p < rgba.length; p += 4, q += 3) {
+    rgb[q] = rgba[p]; rgb[q + 1] = rgba[p + 1]; rgb[q + 2] = rgba[p + 2];
+  }
+  return sha(rgb);
+}
+
+async function reopen(blob, { pixels = true } = {}) {
+  const data = new Uint8Array(await blob.arrayBuffer());
+  const doc = await pdfjsLib.getDocument({
+    data: data.slice(), isEvalSupported: false, isOffscreenCanvasSupported: false, stopAtErrors: true,
+  }).promise;
+  const pages = [];
+  for (let n = 1; n <= doc.numPages; n += 1) {
+    const page = await doc.getPage(n);
+    const [x0, y0, x1, y1] = page.view;
+    const text = (await page.getTextContent()).items.map((i) => i.str).join(' ').trim();
+    const ops = await page.getOperatorList();
+    const names = [];
+    ops.fnArray.forEach((fn, i) => { if (fn === pdfjsLib.OPS.paintImageXObject) names.push(ops.argsArray[i][0]); });
+    const entry = { width: +(x1 - x0).toFixed(3), height: +(y1 - y0).toFixed(3), text, images: names.length };
+    if (pixels && names.length === 1) {
+      const img = await new Promise((resolve) => page.objs.get(names[0], resolve));
+      entry.imageWidth = img.width;
+      entry.imageHeight = img.height;
+      let rgb = img.data;
+      if (img.kind === 3) {
+        rgb = new Uint8Array(img.width * img.height * 3);
+        for (let p = 0, q = 0; p < img.data.length; p += 4, q += 3) {
+          rgb[q] = img.data[p]; rgb[q + 1] = img.data[p + 1]; rgb[q + 2] = img.data[p + 2];
+        }
+      }
+      entry.rgbHash = await sha(rgb);
+    }
+    pages.push(entry);
+    page.cleanup();
+  }
+  await doc.destroy();
+  return { bytes: data.length, pages };
+}
+
+const alwaysOwner = { isCancelled: () => false, isOwner: () => true };
+
+/** Source sheet of every requested page of the reference, in points. */
+async function sourceSheets(name, pages) {
+  const pdf = await open(name);
+  const out = [];
+  for (const n of pages) {
+    const [x0, y0, x1, y1] = (await pdf.getPage(n)).view;
+    out.push([Math.abs(x1 - x0), Math.abs(y1 - y0)]);
+  }
+  return out;
+}
+
+function summaryOf(plan) {
+  return {
+    status: plan.status,
+    refusal: plan.refusal?.status ?? null,
+    reason: plan.refusal?.reason ?? null,
+    effectiveDpi: plan.effective.dpi,
+    effectivePages: plan.effective.pages,
+    jobPeak: plan.preflight.jobPeak,
+    peakPhase: plan.preflight.peakPhase,
+    outputBound: plan.preflight.output.outputBytes,
+    fileBound: plan.preflight.output.fileBytes,
+    perImageBound: plan.preflight.artifact.items[0]?.cost.encodedBytes ?? null,
+    items: plan.preflight.artifact.items.length,
+    kernelPeak: plan.preflight.memory.kernel.peakWorkingSet,
+    publish: plan.preflight.memory.publish,
+  };
+}
+
+window.__large = {
+  /**
+   * An A1 job: planned at `limit`, and when `run`, written by the production
+   * sink and reopened. The baseline is what the previous Comparison PDF writer
+   * put in the file for the same images: w x h x 3 uncompressed bytes each
+   * (jsPdfFileBytes; measured byte for byte in PR #28), plus its overhead.
+   */
+  async a1({ names, dpi, limit, run = true, pixels = true }) {
+    const set = await membersOf(names);
+    const pages = [1, 2, 3, 4, 5];
+    const s = settingsFor(pages, dpi, limit);
+    const plan = await planComparison(set, s);
+    const out = { plan: summaryOf(plan), sheets: await sourceSheets(names[0], pages) };
+    if (!run || plan.refusal) {
+      let sinkCalls = 0;
+      await runComparison(plan, set, alwaysOwner, {
+        onPair: () => { sinkCalls += 1; }, onPage: () => { sinkCalls += 1; },
+      });
+      out.sinkCallsOnRefused = sinkCalls;
+      return out;
+    }
+    const sink = createComparisonPdf(dpi, { paint: paintFor(set, s), signal: alwaysOwner });
+    const pairs = [];
+    const t0 = performance.now();
+    const result = await runComparison(plan, set, alwaysOwner, {
+      onPair: async (pair) => {
+        pairs.push({
+          page: pair.page, slot: pair.slot, verdict: pair.verdict, title: pair.title,
+          width: pair.width, height: pair.height, hash: pixels ? await rgbHash(pair.pixels) : null,
+        });
+        await sink.onPair(pair);
+      },
+      onPage: sink.onPage,
+    });
+    const blob = sink.finish();
+    out.ms = Math.round(performance.now() - t0);
+    out.runStatus = result.status;
+    out.abandoned = result.abandoned;
+    out.pairs = pairs;
+    out.appended = sink.appended;
+    out.stats = sink.stats;
+    out.file = await reopen(blob, { pixels });
+    out.baseline = JSPDF_CONTAINER.documentOverheadBytes
+      + pairs.reduce((n, p) => n + jsPdfFileBytes(p.width, p.height), 0);
+    out.scale = dpi / 72;
+    return out;
+  },
+
+  /** 2 / 3 / 4 members over the feature-surface fixtures, every event through the production sink. */
+  async members(names) {
+    const set = await membersOf(names);
+    const pages = [1, 2, 3, 4, 5];
+    const s = settingsFor(pages, 150, DEFAULT_MEMORY_BUDGET_BYTES);
+    const plan = await planComparison(set, s);
+    const sink = createComparisonPdf(150, { paint: paintFor(set, s), signal: alwaysOwner });
+    const expected = [];
+    const result = await runComparison(plan, set, alwaysOwner, {
+      onPair: async (pair) => {
+        expected.push({
+          kind: 'PAIR', page: pair.page, slot: pair.slot, label: pair.label, verdict: pair.verdict,
+          width: pair.width, height: pair.height, hash: await rgbHash(pair.pixels),
+        });
+        await sink.onPair(pair);
+      },
+      onPage: async (page) => {
+        if (page.status !== PLAN.READY_TO_COMPARE) {
+          // Drawn independently of the sink, from the same page: what the
+          // notice in the file must decode to.
+          const raster = NOTICE_RASTER.COMPARISON_PDF;
+          expected.push({
+            kind: page.status, page: page.page, slot: null,
+            width: raster.width, height: raster.height,
+            hash: await rgbHash(drawNotice(noticeLines(page), raster)),
+          });
+        }
+        await sink.onPage(page);
+      },
+    });
+    const file = await reopen(sink.finish());
+    return {
+      plan: summaryOf(plan),
+      planStatuses: plan.pages.map((p) => `${p.page}:${p.status}`),
+      runStatus: result.status,
+      expected,
+      appended: sink.appended.map((a) => ({ kind: a.kind, page: a.page, slot: a.slot })),
+      file,
+      scale: 150 / 72,
+      sheets: await sourceSheets(names[0], pages),
+    };
+  },
+
+  /**
+   * The runtime ceiling: the same accepted A1 job, with the writer's ceiling
+   * lowered below what the file will actually need. It must fail typed, and
+   * leave nothing that could be published.
+   */
+  async ceiling(maxBytes) {
+    const names = ['a1-set-a', 'a1-set-b'];
+    const set = await membersOf(names);
+    const s = settingsFor([1, 2, 3, 4, 5], 150, DEFAULT_MEMORY_BUDGET_BYTES);
+    const plan = await planComparison(set, s);
+    const sink = createComparisonPdf(150, { paint: paintFor(set, s), signal: alwaysOwner, maxBytes });
+    let error = null;
+    try {
+      await runComparison(plan, set, alwaysOwner, { onPair: sink.onPair, onPage: sink.onPage });
+    } catch (e) {
+      error = e;
+    }
+    let finishError = null;
+    let blob = null;
+    try { blob = sink.finish(); } catch (e) { finishError = e?.name ?? String(e); }
+    return {
+      planAccepted: plan.refusal === null,
+      errorName: error?.name ?? null,
+      isOutputCeilingError: error instanceof OutputCeilingError,
+      pagesWritten: error?.pagesWritten ?? null,
+      ceiling: error?.ceiling ?? null,
+      projected: error?.bytes ?? null,
+      appendedBeforeFailure: sink.appended.length,
+      blob: blob ? blob.size : null,
+      finishError,
+      defaultCeiling: MAX_OUTPUT_BYTES,
+    };
+  },
+
+  /**
+   * Ownership taken away by another task while the first page is encoding.
+   *
+   * The timer that revokes it is queued just before the first encode starts.
+   * An encode that never yielded would finish the page before the timer could
+   * run; one that yields lets it run mid-encode, sees it at its next block
+   * boundary, and stops. Meanwhile a ticker counts how often the event loop
+   * got control during that one encode.
+   */
+  async cancelMidEncode() {
+    const names = ['a1-set-a', 'a1-set-b'];
+    const set = await membersOf(names);
+    const s = settingsFor([2], 150, DEFAULT_MEMORY_BUDGET_BYTES);
+    const plan = await planComparison(set, s);
+    let owner = true;
+    const signal = { isCancelled: () => !owner, isOwner: () => owner };
+    const sink = createComparisonPdf(150, { paint: paintFor(set, s), signal });
+    let revokedAt = null;
+    let encodeStart = 0;
+    let encodeEnd = 0;
+    const result = await runComparison(plan, set, signal, {
+      onPair: async (pair) => {
+        setTimeout(() => { owner = false; revokedAt = performance.now(); }, 0);
+        encodeStart = performance.now();
+        await sink.onPair(pair);
+        encodeEnd = performance.now();
+      },
+      onPage: sink.onPage,
+    });
+    let finishError = null;
+    try { sink.finish(); } catch (e) { finishError = e?.message ?? String(e); }
+
+    // Separately: how the event loop fares during one full encode.
+    const s2 = settingsFor([3], 150, DEFAULT_MEMORY_BUDGET_BYTES);
+    const plan2 = await planComparison(set, s2);
+    const sink2 = createComparisonPdf(150, { paint: paintFor(set, s2), signal: alwaysOwner });
+    const ticks = [];
+    let ticking = false;
+    const tick = () => { if (!ticking) return; ticks.push(performance.now()); setTimeout(tick, 0); };
+    let t0 = 0;
+    let t1 = 0;
+    await runComparison(plan2, set, alwaysOwner, {
+      onPair: async (pair) => {
+        ticking = true;
+        setTimeout(tick, 0);
+        t0 = performance.now();
+        await sink2.onPair(pair);
+        t1 = performance.now();
+        ticking = false;
+      },
+    });
+    const during = ticks.filter((t) => t >= t0 && t <= t1);
+    const gaps = [t0, ...during, t1].map((t, i, a) => (i ? t - a[i - 1] : 0));
+    return {
+      runStatus: result.status,
+      abandoned: result.abandoned,
+      cancelled: sink.cancelled,
+      appended: sink.appended.length,
+      revokedDuringEncode: revokedAt !== null && revokedAt >= encodeStart && revokedAt <= encodeEnd,
+      finishError,
+      encodeMs: t1 - t0,
+      ticksDuringEncode: during.length,
+      longestGapMs: Math.max(...gaps),
+      yields: sink2.stats.yields,
+      longestSliceMs: sink2.stats.longestSliceMs,
+    };
+  },
+};
+
+window.__largeReady = true;
+document.getElementById('state').textContent = 'ready';
+</script>

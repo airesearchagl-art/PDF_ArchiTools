@@ -7,14 +7,19 @@
  * the page sizes, the member count, the tolerance and the artifact being built,
  * so all three are answerable before the first canvas exists.
  *
- * The artifact matters as much as the comparison. A comparison PDF is a jsPDF
- * document that holds every image until it is saved, and writes a notice image
- * for every page nobody could compare; the preview holds its visuals as pixels.
- * So a plan is priced item by item against the artifact that will actually be
- * built — including the items that are not comparisons at all.
+ * The artifact matters as much as the comparison, and each has its own
+ * container. The Comparison PDF (Output Writer v2) keeps every page as its
+ * compressed stream until it is saved, each bounded before the run by the owned
+ * encoder; the Change Report is a jsPDF document that holds every image as an
+ * uncompressed string; both write a notice image for every page nobody could
+ * compare; the preview holds its visuals as pixels. So a plan is priced item by
+ * item against the artifact that will actually be built — including the items
+ * that are not comparisons at all — and never against the other container.
  *
- * Adopted from `research/m4-comparator-reliability/prototype/candidates.mjs`,
- * and bound to the production container, jsPDF 3.0.4.
+ * Adopted from `research/m4-comparator-reliability/prototype/candidates.mjs`
+ * (the kernel, the preflight, the Change Report's jsPDF 3.0.4 model) and
+ * `research/m4-large-set-output-writer/` (PR #28: the Comparison PDF's owned
+ * container).
  */
 import {
     ARTIFACT,
@@ -30,6 +35,15 @@ import {
     type Refusal,
 } from './contract';
 import { pngStoredSize, encoderScratchBytes } from './png';
+import { ownedDeflateBound } from './deflate';
+import { DOCUMENT_OBJECTS_BYTES, PAGE_OBJECTS_BYTES } from './pdf-writer';
+import {
+    indexedRowBytes,
+    indexedStreamInputBytes,
+    rgbStreamInputBytes,
+    streamEncoderScratchBytes,
+    streamRetainedBound,
+} from './state-raster';
 
 export interface PageSize {
     width: number;
@@ -249,6 +263,63 @@ export function jsPdfFileBytes(width: number, height: number): number {
     return width * height * 3 + JSPDF_CONTAINER.perItemFileOverheadBytes;
 }
 
+// ---------------------------------------------------------------------------
+// The Comparison PDF container: Output Writer v2 (owned)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Comparison PDF's container, as its own code bounds it.
+ *
+ * Every term is arithmetic on code this module's siblings own: the image
+ * stream through the owned bounded DEFLATE (deflate.ts), the encoder's fixed
+ * buffers (state-raster.ts), the per-page and per-document object allowances
+ * the writer asserts (pdf-writer.ts). Nothing rests on a platform compressor.
+ * Two things are platform assumptions, as they were for jsPDF: that a canvas
+ * of the frame's size can be allocated, and that `new Blob(chunks)` copies the
+ * bytes at most once.
+ *
+ * Adopted from `research/m4-large-set-output-writer/` (PR #28, RF-01).
+ */
+export const COMPARISON_PDF_CONTAINER = {
+    writer: 'owned append-only (pdf-writer.ts)',
+    compressor: 'owned bounded DEFLATE (deflate.ts)',
+    pageObjectsBytes: PAGE_OBJECTS_BYTES,
+    documentObjectsBytes: DOCUMENT_OBJECTS_BYTES,
+} as const;
+
+export interface StreamTerms {
+    /** Bytes the compressor receives: rows plus their predictor bytes. */
+    inputBytes: number;
+    /** The most the image stream can be: `ownedDeflateBound(inputBytes)`. */
+    streamBound: number;
+    /** The most the stream holds in memory, chunk objects included. */
+    retainedBound: number;
+    /** The encoder's own buffers while it runs. */
+    scratch: number;
+}
+
+/** A pair visual: 4-bit Indexed rows of `width` x `height`. */
+export function indexedImageTerms(width: number, height: number): StreamTerms {
+    const inputBytes = indexedStreamInputBytes(width, height);
+    return {
+        inputBytes,
+        streamBound: ownedDeflateBound(inputBytes),
+        retainedBound: streamRetainedBound(inputBytes),
+        scratch: streamEncoderScratchBytes(indexedRowBytes(width)),
+    };
+}
+
+/** A notice: DeviceRGB rows of `width` x `height`. */
+export function rgbImageTerms(width: number, height: number): StreamTerms {
+    const inputBytes = rgbStreamInputBytes(width, height);
+    return {
+        inputBytes,
+        streamBound: ownedDeflateBound(inputBytes),
+        retainedBound: streamRetainedBound(inputBytes),
+        scratch: streamEncoderScratchBytes(width * 3),
+    };
+}
+
 /**
  * Where each term comes from, so a reader can tell a bound from a fact.
  *
@@ -280,6 +351,11 @@ export const MEMORY_TERMS: readonly {
     { term: 'joined document, ArrayBuffer', basis: 'inferred', source: 'jspdf.es.js:3356, 1511-1518' },
     { term: 'Blob', basis: 'inferred', source: 'jspdf.es.js:3358-3361; the browser copies it' },
     { term: 'display canvas (preview)', basis: 'exact', source: 'putImageData into one canvas' },
+    { term: 'Comparison PDF image stream (owned DEFLATE bound)', basis: 'exact', source: 'ownedDeflateBound; OwnedZlib.finish asserts it' },
+    { term: 'Comparison PDF encoder buffers', basis: 'exact', source: 'state-raster encoderScratchBytes; ownedDeflateScratchBytes' },
+    { term: 'Comparison PDF chunk objects', basis: 'conservative', source: 'CHUNK_OBJECT_BYTES per 64 KiB chunk' },
+    { term: 'Comparison PDF page / document objects', basis: 'conservative', source: 'PAGE_OBJECTS_BYTES asserted per page; DOCUMENT_OBJECTS_BYTES' },
+    { term: 'Comparison PDF Blob (one copy of the file)', basis: 'inferred', source: 'new Blob(chunks); a platform assumption' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -289,16 +365,20 @@ export const MEMORY_TERMS: readonly {
 export interface ItemCost {
     /** The RGBA the item is made from: a composite, or a notice's readback. */
     rasterBytes: number;
-    /** The owned PNG. Exact. */
+    /**
+     * What the item's image becomes: the owned PNG (Change Report, exact), or
+     * the owned DEFLATE stream's bound (Comparison PDF, an upper bound).
+     */
     encodedBytes: number;
-    /** jsPDF's own peak while it ingests the PNG. */
+    /** jsPDF's own peak while it ingests the PNG; 0 for the Comparison PDF. */
     ingestBytes: number;
     /** What stays behind in the document. */
     retainedBytes: number;
     /** What the saved file receives. */
     fileBytes: number;
     /**
-     * What counts against `MAX_OUTPUT_BYTES`: the larger of the owned PNG and
+     * What counts against `MAX_OUTPUT_BYTES`. Comparison PDF: the stream bound
+     * plus the page's objects. Change Report: the larger of the owned PNG and
      * the file's share, so the ceiling bounds both.
      */
     outputBytes: number;
@@ -331,14 +411,12 @@ export function itemCost(
             steps: { hold: raster }, peakBytes: raster, peakStep: 'hold',
         };
     }
+    if (artifact === ARTIFACT.COMPARISON_PDF) return comparisonPdfItemCost(item, width, height);
     const encoded = pngStoredSize(width, height);
     const scratch = encoderScratchBytes(width);
     const ingest = jsPdfIngest(width, height);
     const steps: Record<string, number> = {};
-    if (item === ARTIFACT_ITEM.PAIR_VISUAL && artifact === ARTIFACT.COMPARISON_PDF) {
-        steps.encode = raster + encoded + scratch;
-        steps.ingest = encoded + ingest.peak;
-    } else if (item === ARTIFACT_ITEM.PAIR_VISUAL) {
+    if (item === ARTIFACT_ITEM.PAIR_VISUAL) {
         // Priced as a crop of the whole sheet, which no crop exceeds.
         steps.crop = raster + raster;
         steps.encode = raster + encoded + scratch;
@@ -358,6 +436,42 @@ export function itemCost(
         retainedBytes: jsPdfRetained(width, height),
         fileBytes,
         outputBytes: Math.max(encoded, fileBytes),
+        steps,
+        peakBytes,
+        peakStep,
+    };
+}
+
+/**
+ * One Comparison PDF item, priced against the owned container.
+ *
+ * The sequence is the one `createComparisonPdf` follows. A pair's composite is
+ * live while it is encoded, with the encoder's buffers and the stream growing
+ * towards its bound; a notice is drawn, read back (the canvas released), and
+ * encoded from the readback. What stays behind is the stream, at most its
+ * bound, plus the page's objects.
+ */
+function comparisonPdfItemCost(item: ArtifactItemKind, width: number, height: number): ItemCost {
+    const raster = width * height * 4;
+    const terms = item === ARTIFACT_ITEM.PAIR_VISUAL
+        ? indexedImageTerms(width, height)
+        : rgbImageTerms(width, height);
+    const retained = terms.retainedBound + PAGE_OBJECTS_BYTES;
+    const steps: Record<string, number> = {};
+    if (item !== ARTIFACT_ITEM.PAIR_VISUAL) {
+        steps.draw = raster;
+        steps.readback = raster + raster;
+    }
+    steps.encode = raster + terms.scratch + terms.retainedBound;
+    const [peakStep, peakBytes] = maxEntry(steps);
+    const fileBytes = terms.streamBound + PAGE_OBJECTS_BYTES;
+    return {
+        rasterBytes: raster,
+        encodedBytes: terms.streamBound,
+        ingestBytes: 0,
+        retainedBytes: retained,
+        fileBytes,
+        outputBytes: fileBytes,
         steps,
         peakBytes,
         peakStep,
@@ -578,6 +692,9 @@ export function preflightArtifact(
 ): Preflight {
     const c = JSPDF_CONTAINER;
     const container = plan.kind !== ARTIFACT.PREVIEW;
+    // The Comparison PDF is the owned writer; the Change Report is still jsPDF.
+    const owned = plan.kind === ARTIFACT.COMPARISON_PDF;
+    const documentBytes = !container ? 0 : (owned ? DOCUMENT_OBJECTS_BYTES : c.documentOverheadBytes);
     const visuals = plan.items.filter((i) => i.kind === ARTIFACT_ITEM.PAIR_VISUAL);
 
     // The kernel, and the work it does, over the compared pages.
@@ -616,11 +733,11 @@ export function preflightArtifact(
     let sinkPeakItem: number | null = null;
     let retainedTotal = 0;
     let encodedBytes = 0;
-    let fileBytes = container ? c.documentOverheadBytes : 0;
-    let outputBytes = container ? c.documentOverheadBytes : 0;
+    let fileBytes = documentBytes;
+    let outputBytes = documentBytes;
     let perVisualBytes = 0;
     let largestString = 0;
-    let smallStrings = container ? c.documentOverheadBytes : 0;
+    let smallStrings = documentBytes;
     plan.items.forEach((item, index) => {
         const cost = item.cost;
         if (container) {
@@ -629,8 +746,10 @@ export function preflightArtifact(
                 sinkPeak = live;
                 sinkPeakItem = index;
             }
-            largestString = Math.max(largestString, binaryStringBytes(item.width * item.height * 3));
-            smallStrings += c.perItemFileOverheadBytes;
+            if (!owned) {
+                largestString = Math.max(largestString, binaryStringBytes(item.width * item.height * 3));
+                smallStrings += c.perItemFileOverheadBytes;
+            }
         }
         retainedTotal += cost.retainedBytes;
         encodedBytes += cost.encodedBytes;
@@ -641,9 +760,18 @@ export function preflightArtifact(
         }
     });
 
-    const duringRun = Math.max(kernel.peakWorkingSet, sinkPeak) + retainedTotal;
+    // The owned writer holds its header and document objects from the start.
+    const duringRun = Math.max(kernel.peakWorkingSet, sinkPeak) + retainedTotal
+        + (owned ? documentBytes : 0);
     let publish: Record<string, number>;
-    if (container) {
+    if (owned) {
+        // The chunks the writer holds, and the Blob made from them: no joined
+        // string, no ArrayBuffer copy (the Blob copy is a platform assumption).
+        publish = {
+            'retained chunks': retainedTotal + documentBytes,
+            Blob: fileBytes,
+        };
+    } else if (container) {
         publish = {
             'retained images': retainedTotal,
             'content strings': smallStrings,
@@ -697,7 +825,9 @@ export function formatBytes(bytes: number): string {
 
 /** How many leading pages of the plan fit under the output ceiling. */
 function pagesThatFit(plan: ArtifactPlan): number {
-    const base = plan.kind === ARTIFACT.PREVIEW ? 0 : JSPDF_CONTAINER.documentOverheadBytes;
+    const base = plan.kind === ARTIFACT.PREVIEW ? 0
+        : (plan.kind === ARTIFACT.COMPARISON_PDF
+            ? COMPARISON_PDF_CONTAINER.documentObjectsBytes : JSPDF_CONTAINER.documentOverheadBytes);
     const byPage = new Map<number, number>();
     for (const item of plan.items) {
         byPage.set(item.page, (byPage.get(item.page) ?? 0) + item.cost.outputBytes);
