@@ -261,7 +261,8 @@ function html(s) {
 
 // One print per sheet at an explicit size, then one document: Chrome's named
 // @page support does not survive page.pdf().
-const browser = await puppeteer.launch({ headless: true });
+// The same flags every other gate uses: CI's Ubuntu has no usable sandbox.
+const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
 try {
     const page = await browser.newPage();
     for (const variant of ['A', 'B']) {
