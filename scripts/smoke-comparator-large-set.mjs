@@ -308,16 +308,71 @@ try {
     await ui.select('[data-testid="dpi"]', '300');
     await ui.select('[data-testid="memory-budget"]', String(2 * GIB));
     await settle();
+    // The preview of the current page also plans at these settings, and at
+    // 300 dpi x 3 members its own single-page plan is refused too (2 visuals,
+    // 1 page requested). A refusal on screen is therefore not evidence about
+    // the export: the assertion is bound to the export plan's own numbers --
+    // all 5 pages requested, 10 comparison visuals, a ~333 MiB output bound --
+    // which the one-page preview refusal cannot show.
+    const refusalText = () => ui.evaluate(
+        () => document.querySelector('[data-testid="preflight-refusal"]')?.textContent ?? '');
+    const isExportRefusal = (t) => t.includes('OVER_OUTPUT_BUDGET') && t.includes('比較 10 枚')
+        && t.includes('/ 333 MiB') && t.includes('要求: 5 ページ');
+    const beforeClick = await refusalText();
+    // The estimate is planned asynchronously after each settings change; give it
+    // time to reach the settings now on screen before reading it.
+    const estimateSettled = await ui.waitForFunction(() => {
+        const t = document.querySelector('[data-testid="export-estimate"]')?.textContent ?? '';
+        return t.includes('333 MiB');
+    }, { timeout: 30000 }).then(() => true, () => false);
+    const estimateBefore = await ui.evaluate(
+        () => document.querySelector('[data-testid="export-estimate"]')?.textContent ?? '');
+    console.log(`  estimate settled on the 3-member plan: ${estimateSettled}`);
+    // Every Blob the page could publish goes through URL.createObjectURL
+    // (file-saver's saveAs does); count them from here on.
+    await ui.evaluate(() => {
+        window.__objectUrls = 0;
+        const original = URL.createObjectURL;
+        URL.createObjectURL = function counted(...args) {
+            window.__objectUrls += 1;
+            return original.apply(this, args);
+        };
+    });
     await ui.click('[data-testid="export-pdf"]');
-    await ui.waitForSelector('[data-testid="preflight-refusal"]');
-    const refusal = await ui.evaluate(() => ({
-        text: document.querySelector('[data-testid="preflight-refusal"]').textContent,
-        dpi: document.querySelector('[data-testid="dpi"]')?.value,
-    }));
+    // The same predicate as isExportRefusal, evaluated in the page.
+    await ui.waitForFunction(() => {
+        const t = document.querySelector('[data-testid="preflight-refusal"]')?.textContent ?? '';
+        return t.includes('OVER_OUTPUT_BUDGET') && t.includes('比較 10 枚')
+            && t.includes('/ 333 MiB') && t.includes('要求: 5 ページ');
+    }, { timeout: 180000 });
+    await settle();
     await wait(5000);
-    console.log(`  300 dpi x 3: ${refusal.text.slice(0, 160)}`);
-    probe('300 dpi x 3 members at 2 GiB is refused on the output ceiling in the UI, DPI still 300, nothing written',
-        refusal.text.includes('OVER_OUTPUT_BUDGET') && refusal.dpi === '300' && finished().length === 0);
+    const after = await ui.evaluate(() => ({
+        text: document.querySelector('[data-testid="preflight-refusal"]')?.textContent ?? '',
+        status: document.querySelector('[data-testid="refusal-status"]')?.textContent ?? '',
+        dpi: document.querySelector('[data-testid="dpi"]')?.value,
+        scopeAll: [...document.querySelectorAll('label')]
+            .find((l) => l.textContent?.includes('All Pages'))
+            ?.querySelector('input[type="radio"]')?.checked ?? null,
+        objectUrls: window.__objectUrls,
+        overlay: document.querySelector('[data-testid="exporting-overlay"]') !== null,
+    }));
+    console.log(`  300 dpi x 3, estimate: ${estimateBefore}`);
+    console.log(`  300 dpi x 3, before the click: ${beforeClick.slice(0, 140) || '(no refusal shown)'}`);
+    console.log(`  300 dpi x 3, after Export:     ${after.text.slice(0, 160)}`);
+    check('the refusal shown before the click is not the export plan (the gate can tell them apart)',
+        !isExportRefusal(beforeClick), beforeClick ? 'a one-page preview refusal' : 'none shown');
+    check('the export settings plan the same export: 5 pages, refused on the ~333 MiB output bound',
+        estimateBefore.includes('5 ページ（1–5）') && estimateBefore.includes('300 DPI')
+        && estimateBefore.includes('出力できません') && estimateBefore.includes('比較 10 枚')
+        && estimateBefore.includes('333 MiB'));
+    probe('Export at 300 dpi x 3 members x 2 GiB is refused by the export plan itself: all 5 pages, 10 visuals, ~333 MiB',
+        isExportRefusal(after.text) && after.status === 'OVER_OUTPUT_BUDGET',
+        after.text.slice(0, 120));
+    probe('and nothing is reduced, published or written: DPI 300, all pages, no Blob URL, no download',
+        after.dpi === '300' && after.scopeAll === true && after.objectUrls === 0
+        && !after.overlay && finished().length === 0,
+        `dpi ${after.dpi}, scope all ${after.scopeAll}, object URLs ${after.objectUrls}, files ${finished().length}`);
 
     check('no network request left the machine', external.length === 0, external.slice(0, 3).join(' '));
     check('no page error and no alert', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
