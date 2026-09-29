@@ -24,9 +24,12 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
         changelog: '注釈付きPDFの保存を、元PDFのベクター・検索可能な文字情報を保持する方式へ変更'
     },
     comparator: {
-        version: '1.1.1',
-        lastUpdate: '2026/01/29',
-        changelog: '初期リリース'
+        version: '1.2.0',
+        lastUpdate: '2026/09/29',
+        changelog: '比較結果のPDFを画質を落とさずに圧縮して書き出すよう変更。'
+            + 'A1など大判の図面を複数ページまとめて1つのPDFに書き出せるようになり、ファイルサイズも大幅に小さくなりました。'
+            + '選んだ解像度やページが自動で下がることはなく、安全に書き出せない場合は理由を示して中止します。'
+            + '書き出し設定に、作業メモリの見積りと出力サイズの安全上限を表示'
     },
     tools: {
         version: '1.3.1',

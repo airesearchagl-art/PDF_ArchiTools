@@ -404,7 +404,7 @@ try {
     console.log(`  one A4 page at 300 dpi: ${
         budgets.work.oneA4Page.toLocaleString('en-US')} work units, `
         + `${(budgets.output.perVisual / 1e6).toFixed(1)} MB of output`);
-    console.log(`  a 48 Mpx sheet at 512 MiB: ${
+    console.log(`  a 69 Mpx sheet at 512 MiB: ${
         budgets.memory.atDefault.refusal?.status ?? 'within'}  `
         + `at 2 GiB: ${budgets.memory.afterExplicitRaise.refusal?.status ?? 'within'}`);
     console.log(`  an A1 at 450 dpi through the engine: ${
@@ -439,12 +439,26 @@ try {
     probe('and arithmetic that would leave the safe-integer range is refused',
         budgets.work.unrepresentable === false);
 
-    check('the documented output capacity is what the planner actually allows',
-        budgets.output.seven === null,
+    // The Comparison PDF (Output Writer v2): its capacity is what its owned
+    // bound allows, found by the planner.
+    const cmpOut = budgets.output.comparison;
+    check('Comparison PDF: the output capacity is what the owned bound allows, and more than before',
+        cmpOut.largest > 7
+        && cmpOut.largest * budgets.output.perVisual <= budgets.output.ceiling,
+        `${cmpOut.largest} A4 pages at 300 dpi, bound ${
+            (budgets.output.perVisual / 1e6).toFixed(2)} MB each (the stored-PNG writer took 7)`);
+    probe('Comparison PDF: and one page past it is refused before anything is rendered',
+        cmpOut.status === 'OVER_OUTPUT_BUDGET' && cmpOut.first === cmpOut.largest + 1
+        && cmpOut.outputBytes > budgets.output.ceiling,
+        `${cmpOut.first} pages against a ${
+            budgets.output.ceiling / (1024 * 1024)} MiB output ceiling`);
+    // The Change Report is still the stored-PNG container.
+    check('Change Report: the documented output capacity is what the planner actually allows',
+        budgets.output.changeReport.seven === null,
         `seven A4 pages at 300 dpi, ${
-            (budgets.output.perVisual / 1e6).toFixed(1)} MB each`);
-    probe('and one page past it is refused before anything is rendered',
-        budgets.output.nine === 'OVER_OUTPUT_BUDGET',
+            (budgets.output.changeReport.perVisual / 1e6).toFixed(1)} MB each`);
+    probe('Change Report: and one page past it is refused before anything is rendered',
+        budgets.output.changeReport.nine === 'OVER_OUTPUT_BUDGET',
         `nine pages against a ${
             budgets.output.ceiling / (1024 * 1024)} MiB output ceiling`);
     check('the working set is modelled phase by phase, not as one sum',
@@ -508,9 +522,9 @@ try {
         lifetime.maxLiveVisuals === 1
         && lifetime.maxLiveBytes === lifetime.oneVisualBytes,
         `${lifetime.maxLiveBytes.toLocaleString('en-US')} bytes = one visual`);
-    check('and the production sink lets go of it before jsPDF ingests it',
-        lifetime.releasedBySink === lifetime.pairs,
-        `${lifetime.releasedBySink}/${lifetime.pairs} composites released inside the sink`);
+    check('and each composite is gone before the next one exists',
+        lifetime.earlierReleased === lifetime.pairs,
+        `${lifetime.earlierReleased}/${lifetime.pairs} pairs arrived with every earlier composite released`);
     check('and it has released that one by the time the job ends',
         lifetime.stillHeld === 0,
         'the sink took it, so the run does not keep it');
@@ -519,10 +533,17 @@ try {
         && lifetime.retainedBytes === lifetime.pairs * lifetime.oneVisualBytes,
         `${(lifetime.retainedBytes / 1e6).toFixed(1)} MB — the lifetime the `
         + 'ceiling would have been wrong about');
-    check('the encoded bytes it does accumulate are exactly what preflight counted',
-        lifetime.encodedBytes === lifetime.predictedEncoded,
-        `${lifetime.encodedBytes.toLocaleString('en-US')} = `
+    check('the encoded bytes it does accumulate are within the bound preflight counted',
+        lifetime.encodedBytes > 0 && lifetime.encodedBytes <= lifetime.predictedEncoded,
+        `${lifetime.encodedBytes.toLocaleString('en-US')} <= `
         + `${lifetime.predictedEncoded.toLocaleString('en-US')} bytes`);
+    check('and the file it wrote is within the bound too',
+        lifetime.fileBytes <= lifetime.modelledFileBytes,
+        `${lifetime.fileBytes.toLocaleString('en-US')} <= `
+        + `${lifetime.modelledFileBytes.toLocaleString('en-US')} bytes`);
+    check('reopened, every page decodes to exactly the composite the engine painted',
+        lifetime.decodedMatches === true,
+        `${lifetime.pairs} pages, RGB hashed and compared`);
     check('so the modelled peak is the peak of the code that runs',
         lifetime.withinBudget === true
         && lifetime.modelledPeak >= lifetime.oneVisualBytes + lifetime.predictedEncoded,
@@ -638,16 +659,16 @@ try {
         alias.verdicts.join(',') === 'MATCH,CHANGE'
         && alias.firstChangeRow > alias.height / 2 && alias.rawImages === 1,
         'its alias hashes only the first half of the bytes (jspdf.es.js:9095)');
-    check('so the sink names every image, and the CHANGE is stored as itself',
+    check('the Comparison PDF writes every pair as its own image, and the CHANGE decodes as itself',
         alias.sinkImages === 2 && alias.secondCarriesChange === true,
-        alias.aliases.join(', '));
+        `${alias.aliases.join(', ')}; reopened, each page decodes to its own composite`);
 
     const prod = await page.evaluate(() => window.__comparator.productionMemory());
-    console.log(`  jsPDF running ${prod.version.running}, modelled ${prod.version.modelled}`);
+    console.log(`  Comparison PDF: ${prod.container.writer}, ${prod.container.compressor}`);
+    console.log(`  Change Report: jsPDF running ${prod.version.running}, modelled ${prod.version.modelled}`);
     console.log(`  A4 at 300 dpi, two members, frame ${prod.model.frame.join('x')}:`);
-    console.log(`    per image: owned PNG ${mib(prod.model.item.encodedBytes)}, jsPDF ingest `
-        + `peak ${mib(prod.model.ingest.peak)} (${prod.model.ingest.peakStep}), retained `
-        + `${mib(prod.measured.retainedPerImage)}, file ${mib(prod.measured.filePerImage)}`);
+    console.log(`    per image: stream bound ${mib(prod.model.item.encodedBytes)}, retained `
+        + `${mib(prod.model.item.retainedBytes)}, file ${mib(prod.model.item.fileBytes)}`);
     console.log(`    item steps: ${Object.entries(prod.model.item.steps)
         .map(([k, v]) => `${k} ${mib(v)}`).join(', ')}`);
     console.log(`    kernel peak ${mib(prod.model.kernel.peakWorkingSet)} (`
@@ -669,13 +690,14 @@ try {
         + `(${mib(prod.outputAtOne.outputBytes)}), at 2 GiB ${prod.outputAtTwo.refusal}`);
     console.log(`  173 pages: ${prod.workAtTwo.refusal} at 2 GiB, ${prod.workAtMachine.refusal} `
         + 'at 64 GiB');
-    console.log(`  built the ${prod.largest.pages}-page job: ${prod.measured.images} images, `
-        + `${prod.measured.retainedChars.toLocaleString('en-US')} retained chars, file `
-        + `${prod.measured.fileBytes.toLocaleString('en-US')} bytes (modelled `
-        + `${prod.measured.modelledFileBytes.toLocaleString('en-US')}), max char code `
-        + `${prod.measured.maxCharCode}`);
+    console.log(`  built the ${prod.largest.pages}-page job: ${prod.measured.pages} pages, `
+        + `${prod.measured.images} images, file ${prod.measured.fileBytes.toLocaleString('en-US')} `
+        + `bytes (bound ${prod.measured.modelledFileBytes.toLocaleString('en-US')}); encoded `
+        + `${prod.measured.encodedBytes.toLocaleString('en-US')} (bound `
+        + `${prod.measured.modelledEncoded.toLocaleString('en-US')}); ${prod.measured.yields} yields `
+        + `over ${prod.measured.blocks} blocks, longest slice ${prod.measured.longestSliceMs.toFixed(1)} ms`);
 
-    check('the container running is the one the model was derived from',
+    check("the Change Report's container is still the one its model was derived from",
         prod.version.running === prod.version.modelled && prod.version.running === '3.0.4',
         `jsPDF ${prod.version.running}`);
     check('512 MiB takes a real multi-page A4 job through the Comparison PDF',
@@ -687,11 +709,18 @@ try {
         && prod.firstOver.pages === prod.largest.pages + 1
         && prod.firstOver.jobPeak > 512 * 1024 * 1024,
         prod.firstOver.reason ?? '');
-    check('the same job is accepted once a person selects 1 GiB, or 2 GiB',
-        prod.atOneGiB.refusal === null && prod.atTwoGiB.refusal === null
+    // In the owned container, publication holds the chunks and the Blob (twice
+    // the output), so for small sheets the 512 MiB default and the 256 MiB
+    // output ceiling stop the same job: a larger preset moves the refusal to
+    // the output ceiling instead of accepting it. (A job that the budget
+    // alone refuses and a preset accepts is memoryBoundary's, above.)
+    check('the same job at 1 GiB, or 2 GiB, meets the output ceiling instead: the two ceilings meet here',
+        prod.atOneGiB.refusal === 'OVER_OUTPUT_BUDGET' && prod.atTwoGiB.refusal === 'OVER_OUTPUT_BUDGET'
+        && prod.firstOver.outputBytes > 256 * 1024 * 1024
         && prod.presets.includes(1024 * 1024 * 1024)
         && prod.presets.includes(2 * 1024 * 1024 * 1024),
-        'both are offered presets; neither is chosen for the user');
+        `${prod.firstOver.pages} pages, ${mib(prod.firstOver.outputBytes)} of output; `
+        + 'both presets are offered, neither is chosen for the user');
     probe('and asking again at the default still refuses, because nothing was raised',
         prod.askedAgain.refusal === 'OVER_MEMORY_BUDGET');
     probe('a larger budget does not buy past the output ceiling',
@@ -702,32 +731,31 @@ try {
         prod.workAtTwo.refusal === 'OVER_WORK_BUDGET'
         && prod.workAtMachine.refusal === 'OVER_WORK_BUDGET',
         `${prod.workAtTwo.workUnits?.toLocaleString('en-US')} units`);
-    check('the model has a term for every buffer on the jsPDF path, and says what each rests on',
-        ['inflate', 'unfilter', 'split', 'stringify'].every((s) => s in prod.model.ingest.steps)
-        && ['retained images', 'content strings', 'rope flatten', 'joined document',
-            'ArrayBuffer', 'Blob'].every((s) => s in prod.model.publish)
+    check('the model has a term for every buffer on the owned path, and says what each rests on',
+        ['encode'].every((s) => s in prod.model.item.steps)
+        && ['retained chunks', 'Blob'].every((s) => s in prod.model.publish)
+        && Object.keys(prod.model.publish).length === 2
+        && prod.terms.some((t) => t.term.startsWith('Comparison PDF image stream'))
         && prod.terms.every((t) => ['exact', 'conservative', 'inferred'].includes(t.basis)),
-        `${prod.terms.length} named terms`);
-    // Measured against the real jsPDF document the production sink built.
-    check('measured: jsPDF keeps one image per item, each under its own name',
-        prod.measured.images === prod.measured.appended
-        && prod.measured.distinctAliases === prod.measured.images,
-        `${prod.measured.images} images, ${prod.measured.distinctAliases} aliases`);
-    check('measured: what it keeps is the colour string the model priced, and no SMask',
-        prod.measured.retainedChars === prod.measured.modelledRetainedChars
-        && prod.measured.noSMask === true,
-        `${prod.measured.retainedChars.toLocaleString('en-US')} characters = 3 bytes per pixel`);
+        `${prod.terms.length} named terms; no joined string, no ArrayBuffer copy`);
+    // Measured against the real file the production sink built, reopened.
+    check('measured: one page and one image per item, every page the sheet it came from',
+        prod.measured.pages === prod.measured.appended
+        && prod.measured.images === prod.measured.appended && prod.measured.onePerPage
+        && prod.measured.sizes.length === 1 && prod.measured.titled,
+        `${prod.measured.pages} pages, ${prod.measured.sizes.join(', ')} pt`);
     check('measured: the file is no larger than the model said',
-        prod.measured.fileBytes <= prod.measured.modelledFileBytes
-        && prod.measured.fileBytes >= prod.measured.imageStreamBytes,
+        prod.measured.fileBytes <= prod.measured.modelledFileBytes,
         `${prod.measured.fileBytes.toLocaleString('en-US')} <= `
         + `${prod.measured.modelledFileBytes.toLocaleString('en-US')} bytes`);
-    check('measured: every character of it is one byte wide',
-        prod.measured.maxCharCode < 256,
-        `max char code ${prod.measured.maxCharCode}; V8's one-byte strings are inferred from this`);
-    check('measured: the owned PNGs are exactly what the plan counted',
-        prod.measured.encodedBytes === prod.measured.modelledEncoded,
-        `${prod.measured.encodedBytes.toLocaleString('en-US')} bytes`);
+    check('measured: every image stream is within the per-image bound the plan counted',
+        prod.measured.largestEncoded <= prod.measured.perImageBound
+        && prod.measured.encodedBytes <= prod.measured.modelledEncoded,
+        `largest ${prod.measured.largestEncoded.toLocaleString('en-US')} <= `
+        + `${prod.measured.perImageBound.toLocaleString('en-US')} bytes`);
+    check('measured: the encode gave the thread back while it worked',
+        prod.measured.yields > 0 && prod.measured.blocks > prod.measured.yields,
+        `${prod.measured.yields} yields at block boundaries`);
 
     // ---- the encoder ---------------------------------------------------------
     console.log('\n=== the owned encoder ===');

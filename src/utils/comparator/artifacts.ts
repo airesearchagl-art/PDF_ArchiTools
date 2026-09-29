@@ -5,23 +5,44 @@
  * allocations and releases (`itemCost` in budget.ts). That price is only true
  * while the code that builds the file keeps to the sequence, so the code lives
  * here, once: the UI calls it, and the gates call exactly the same thing and
- * then measure the jsPDF document it produced.
+ * then measure the file it produced.
  *
- * The container is jsPDF 3.0.4 and nothing else; the model is bound to it, and
- * a different version is refused rather than trusted.
+ * The two files have two containers, and each has its own model:
+ *
+ *   - The Comparison PDF (Output Writer v2) is written by the owned
+ *     append-only writer (pdf-writer.ts): each visual as a 4-bit Indexed image
+ *     through the owned bounded DEFLATE, each notice as DeviceRGB through the
+ *     same encoder. Its bounds are the owned ones in budget.ts.
+ *   - The Change Report is still jsPDF 3.0.4 and nothing else; its model is
+ *     bound to that version, and a different one is refused rather than
+ *     trusted.
  */
 import jsPDF, { type jsPDFOptions } from 'jspdf';
+import { saveAs } from 'file-saver';
 import {
     ARTIFACT_ITEM,
+    MAX_OUTPUT_BYTES,
     NOTICE_RASTER,
     PLAN,
     RESULT,
     type ArtifactItemKind,
 } from './contract';
 import { JSPDF_CONTAINER } from './budget';
-import { RasterShapeError, assertRaster } from './mask';
+import { RasterShapeError, assertRaster, taskBoundary } from './mask';
 import { encodePngStored } from './png';
-import type { PageResult, PairResult } from './engine';
+import { paintPair, type PageResult, type PairResult, type RunSignal } from './engine';
+import { ChunkedPdfWriter, OutputCeilingError } from './pdf-writer';
+import {
+    encodeIndexedImage,
+    encodeRgbImage,
+    statePalette,
+    type EncodeControl,
+    type EncodedImage,
+    type Rgb,
+} from './state-raster';
+
+/** Re-exported so a caller can tell a runtime ceiling from any other failure. */
+export { OutputCeilingError };
 
 type FileKind = keyof typeof NOTICE_RASTER;
 
@@ -172,65 +193,175 @@ function newDocument(options?: jsPDFOptions): jsPDF {
     return new jsPDF(options);
 }
 
+/** The colours the run's pairs were painted with: one reference, one per other slot. */
+export interface ComparisonPaint {
+    referenceColor: Rgb;
+    colorBySlot: ReadonlyMap<number, Rgb>;
+    matchColor: Rgb;
+    matchOpacity: number;
+}
+
+export interface ComparisonPdfOptions {
+    paint: ComparisonPaint;
+    /** The run's own signal. A superseded run stops encoding and publishes nothing. */
+    signal?: RunSignal;
+    /** The runtime ceiling on actual bytes. `MAX_OUTPUT_BYTES` unless a test lowers it. */
+    maxBytes?: number;
+    /** How long an encode may hold the thread before it yields at a block boundary. */
+    sliceMs?: number;
+}
+
+/** How the encode shared the thread, for the gates. */
+export interface YieldStats {
+    yields: number;
+    /** The longest stretch between two yields (or from the start of an encode). */
+    longestSliceMs: number;
+    blocks: number;
+}
+
+export interface ComparisonPdfSink {
+    kind: 'COMPARISON_PDF';
+    appended: AppendedItem[];
+    stats: YieldStats;
+    onPair: (pair: PairResult) => Promise<void>;
+    onPage: (page: PageResult) => Promise<void>;
+    /** True once the run was superseded mid-encode; nothing will be published. */
+    readonly cancelled: boolean;
+    readonly bytesWritten: number;
+    /** The finished file. Throws `OutputCeilingError` if the tail would pass the ceiling. */
+    finish: () => Blob;
+    /** `finish()` and hand the file to the browser's download. */
+    save: (filename: string) => void;
+    abort: () => void;
+}
+
 /**
  * The Comparison PDF: one page per pair, and one per page nobody could compare,
  * in source-page order.
  *
- * Every image is added under its own alias. Without one, jsPDF names an image
- * by a hash of the first half of its bytes (jspdf.es.js:9095, 9329-9332) and
- * reuses any earlier image with the same name — and a stored PNG's first half
- * is the top half of the sheet. A CHANGE whose change is in the lower half
- * would have been written as the picture of the MATCH before it.
+ * Each pair's composite becomes a 4-bit Indexed image whose palette is what
+ * `paintPair` paints for that pair's colours, so it decodes to exactly the
+ * composite's RGB. Each notice is drawn as today and written as DeviceRGB.
+ * Both go through the owned bounded DEFLATE, whose output and scratch the
+ * preflight priced before the run began (budget.ts).
+ *
+ * The encode yields to the event loop at block boundaries whenever it has held
+ * the thread for `sliceMs`, and after every yield it asks the run's signal
+ * whether it still owns the output. A run that no longer does drops the writer
+ * and returns; the engine sees the same signal and abandons the run, and the
+ * component never reaches `save`. Every append is counted against `maxBytes`:
+ * a file that would pass it is dropped and the run fails with
+ * `OutputCeilingError`, and nothing is written.
  */
-export function createComparisonPdf(dpi: number): ArtifactSink {
-    // Points, because the page sizes below are points: the pixel width divided
-    // back by the render scale is the source sheet.
-    const doc = newDocument({ orientation: 'portrait', unit: 'pt' });
-    doc.deletePage(1);
-    const appended: AppendedItem[] = [];
+export function createComparisonPdf(dpi: number, options: ComparisonPdfOptions): ComparisonPdfSink {
     const scale = dpi / 72;
+    const writer = new ChunkedPdfWriter(options.maxBytes ?? MAX_OUTPUT_BYTES);
+    const appended: AppendedItem[] = [];
+    const stats: YieldStats = { yields: 0, longestSliceMs: 0, blocks: 0 };
+    const sliceMs = options.sliceMs ?? 12;
+    const signal = options.signal;
+    const { paint } = options;
+    let cancelled = false;
 
-    const onPair = (pair: PairResult) => {
-        if (!pair.pixels) return;
+    const owns = () => !signal || (!signal.isCancelled() && signal.isOwner());
+
+    const control = (): EncodeControl => {
+        let sliceStart = performance.now();
+        return {
+            atBlock: async () => {
+                stats.blocks += 1;
+                const held = performance.now() - sliceStart;
+                if (held < sliceMs) return;
+                stats.longestSliceMs = Math.max(stats.longestSliceMs, held);
+                await taskBoundary();
+                stats.yields += 1;
+                sliceStart = performance.now();
+            },
+            shouldContinue: owns,
+            // The running compressed size, against the ceiling, before the
+            // page is appended: a file that cannot fit stops growing now.
+            onBytes: (encodedSoFar) => writer.reserve(encodedSoFar),
+        };
+    };
+
+    const append = (image: EncodedImage | null, widthPt: number, heightPt: number, title: string) => {
+        if (!image) {
+            cancelled = true;
+            writer.abort();
+            return false;
+        }
+        writer.addImagePage({ widthPt, heightPt, image, title });
+        return true;
+    };
+
+    // Any failure drops the writer, whatever threw: a sink that failed part way
+    // has no file to give, even to a caller that goes on to ask for one.
+    const failClosed = <T extends unknown[]>(step: (...args: T) => Promise<void>) =>
+        async (...args: T) => {
+            try {
+                await step(...args);
+            } catch (error) {
+                writer.abort();
+                throw error;
+            }
+        };
+
+    const onPair = failClosed(async (pair: PairResult) => {
+        if (!pair.pixels || cancelled || !writer.isOpen) return;
         const alias = `pair:p${pair.page}:s${pair.slot}`;
-        const png = encodeOpaque(pair.pixels, pair.width, pair.height, alias);
-        // Released before jsPDF ingests the PNG: the composite is not needed
-        // again, and the model prices the ingest step without it.
-        pair.pixels = null;
+        assertRaster(pair.pixels, pair.width, pair.height, 4, alias);
+        assertOpaque(pair.pixels, alias);
+        const otherColor = paint.colorBySlot.get(pair.slot);
+        if (!otherColor) throw new RasterShapeError(`${alias}: no colour for slot ${pair.slot}`);
+        const palette = statePalette(paintPair, {
+            referenceColor: paint.referenceColor,
+            otherColor,
+            matchColor: paint.matchColor,
+            matchOpacity: paint.matchOpacity,
+        });
+        const image = await encodeIndexedImage(pair.pixels, pair.width, pair.height, palette, control());
         const w = pair.width / scale;
         const h = pair.height / scale;
-        doc.addPage([w, h], w > h ? 'landscape' : 'portrait');
-        doc.addImage(png, 'PNG', 0, 0, w, h, alias);
-        doc.setFontSize(9);
-        doc.text(`${pair.title} — ${pair.verdict}`, 8, 14);
+        if (!append(image, w, h, `${pair.title} — ${pair.verdict}`)) return;
         appended.push({
             kind: ARTIFACT_ITEM.PAIR_VISUAL, page: pair.page, slot: pair.slot,
-            width: pair.width, height: pair.height, alias, encodedBytes: png.length,
+            width: pair.width, height: pair.height, alias, encodedBytes: image!.encodedBytes,
         });
-    };
+    });
 
     // A page nobody could compare is kept and named, in its own place in the
     // document, as an image — so the notice survives whatever glyphs it needs.
-    const onPage = (page: PageResult) => {
-        if (page.status === PLAN.READY_TO_COMPARE) return;
+    const onPage = failClosed(async (page: PageResult) => {
+        if (page.status === PLAN.READY_TO_COMPARE || cancelled || !writer.isOpen) return;
         const raster = NOTICE_RASTER.COMPARISON_PDF;
         const alias = `notice:p${page.page}`;
-        const png = noticePng(page, 'COMPARISON_PDF');
-        doc.addPage([raster.width / 2, raster.height / 2], 'portrait');
-        doc.addImage(png, 'PNG', 0, 0, raster.width / 2, raster.height / 2, alias);
+        const image = await encodeRgbImage(
+            drawNotice(noticeLines(page), raster), raster.width, raster.height, control(),
+        );
+        if (!append(image, raster.width / 2, raster.height / 2, '')) return;
         appended.push({
             kind: noticeKind(page), page: page.page, slot: null,
-            width: raster.width, height: raster.height, alias, encodedBytes: png.length,
+            width: raster.width, height: raster.height, alias, encodedBytes: image!.encodedBytes,
         });
+    });
+
+    const finish = () => {
+        if (cancelled) throw new Error('the Comparison PDF was cancelled and has no output');
+        const chunks = writer.finish() as Uint8Array<ArrayBuffer>[];
+        return new Blob(chunks, { type: 'application/pdf' });
     };
 
     return {
         kind: 'COMPARISON_PDF',
-        doc,
         appended,
+        stats,
         onPair,
         onPage,
-        save: (filename) => { doc.save(filename); },
+        get cancelled() { return cancelled; },
+        get bytesWritten() { return writer.bytesWritten; },
+        finish,
+        save: (filename) => { saveAs(finish(), filename); },
+        abort: () => { writer.abort(); },
     };
 }
 

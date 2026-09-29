@@ -11,3 +11,6 @@ export * from './png';
 export * from './budget';
 export * from './engine';
 export * from './artifacts';
+export * from './deflate';
+export * from './pdf-writer';
+export * from './state-raster';

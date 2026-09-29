@@ -105,6 +105,8 @@ jobs:
           node scripts/make-drawing-register-fixtures.mjs
           node scripts/make-annotator-save-fixtures.mjs
           node scripts/make-comparator-fixtures.mjs
+          node scripts/make-comparator-a1-fixtures.mjs
+          node scripts/make-comparator-members-fixtures.mjs
           node scripts/make-processor-fixtures.mjs
           node scripts/make-m6-split-merge-fixtures.mjs
           node scripts/make-m6-remediation-fixtures.mjs
@@ -177,6 +179,18 @@ jobs:
       # bytes -- including the ones that are about nothing being written at all.
       - name: Comparator artifacts
         run: node scripts/smoke-comparator-artifacts.mjs
+
+      # The Comparison PDF's owned bounded DEFLATE, against node:zlib and pako:
+      # round trip, the construction-owned bound, determinism, corruption.
+      - name: Comparator owned DEFLATE
+        run: node scripts/smoke-comparator-deflate.mjs
+
+      # Output Writer v2 at the size that used to fail: A1 x 5 pages at 150 dpi
+      # as one file at 512 MiB, 2/3/4 members with notices, the 300 dpi
+      # boundary, the runtime ceiling, yielding and mid-encode cancellation,
+      # and the real UI. Synthetic drawings only (generated, never committed).
+      - name: Comparator large-set Comparison PDF
+        run: node scripts/smoke-comparator-large-set.mjs
 
       # The Processor's adopted contract, most of which is about refusing.
       # Drives the real planner, the real facts reader and the real runners over

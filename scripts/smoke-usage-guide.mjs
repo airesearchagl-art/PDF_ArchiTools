@@ -369,8 +369,12 @@ try {
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
     check('and the newest entries are the ones just added',
-        historyDates[0] === '20260927',
+        historyDates[0] === '20260929',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
+    check('the Comparator 1.2.0 entry says the resolution is never lowered and nothing partial is written',
+        historyText.includes('PDF比較') && historyText.includes('1.2.0')
+        && historyText.includes('自動で下げたり減らしたりすることはありません')
+        && historyText.includes('ファイルは作成されません'));
     check('the Word entry is still there below them',
         historyText.includes('Word') && historyText.includes('1.5.0'));
     check('the earlier entries survive below it',
