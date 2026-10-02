@@ -18,7 +18,7 @@ const ONLY = arg('only', null);
 const LOSSLESS = ['current', 'struct-chunked', 'r1-chunked', 'll-chunked', 'll-chunked-owned', 'll-chunked-pako', 'll-chunked-pako-fast', 'll-pdflib'];
 const LOSSY = ['lossy-q85', 'lossy-q75', 'lossy-down2'];
 const FIXTURES = ['f01-comparator-a1-150', 'f02-dense-drawing', 'f03-schedule', 'f04-gray-scan', 'f05-photo', 'f06-jpeg',
-    'f07-mixed', 'f08-shared', 'f09-smask', 'f10-structure', 'f11-classes'];
+    'f07-mixed', 'f08-shared', 'f09-smask', 'f10-structure', 'f11-classes', 'f12-interpolate'];
 const CELLS = [];
 for (const f of FIXTURES) {
     for (const c of LOSSLESS) CELLS.push([f, c, []]);

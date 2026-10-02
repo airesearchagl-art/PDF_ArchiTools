@@ -27,6 +27,8 @@
  *                           colour-key Mask, ImageMask, ICCBased RGB, 16-bit,
  *                           Interpolate, 1-bit gray, ASCIIHex+Flate filter
  *                           chain, CMYK.
+ *   f12-interpolate         4-colour DeviceRGB raw twice: /Interpolate true
+ *                           (R2 forbidden) and the same samples without it.
  *
  * Run: node corpus/make-corpus.mjs [--only f01]
  */
@@ -389,6 +391,33 @@ if (want('f11')) {
     for (let i = 0; i < w * h; i += 1) { cmyk[i * 4] = 255 - rgbBytes[i * 3]; cmyk[i * 4 + 1] = 255 - rgbBytes[i * 3 + 1]; cmyk[i * 4 + 2] = 255 - rgbBytes[i * 3 + 2]; }
     add('DeviceCMYK raw', cmyk, { ColorSpace: 'DeviceCMYK', BitsPerComponent: 8 });
     await save('f11-classes', doc, images);
+}
+
+// --------------------------------------------------------- f12 interpolate
+// The same exact 4-colour DeviceRGB samples twice: p1 with /Interpolate true
+// (must stay R1), p2 without it (the control, where R2 Indexed wins by size).
+if (want('f12')) {
+    const doc = await PDFDocument.create();
+    const w = 1200; const h = 900;
+    const src = toRgb(drawingRgba(w, h, 12));
+    const pal = [[255, 255, 255], [0, 0, 0], [255, 0, 0], [0, 0, 255]];
+    const rgbBytes = Buffer.alloc(w * h * 3);
+    const rgba = Buffer.alloc(w * h * 4);
+    for (let i = 0; i < w * h; i += 1) {
+        let best = 0; let bd = Infinity;
+        pal.forEach((c, k) => { const d = (c[0] - src[i * 3]) ** 2 + (c[1] - src[i * 3 + 1]) ** 2 + (c[2] - src[i * 3 + 2]) ** 2; if (d < bd) { bd = d; best = k; } });
+        for (let c = 0; c < 3; c += 1) { rgbBytes[i * 3 + c] = pal[best][c]; rgba[i * 4 + c] = pal[best][c]; }
+        rgba[i * 4 + 3] = 255;
+    }
+    const images = [];
+    const add = (label, dict) => {
+        const ref = imageObject(doc, rgbBytes, { Width: w, Height: h, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, ...dict });
+        imagePage(doc, null, 600, 450, ref, null);
+        images.push({ page: images.length + 1, width: w, height: h, rgba: sha(rgba), class: label });
+    };
+    add('DeviceRGB 8-bit, 4 exact colours, /Interpolate true', { Interpolate: true });
+    add('the same samples without /Interpolate (control)', {});
+    await save('f12-interpolate', doc, images);
 }
 
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 1));

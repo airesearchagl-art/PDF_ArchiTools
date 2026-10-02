@@ -83,6 +83,9 @@ const summary = {
         largestAdmitted: model.largestAdmitted,
         policies: model.policies,
         parse: model.parse.map((p) => ({ fixture: p.fixture, objects: p.objects, streams: p.streams, streamBytes: p.streamBytes })),
+        imageWork: { bytes: model.f01.imageWorkBytes, basis: model.f01.imageWorkBasis, terms: model.f01.imageWorkTerms, pako2: model.pako2 },
+        pakoProbe: model.pakoProbe,
+        stage1: model.stage1,
         selftest,
     },
     measuredOnly: { steps, cells: measuredCells, parseGrowth: model.parse.map((p) => ({ fixture: p.fixture, parsedGrowthBytes: p.parsedGrowthBytes, nonStreamPerObject: p.nonStreamPerObject })), PER_OBJECT: model.PER_OBJECT },
@@ -96,7 +99,34 @@ const checks = {
     primaryLosslessOver90pctAndUnder5MB: f01('ll-chunked-pako-fast').outputBytes < 5_000_000
         && f01('ll-chunked-pako-fast').outputBytes < 0.1 * f01('ll-chunked-pako-fast').sourceBytes,
     lossyNeverChosenWhereLosslessIsSmaller: structuralCells['f01-comparator-a1-150/lossy-q85'].images.every((s) => !s.includes('LOSSY')),
+    // RF-30-01: priced for pako 2.1.0, streaming equals one-shot without the
+    // flatten copy, the run-time cap fires, and ~250 MiB @ 512 MiB is deferred.
+    imageWorkPricedForPako2: model.f01.imageWorkBasis.startsWith('pako 2.1.0') && model.pakoProbe.pakoVersion === '2.1.0',
+    pakoStreamingEqualsOneShot: model.pakoProbe.streamingEqualsOneShot && model.pakoProbe.streamingChunksAreDistinctBuffers
+        && model.pakoProbe.streamingPeakHeldBytes < model.pakoProbe.oneShotPeakHeldBytes,
+    pakoRuntimeCapFires: model.pakoProbe.cap.aborted && model.pakoProbe.cap.withinCapPlusOneChunk,
+    stage1Large512Deferred: model.stage1['~250 MiB source']['512 MiB'].status.startsWith('DEFERRED')
+        && model.stage1['~250 MiB source']['1024 MiB'].status === 'required preset in Stage 1',
+    stage1SingleFileOnly: model.stage1.boundary.inputs.startsWith('single file only'),
+    // RF-30-02: /Interpolate true stays R1 in every image-aware candidate; the
+    // control (same samples, no /Interpolate) shows R2 would otherwise win.
+    interpolateBlocksR2: interpolateBlocksR2(),
+    matrixGrewNotShrank: cells.length === 110,
 };
+function interpolateBlocksR2() {
+    const aware = ['r1-chunked', 'll-chunked', 'll-chunked-owned', 'll-chunked-pako', 'll-chunked-pako-fast', 'll-pdflib'];
+    const r2Capable = aware.filter((c) => c !== 'r1-chunked');
+    const f12 = cells.filter((c) => c.fixture === 'f12-interpolate' && aware.includes(c.candidate));
+    if (f12.length !== aware.length) return false;
+    const f11 = cells.filter((c) => c.fixture === 'f11-classes' && aware.includes(c.candidate));
+    return f12.every((c) => {
+        const interp = c.images.find((i) => i.usedBy.includes('p1'));
+        const control = c.images.find((i) => i.usedBy.includes('p2'));
+        const kept = interp.decision === 'R1' && interp.chosen.startsWith('R1 ') && c.verify?.ok === true;
+        const wins = !r2Capable.includes(c.candidate) || (control.decision === 'R1+R2' && control.chosen.startsWith('R2 Indexed') && control.after < interp.after);
+        return kept && wins;
+    }) && f11.every((c) => c.images.filter((i) => i.why.includes('/Interpolate')).length === 1);
+}
 summary.checks = checks;
 summary.pass = Object.values(checks).every(Boolean) && !summary.srcDirty;
 fs.writeFileSync(path.join(EVIDENCE, `gate-${RUN}.json`), JSON.stringify(summary, null, 1));

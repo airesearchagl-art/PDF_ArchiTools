@@ -15,7 +15,9 @@
  *             exact: DeviceRGB or ICCBased(N=3) 8-bit -> Indexed over the same
  *             base (<=256 colours); DeviceRGB 8-bit with R=G=B -> DeviceGray;
  *             DeviceGray 8-bit -> 1/2/4-bit when every value is representable;
- *             never with a /Decode array, a colour-key /Mask, or /ImageMask.
+ *             never with a /Decode array, a colour-key /Mask, /ImageMask, or
+ *             /Interpolate true (R1 only: equal decoded samples do not
+ *             establish equal interpolated rendering after the change).
  *   LOSSY     opt-in only: DCT (q) and/or downsampling; never by default.
  *
  * The chosen encoding is kept only when it is smaller than the original
@@ -314,14 +316,16 @@ export function censusAndPlan(doc) {
             streamBytes: obj.contents.length, decodeArray: hasDecode, colourKeyMask: colourKey,
             stencilMask: mask instanceof PDFRawStream || mask instanceof PDFRef, imageMask,
             smask: d.get(N('SMask')) !== undefined, isSMask: smaskOf.has(ref.toString()),
-            interpolate: d.get(N('Interpolate')) !== undefined,
+            interpolate: resolve(ctx, d.get(N('Interpolate'))) === PDFBool.True,
             usedBy: pageUse.get(ref.toString()) ?? (smaskOf.has(ref.toString()) ? ['(SMask)'] : []),
         };
         const exotic = filters.find((f) => !DECODABLE.has(f));
         if (exotic) rec.decision = { class: 'LEAVE', why: `${exotic} is kept as is (not decoded here)` };
         else if (!cs.comps && !imageMask) rec.decision = { class: 'LEAVE', why: `colour space ${cs.kind} with unknown component count` };
         else {
-            const r2Blocked = imageMask ? 'ImageMask' : hasDecode ? '/Decode array' : colourKey ? 'colour-key /Mask' : bpc !== 8 ? `${bpc}-bit` : !['DeviceRGB', 'DeviceGray', 'ICCBased'].includes(cs.kind) ? cs.kind : null;
+            // /Interpolate true: equal decoded samples do not establish equal
+            // interpolated rendering once the colour space or bit depth changes.
+            const r2Blocked = imageMask ? 'ImageMask' : hasDecode ? '/Decode array' : colourKey ? 'colour-key /Mask' : rec.interpolate ? '/Interpolate true' : bpc !== 8 ? `${bpc}-bit` : !['DeviceRGB', 'DeviceGray', 'ICCBased'].includes(cs.kind) ? cs.kind : null;
             rec.decision = { class: r2Blocked ? 'R1' : 'R1+R2', why: r2Blocked ? `samples kept exactly (${r2Blocked} forbids a representation change)` : 'samples kept; exact Indexed/Gray/bit-depth forms tried' };
         }
         images.push({ rec, ref, obj });
