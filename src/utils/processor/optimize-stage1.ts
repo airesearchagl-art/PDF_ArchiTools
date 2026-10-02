@@ -3,20 +3,26 @@
  *
  * The order below is the contract:
  *
- *   1. preflight   the file's size and its trailer /Size, read without
- *                  reading the file — refused here if the parse could not fit
+ *   1. preflight   the file's size and the /Size of the cross-reference
+ *                  section `startxref` names, read without reading the file —
+ *                  refused if /Size cannot be read exactly, is out of range,
+ *                  or the parse could not fit
  *   2. parse       the only place the source bytes exist; nothing outside
  *                  `parseOnce` keeps a reference to them, so once pdf-lib has
- *                  copied the streams out the buffer can be collected
+ *                  copied the streams out the buffer can be collected. A parse
+ *                  whose objects go past /Size is refused (the preflight was
+ *                  priced on a number that was not true)
  *   3. plan        the Processor's own refusals (encrypted, unreadable,
  *                  applied signature, unreadable form)
- *   4. images      one at a time, each priced before it starts; an image whose
- *                  working set does not fit is left as it is
- *   5. write       the chunked writer, against the output ceiling and the
- *                  ledger
- *   6. threshold   the derivative is handed over only when it is ≥ 1% smaller;
- *                  otherwise the caller hands back the original File, which it
- *                  never stopped holding
+ *   4. images      one at a time, each charged to the ledger before it starts;
+ *                  an image whose working set does not fit is left as it is
+ *   5. measure     no image rewritten → the original File. Otherwise the
+ *                  writer's output is measured exactly without allocating it;
+ *                  the output ceiling and the ≥ 1% threshold are decided on
+ *                  that, and the writer's own bytes plus the publication copy
+ *                  are charged to the ledger — which refuses rather than pass
+ *                  its share — before the writer allocates anything
+ *   6. write       the chunked writer, held to the bytes it was given
  *
  * Nothing is published from here. The caller publishes `chunks`, or the File.
  */
@@ -26,14 +32,13 @@ import type { SourceFacts } from './contracts';
 import type { RunToken } from './ownership';
 import { planOperation } from './planner';
 import { readSourceFactsFromDocument, unreadableFacts } from './source-facts';
-import { PRESERVING_SLACK_BYTES, preservingFileCost } from './budget';
 import type { Ceilings } from './budget';
 import {
     OptimizeLedger, admitPreParse, imageWorkBytes, meetsPublicationThreshold, parsedFixedBytes, usableBytes,
 } from './optimize-budget';
 import { bestReplacement, censusImages, decodeExactSamples } from './image-optimize';
 import type { WorkControl } from './image-optimize';
-import { ChunkedDocumentWriter, writeDocument } from './chunked-writer';
+import { ChunkedDocumentWriter, planDocumentWrite, writeDocument } from './chunked-writer';
 import type { StreamReplacement } from './chunked-writer';
 
 /** Where the PDF comes from. A `File` in the app; anything in a gate. */
@@ -77,8 +82,8 @@ export interface OptimizeSummary {
     /** Always false in Stage 1: nothing lossy exists on this path. */
     qualityChanged: false;
     resolutionChanged: false;
-    /** 'images' (chunked writer) or 'structure' (no image changed; pdf-lib re-save). */
-    mode: 'images' | 'structure' | 'none';
+    /** 'images' when the chunked writer ran (or was measured), 'none' when no image was rewritten. */
+    mode: 'images' | 'none';
     ledgerPeakBytes: number;
     usableBytes: number;
 }
@@ -110,42 +115,82 @@ const MiB = (b: number) => (b / 1048576).toFixed(0);
 
 // ---------------------------------------------------------------- trailer
 
-const MAX_PDF_OBJECTS = 8_388_607;
+/** The largest /Size Optimizer v2 accepts (PDF 32000 Annex C: 8,388,607 objects). */
+export const MAX_TRAILER_SIZE = 8_388_607;
 
-const sizeEntries = (bytes: Uint8Array): number[] => {
+const latin = (bytes: Uint8Array): string => {
     let s = '';
     for (let i = 0; i < bytes.length; i += 1) s += String.fromCharCode(bytes[i]);
-    const found: number[] = [];
-    for (const m of s.matchAll(/\/Size\s+(\d{1,10})(?![\d.])/g)) found.push(Number(m[1]));
-    return found;
+    return s;
 };
 
+/** The /Size entry of one dictionary's text, or null when it has none. */
+const sizeIn = (dict: string): number | null => {
+    const m = /\/Size\s+(\d{1,12})(?=[\s/>\]])/.exec(dict);
+    return m ? Number(m[1]) : null;
+};
+
+/** The dictionary that begins at the first `<<` in `text`, brackets balanced; null if it does not close. */
+function firstDictionary(text: string): string | null {
+    const start = text.indexOf('<<');
+    if (start < 0) return null;
+    let depth = 0;
+    for (let i = start; i < text.length - 1; i += 1) {
+        if (text[i] === '<' && text[i + 1] === '<') { depth += 1; i += 1; continue; }
+        if (text[i] === '>' && text[i + 1] === '>') {
+            depth -= 1;
+            i += 1;
+            if (depth === 0) return text.slice(start, i + 1);
+        }
+    }
+    return null;
+}
+
 /**
- * The trailer's /Size — one more than the highest object number the file may
- * use — read from the file's tail and from where `startxref` points, without
- * reading the rest. Null when neither place says.
+ * The /Size of the cross-reference section `startxref` points at — one more
+ * than the highest object number the file may use — read without reading the
+ * body. Only the trailer dictionary of a classic table, or the dictionary of a
+ * cross-reference stream, counts; a `/Size` anywhere else is ignored.
  *
- * The largest value found is taken: an over-estimate only makes the preflight
- * stricter.
+ * Null whenever this cannot be established exactly: no `startxref`, a target
+ * that is neither `xref` nor `N G obj`, a table that does not walk to its
+ * `trailer`, a dictionary that does not close, or no integer /Size in it. The
+ * caller refuses on null; nothing here is clamped or guessed.
  */
 export async function readTrailerSize(source: OptimizeSource): Promise<number | null> {
     if (source.size <= 0) return null;
-    const tailStart = Math.max(0, source.size - 65_536);
-    const tail = await source.readRange(tailStart, source.size);
-    const sizes = sizeEntries(tail);
+    const tail = latin(await source.readRange(Math.max(0, source.size - 2048), source.size));
+    const sx = [...tail.matchAll(/startxref\s+(\d{1,12})\s+%%EOF/g)].pop();
+    if (!sx) return null;
+    const at = Number(sx[1]);
+    if (!(at >= 0 && at < source.size)) return null;
 
-    let text = '';
-    const from = Math.max(0, tail.length - 2048);
-    for (let i = from; i < tail.length; i += 1) text += String.fromCharCode(tail[i]);
-    const sx = [...text.matchAll(/startxref\s+(\d{1,12})/g)].pop();
-    if (sx) {
-        const at = Number(sx[1]);
-        if (at >= 0 && at < source.size) {
-            sizes.push(...sizeEntries(await source.readRange(at, Math.min(source.size, at + 4096))));
-        }
+    const head = latin(await source.readRange(at, Math.min(source.size, at + 4096)));
+    if (/^\d+\s+\d+\s+obj\b/.test(head)) {
+        // A cross-reference stream: its own dictionary carries /Size.
+        const dict = firstDictionary(head);
+        if (!dict || !/\/Type\s*\/XRef\b/.test(dict)) return null;
+        return sizeIn(dict);
     }
-    if (sizes.length === 0) return null;
-    return Math.min(MAX_PDF_OBJECTS + 1, Math.max(...sizes));
+    if (!head.startsWith('xref')) return null;
+
+    // A classic table: walk its subsections (20-byte entries) to the trailer.
+    let pos = at + 4;
+    for (let guard = 0; guard < 100_000; guard += 1) {
+        const window = latin(await source.readRange(pos, Math.min(source.size, pos + 64)));
+        const ws = /^[\0\t\n\f\r ]*/.exec(window)?.[0].length ?? 0;
+        const rest = window.slice(ws);
+        if (rest.startsWith('trailer')) {
+            const t = latin(await source.readRange(pos + ws, Math.min(source.size, pos + ws + 4096)));
+            const dict = firstDictionary(t);
+            return dict ? sizeIn(dict) : null;
+        }
+        const sub = /^(\d{1,10}) (\d{1,10})[ \t]*(\r\n|\r|\n)/.exec(rest);
+        if (!sub) return null;
+        pos += ws + sub[0].length + Number(sub[2]) * 20;
+        if (pos >= source.size) return null;
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------- the run
@@ -182,10 +227,13 @@ export async function preflightOptimize(
     memoryBytes: number,
 ): Promise<{ trailerSize: number; needBytes: number; usableBytes: number }> {
     const trailerSize = await readTrailerSize(source);
-    if (trailerSize === null) {
+    if (trailerSize === null || !Number.isSafeInteger(trailerSize) || trailerSize < 1 || trailerSize > MAX_TRAILER_SIZE) {
         throw new ProcessorError(
-            'このPDFの末尾にある相互参照情報（/Size）を読み取れないため、必要なメモリを事前に見積もれません。'
-            + '見積もれない状態では最適化を開始しません。',
+            trailerSize === null
+                ? 'このPDFの相互参照情報（trailerの/Size）を読み取れないため、必要なメモリを事前に見積もれません。'
+                    + '見積もれない状態では最適化を開始しません。'
+                : `このPDFの相互参照情報に記された/Size（${trailerSize}）が有効な範囲（1〜${MAX_TRAILER_SIZE}）にないため、`
+                    + '必要なメモリを事前に見積もれません。見積もれない状態では最適化を開始しません。',
             PLAN_STATUS.UNSUPPORTED_DOCUMENT,
         );
     }
@@ -208,7 +256,7 @@ export async function runOptimizeV2(source: OptimizeSource, options: OptimizeOpt
     const control: WorkControl = { check, yieldToTask };
 
     // ---- 1. preflight --------------------------------------------------------
-    await preflightOptimize(source, memoryBytes);
+    const { trailerSize } = await preflightOptimize(source, memoryBytes);
     check();
 
     // ---- 2. parse ------------------------------------------------------------
@@ -223,9 +271,21 @@ export async function runOptimizeV2(source: OptimizeSource, options: OptimizeOpt
     const ctx = doc.context;
     let objects = 0;
     let streamBytes = 0;
-    for (const [, obj] of ctx.enumerateIndirectObjects()) {
+    let highest = 0;
+    for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
         objects += 1;
+        highest = Math.max(highest, ref.objectNumber);
         if (obj instanceof PDFRawStream) streamBytes += obj.contents.length;
+    }
+    // The preflight priced the parse on /Size. A document whose parsed objects
+    // go past it (pdf-lib recovers some broken tables by scanning) was priced
+    // on a number that was not true, so it is refused before anything changes.
+    if (highest >= trailerSize || objects >= trailerSize) {
+        throw new ProcessorError(
+            `このPDFには相互参照情報の/Size（${trailerSize}）を超える番号のオブジェクト（最大${highest}、${objects}個）があり、`
+            + '事前の見積もりが成り立たないため、最適化を中止しました。',
+            PLAN_STATUS.UNSUPPORTED_DOCUMENT,
+        );
     }
     const ledger = new OptimizeLedger(memoryBytes, parsedFixedBytes({ objects, streamBytes }));
     if (!ledger.fits(0)) {
@@ -271,7 +331,10 @@ export async function runOptimizeV2(source: OptimizeSource, options: OptimizeOpt
             if (!ledger.fits(work)) {
                 report.outcome = 'unchanged (its working set does not fit the memory budget)';
             } else {
-                ledger.commit(work);
+                ledger.commit(work, '画像の処理');
+                // The kept candidate's chunks were allocated inside `work`; they
+                // move to the ledger as retained bytes once `work` is let go.
+                let retained = 0;
                 try {
                     const samples = decodeExactSamples(entry);
                     if (!samples) {
@@ -287,7 +350,7 @@ export async function runOptimizeV2(source: OptimizeSource, options: OptimizeOpt
                             const placeholder = PDFRawStream.of(best.dict, new Uint8Array(0));
                             ctx.assign(entry.ref, placeholder);
                             replacements.set(placeholder, { chunks: best.encoded.chunks, length: best.encoded.length });
-                            ledger.commit(best.encoded.heldBytes);
+                            retained = best.encoded.heldBytes;
                             report.after = best.encoded.length;
                             report.outcome = best.label;
                             report.rewritten = true;
@@ -296,6 +359,8 @@ export async function runOptimizeV2(source: OptimizeSource, options: OptimizeOpt
                 } finally {
                     ledger.release(work);
                 }
+                // ≤ the kept-candidate share of `work`, so this always fits.
+                if (retained > 0) ledger.commit(retained, '置き換えた画像の保持');
             }
         }
         await hooks.afterImage?.(i, census.length);
@@ -315,52 +380,47 @@ export async function runOptimizeV2(source: OptimizeSource, options: OptimizeOpt
         usableBytes: usableBytes(memoryBytes),
     };
 
-    // ---- 5. write ------------------------------------------------------------
-    let chunks: Uint8Array[];
-    let total: number;
-    await hooks.beforeWrite?.();
-    check();
-    if (replacements.size > 0) {
-        const writer = new ChunkedDocumentWriter(ceilings.maxOutputBytes);
-        ({ chunks, total } = await writeDocument(ctx, replacements, writer, control));
-        summary.mode = 'images';
-        ledger.commit(writer.ownedBytes);
-    } else {
-        // No image changed. What remains is the structural re-save Stage 1
-        // inherited from 1.3.1, priced by the same conservative bound and
-        // skipped — the original returned — when it does not fit.
-        const bound = preservingFileCost(source.size, PRESERVING_SLACK_BYTES).outputBytes;
-        if (!ledger.fits(bound)) {
-            summary.ledgerPeakBytes = ledger.peakBytes;
-            return { kind: 'unchanged', summary };
-        }
-        const saved = await doc.save({ useObjectStreams: true });
-        chunks = [saved];
-        total = saved.length;
-        summary.mode = 'structure';
-        ledger.commit(total);
-        if (total > ceilings.maxOutputBytes) {
-            summary.candidateBytes = total;
-            summary.ledgerPeakBytes = ledger.peakBytes;
-            return { kind: 'unchanged', summary };
-        }
-    }
-    check();
-    summary.candidateBytes = total;
-
-    // ---- 6. threshold ---------------------------------------------------------
-    if (!meetsPublicationThreshold(total, source.size)) {
+    // ---- 5. nothing to write? -------------------------------------------------
+    // No image was rewritten: the original File is the answer. (Stage 1 has no
+    // structure-only re-save — it would need its own priced allocation.)
+    if (replacements.size === 0) {
         summary.ledgerPeakBytes = ledger.peakBytes;
         return { kind: 'unchanged', summary };
     }
-    // The publication Blob is one more copy of the output.
-    if (!ledger.fits(total)) {
+
+    // ---- 6. measure, decide, reserve — all before the writer allocates ----------
+    await hooks.beforeWrite?.();
+    check();
+    const writePlan = planDocumentWrite(ctx, replacements);
+    summary.mode = 'images';
+    summary.candidateBytes = writePlan.totalBytes;
+    if (writePlan.totalBytes > ceilings.maxOutputBytes) {
         throw new ProcessorError(
-            `書き出し用のデータ（約${MiB(total)} MiB）を確保すると処理メモリ上限を超えるため、書き出しを中止しました。`,
-            PLAN_STATUS.OVER_MEMORY_BUDGET,
+            `出力が${(writePlan.totalBytes / 1048576).toFixed(1)} MiBとなり、上限の${MiB(ceilings.maxOutputBytes)} MiBを超えるため、`
+            + '書き出しは行いませんでした。',
+            PLAN_STATUS.OVER_OUTPUT_BUDGET,
         );
     }
-    ledger.commit(total);
+    if (!meetsPublicationThreshold(writePlan.totalBytes, source.size)) {
+        summary.ledgerPeakBytes = ledger.peakBytes;
+        return { kind: 'unchanged', summary };
+    }
+    // The writer's own bytes (headers, dictionaries, xref, trailer, and an
+    // entry per chunk), then the publication Blob's copy of the whole output.
+    // Unchanged stream contents are already held by the parsed document.
+    ledger.commit(writePlan.ownedBytes + writePlan.chunkCount * CHUNK_ENTRY_BYTES, '書き出し');
+    ledger.commit(writePlan.totalBytes, '書き出したPDFの受け渡し');
+
+    // ---- 7. write ----------------------------------------------------------------
+    const writer = new ChunkedDocumentWriter(ceilings.maxOutputBytes, writePlan.ownedBytes);
+    const { chunks, total } = await writeDocument(ctx, replacements, writer, control);
+    check();
+    if (total !== writePlan.totalBytes) {
+        throw new ProcessorError('書き出したPDFの大きさが事前の見積もりと一致しないため、書き出しを中止しました。', PLAN_STATUS.UNSUPPORTED_DOCUMENT);
+    }
     summary.ledgerPeakBytes = ledger.peakBytes;
     return { kind: 'optimized', chunks, outputBytes: total, summary };
 }
+
+/** One array entry per writer chunk: pointer, typed-array header. Conservative. */
+const CHUNK_ENTRY_BYTES = 128;

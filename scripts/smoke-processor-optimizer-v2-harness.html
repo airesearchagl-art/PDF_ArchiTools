@@ -31,9 +31,12 @@ import {
     readTrailerSize,
     runOptimizeV2,
     usableBytes,
+    inflateExact,
     MAX_OUTPUT_BYTES,
+    MAX_TRAILER_SIZE,
     MEMORY_PRESETS,
 } from '/src/utils/processor/index.ts';
+import { Deflate } from 'pako';
 import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFArray, PDFHexString } from 'pdf-lib';
@@ -263,7 +266,7 @@ async function judge(source, output, manifest) {
         if (img.interpolate && (o.cs !== s.cs || o.bpc !== s.bpc || o.interpolate !== s.interpolate)) {
             errors.push(`image ${img.obj} has /Interpolate true and its representation changed (${s.cs}/${s.bpc} -> ${o.cs}/${o.bpc})`);
         }
-        if (img.decision === 'LEAVE' && (o.sha !== s.sha || o.filter !== s.filter)) errors.push(`image ${img.obj} should have been left byte-identical`);
+        if ((img.decision === 'LEAVE' || img.rewrite === false) && (o.sha !== s.sha || o.filter !== s.filter)) errors.push(`image ${img.obj} should have been left byte-identical`);
     }
     const imageCount = a.pages.reduce((n, p) => n + p.images.length, 0);
     return { ok: errors.length === 0, errors, imageCount, libSource: la, libOutput: lb };
@@ -415,10 +418,21 @@ window.__ov2 = {
         return { good, offset: strictXref(bad1), root: strictXref(bad2) };
     },
 
-    /** The preflight against a file that is never materialised. */
-    async preflightLarge(sizeBytes, trailerSize, memMiB) {
+    /**
+     * The preflight against a file that is never materialised. `kind` shapes
+     * the tail: a real classic table + trailer, or only a stray `/Size` text
+     * with `startxref` pointing at something that is not a table.
+     */
+    async preflightLarge(sizeBytes, trailerSize, memMiB, kind = 'classic') {
         let readCalled = false;
-        const tail = new TextEncoder().encode(`\ntrailer\n<< /Size ${trailerSize} /Root 1 0 R >>\nstartxref\n${sizeBytes - 200}\n%%EOF\n`);
+        const tailText = (xrefAt) => (kind === 'classic'
+            ? `xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size ${trailerSize} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`
+            : `% not a table /Size ${trailerSize}\n(/Size ${trailerSize}) Tj\nstartxref\n${xrefAt}\n%%EOF\n`);
+        // The offset's own digit count changes the tail's length: settle it.
+        let len = new TextEncoder().encode(tailText(sizeBytes)).length;
+        for (let i = 0; i < 4; i += 1) len = new TextEncoder().encode(tailText(sizeBytes - len)).length;
+        const tail = new TextEncoder().encode(tailText(sizeBytes - len));
+        if (tail.length !== len) throw new Error('fake tail did not settle');
         const source = {
             size: sizeBytes,
             read: async () => { readCalled = true; throw new Error('read() must not be reached'); },
@@ -594,7 +608,58 @@ window.__ov2 = {
         const l = new OptimizeLedger(512 * MiB, 100 * MiB);
         const fitsBefore = l.fits(200 * MiB);
         l.commit(200 * MiB);
-        return { usable: l.usable, fitsBefore, fitsMore: l.fits(100 * MiB), peak: l.peakBytes, PLAN_STATUS_SINGLE: PLAN_STATUS.SINGLE_FILE_ONLY };
+        let overCommit = null;
+        try { l.commit(100 * MiB, 'test'); } catch (e) { overCommit = e.code; }
+        return {
+            usable: l.usable, fitsBefore, fitsMore: l.fits(100 * MiB), peak: l.peakBytes, heldAfterRefusal: l.heldBytes,
+            overCommit, PLAN_STATUS_SINGLE: PLAN_STATUS.SINGLE_FILE_ONLY,
+        };
+    },
+
+    /** A run expected to be refused: its code, its message, and how far it got. */
+    async refusal(name, memMiB) {
+        const bytes = await fixture(name);
+        let reachedWrite = false;
+        try {
+            const r = await runOptimizeV2(sourceOf(bytes), {
+                memoryBytes: memMiB * MiB, ceilings: defaultCeilings(memMiB * MiB),
+                hooks: { beforeWrite: () => { reachedWrite = true; } },
+            });
+            return { code: null, kind: r.kind, outputBytes: r.outputBytes ?? null, reachedWrite };
+        } catch (e) { return { code: e.code ?? String(e), message: e.message, reachedWrite }; }
+    },
+
+    /** inflateExact on its own: a clean stream at chunk boundaries passes; every malformed one is refused. */
+    inflate() {
+        const make = (n, seed) => { const b = new Uint8Array(n); let s = seed; for (let i = 0; i < n; i += 1) { s = (Math.imul(s, 1103515245) + 12345) >>> 0; b[i] = (s >>> 28) * 17; } return b; };
+        const deflate = (data) => {
+            const d = new Deflate({ level: 6 });
+            const parts = [];
+            d.onData = (c) => parts.push(c);
+            d.onEnd = () => {};
+            d.push(data, true);
+            return join(parts, parts.reduce((n, c) => n + c.length, 0));
+        };
+        const out = {};
+        for (const n of [65_536, 131_072, 65_535, 65_537]) {
+            const data = make(n, n);
+            const z = deflate(data);
+            const ok = inflateExact(z, n);
+            out[`exact ${n}`] = ok !== null && ok.length === n && ok.every((v, i) => v === data[i]);
+            const badAdler = z.slice(); badAdler[badAdler.length - 1] ^= 0xFF;
+            out[`bad Adler ${n}`] = inflateExact(badAdler, n) === null;
+            out[`truncated ${n}`] = inflateExact(z.subarray(0, z.length - 8), n) === null;
+            out[`expected-1 ${n}`] = inflateExact(z, n - 1) === null;
+            out[`expected+1 ${n}`] = inflateExact(z, n + 1) === null;
+        }
+        return out;
+    },
+
+    /** The writer measured without allocating must equal what it then writes. */
+    async writePlanExact(name) {
+        const bytes = await fixture(name);
+        const r = await runOptimizeV2(sourceOf(bytes), { memoryBytes: 1024 * MiB, ceilings: defaultCeilings(1024 * MiB) });
+        return { kind: r.kind, outputBytes: r.outputBytes, candidateBytes: r.summary.candidateBytes, max: MAX_TRAILER_SIZE };
     },
 };
 window.__ov2Ready = true;

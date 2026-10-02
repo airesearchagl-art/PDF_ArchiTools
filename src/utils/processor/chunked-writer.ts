@@ -43,6 +43,9 @@ export type WriterState = 'open' | 'finished' | 'aborted';
 export class ChunkedDocumentWriter {
     private readonly maxBytes: number;
 
+    /** What the ledger reserved for this writer's own bytes; never exceeded. */
+    private readonly ownedLimit: number;
+
     private chunks: Uint8Array[] = [];
 
     private offset = 0;
@@ -52,8 +55,9 @@ export class ChunkedDocumentWriter {
 
     private status: WriterState = 'open';
 
-    constructor(maxBytes: number) {
+    constructor(maxBytes: number, ownedLimit = Number.POSITIVE_INFINITY) {
         this.maxBytes = maxBytes;
+        this.ownedLimit = ownedLimit;
     }
 
     get bytesWritten(): number { return this.offset; }
@@ -83,6 +87,13 @@ export class ChunkedDocumentWriter {
     /** New bytes this writer made. */
     writeOwned(bytes: Uint8Array): void {
         this.assertOpen();
+        if (this.owned + bytes.length > this.ownedLimit) {
+            this.abort();
+            throw new ProcessorError(
+                '書き出し用に確保した量を超えるデータが発生したため、書き出しを中止しました。',
+                PLAN_STATUS.OVER_MEMORY_BUDGET,
+            );
+        }
         this.reserve(bytes.length);
         this.chunks.push(bytes);
         this.offset += bytes.length;
@@ -117,6 +128,84 @@ export interface WriteControl {
     /** Throws when the run has been superseded. Called between objects. */
     check: () => void;
     yieldToTask: () => Promise<void>;
+}
+
+export interface WritePlan {
+    /** Bytes the writer will allocate itself: headers, dictionaries, xref, trailer. */
+    ownedBytes: number;
+    /** The whole output, views included — what the publication Blob will copy. */
+    totalBytes: number;
+    /** Chunks the writer will hold (each one an array entry). */
+    chunkCount: number;
+}
+
+const STREAM_OPEN = '\nstream\n';
+const STREAM_CLOSE = '\nendstream';
+const OBJECT_CLOSE = '\nendobj\n';
+
+/**
+ * The exact size of what `writeDocument` will write, computed without
+ * allocating any of it — so Policy R can reserve the writer's own bytes and the
+ * publication copy before the first one exists.
+ *
+ * It walks the same objects in the same order and sets the same /Length values
+ * the writer will, so the numbers are not an estimate: the writer is held to
+ * `ownedBytes` and refuses to pass it.
+ */
+export function planDocumentWrite(
+    ctx: PDFContext,
+    replacements: Map<PDFRawStream, StreamReplacement>,
+): WritePlan {
+    const root = ctx.trailerInfo.Root;
+    if (!(root instanceof PDFRef)) {
+        throw new ProcessorError('文書カタログ（/Root）を特定できないため、書き出しを中止しました。', PLAN_STATUS.UNSUPPORTED_DOCUMENT);
+    }
+    let owned = (ctx.header as unknown as PDFObject).sizeInBytes() + 1;
+    let total = owned;
+    let chunks = 2;
+    let maxNum = 0;
+    for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
+        maxNum = Math.max(maxNum, ref.objectNumber);
+        const head = `${ref.objectNumber} ${ref.generationNumber} obj\n`.length;
+        owned += head + OBJECT_CLOSE.length;
+        total += head + OBJECT_CLOSE.length;
+        chunks += 2;
+        if (obj instanceof PDFStream && !(obj instanceof PDFRawStream)) {
+            // A parsed document holds raw streams only; anything else would be
+            // encoded into a new buffer the plan has not priced.
+            throw new ProcessorError('想定外の形式のストリームがあるため、書き出しを中止しました。', PLAN_STATUS.UNSUPPORTED_DOCUMENT);
+        }
+        if (obj instanceof PDFRawStream) {
+            const replacement = replacements.get(obj);
+            const length = replacement ? replacement.length : obj.contents.length;
+            obj.dict.set(N('Length'), PDFNumber.of(length));
+            const fixed = obj.dict.sizeInBytes() + STREAM_OPEN.length + STREAM_CLOSE.length;
+            owned += fixed;
+            total += fixed + length;
+            chunks += 3 + (replacement ? replacement.chunks.length : length > 0 ? 1 : 0);
+        } else {
+            owned += obj.sizeInBytes();
+            total += obj.sizeInBytes();
+            chunks += 1;
+        }
+    }
+    const xrefAt = total;
+    const xref = `xref\n0 ${maxNum + 1}\n`.length + 20 * (maxNum + 1);
+    const trailer = trailerDict(ctx, root, maxNum).sizeInBytes();
+    const tail = 'trailer\n'.length + trailer + `\nstartxref\n${xrefAt}\n%%EOF\n`.length;
+    owned += xref + tail;
+    total += xref + tail;
+    chunks += 4;
+    return { ownedBytes: owned, totalBytes: total, chunkCount: chunks };
+}
+
+function trailerDict(ctx: PDFContext, root: PDFRef, maxNum: number): PDFDict {
+    const trailer = ctx.obj({}) as PDFDict;
+    trailer.set(N('Size'), PDFNumber.of(maxNum + 1));
+    trailer.set(N('Root'), root);
+    if (ctx.trailerInfo.Info) trailer.set(N('Info'), ctx.trailerInfo.Info as PDFObject);
+    if (ctx.trailerInfo.ID) trailer.set(N('ID'), ctx.trailerInfo.ID as PDFObject);
+    return trailer;
 }
 
 const serialise = (obj: PDFObject): Uint8Array => {
@@ -170,7 +259,7 @@ export async function writeDocument(
                 const dict: PDFDict = obj.dict;
                 dict.set(N('Length'), PDFNumber.of(length));
                 writer.writeOwned(serialise(dict));
-                writer.writeOwned(latin1('\nstream\n'));
+                writer.writeOwned(latin1(STREAM_OPEN));
                 if (replacement) {
                     let written = 0;
                     for (const c of replacement.chunks) { writer.writeView(c); written += c.length; }
@@ -180,11 +269,11 @@ export async function writeDocument(
                 } else {
                     writer.writeView(contents as Uint8Array);
                 }
-                writer.writeOwned(latin1('\nendstream'));
+                writer.writeOwned(latin1(STREAM_CLOSE));
             } else {
                 writer.writeOwned(serialise(obj));
             }
-            writer.writeOwned(latin1('\nendobj\n'));
+            writer.writeOwned(latin1(OBJECT_CLOSE));
 
             sinceCheck += 1;
             if (sinceCheck >= 256) {
@@ -214,13 +303,8 @@ export async function writeDocument(
         }
         writer.writeOwned(latin1(x));
 
-        const trailer = ctx.obj({}) as PDFDict;
-        trailer.set(N('Size'), PDFNumber.of(maxNum + 1));
-        trailer.set(N('Root'), root);
-        if (ctx.trailerInfo.Info) trailer.set(N('Info'), ctx.trailerInfo.Info as PDFObject);
-        if (ctx.trailerInfo.ID) trailer.set(N('ID'), ctx.trailerInfo.ID as PDFObject);
         writer.writeOwned(latin1('trailer\n'));
-        writer.writeOwned(serialise(trailer));
+        writer.writeOwned(serialise(trailerDict(ctx, root, maxNum)));
         writer.writeOwned(latin1(`\nstartxref\n${xrefAt}\n%%EOF\n`));
         return writer.finish();
     } catch (e) {

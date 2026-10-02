@@ -355,24 +355,42 @@ export function decodeAsciiHex(data: Uint8Array): Uint8Array | null {
     return out.subarray(0, n);
 }
 
-/** Inflate into a buffer of exactly `expected` bytes. Null when short or corrupt. */
-function inflateExact(data: Uint8Array, expected: number): Uint8Array | null {
+/** Thrown from inside `onData` when a stream decodes to more than the image holds. */
+class DecodeOverrun extends Error {
+    constructor() {
+        super('decode overrun');
+        this.name = 'DecodeOverrun';
+    }
+}
+
+/**
+ * Inflate into exactly `expected` bytes, or nothing.
+ *
+ * Only a stream pako decoded completely is accepted: `push` succeeded, no
+ * error, the zlib stream reached its end (so its Adler-32 was checked), and it
+ * produced exactly the bytes the image holds. A truncated stream, a bad
+ * checksum, or a stream that decodes to more than the image are all left as
+ * they are — rewriting them would turn a malformed image into a valid one.
+ * Decoding stops the moment the output would pass `expected`, so an
+ * over-long stream never materialises beyond one chunk.
+ */
+export function inflateExact(data: Uint8Array, expected: number): Uint8Array | null {
     const out = new Uint8Array(expected);
     let at = 0;
     const inflater = new Inflate({ chunkSize: PAKO2.inflateChunkBytes });
     inflater.onData = (chunk: Uint8Array) => {
-        const room = expected - at;
-        if (room > 0) out.set(room >= chunk.length ? chunk : chunk.subarray(0, room), at);
+        if (at + chunk.length > expected) throw new DecodeOverrun();
+        out.set(chunk, at);
         at += chunk.length;
-        // Everything the image can use has arrived; what follows is never read.
-        if (at >= expected) throw new CandidateCap();
     };
+    let pushed: boolean;
     try {
-        inflater.push(data, true);
+        pushed = inflater.push(data, true);
     } catch (e) {
-        if (!(e instanceof CandidateCap)) return null;
+        if (e instanceof DecodeOverrun) return null;
+        throw e;
     }
-    return at >= expected ? out : null;
+    return pushed && inflater.err === 0 && inflater.ended && at === expected ? out : null;
 }
 
 /** Undo PNG predictors in place; returns the packed rows, or null if malformed. */
@@ -412,7 +430,8 @@ function unpredictPng(buf: Uint8Array, rowBytes: number, height: number, bpp: nu
 
 /**
  * The image's exact samples, packed `rowBytes` per row, or null when they
- * cannot be recovered exactly (the image is then left as it is).
+ * cannot be recovered exactly (the image is then left as it is): every stage
+ * must decode cleanly to exactly the size the image declares.
  *
  * An unfiltered stream is returned as a view of pdf-lib's own copy — read,
  * never written.
@@ -431,10 +450,10 @@ export function decodeExactSamples(entry: ImageEntry): Uint8Array | null {
         const inflated = inflateExact(data, expected);
         if (!inflated) return null;
         data = inflated;
-    } else if (data.length < expected) {
+    } else if (data.length !== expected) {
+        // Unfiltered (or ASCIIHex only) data must be exactly the image's size:
+        // short is malformed, and longer would be silently truncated.
         return null;
-    } else {
-        data = data.subarray(0, expected);
     }
     if (!entry.pngPredicted) return data;
     const bpp = Math.max(1, Math.ceil((entry.components * entry.bitsPerComponent) / 8));

@@ -21,6 +21,7 @@
  * No worst-case output bound for pako 2.1.0 is claimed either: a candidate is
  * held to a cap at run time instead (see `image-optimize.ts`).
  */
+import { PLAN_STATUS, ProcessorError } from './contracts';
 
 /**
  * The share of the chosen preset Optimizer v2 lets itself plan against.
@@ -165,9 +166,10 @@ export function admitPreParse(sourceBytes: number, trailerSize: number, memoryBy
 /**
  * The run-time half of Policy R.
  *
- * Starts from the fixed cost of the parsed document and is charged as real
- * bytes appear. `reserve` answers before an allocation is made; `commit` and
- * `release` keep the ledger equal to what is actually held.
+ * Starts from the fixed cost of the parsed document. Every allocation that
+ * carries memory is committed **before** it is made, and `commit` refuses —
+ * throws OVER_MEMORY_BUDGET — rather than let the ledger pass the usable
+ * share. `release` returns what was let go.
  */
 export class OptimizeLedger {
     readonly usable: number;
@@ -191,7 +193,16 @@ export class OptimizeLedger {
         return this.held + more <= this.usable;
     }
 
-    commit(bytes: number): void {
+    /** Charge `bytes` before they are allocated. Never lets `held` pass `usable`. */
+    commit(bytes: number, what = 'この処理'): void {
+        if (!(bytes >= 0) || this.held + bytes > this.usable) {
+            throw new ProcessorError(
+                `${what}に約${Math.ceil(bytes / 1048576)} MiBが必要で、すでに確保している約${Math.ceil(this.held / 1048576)} MiBと合わせると、`
+                + `最適化に使える${Math.floor(this.usable / 1048576)} MiBを超えます。処理を中止しました（書き出しは行っていません）。`
+                + '処理メモリ上限を上げてから実行してください。',
+                PLAN_STATUS.OVER_MEMORY_BUDGET,
+            );
+        }
         this.held += bytes;
         if (this.held > this.peak) this.peak = this.held;
     }

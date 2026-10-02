@@ -67,7 +67,7 @@ try {
     // ---- A. lossless correctness --------------------------------------------
     console.log('\n=== A. lossless: every image decodes the same, nothing else moves ===');
     const results = {};
-    for (const f of corpus) {
+    for (const f of corpus.filter((c) => !c.expectRefusal && !c.expectRefusalAt512)) {
         const r = await call('verify', f.name, 512);
         results[f.name] = r;
         check(`${f.name}: ${f.expectKind}${f.expectMode ? ` (${f.expectMode})` : ''}`,
@@ -145,8 +145,24 @@ try {
     check('~249 MiB at 1 GiB: admitted by the preflight', f1g.code === 'ADMITTED', JSON.stringify(f1g.arithmetic));
     check('~249 MiB at 2 GiB: admitted', f2g.code === 'ADMITTED');
     check('the trailer /Size is read from the tail', f512.trailerSize === 19);
-    const unknownSize = await call('preflightLarge', 1_000_000, 0, 512).catch((e) => ({ code: String(e) }));
-    check('a file whose /Size cannot be bounded is still priced (Size 0 counts no objects, 2×S)', unknownSize.code === 'ADMITTED');
+    // RF-31-03: /Size is a bound, so anything that is not a true one refuses.
+    const size0 = await call('preflightLarge', 1_000_000, 0, 512);
+    check('/Size 0: refused before the read (UNSUPPORTED_DOCUMENT), never treated as "no objects"',
+        size0.code === 'UNSUPPORTED_DOCUMENT' && size0.trailerSize === 0 && size0.readCalled === false, size0.reason);
+    const sizeHuge = await call('preflightLarge', 1_000_000, 9_000_000, 2048);
+    check('/Size above 8,388,607: refused, not clamped down', sizeHuge.code === 'UNSUPPORTED_DOCUMENT' && sizeHuge.readCalled === false && sizeHuge.trailerSize === 9_000_000,
+        sizeHuge.reason);
+    const sizeMax = await call('preflightLarge', 1_000_000, 8_388_607, 2048);
+    check('/Size at the maximum is read exactly (and then priced: 8,388,607 objects do not fit 2 GiB)', sizeMax.trailerSize === 8_388_607 && sizeMax.code === 'OVER_MEMORY_BUDGET', sizeMax.code);
+    const stray = await call('preflightLarge', 1_000_000, 12, 512, 'stray');
+    check('a stray "/Size 12" near EOF with no table at startxref: refused, the text is not a trailer',
+        stray.code === 'UNSUPPORTED_DOCUMENT' && stray.trailerSize === null && stray.readCalled === false, stray.reason);
+    const under = await call('refusal', 'size-understated', 512);
+    const underMeta = corpus.find((c) => c.name === 'size-understated');
+    check(`/Size ${underMeta.declared} declared for ${underMeta.actual}: refused after the parse, before any image is touched`,
+        under.code === 'UNSUPPORTED_DOCUMENT' && /\/Size/.test(under.message) && under.reachedWrite === false, under.message);
+    const xs = results['xref-stream'];
+    check('an XRef-stream file: /Size read from the stream dictionary, optimized', xs?.kind === 'optimized' && xs.verdict?.ok);
     const k = await call('constants');
     check('MAX_OUTPUT_BYTES is still 256 MiB and the presets are unchanged',
         k.MAX_OUTPUT_BYTES === 256 * 1024 * 1024 && JSON.stringify(k.MEMORY_PRESETS) === JSON.stringify([512, 1024, 2048].map((m) => m * 1024 * 1024)));
@@ -202,6 +218,30 @@ try {
     check('an unreadable PDF is refused (UNSUPPORTED_DOCUMENT)', ref.invalid === 'UNSUPPORTED_DOCUMENT', ref.invalid);
     const led = await call('ledger');
     check('the ledger plans against 3/4 of the preset', led.usable === 384 * 1024 * 1024 && led.fitsBefore === true && led.fitsMore === false);
+    check('a commit past the usable share throws OVER_MEMORY_BUDGET and is not recorded',
+        led.overCommit === 'OVER_MEMORY_BUDGET' && led.heldAfterRefusal === 300 * 1024 * 1024, JSON.stringify(led));
+
+    // ---- K. RF-31: exact decode, writer reservation --------------------------------
+    console.log('\n=== K. Flate must decode exactly; the writer is reserved before it allocates ===');
+    const inf = await call('inflate');
+    for (const [k2, v] of Object.entries(inf)) check(`inflateExact: ${k2}`, v === true);
+    const fi = results['flate-integrity'];
+    check('flate-integrity: bad Adler, truncated, expected±1 (Flate) and expected+1 (raw) are all left byte-identical',
+        fi && fi.summary.images.filter((i) => !i.rewritten).length === 5 && fi.verdict?.ok,
+        fi?.summary.images.map((i) => `${i.objectNumber}:${i.rewritten ? 'R' : '-'}`).join(' '));
+    check('flate-integrity: the stream decoding to exactly one 64 KiB pako chunk is rewritten',
+        fi?.summary.images.find((i) => i.width === 256)?.rewritten === true);
+    const heavyMeta = corpus.find((c) => c.name === 'object-heavy');
+    const oh512 = await call('refusal', 'object-heavy', 512);
+    check(`object-heavy at 512 MiB: the pre-parse gate admitted it (${heavyMeta.preParseNeed} ≤ ${heavyMeta.usable512})`, heavyMeta.preParseNeed <= heavyMeta.usable512);
+    check('object-heavy at 512 MiB: refused OVER_MEMORY_BUDGET by the writer reservation, before the writer allocated',
+        oh512.code === 'OVER_MEMORY_BUDGET' && oh512.reachedWrite === true && /書き出し/.test(oh512.message ?? ''), oh512.message);
+    const oh1g = await call('refusal', 'object-heavy', 1024);
+    check('object-heavy at 1 GiB: the same file is optimized, its output far inside the 256 MiB ceiling',
+        oh1g.code === null && oh1g.kind === 'optimized' && oh1g.outputBytes < 256 * 1024 * 1024, `${oh1g.kind} ${oh1g.outputBytes}`);
+    const wp = await call('writePlanExact', 'many-objects');
+    check('the writer measured without allocating equals what it then wrote', wp.kind === 'optimized' && wp.outputBytes === wp.candidateBytes, `${wp.outputBytes} / ${wp.candidateBytes}`);
+    check('no image rewritten → the original File (jpeg-only), no structure-only re-save', results['jpeg-only'].kind === 'unchanged' && results['jpeg-only'].summary.mode === 'none');
     check('the single-file refusal has its own code', led.PLAN_STATUS_SINGLE === 'SINGLE_FILE_ONLY');
 
     check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));

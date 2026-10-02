@@ -73,6 +73,7 @@ export {
     preflightOptimize,
     readTrailerSize,
     sourceFromFile,
+    MAX_TRAILER_SIZE,
 } from './optimize-stage1';
 export type {
     OptimizeSource, OptimizeResult, OptimizeSummary, OptimizeImageReport, OptimizeOptions, OptimizeHooks,
@@ -100,7 +101,8 @@ export {
     decodeAsciiHex,
     decodeExactSamples,
     deviceGrayIsExact,
+    inflateExact,
 } from './image-optimize';
 export type { ImageEntry, ImageDecision, EncodedChunks, WorkControl } from './image-optimize';
-export { ChunkedDocumentWriter, writeDocument } from './chunked-writer';
-export type { StreamReplacement, WriterState, WriteControl } from './chunked-writer';
+export { ChunkedDocumentWriter, planDocumentWrite, writeDocument } from './chunked-writer';
+export type { StreamReplacement, WriterState, WriteControl, WritePlan } from './chunked-writer';

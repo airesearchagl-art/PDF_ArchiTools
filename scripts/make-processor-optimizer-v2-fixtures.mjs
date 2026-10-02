@@ -320,12 +320,12 @@ function appendContent(doc, page, ref) {
     await save('noise', doc, [{ obj: obj(ref), label: 'random noise', decision: 'R1+R2', rewrite: false }], { expectKind: 'unchanged' });
 }
 
-// 10. Only a JPEG: no image is rewritten; only the inherited structural re-save can help.
+// 10. Only a JPEG: no image is rewritten, so the original File is the answer.
 {
     const doc = await PDFDocument.create();
     const ref = image(doc, TINY_JPEG, { Width: 64, Height: 48, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' });
     imagePage(doc, ref, { w: 64, h: 48 });
-    await save('jpeg-only', doc, [{ obj: obj(ref), label: 'DCTDecode', decision: 'LEAVE', rewrite: false }], { expectKind: 'optimized', expectMode: 'structure' });
+    await save('jpeg-only', doc, [{ obj: obj(ref), label: 'DCTDecode', decision: 'LEAVE', rewrite: false }], { expectKind: 'unchanged' });
 }
 
 // 11. Many objects: the writer crosses several yield boundaries.
@@ -356,6 +356,122 @@ function appendContent(doc, page, ref) {
         images.push({ obj: obj(ref), label: 'raw DeviceRGB photo field', decision: 'R1+R2', rewrite: true, form: 'R1' });
     }
     await save('medium', doc, images, { expectKind: 'optimized' });
+}
+
+// 13. Flate integrity (RF-31-01): only a stream pako decodes completely, with a
+//     valid checksum and exactly the image's bytes, may be rewritten.
+{
+    const doc = await PDFDocument.create();
+    const w = 300; const h = 200;
+    const px = drawing(w, h, 13);
+    const good = flate(px);
+    const images = [];
+    const add = (label, data, dict, rewrite) => {
+        const ref = image(doc, data, { Width: w, Height: h, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode', ...dict });
+        imagePage(doc, ref, { w, h });
+        images.push({ obj: obj(ref), label, decision: 'R1+R2', rewrite });
+    };
+    const badAdler = Buffer.from(good);
+    badAdler[badAdler.length - 1] ^= 0xFF;
+    add('Flate with a bad Adler-32', badAdler, {}, false);
+    add('Flate truncated by 16 bytes', good.subarray(0, good.length - 16), {}, false);
+    add('Flate decoding to expected + 1 byte', flate(Buffer.concat([px, Buffer.from([0])])), {}, false);
+    add('Flate decoding to expected − 1 byte', flate(px.subarray(0, px.length - 1)), {}, false);
+    // Exactly one pako output chunk (64 KiB) of DeviceGray: valid, and rewritten.
+    const gw = 256; const gh = 256;
+    const gray = Buffer.alloc(gw * gh);
+    const gd = drawing(gw, gh, 14, [[0, 0, 0]]);
+    for (let i = 0; i < gw * gh; i += 1) gray[i] = gd[i * 3];
+    const g = image(doc, flate(gray), { Width: gw, Height: gh, ColorSpace: 'DeviceGray', BitsPerComponent: 8, Filter: 'FlateDecode' });
+    imagePage(doc, g, { w: gw, h: gh });
+    images.push({ obj: obj(g), label: 'Flate decoding to exactly 65,536 bytes (one pako chunk)', decision: 'R1+R2', rewrite: true });
+    const raw = image(doc, Buffer.concat([px, Buffer.from([7])]), { Width: w, Height: h, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 });
+    imagePage(doc, raw, { w, h });
+    images.push({ obj: obj(raw), label: 'unfiltered, expected + 1 byte', decision: 'R1+R2', rewrite: false });
+    // A large valid raw image so the document as a whole is optimized and the
+    // left-alone streams can be checked byte for byte in a real output.
+    const big = image(doc, drawing(900, 600, 15), { Width: 900, Height: 600, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 });
+    imagePage(doc, big, { w: 450, h: 300 });
+    images.push({ obj: obj(big), label: 'raw DeviceRGB (valid)', decision: 'R1+R2', rewrite: true, form: 'Indexed' });
+    await save('flate-integrity', doc, images, { expectKind: 'optimized' });
+}
+
+// 14. A cross-reference stream with object streams: /Size comes from the XRef
+//     stream's own dictionary.
+{
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const ref = image(doc, drawing(500, 350, 16), { Width: 500, Height: 350, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 });
+    imagePage(doc, ref, { w: 500, h: 350, font, text: 'xref stream source' });
+    doc.setCreationDate(FIXED_DATE);
+    doc.setModificationDate(FIXED_DATE);
+    doc.setProducer('make-processor-optimizer-v2-fixtures');
+    const bytes = await doc.save({ useObjectStreams: true });
+    fs.writeFileSync(path.join(OUT, 'xref-stream.pdf'), bytes);
+    corpus.push({ name: 'xref-stream', bytes: bytes.length, images: [{ obj: obj(ref), label: 'raw DeviceRGB in an XRef-stream file', decision: 'R1+R2', rewrite: true, form: 'Indexed' }], expectKind: 'optimized', expectText: 'xref stream source' });
+    console.log(`xref-stream.pdf  ${bytes.length.toLocaleString('en-US')} bytes`);
+}
+
+/** Replace the trailer's `/Size N` with a smaller value, padded so no offset moves. */
+function understateSize(bytes, value) {
+    const text = Buffer.from(bytes).toString('latin1');
+    const at = text.lastIndexOf('/Size ');
+    const m = /^\/Size (\d+)/.exec(text.slice(at));
+    const replacement = `/Size ${value}`.padEnd(m[0].length, ' ');
+    const out = Buffer.from(bytes);
+    out.write(replacement, at, 'latin1');
+    return { out, declared: value, actual: Number(m[1]) };
+}
+
+// 15. /Size understated (RF-31-03): the table lists more objects than /Size admits.
+{
+    const doc = await PDFDocument.create();
+    const ref = image(doc, drawing(300, 200, 17), { Width: 300, Height: 200, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 });
+    imagePage(doc, ref);
+    doc.setCreationDate(FIXED_DATE);
+    doc.setModificationDate(FIXED_DATE);
+    const { out, declared, actual } = understateSize(await doc.save({ useObjectStreams: false }), 3);
+    fs.writeFileSync(path.join(OUT, 'size-understated.pdf'), out);
+    corpus.push({ name: 'size-understated', bytes: out.length, images: [], expectRefusal: 'UNSUPPORTED_DOCUMENT', declared, actual });
+    console.log(`size-understated.pdf  /Size ${actual} written as ${declared}`);
+}
+
+// 16. Object-heavy (RF-31-02): at 512 MiB the pre-parse gate admits it, but the
+//     parsed objects plus the writer's own bytes and the publication copy do
+//     not fit — refused before the writer allocates. Output stays far below the
+//     256 MiB ceiling, so only memory refuses it. Sized in two passes.
+{
+    const USABLE_512 = Math.floor((512 * 1024 * 1024 * 3) / 4);
+    const PER_OBJECT = 20_480;
+    const N = 18_000;
+    const build = async (blobBytes) => {
+        const doc = await PDFDocument.create();
+        const ref = image(doc, drawing(600, 560, 18), { Width: 600, Height: 560, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 });
+        imagePage(doc, ref, { w: 300, h: 280 });
+        const items = [];
+        for (let i = 0; i < N; i += 1) items.push(doc.context.register(doc.context.obj({ Type: 'GateItem', N: i })));
+        doc.catalog.set(PDFName.of('GateItems'), doc.context.obj(items));
+        doc.catalog.set(PDFName.of('GateBlob'), doc.context.register(doc.context.stream(noise(blobBytes, 19), {})));
+        doc.setCreationDate(FIXED_DATE);
+        doc.setModificationDate(FIXED_DATE);
+        const bytes = await doc.save({ useObjectStreams: false });
+        const size = Number(/\/Size (\d+)/.exec(Buffer.from(bytes.subarray(bytes.length - 512)).toString('latin1'))[1]);
+        return { bytes, size, ref };
+    };
+    // Aim the pre-parse need 3 MB under the 512 MiB usable share.
+    let blob = 14_000_000;
+    let r = await build(blob);
+    const target = USABLE_512 - 3_000_000;
+    blob += Math.floor((target - (2 * r.bytes.length + r.size * PER_OBJECT)) / 2);
+    r = await build(blob);
+    const need = 2 * r.bytes.length + r.size * PER_OBJECT;
+    fs.writeFileSync(path.join(OUT, 'object-heavy.pdf'), r.bytes);
+    corpus.push({
+        name: 'object-heavy', bytes: r.bytes.length, preParseNeed: need, usable512: USABLE_512,
+        images: [{ obj: obj(r.ref), label: 'small raw image (puts the run on the writer path)', decision: 'R1+R2', rewrite: true }],
+        expectRefusalAt512: 'OVER_MEMORY_BUDGET', expectKindAt1GiB: 'optimized',
+    });
+    console.log(`object-heavy.pdf  ${r.bytes.length.toLocaleString('en-US')} bytes, pre-parse need ${need} of ${USABLE_512}`);
 }
 
 fs.writeFileSync(path.join(OUT, 'corpus.json'), JSON.stringify(corpus, null, 1));
