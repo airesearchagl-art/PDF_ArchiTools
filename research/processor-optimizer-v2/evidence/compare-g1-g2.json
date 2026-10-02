@@ -1,0 +1,64 @@
+{
+ "command": "node harness/gate.mjs --compare g1 g2",
+ "exitCode": 0,
+ "stdout": [
+  "structural fields identical: true"
+ ],
+ "structuralIdentical": true,
+ "structuralKeys": [
+  "corpus",
+  "cells",
+  "currentModel",
+  "largestAdmitted",
+  "policies",
+  "parse",
+  "selftest"
+ ],
+ "runs": {
+  "g1": {
+   "head": "99a1b3ee9398e4e98a7862793e950a676edac1fe",
+   "srcDirty": false,
+   "pass": true,
+   "checks": {
+    "everyLosslessCellVerified": true,
+    "noCellFailed": true,
+    "selftestCatchesEveryBreak": true,
+    "currentRefusedAt512": true,
+    "currentStaysLarge": true,
+    "primaryLosslessOver90pctAndUnder5MB": true,
+    "lossyNeverChosenWhereLosslessIsSmaller": true
+   }
+  },
+  "g2": {
+   "head": "99a1b3ee9398e4e98a7862793e950a676edac1fe",
+   "srcDirty": false,
+   "pass": true,
+   "checks": {
+    "everyLosslessCellVerified": true,
+    "noCellFailed": true,
+    "selftestCatchesEveryBreak": true,
+    "currentRefusedAt512": true,
+    "currentStaysLarge": true,
+    "primaryLosslessOver90pctAndUnder5MB": true,
+    "lossyNeverChosenWhereLosslessIsSmaller": true
+   }
+  }
+ },
+ "measuredOnlyNotCompared": [
+  "steps",
+  "cells",
+  "parseGrowth",
+  "PER_OBJECT"
+ ],
+ "sha256": {
+  "gate-g1.json": "c0c9c4d8c66f748256f7a5bf33a04f170dbc43cce832ec2bff72a281c0fd1d89",
+  "gate-g2.json": "93feeed0cd0e3a408ce65e07ef3a91d080688a398df19cef6625e9991ef42d5c",
+  "matrix-g1.jsonl": "9ad88d32956cc19ebed2f162ffe95bd9c8526913647fafd0f4c75b13e543aab9",
+  "matrix-g2.jsonl": "4f801ed2e7a3c2cef76c82e4dbec65ff8c22739061d929aa432c3ea9229eb5a7",
+  "selftest-g1.json": "8f112d4ecc092a44406253ba14c970e78df7336212e574c4cf6340daea10ef6d",
+  "selftest-g2.json": "8f112d4ecc092a44406253ba14c970e78df7336212e574c4cf6340daea10ef6d",
+  "model.json": "d9c9bdae8b5685b7ac43e4f510beb752f123b0c501b008f92a38dcc319e77005"
+ },
+ "headAtCompare": "99a1b3ee9398e4e98a7862793e950a676edac1fe",
+ "srcDirtyAtCompare": false
+}

@@ -6,7 +6,7 @@ bundle (`harness/prod-entry.ts`).
 
 - Report (Human Gate): [`report.md`](report.md)
 - Limitations / instrument defects: [`limitations.md`](limitations.md)
-- Evidence: [`evidence/`](evidence/) (`gate-*.json`, `matrix-*.jsonl`, `model.json`, `selftest-*.json`)
+- Evidence: [`evidence/`](evidence/) (`gate-*.json`, `matrix-*.jsonl`, `model.json`, `selftest-*.json`, `compare-g1-g2.json`)
 
 ## Layout
 
