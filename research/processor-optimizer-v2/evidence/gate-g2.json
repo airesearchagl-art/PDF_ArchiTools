@@ -1,0 +1,3005 @@
+{
+ "run": "g2",
+ "head": "479114a1cec6346042f9e86b73fdb5e906c65114",
+ "srcDirty": false,
+ "structural": {
+  "corpus": {
+   "f01-comparator-a1-150": {
+    "bytes": 261547235,
+    "images": [
+     "4969x3509 DeviceRGB raw",
+     "4969x3509 DeviceRGB raw",
+     "4969x3509 DeviceRGB raw",
+     "3509x4969 DeviceRGB raw",
+     "3509x4969 DeviceRGB raw"
+    ],
+    "expectText": "p1: a1-set-a.pdf vs a1-set-b.pdf"
+   },
+   "f02-dense-drawing": {
+    "bytes": 767315,
+    "images": [
+     "4969x3509 DeviceRGB Flate, no predictor"
+    ],
+    "expectText": null
+   },
+   "f03-schedule": {
+    "bytes": 52309908,
+    "images": [
+     "3509x4969 DeviceRGB raw"
+    ],
+    "expectText": null
+   },
+   "f04-gray-scan": {
+    "bytes": 9998698,
+    "images": [
+     "3509x4969 DeviceGray Flate, noisy scan"
+    ],
+    "expectText": null
+   },
+   "f05-photo": {
+    "bytes": 3529162,
+    "images": [
+     "1240x1754 DeviceRGB Flate, photographic"
+    ],
+    "expectText": null
+   },
+   "f06-jpeg": {
+    "bytes": 319369,
+    "images": [
+     "1240x1754 DCTDecode (decode is the viewer's)"
+    ],
+    "expectText": null
+   },
+   "f07-mixed": {
+    "bytes": 2882509,
+    "images": [
+     "1200x800 DeviceRGB raw, on a vector/text page"
+    ],
+    "expectText": "Native text: Floor plan level 1"
+   },
+   "f08-shared": {
+    "bytes": 5282321,
+    "images": [
+     "1600x1100 one raw DeviceRGB object, 3 pages + Form XObject"
+    ],
+    "expectText": null
+   },
+   "f09-smask": {
+    "bytes": 2161411,
+    "images": [
+     "900x600 DeviceRGB raw + 8-bit SMask raw"
+    ],
+    "expectText": null
+   },
+   "f10-structure": {
+    "bytes": 2106095,
+    "images": [
+     "1000x700 DeviceRGB raw on a page with annotations and fields"
+    ],
+    "expectText": "Native text survives"
+   },
+   "f11-classes": {
+    "bytes": 2902771,
+    "images": [
+     "400x300 Indexed 8-bit raw",
+     "400x300 DeviceRGB with a /Decode array",
+     "400x300 DeviceRGB with a colour-key /Mask",
+     "400x300 ImageMask (stencil)",
+     "400x300 ICCBased RGB",
+     "400x300 DeviceRGB 16-bit",
+     "400x300 DeviceRGB with /Interpolate true",
+     "400x300 DeviceGray 1-bit raw",
+     "400x300 Filter chain [/ASCIIHexDecode /FlateDecode]",
+     "400x300 DeviceCMYK raw"
+    ],
+    "expectText": null
+   },
+   "f12-interpolate": {
+    "bytes": 6481722,
+    "images": [
+     "1200x900 DeviceRGB 8-bit, 4 exact colours, /Interpolate true",
+     "1200x900 the same samples without /Interpolate (control)"
+    ],
+    "expectText": null
+   }
+  },
+  "cells": {
+   "f01-comparator-a1-150/current": {
+    "sourceBytes": 261547235,
+    "outputBytes": 261545876,
+    "changed": true,
+    "outputSha": "78efecf294bf1b64",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/struct-chunked": {
+    "sourceBytes": 261547235,
+    "outputBytes": 261547218,
+    "changed": true,
+    "outputSha": "0be430d9a9453ee9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->52308663 unchanged",
+     "DeviceRGB/8/none R1+R2 52308663->52308663 unchanged",
+     "DeviceRGB/8/none R1+R2 52308663->52308663 unchanged",
+     "DeviceRGB/8/none R1+R2 52308663->52308663 unchanged",
+     "DeviceRGB/8/none R1+R2 52308663->52308663 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/r1-chunked": {
+    "sourceBytes": 261547235,
+    "outputBytes": 792791,
+    "changed": true,
+    "outputSha": "60008285e817cfdd",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->109862 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->115645 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->165783 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->197149 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->199972 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-chunked": {
+    "sourceBytes": 261547235,
+    "outputBytes": 355046,
+    "changed": true,
+    "outputSha": "7eb83d100e02a4d9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37232 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->52915 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->96847 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->70967 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->92684 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-chunked-owned": {
+    "sourceBytes": 261547235,
+    "outputBytes": 574809,
+    "changed": true,
+    "outputSha": "465cc0914b6cf850",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->56147 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->93214 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->166600 R2 Indexed 2-bit (3 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->100441 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->154157 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-chunked-pako": {
+    "sourceBytes": 261547235,
+    "outputBytes": 359998,
+    "changed": true,
+    "outputSha": "f755ccbdbc9b35d0",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37459 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->53614 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->98016 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->71265 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->95243 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-chunked-pako-fast": {
+    "sourceBytes": 261547235,
+    "outputBytes": 376869,
+    "changed": true,
+    "outputSha": "4db56fb67fd5f165",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37582 R2 Indexed 1-bit (2 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->53935 R2 Indexed 2-bit (4 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->98016 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->76878 R2 Indexed 1-bit (2 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->105902 R2 Indexed 2-bit (4 colours) (2)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-pdflib": {
+    "sourceBytes": 261547235,
+    "outputBytes": 353692,
+    "changed": true,
+    "outputSha": "eaccd9b1504ef9f3",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37232 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->52915 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->96847 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->70967 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->92684 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/lossy-q85": {
+    "sourceBytes": 261547235,
+    "outputBytes": 355046,
+    "changed": true,
+    "outputSha": "7eb83d100e02a4d9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37232 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->52915 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->96847 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->70967 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->92684 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f01-comparator-a1-150/lossy-q75": {
+    "sourceBytes": 261547235,
+    "outputBytes": 355046,
+    "changed": true,
+    "outputSha": "7eb83d100e02a4d9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37232 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->52915 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->96847 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->70967 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->92684 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f01-comparator-a1-150/lossy-down2": {
+    "sourceBytes": 261547235,
+    "outputBytes": 355046,
+    "changed": true,
+    "outputSha": "7eb83d100e02a4d9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37232 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->52915 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->96847 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->70967 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->92684 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     },
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": 1,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f02-dense-drawing/current": {
+    "sourceBytes": 767315,
+    "outputBytes": 766961,
+    "changed": true,
+    "outputSha": "edad7637e9f2f4a9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/struct-chunked": {
+    "sourceBytes": 767315,
+    "outputBytes": 767311,
+    "changed": true,
+    "outputSha": "1714549ce646bb8e",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->766053 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/r1-chunked": {
+    "sourceBytes": 767315,
+    "outputBytes": 721307,
+    "changed": true,
+    "outputSha": "97f95b02a30863bf",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->719972 R1 Flate (2)"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/ll-chunked": {
+    "sourceBytes": 767315,
+    "outputBytes": 343447,
+    "changed": true,
+    "outputSha": "5480753a49fd5e0f",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->342111 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/ll-chunked-owned": {
+    "sourceBytes": 767315,
+    "outputBytes": 498801,
+    "changed": true,
+    "outputSha": "f72052f0fa039bf6",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->495987 R2 Indexed 8-bit (256 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/ll-chunked-pako": {
+    "sourceBytes": 767315,
+    "outputBytes": 345708,
+    "changed": true,
+    "outputSha": "adaddbfc435826f3",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->344372 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/ll-chunked-pako-fast": {
+    "sourceBytes": 767315,
+    "outputBytes": 345708,
+    "changed": true,
+    "outputSha": "adaddbfc435826f3",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->344372 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/ll-pdflib": {
+    "sourceBytes": 767315,
+    "outputBytes": 343096,
+    "changed": true,
+    "outputSha": "1004700f5854f87e",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->342111 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f02-dense-drawing/lossy-q85": {
+    "sourceBytes": 767315,
+    "outputBytes": 343447,
+    "changed": true,
+    "outputSha": "5480753a49fd5e0f",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->342111 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f02-dense-drawing/lossy-q75": {
+    "sourceBytes": 767315,
+    "outputBytes": 343447,
+    "changed": true,
+    "outputSha": "5480753a49fd5e0f",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->342111 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f02-dense-drawing/lossy-down2": {
+    "sourceBytes": 767315,
+    "outputBytes": 343447,
+    "changed": true,
+    "outputSha": "5480753a49fd5e0f",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 766053->342111 R2 DeviceGray 8-bit (adaptive)"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": "identical",
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f03-schedule/current": {
+    "sourceBytes": 52309908,
+    "outputBytes": 52309553,
+    "changed": true,
+    "outputSha": "e380d29b5c8a943e",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f03-schedule/struct-chunked": {
+    "sourceBytes": 52309908,
+    "outputBytes": 52309904,
+    "changed": true,
+    "outputSha": "1e97a0c1bc2028c7",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->52308663 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f03-schedule/r1-chunked": {
+    "sourceBytes": 52309908,
+    "outputBytes": 818514,
+    "changed": true,
+    "outputSha": "e66d94a809810590",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->817256 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f03-schedule/ll-chunked": {
+    "sourceBytes": 52309908,
+    "outputBytes": 375562,
+    "changed": true,
+    "outputSha": "5b9512ff5b79386d",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->374303 R2 DeviceGray 8-bit (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f03-schedule/ll-chunked-owned": {
+    "sourceBytes": 52309908,
+    "outputBytes": 499793,
+    "changed": true,
+    "outputSha": "05ae89caef7f32d6",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->496979 R2 Indexed 8-bit (256 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f03-schedule/ll-chunked-pako": {
+    "sourceBytes": 52309908,
+    "outputBytes": 378436,
+    "changed": true,
+    "outputSha": "f9fdbd45a9fbfcde",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->377177 R2 DeviceGray 8-bit (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f03-schedule/ll-chunked-pako-fast": {
+    "sourceBytes": 52309908,
+    "outputBytes": 393427,
+    "changed": true,
+    "outputSha": "2bb70d788911758c",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->390536 R2 Indexed 8-bit (256 colours) (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f03-schedule/ll-pdflib": {
+    "sourceBytes": 52309908,
+    "outputBytes": 375213,
+    "changed": true,
+    "outputSha": "c246e6ab93a92eb8",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->374303 R2 DeviceGray 8-bit (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/current": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998344,
+    "changed": true,
+    "outputSha": "5b0026c5071ddc43",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/struct-chunked": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998694,
+    "changed": true,
+    "outputSha": "f4960d93a63bec61",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/r1-chunked": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998694,
+    "changed": true,
+    "outputSha": "f4960d93a63bec61",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/ll-chunked": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998694,
+    "changed": true,
+    "outputSha": "f4960d93a63bec61",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/ll-chunked-owned": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998694,
+    "changed": true,
+    "outputSha": "f4960d93a63bec61",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/ll-chunked-pako": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998694,
+    "changed": true,
+    "outputSha": "f4960d93a63bec61",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/ll-chunked-pako-fast": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998694,
+    "changed": true,
+    "outputSha": "f4960d93a63bec61",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/ll-pdflib": {
+    "sourceBytes": 9998698,
+    "outputBytes": 9998344,
+    "changed": true,
+    "outputSha": "5b0026c5071ddc43",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->9997433 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f04-gray-scan/lossy-q85": {
+    "sourceBytes": 9998698,
+    "outputBytes": 2666586,
+    "changed": true,
+    "outputSha": "9945d4e204f8185e",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->2665327 LOSSY DCT q85"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": 37.6,
+      "inkRecall": 0.9879,
+      "markRecall": null,
+      "falseInk": 9587,
+      "resized": null
+     }
+    ]
+   },
+   "f04-gray-scan/lossy-q75": {
+    "sourceBytes": 9998698,
+    "outputBytes": 1745720,
+    "changed": true,
+    "outputSha": "07b682fdcd102097",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->1744461 LOSSY DCT q75"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": 36.5,
+      "inkRecall": 0.9844,
+      "markRecall": null,
+      "falseInk": 13431,
+      "resized": null
+     }
+    ]
+   },
+   "f04-gray-scan/lossy-down2": {
+    "sourceBytes": 9998698,
+    "outputBytes": 539151,
+    "changed": true,
+    "outputSha": "a11e0ff0a58b8837",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/FlateDecode R1+R2 9997433->537894 LOSSY DCT q85 after 2x downsample"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": 26.07,
+      "inkRecall": 0.8605,
+      "markRecall": null,
+      "falseInk": 305965,
+      "resized": "1755x2485"
+     }
+    ]
+   },
+   "f05-photo/current": {
+    "sourceBytes": 3529162,
+    "outputBytes": 3528808,
+    "changed": true,
+    "outputSha": "f851e1cab7e227a8",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f05-photo/struct-chunked": {
+    "sourceBytes": 3529162,
+    "outputBytes": 3529158,
+    "changed": true,
+    "outputSha": "ff9ee191211119ad",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->3527902 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/r1-chunked": {
+    "sourceBytes": 3529162,
+    "outputBytes": 2805058,
+    "changed": true,
+    "outputSha": "dbc623c564c433af",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->2803725 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/ll-chunked": {
+    "sourceBytes": 3529162,
+    "outputBytes": 2805058,
+    "changed": true,
+    "outputSha": "dbc623c564c433af",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->2803725 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/ll-chunked-owned": {
+    "sourceBytes": 3529162,
+    "outputBytes": 3529158,
+    "changed": true,
+    "outputSha": "ff9ee191211119ad",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->3527902 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/ll-chunked-pako": {
+    "sourceBytes": 3529162,
+    "outputBytes": 2803839,
+    "changed": true,
+    "outputSha": "69ca3533d69e7c56",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->2802506 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/ll-chunked-pako-fast": {
+    "sourceBytes": 3529162,
+    "outputBytes": 2803839,
+    "changed": true,
+    "outputSha": "69ca3533d69e7c56",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->2802506 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/ll-pdflib": {
+    "sourceBytes": 3529162,
+    "outputBytes": 2804708,
+    "changed": true,
+    "outputSha": "fff1f9ac03034ff1",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->2803725 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f05-photo/lossy-q85": {
+    "sourceBytes": 3529162,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->318113 LOSSY DCT q85"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": 35.95,
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f05-photo/lossy-q75": {
+    "sourceBytes": 3529162,
+    "outputBytes": 178550,
+    "changed": true,
+    "outputSha": "747dc24018190223",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->177298 LOSSY DCT q75"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": 34.94,
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": null
+     }
+    ]
+   },
+   "f05-photo/lossy-down2": {
+    "sourceBytes": 3529162,
+    "outputBytes": 39740,
+    "changed": true,
+    "outputSha": "999513aec4c1a207",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/FlateDecode R1+R2 3527902->38492 LOSSY DCT q85 after 2x downsample"
+    ],
+    "lossyMetrics": [
+     {
+      "psnr": 33.96,
+      "inkRecall": 1,
+      "markRecall": null,
+      "falseInk": 0,
+      "resized": "620x877"
+     }
+    ]
+   },
+   "f06-jpeg/current": {
+    "sourceBytes": 319369,
+    "outputBytes": 319015,
+    "changed": true,
+    "outputSha": "b218f79f49b060b5",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/struct-chunked": {
+    "sourceBytes": 319369,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/r1-chunked": {
+    "sourceBytes": 319369,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/ll-chunked": {
+    "sourceBytes": 319369,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/ll-chunked-owned": {
+    "sourceBytes": 319369,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/ll-chunked-pako": {
+    "sourceBytes": 319369,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/ll-chunked-pako-fast": {
+    "sourceBytes": 319369,
+    "outputBytes": 319365,
+    "changed": true,
+    "outputSha": "4b67e2ad68caccb2",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f06-jpeg/ll-pdflib": {
+    "sourceBytes": 319369,
+    "outputBytes": 319015,
+    "changed": true,
+    "outputSha": "b218f79f49b060b5",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/DCTDecode LEAVE 318113->318113 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/current": {
+    "sourceBytes": 2882509,
+    "outputBytes": 2881829,
+    "changed": true,
+    "outputSha": "c54d71fac709cb52",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f07-mixed/struct-chunked": {
+    "sourceBytes": 2882509,
+    "outputBytes": 2882501,
+    "changed": true,
+    "outputSha": "f870687a9ad2bb02",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->2880000 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/r1-chunked": {
+    "sourceBytes": 2882509,
+    "outputBytes": 172466,
+    "changed": true,
+    "outputSha": "f7f98fecdc96c816",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->169946 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/ll-chunked": {
+    "sourceBytes": 2882509,
+    "outputBytes": 172466,
+    "changed": true,
+    "outputSha": "f7f98fecdc96c816",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->169946 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/ll-chunked-owned": {
+    "sourceBytes": 2882509,
+    "outputBytes": 288231,
+    "changed": true,
+    "outputSha": "320f7ac76b47011e",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->285711 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/ll-chunked-pako": {
+    "sourceBytes": 2882509,
+    "outputBytes": 166126,
+    "changed": true,
+    "outputSha": "8135b0677658bae1",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->163606 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/ll-chunked-pako-fast": {
+    "sourceBytes": 2882509,
+    "outputBytes": 172117,
+    "changed": true,
+    "outputSha": "04c010db25ed30ff",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->169520 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f07-mixed/ll-pdflib": {
+    "sourceBytes": 2882509,
+    "outputBytes": 171792,
+    "changed": true,
+    "outputSha": "e8ad239fa83a0947",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2880000->169946 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/current": {
+    "sourceBytes": 5282321,
+    "outputBytes": 5281349,
+    "changed": true,
+    "outputSha": "d07912b4dbbcac38",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f08-shared/struct-chunked": {
+    "sourceBytes": 5282321,
+    "outputBytes": 5282310,
+    "changed": true,
+    "outputSha": "d901bd4117205b99",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->5280000 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/r1-chunked": {
+    "sourceBytes": 5282321,
+    "outputBytes": 288219,
+    "changed": true,
+    "outputSha": "17d5ad5a19c65320",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->285890 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/ll-chunked": {
+    "sourceBytes": 5282321,
+    "outputBytes": 288219,
+    "changed": true,
+    "outputSha": "17d5ad5a19c65320",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->285890 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/ll-chunked-owned": {
+    "sourceBytes": 5282321,
+    "outputBytes": 469855,
+    "changed": true,
+    "outputSha": "6df157e4fae7201b",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->467526 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/ll-chunked-pako": {
+    "sourceBytes": 5282321,
+    "outputBytes": 281663,
+    "changed": true,
+    "outputSha": "e0af6b4bf98a2214",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->279334 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/ll-chunked-pako-fast": {
+    "sourceBytes": 5282321,
+    "outputBytes": 294766,
+    "changed": true,
+    "outputSha": "0838078469ae8291",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->292360 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f08-shared/ll-pdflib": {
+    "sourceBytes": 5282321,
+    "outputBytes": 287258,
+    "changed": true,
+    "outputSha": "9169b3405728c654",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 5280000->285890 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/current": {
+    "sourceBytes": 2161411,
+    "outputBytes": 2161045,
+    "changed": true,
+    "outputSha": "963e60b338d84212",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f09-smask/struct-chunked": {
+    "sourceBytes": 2161411,
+    "outputBytes": 2161406,
+    "changed": true,
+    "outputSha": "bfe475493ff738a3",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->540000 unchanged",
+     "DeviceRGB/8/none R1+R2 1620000->1620000 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/r1-chunked": {
+    "sourceBytes": 2161411,
+    "outputBytes": 152332,
+    "changed": true,
+    "outputSha": "0e5b3bc9e9c7ce93",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->20505 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 1620000->130306 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/ll-chunked": {
+    "sourceBytes": 2161411,
+    "outputBytes": 152332,
+    "changed": true,
+    "outputSha": "0e5b3bc9e9c7ce93",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->20505 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 1620000->130306 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/ll-chunked-owned": {
+    "sourceBytes": 2161411,
+    "outputBytes": 447313,
+    "changed": true,
+    "outputSha": "6d06bbbe8c1ec873",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->211933 R1 Flate (2)",
+     "DeviceRGB/8/none R1+R2 1620000->233858 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/ll-chunked-pako": {
+    "sourceBytes": 2161411,
+    "outputBytes": 146307,
+    "changed": true,
+    "outputSha": "bb63d1c1a6d47f9c",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->20533 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 1620000->124253 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/ll-chunked-pako-fast": {
+    "sourceBytes": 2161411,
+    "outputBytes": 148974,
+    "changed": true,
+    "outputSha": "176fd064d25bd339",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->20533 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 1620000->126844 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f09-smask/ll-pdflib": {
+    "sourceBytes": 2161411,
+    "outputBytes": 151971,
+    "changed": true,
+    "outputSha": "89b701d6773b3099",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceGray/8/none R1+R2 540000->20505 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 1620000->130306 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/current": {
+    "sourceBytes": 2106095,
+    "outputBytes": 2104046,
+    "changed": true,
+    "outputSha": "bb646fdf6713ab87",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f10-structure/struct-chunked": {
+    "sourceBytes": 2106095,
+    "outputBytes": 2106072,
+    "changed": true,
+    "outputSha": "9ed69430abae985c",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->2100000 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/r1-chunked": {
+    "sourceBytes": 2106095,
+    "outputBytes": 161140,
+    "changed": true,
+    "outputSha": "0ce885c6d14a324a",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->155049 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/ll-chunked": {
+    "sourceBytes": 2106095,
+    "outputBytes": 161140,
+    "changed": true,
+    "outputSha": "0ce885c6d14a324a",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->155049 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/ll-chunked-owned": {
+    "sourceBytes": 2106095,
+    "outputBytes": 291068,
+    "changed": true,
+    "outputSha": "c4c58e98affe4603",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->284900 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/ll-chunked-pako": {
+    "sourceBytes": 2106095,
+    "outputBytes": 154384,
+    "changed": true,
+    "outputSha": "fd68cbe422b1b449",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->148293 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/ll-chunked-pako-fast": {
+    "sourceBytes": 2106095,
+    "outputBytes": 157146,
+    "changed": true,
+    "outputSha": "fba455b5b2b2289a",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->150978 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f10-structure/ll-pdflib": {
+    "sourceBytes": 2106095,
+    "outputBytes": 159119,
+    "changed": true,
+    "outputSha": "825f2af573ca5199",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 2100000->155049 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/current": {
+    "sourceBytes": 2902771,
+    "outputBytes": 2900437,
+    "changed": true,
+    "outputSha": "83ca3d69c2310f0a",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f11-classes/struct-chunked": {
+    "sourceBytes": 2902771,
+    "outputBytes": 2902739,
+    "changed": true,
+    "outputSha": "82dc53a616adf6b0",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->120000 unchanged",
+     "DeviceRGB/8/none R1 360000->360000 unchanged",
+     "DeviceRGB/8/none R1 360000->360000 unchanged",
+     "ImageMask/1/none R1 15000->15000 unchanged",
+     "ICCBased/8/none R1+R2 360000->360000 unchanged",
+     "DeviceRGB/16/none R1 720000->720000 unchanged",
+     "DeviceRGB/8/none R1 360000->360000 unchanged",
+     "DeviceGray/1/none R1 15000->15000 unchanged",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->106969 unchanged",
+     "DeviceCMYK/8/none R1 480000->480000 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/r1-chunked": {
+    "sourceBytes": 2902771,
+    "outputBytes": 392145,
+    "changed": true,
+    "outputSha": "f69a6ce22b323dd1",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->7813 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "ImageMask/1/none R1 15000->5830 R1 Flate (none)",
+     "ICCBased/8/none R1+R2 360000->52753 R1 Flate (none)",
+     "DeviceRGB/16/none R1 720000->53907 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "DeviceGray/1/none R1 15000->5830 R1 Flate (none)",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->52753 R1 Flate (none)",
+     "DeviceCMYK/8/none R1 480000->49073 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/ll-chunked": {
+    "sourceBytes": 2902771,
+    "outputBytes": 392145,
+    "changed": true,
+    "outputSha": "f69a6ce22b323dd1",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->7813 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "ImageMask/1/none R1 15000->5830 R1 Flate (none)",
+     "ICCBased/8/none R1+R2 360000->52753 R1 Flate (none)",
+     "DeviceRGB/16/none R1 720000->53907 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "DeviceGray/1/none R1 15000->5830 R1 Flate (none)",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->52753 R1 Flate (none)",
+     "DeviceCMYK/8/none R1 480000->49073 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/ll-chunked-owned": {
+    "sourceBytes": 2902771,
+    "outputBytes": 768882,
+    "changed": true,
+    "outputSha": "bebd306606d4027d",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->21903 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->98578 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->98578 R1 Flate (none)",
+     "ImageMask/1/none R1 15000->8846 R1 Flate (none)",
+     "ICCBased/8/none R1+R2 360000->98578 R1 Flate (none)",
+     "DeviceRGB/16/none R1 720000->96472 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->98578 R1 Flate (none)",
+     "DeviceGray/1/none R1 15000->9151 R1 Flate (none)",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->98578 R1 Flate (none)",
+     "DeviceCMYK/8/none R1 480000->133615 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/ll-chunked-pako": {
+    "sourceBytes": 2902771,
+    "outputBytes": 372492,
+    "changed": true,
+    "outputSha": "85d2d1d74690eb69",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->7836 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->49020 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->49020 R1 Flate (none)",
+     "ImageMask/1/none R1 15000->5903 R1 Flate (none)",
+     "ICCBased/8/none R1+R2 360000->49020 R1 Flate (none)",
+     "DeviceRGB/16/none R1 720000->53122 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->49020 R1 Flate (none)",
+     "DeviceGray/1/none R1 15000->5903 R1 Flate (none)",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->49020 R1 Flate (none)",
+     "DeviceCMYK/8/none R1 480000->48701 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/ll-chunked-pako-fast": {
+    "sourceBytes": 2902771,
+    "outputBytes": 384325,
+    "changed": true,
+    "outputSha": "7e652de4bb41ceee",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->9104 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1 360000->50349 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1 360000->50349 R1 Flate (adaptive)",
+     "ImageMask/1/none R1 15000->6795 R1 Flate (2)",
+     "ICCBased/8/none R1+R2 360000->50349 R1 Flate (adaptive)",
+     "DeviceRGB/16/none R1 720000->54184 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1 360000->50349 R1 Flate (adaptive)",
+     "DeviceGray/1/none R1 15000->6804 R1 Flate (2)",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->50349 R1 Flate (adaptive)",
+     "DeviceCMYK/8/none R1 480000->49005 R1 Flate (adaptive)"
+    ],
+    "lossyMetrics": []
+   },
+   "f11-classes/ll-pdflib": {
+    "sourceBytes": 2902771,
+    "outputBytes": 389841,
+    "changed": true,
+    "outputSha": "b898c0629b8e9aad",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "Indexed/8/none R1 120000->7813 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "ImageMask/1/none R1 15000->5830 R1 Flate (none)",
+     "ICCBased/8/none R1+R2 360000->52753 R1 Flate (none)",
+     "DeviceRGB/16/none R1 720000->53907 R1 Flate (none)",
+     "DeviceRGB/8/none R1 360000->52753 R1 Flate (none)",
+     "DeviceGray/1/none R1 15000->5830 R1 Flate (none)",
+     "DeviceRGB/8/ASCIIHexDecode+FlateDecode R1+R2 106969->52753 R1 Flate (none)",
+     "DeviceCMYK/8/none R1 480000->49073 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/current": {
+    "sourceBytes": 6481722,
+    "outputBytes": 6481161,
+    "changed": true,
+    "outputSha": "adf95b56386475ef",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/struct-chunked": {
+    "sourceBytes": 6481722,
+    "outputBytes": 6481715,
+    "changed": true,
+    "outputSha": "a47d415adf898643",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->3240000 unchanged",
+     "DeviceRGB/8/none R1+R2 3240000->3240000 unchanged"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/r1-chunked": {
+    "sourceBytes": 6481722,
+    "outputBytes": 76555,
+    "changed": true,
+    "outputSha": "7024cd568ff202a6",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->37402 R1 Flate (none)",
+     "DeviceRGB/8/none R1+R2 3240000->37402 R1 Flate (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/ll-chunked": {
+    "sourceBytes": 6481722,
+    "outputBytes": 68596,
+    "changed": true,
+    "outputSha": "4759c90a6b032e12",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->37402 R1 Flate (none)",
+     "DeviceRGB/8/none R1+R2 3240000->29401 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/ll-chunked-owned": {
+    "sourceBytes": 6481722,
+    "outputBytes": 172204,
+    "changed": true,
+    "outputSha": "b250c72fc02b0012",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->114741 R1 Flate (none)",
+     "DeviceRGB/8/none R1+R2 3240000->55668 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/ll-chunked-pako": {
+    "sourceBytes": 6481722,
+    "outputBytes": 68940,
+    "changed": true,
+    "outputSha": "dcb35b0ef98cd87a",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->37532 R1 Flate (none)",
+     "DeviceRGB/8/none R1+R2 3240000->29615 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/ll-chunked-pako-fast": {
+    "sourceBytes": 6481722,
+    "outputBytes": 80477,
+    "changed": true,
+    "outputSha": "d31d8bbf0fedbfe7",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->46078 R1 Flate (adaptive)",
+     "DeviceRGB/8/none R1+R2 3240000->32452 R2 Indexed 2-bit (4 colours) (2)"
+    ],
+    "lossyMetrics": []
+   },
+   "f12-interpolate/ll-pdflib": {
+    "sourceBytes": 6481722,
+    "outputBytes": 68040,
+    "changed": true,
+    "outputSha": "a0c8a95d11e3cee9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1 3240000->37402 R1 Flate (none)",
+     "DeviceRGB/8/none R1+R2 3240000->29401 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-chunked/--drop-source": {
+    "sourceBytes": 261547235,
+    "outputBytes": 355046,
+    "changed": true,
+    "outputSha": "7eb83d100e02a4d9",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37232 R2 Indexed 1-bit (2 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->52915 R2 Indexed 2-bit (4 colours) (adaptive)",
+     "DeviceRGB/8/none R1+R2 52308663->96847 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->70967 R2 Indexed 1-bit (2 colours) (none)",
+     "DeviceRGB/8/none R1+R2 52308663->92684 R2 Indexed 2-bit (4 colours) (none)"
+    ],
+    "lossyMetrics": []
+   },
+   "f01-comparator-a1-150/ll-chunked-pako-fast/--drop-source": {
+    "sourceBytes": 261547235,
+    "outputBytes": 376869,
+    "changed": true,
+    "outputSha": "4db56fb67fd5f165",
+    "verifyOk": true,
+    "errors": [],
+    "fieldsPreserved": true,
+    "images": [
+     "DeviceRGB/8/none R1+R2 52308663->37582 R2 Indexed 1-bit (2 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->53935 R2 Indexed 2-bit (4 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->98016 R2 Indexed 2-bit (3 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->76878 R2 Indexed 1-bit (2 colours) (2)",
+     "DeviceRGB/8/none R1+R2 52308663->105902 R2 Indexed 2-bit (4 colours) (2)"
+    ],
+    "lossyMetrics": []
+   }
+  },
+  "currentModel": [
+   {
+    "label": "f01 (synthetic, this corpus)",
+    "sourceBytes": 261547235,
+    "sourceMiB": 249.4,
+    "plannedOutputMiB": 374.4,
+    "filePeakMiB": 873.3,
+    "presets": {
+     "512 MiB": "refused: すでに書き出し済みの0 MiBに加えてこのファイルの処理に約873 MiBが必要で、処理メモリ上限512 MiBを超えます。ファイル数を減らすか、上限設定を変更してください。",
+     "1024 MiB": "runs",
+     "2048 MiB": "runs"
+    },
+    "unchangedOutputPassesCeiling": true
+   },
+   {
+    "label": "250,000,000 B (the reported ~250 MB)",
+    "sourceBytes": 250000000,
+    "sourceMiB": 238.4,
+    "plannedOutputMiB": 357.9,
+    "filePeakMiB": 834.7,
+    "presets": {
+     "512 MiB": "refused: すでに書き出し済みの0 MiBに加えてこのファイルの処理に約835 MiBが必要で、処理メモリ上限512 MiBを超えます。ファイル数を減らすか、上限設定を変更してください。",
+     "1024 MiB": "runs",
+     "2048 MiB": "runs"
+    },
+    "unchangedOutputPassesCeiling": true
+   },
+   {
+    "label": "261,549,245 B (M4 PR #28, measured old writer)",
+    "sourceBytes": 261549245,
+    "sourceMiB": 249.4,
+    "plannedOutputMiB": 374.4,
+    "filePeakMiB": 873.3,
+    "presets": {
+     "512 MiB": "refused: すでに書き出し済みの0 MiBに加えてこのファイルの処理に約873 MiBが必要で、処理メモリ上限512 MiBを超えます。ファイル数を減らすか、上限設定を変更してください。",
+     "1024 MiB": "runs",
+     "2048 MiB": "runs"
+    },
+    "unchangedOutputPassesCeiling": true
+   }
+  ],
+  "largestAdmitted": {
+   "512 MiB": {
+    "bytes": 153316790,
+    "MiB": 146.2
+   },
+   "1024 MiB": {
+    "bytes": 306708480,
+    "MiB": 292.5
+   },
+   "2048 MiB": {
+    "bytes": 613491858,
+    "MiB": 585.1
+   }
+  },
+  "policies": [
+   {
+    "variant": "B1 pdf-lib parse (copies streams), source held",
+    "fixedMiB": 707.4,
+    "policyP_MiB": 1455.7,
+    "acceptsP": [
+     false,
+     false,
+     true
+    ],
+    "parsePeakMiB": 707.4,
+    "policyR": [
+     {
+      "presetMiB": 512,
+      "arithmeticAdmits": false,
+      "headroomAtPeakMiB": -195.4,
+      "reserveMiB": -195.4
+     },
+     {
+      "presetMiB": 1024,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 316.6,
+      "reserveMiB": 316.6
+     },
+     {
+      "presetMiB": 2048,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 1340.6,
+      "reserveMiB": 1340.6
+     }
+    ]
+   },
+   {
+    "variant": "B1 pdf-lib parse, source released after parse (re-read the File for the unchanged fallback)",
+    "fixedMiB": 457.9,
+    "policyP_MiB": 1206.2,
+    "acceptsP": [
+     false,
+     false,
+     true
+    ],
+    "parsePeakMiB": 499.2,
+    "policyR": [
+     {
+      "presetMiB": 512,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 12.8,
+      "reserveMiB": 54.1
+     },
+     {
+      "presetMiB": 1024,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 524.8,
+      "reserveMiB": 566.1
+     },
+     {
+      "presetMiB": 2048,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 1548.8,
+      "reserveMiB": 1590.1
+     }
+    ]
+   },
+   {
+    "variant": "B2 owned parser (streams are views of the source)",
+    "fixedMiB": 457.9,
+    "policyP_MiB": 1206.2,
+    "acceptsP": [
+     false,
+     false,
+     true
+    ],
+    "parsePeakMiB": 457.9,
+    "policyR": [
+     {
+      "presetMiB": 512,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 54.1,
+      "reserveMiB": 54.1
+     },
+     {
+      "presetMiB": 1024,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 566.1,
+      "reserveMiB": 566.1
+     },
+     {
+      "presetMiB": 2048,
+      "arithmeticAdmits": true,
+      "headroomAtPeakMiB": 1590.1,
+      "reserveMiB": 1590.1
+     }
+    ]
+   }
+  ],
+  "parse": [
+   {
+    "fixture": "f01-comparator-a1-150",
+    "objects": 19,
+    "streams": 10,
+    "streamBytes": 261543958
+   },
+   {
+    "fixture": "f02-dense-drawing",
+    "objects": 6,
+    "streams": 2,
+    "streamBytes": 766092
+   },
+   {
+    "fixture": "f03-schedule",
+    "objects": 6,
+    "streams": 2,
+    "streamBytes": 52308702
+   },
+   {
+    "fixture": "f04-gray-scan",
+    "objects": 6,
+    "streams": 2,
+    "streamBytes": 9997472
+   },
+   {
+    "fixture": "f05-photo",
+    "objects": 6,
+    "streams": 2,
+    "streamBytes": 3527939
+   },
+   {
+    "fixture": "f06-jpeg",
+    "objects": 6,
+    "streams": 2,
+    "streamBytes": 318150
+   },
+   {
+    "fixture": "f07-mixed",
+    "objects": 10,
+    "streams": 4,
+    "streamBytes": 2880697
+   },
+   {
+    "fixture": "f08-shared",
+    "objects": 13,
+    "streams": 6,
+    "streamBytes": 5280136
+   },
+   {
+    "fixture": "f09-smask",
+    "objects": 7,
+    "streams": 3,
+    "streamBytes": 2160031
+   },
+   {
+    "fixture": "f10-structure",
+    "objects": 25,
+    "streams": 10,
+    "streamBytes": 2101338
+   },
+   {
+    "fixture": "f11-classes",
+    "objects": 34,
+    "streams": 21,
+    "streamBytes": 2897279
+   },
+   {
+    "fixture": "f12-interpolate",
+    "objects": 9,
+    "streams": 4,
+    "streamBytes": 6480062
+   }
+  ],
+  "imageWork": {
+   "bytes": 218245079,
+   "basis": "pako 2.1.0 (recommended path)",
+   "terms": {
+    "decodedSamples": 52308663,
+    "predictedR1Body": 52312172,
+    "largestR2Form": 8723374,
+    "bestCandidateKept": 52308663,
+    "candidateInProgressUnderRuntimeCap": 52325047,
+    "pakoStateBytes": 267160
+   },
+   "pako2": {
+    "version": "2.1.0",
+    "chunkSize": 16384,
+    "stateBytes": 267160
+   }
+  },
+  "pakoProbe": {
+   "pakoVersion": "2.1.0",
+   "inputBytes": 52308663,
+   "oneShotBytes": 175916,
+   "streamingBytes": 175916,
+   "streamingEqualsOneShot": true,
+   "streamingChunks": 11,
+   "streamingChunksAreDistinctBuffers": true,
+   "oneShotPeakHeldBytes": 356140,
+   "streamingPeakHeldBytes": 180224,
+   "cap": {
+    "capBytes": 87958,
+    "aborted": true,
+    "emittedBytes": 98304,
+    "withinCapPlusOneChunk": true
+   }
+  },
+  "stage1": {
+   "policyRConcept": "recommended",
+   "boundary": {
+    "inputs": "single file only: Optimizer v2 with more than one selected file is refused explicitly (no silent first-file processing)",
+    "why": "the UI holds every selected source in planned[] before running (PdfTools.tsx:219); releasing one source after parse bounds nothing while the others stay held",
+    "otherProcessorTools": "batch behaviour unchanged",
+    "batchAndZip": "deferred (needs its own sequential source-ownership + ZIP memory model and gate)"
+   },
+   "variant": "B1 pdf-lib parse, source released after parse (re-read the File for the unchanged fallback)",
+   "~250 MiB source": {
+    "512 MiB": {
+     "status": "DEFERRED - not yet proven",
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 12.8,
+     "unproven": [
+      "parse-instant headroom",
+      "PER_OBJECT measured on the synthetic corpus only",
+      "browser heap / GC / Blob not measured",
+      "pako 2.1.0 output held by a run-time cap that is a design contract, not yet implemented"
+     ]
+    },
+    "1024 MiB": {
+     "status": "required preset in Stage 1",
+     "headroomAtPeakMiB": 524.8,
+     "reserveMiB": 566.1
+    }
+   }
+  },
+  "selftest": {
+   "ok": true,
+   "results": {
+    "the unbroken output passes": true,
+    "one image sample changed": {
+     "caught": true,
+     "by": "p1 image 0: 1 samples differ (max 64)"
+    },
+    "an annotation removed": {
+     "caught": true,
+     "by": "p1 annotations differ"
+    },
+    "a link target changed": {
+     "caught": true,
+     "by": "p1 annotations differ"
+    },
+    "a form value changed": {
+     "caught": true,
+     "by": "p1 operator stream differs (56 vs 56 ops, paths 3 vs 3)"
+    },
+    "the title changed": {
+     "caught": true,
+     "by": "document metadata differs"
+    },
+    "a text string changed": {
+     "caught": true,
+     "by": "p1 operator stream differs (56 vs 56 ops, paths 3 vs 3)"
+    },
+    "the page rotated": {
+     "caught": true,
+     "by": "p1 rotate 90 != 0"
+    },
+    "the CropBox moved": {
+     "caught": true,
+     "by": "p1 view 10,10,510,710 != 0,0,595.28,841.89"
+    },
+    "a vector path added": {
+     "caught": true,
+     "by": "p1 operator stream differs (64 vs 56 ops, paths 4 vs 3)"
+    }
+   }
+  }
+ },
+ "measuredOnly": {
+  "steps": [
+   {
+    "name": "bundle production processor + comparator",
+    "exitCode": 0,
+    "ms": 219
+   },
+   {
+    "name": "synthetic corpus",
+    "exitCode": 0,
+    "ms": 5261
+   },
+   {
+    "name": "matrix",
+    "exitCode": 0,
+    "ms": 443173
+   },
+   {
+    "name": "memory model",
+    "exitCode": 0,
+    "ms": 4715
+   },
+   {
+    "name": "verifier self-test",
+    "exitCode": 0,
+    "ms": 979
+   }
+  ],
+  "cells": {
+   "f01-comparator-a1-150/current": {
+    "ms": 236,
+    "peakOverBaselineMiB": 250,
+    "sampledPeakMiB": 869
+   },
+   "f01-comparator-a1-150/struct-chunked": {
+    "ms": 70,
+    "analyseMs": 69,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 92.1,
+    "sampledPeakMiB": 710.3
+   },
+   "f01-comparator-a1-150/r1-chunked": {
+    "ms": 12018,
+    "analyseMs": 12016,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 123.5,
+    "sampledPeakMiB": 741.9
+   },
+   "f01-comparator-a1-150/ll-chunked": {
+    "ms": 16605,
+    "analyseMs": 16604,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 185.8,
+    "sampledPeakMiB": 804.8
+   },
+   "f01-comparator-a1-150/ll-chunked-owned": {
+    "ms": 9056,
+    "analyseMs": 9054,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 141.8,
+    "sampledPeakMiB": 760.5
+   },
+   "f01-comparator-a1-150/ll-chunked-pako": {
+    "ms": 33072,
+    "analyseMs": 33071,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 125.4,
+    "sampledPeakMiB": 744.5
+   },
+   "f01-comparator-a1-150/ll-chunked-pako-fast": {
+    "ms": 13171,
+    "analyseMs": 13170,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 127.9,
+    "sampledPeakMiB": 746.6
+   },
+   "f01-comparator-a1-150/ll-pdflib": {
+    "ms": 16349,
+    "analyseMs": 16344,
+    "writeMs": 5,
+    "peakOverBaselineMiB": 136.1,
+    "sampledPeakMiB": 755.5
+   },
+   "f01-comparator-a1-150/lossy-q85": {
+    "ms": 17379,
+    "analyseMs": 17378,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 526.3,
+    "sampledPeakMiB": 1145.3
+   },
+   "f01-comparator-a1-150/lossy-q75": {
+    "ms": 17077,
+    "analyseMs": 17076,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 526.1,
+    "sampledPeakMiB": 1144.7
+   },
+   "f01-comparator-a1-150/lossy-down2": {
+    "ms": 17793,
+    "analyseMs": 17791,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 207.2,
+    "sampledPeakMiB": 825.7
+   },
+   "f02-dense-drawing/current": {
+    "ms": 8,
+    "peakOverBaselineMiB": 2.5,
+    "sampledPeakMiB": 123.1
+   },
+   "f02-dense-drawing/struct-chunked": {
+    "ms": 3,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 1,
+    "sampledPeakMiB": 122.2
+   },
+   "f02-dense-drawing/r1-chunked": {
+    "ms": 2600,
+    "analyseMs": 2600,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 154.6,
+    "sampledPeakMiB": 275.4
+   },
+   "f02-dense-drawing/ll-chunked": {
+    "ms": 5769,
+    "analyseMs": 5768,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 170.9,
+    "sampledPeakMiB": 291.6
+   },
+   "f02-dense-drawing/ll-chunked-owned": {
+    "ms": 2447,
+    "analyseMs": 2446,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 173.9,
+    "sampledPeakMiB": 294.9
+   },
+   "f02-dense-drawing/ll-chunked-pako": {
+    "ms": 11569,
+    "analyseMs": 11568,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 173.1,
+    "sampledPeakMiB": 294.1
+   },
+   "f02-dense-drawing/ll-chunked-pako-fast": {
+    "ms": 4389,
+    "analyseMs": 4388,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 172.7,
+    "sampledPeakMiB": 293.1
+   },
+   "f02-dense-drawing/ll-pdflib": {
+    "ms": 5845,
+    "analyseMs": 5838,
+    "writeMs": 6,
+    "peakOverBaselineMiB": 169.2,
+    "sampledPeakMiB": 289.9
+   },
+   "f02-dense-drawing/lossy-q85": {
+    "ms": 5993,
+    "analyseMs": 5993,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 321.1,
+    "sampledPeakMiB": 442.1
+   },
+   "f02-dense-drawing/lossy-q75": {
+    "ms": 5977,
+    "analyseMs": 5976,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 320.2,
+    "sampledPeakMiB": 441.4
+   },
+   "f02-dense-drawing/lossy-down2": {
+    "ms": 6170,
+    "analyseMs": 6169,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 194.8,
+    "sampledPeakMiB": 316.2
+   },
+   "f03-schedule/current": {
+    "ms": 50,
+    "peakOverBaselineMiB": 101,
+    "sampledPeakMiB": 269.9
+   },
+   "f03-schedule/struct-chunked": {
+    "ms": 17,
+    "analyseMs": 16,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 50.8,
+    "sampledPeakMiB": 219.9
+   },
+   "f03-schedule/r1-chunked": {
+    "ms": 2645,
+    "analyseMs": 2644,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 153.8,
+    "sampledPeakMiB": 323.1
+   },
+   "f03-schedule/ll-chunked": {
+    "ms": 6124,
+    "analyseMs": 6122,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 169.8,
+    "sampledPeakMiB": 339.7
+   },
+   "f03-schedule/ll-chunked-owned": {
+    "ms": 2581,
+    "analyseMs": 2580,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 173.8,
+    "sampledPeakMiB": 343.1
+   },
+   "f03-schedule/ll-chunked-pako": {
+    "ms": 11716,
+    "analyseMs": 11715,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 169.1,
+    "sampledPeakMiB": 338.8
+   },
+   "f03-schedule/ll-chunked-pako-fast": {
+    "ms": 4648,
+    "analyseMs": 4647,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 120.3,
+    "sampledPeakMiB": 289.7
+   },
+   "f03-schedule/ll-pdflib": {
+    "ms": 5960,
+    "analyseMs": 5954,
+    "writeMs": 5,
+    "peakOverBaselineMiB": 169.6,
+    "sampledPeakMiB": 339.5
+   },
+   "f04-gray-scan/current": {
+    "ms": 15,
+    "peakOverBaselineMiB": 20,
+    "sampledPeakMiB": 149.2
+   },
+   "f04-gray-scan/struct-chunked": {
+    "ms": 6,
+    "analyseMs": 5,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 10,
+    "sampledPeakMiB": 139.1
+   },
+   "f04-gray-scan/r1-chunked": {
+    "ms": 1384,
+    "analyseMs": 1383,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 101.1,
+    "sampledPeakMiB": 229.5
+   },
+   "f04-gray-scan/ll-chunked": {
+    "ms": 1392,
+    "analyseMs": 1391,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 91.2,
+    "sampledPeakMiB": 220.2
+   },
+   "f04-gray-scan/ll-chunked-owned": {
+    "ms": 1064,
+    "analyseMs": 1063,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 152.2,
+    "sampledPeakMiB": 281
+   },
+   "f04-gray-scan/ll-chunked-pako": {
+    "ms": 2733,
+    "analyseMs": 2732,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 103.9,
+    "sampledPeakMiB": 232.9
+   },
+   "f04-gray-scan/ll-chunked-pako-fast": {
+    "ms": 1219,
+    "analyseMs": 1218,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 67.1,
+    "sampledPeakMiB": 196.3
+   },
+   "f04-gray-scan/ll-pdflib": {
+    "ms": 1396,
+    "analyseMs": 1385,
+    "writeMs": 11,
+    "peakOverBaselineMiB": 102.9,
+    "sampledPeakMiB": 232.1
+   },
+   "f04-gray-scan/lossy-q85": {
+    "ms": 1595,
+    "analyseMs": 1594,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 289,
+    "sampledPeakMiB": 418.3
+   },
+   "f04-gray-scan/lossy-q75": {
+    "ms": 1582,
+    "analyseMs": 1581,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 289.5,
+    "sampledPeakMiB": 417.9
+   },
+   "f04-gray-scan/lossy-down2": {
+    "ms": 1630,
+    "analyseMs": 1629,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 168.6,
+    "sampledPeakMiB": 297.1
+   },
+   "f05-photo/current": {
+    "ms": 10,
+    "peakOverBaselineMiB": 0.9,
+    "sampledPeakMiB": 127
+   },
+   "f05-photo/struct-chunked": {
+    "ms": 4,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.5,
+    "sampledPeakMiB": 126.2
+   },
+   "f05-photo/r1-chunked": {
+    "ms": 516,
+    "analyseMs": 515,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 34.8,
+    "sampledPeakMiB": 161.8
+   },
+   "f05-photo/ll-chunked": {
+    "ms": 507,
+    "analyseMs": 507,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 40.8,
+    "sampledPeakMiB": 167
+   },
+   "f05-photo/ll-chunked-owned": {
+    "ms": 421,
+    "analyseMs": 420,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 62.1,
+    "sampledPeakMiB": 188
+   },
+   "f05-photo/ll-chunked-pako": {
+    "ms": 1787,
+    "analyseMs": 1786,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 34.5,
+    "sampledPeakMiB": 161.1
+   },
+   "f05-photo/ll-chunked-pako-fast": {
+    "ms": 892,
+    "analyseMs": 892,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 23.6,
+    "sampledPeakMiB": 149
+   },
+   "f05-photo/ll-pdflib": {
+    "ms": 523,
+    "analyseMs": 517,
+    "writeMs": 6,
+    "peakOverBaselineMiB": 37.7,
+    "sampledPeakMiB": 163.8
+   },
+   "f05-photo/lossy-q85": {
+    "ms": 543,
+    "analyseMs": 542,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 38.8,
+    "sampledPeakMiB": 164.9
+   },
+   "f05-photo/lossy-q75": {
+    "ms": 533,
+    "analyseMs": 532,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 42.3,
+    "sampledPeakMiB": 168.8
+   },
+   "f05-photo/lossy-down2": {
+    "ms": 542,
+    "analyseMs": 542,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 41.1,
+    "sampledPeakMiB": 167.1
+   },
+   "f06-jpeg/current": {
+    "ms": 6,
+    "peakOverBaselineMiB": 1.4,
+    "sampledPeakMiB": 121.6
+   },
+   "f06-jpeg/struct-chunked": {
+    "ms": 3,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.5,
+    "sampledPeakMiB": 120.6
+   },
+   "f06-jpeg/r1-chunked": {
+    "ms": 3,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.5,
+    "sampledPeakMiB": 120.7
+   },
+   "f06-jpeg/ll-chunked": {
+    "ms": 4,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.5,
+    "sampledPeakMiB": 120.7
+   },
+   "f06-jpeg/ll-chunked-owned": {
+    "ms": 3,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.7,
+    "sampledPeakMiB": 121.3
+   },
+   "f06-jpeg/ll-chunked-pako": {
+    "ms": 3,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.6,
+    "sampledPeakMiB": 120.9
+   },
+   "f06-jpeg/ll-chunked-pako-fast": {
+    "ms": 3,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 0.6,
+    "sampledPeakMiB": 120.9
+   },
+   "f06-jpeg/ll-pdflib": {
+    "ms": 7,
+    "analyseMs": 3,
+    "writeMs": 4,
+    "peakOverBaselineMiB": 1.7,
+    "sampledPeakMiB": 121.6
+   },
+   "f07-mixed/current": {
+    "ms": 9,
+    "peakOverBaselineMiB": 0.7,
+    "sampledPeakMiB": 125.6
+   },
+   "f07-mixed/struct-chunked": {
+    "ms": 4,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 2.9,
+    "sampledPeakMiB": 128.2
+   },
+   "f07-mixed/r1-chunked": {
+    "ms": 263,
+    "analyseMs": 262,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 10,
+    "sampledPeakMiB": 134.9
+   },
+   "f07-mixed/ll-chunked": {
+    "ms": 267,
+    "analyseMs": 267,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 9.4,
+    "sampledPeakMiB": 133.7
+   },
+   "f07-mixed/ll-chunked-owned": {
+    "ms": 103,
+    "analyseMs": 103,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 11.4,
+    "sampledPeakMiB": 136.2
+   },
+   "f07-mixed/ll-chunked-pako": {
+    "ms": 538,
+    "analyseMs": 537,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 11.8,
+    "sampledPeakMiB": 137.1
+   },
+   "f07-mixed/ll-chunked-pako-fast": {
+    "ms": 214,
+    "analyseMs": 213,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 7.7,
+    "sampledPeakMiB": 132.8
+   },
+   "f07-mixed/ll-pdflib": {
+    "ms": 269,
+    "analyseMs": 265,
+    "writeMs": 4,
+    "peakOverBaselineMiB": 9.8,
+    "sampledPeakMiB": 135.4
+   },
+   "f08-shared/current": {
+    "ms": 11,
+    "peakOverBaselineMiB": 11.2,
+    "sampledPeakMiB": 135.7
+   },
+   "f08-shared/struct-chunked": {
+    "ms": 6,
+    "analyseMs": 5,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 5.8,
+    "sampledPeakMiB": 130.6
+   },
+   "f08-shared/r1-chunked": {
+    "ms": 465,
+    "analyseMs": 465,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 17.1,
+    "sampledPeakMiB": 141.9
+   },
+   "f08-shared/ll-chunked": {
+    "ms": 467,
+    "analyseMs": 466,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 12.7,
+    "sampledPeakMiB": 142.8
+   },
+   "f08-shared/ll-chunked-owned": {
+    "ms": 166,
+    "analyseMs": 165,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 21.5,
+    "sampledPeakMiB": 146.3
+   },
+   "f08-shared/ll-chunked-pako": {
+    "ms": 919,
+    "analyseMs": 918,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 19.8,
+    "sampledPeakMiB": 144
+   },
+   "f08-shared/ll-chunked-pako-fast": {
+    "ms": 357,
+    "analyseMs": 356,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 12.7,
+    "sampledPeakMiB": 137.4
+   },
+   "f08-shared/ll-pdflib": {
+    "ms": 466,
+    "analyseMs": 460,
+    "writeMs": 5,
+    "peakOverBaselineMiB": 17.3,
+    "sampledPeakMiB": 141.7
+   },
+   "f09-smask/current": {
+    "ms": 8,
+    "peakOverBaselineMiB": 4.9,
+    "sampledPeakMiB": 128.9
+   },
+   "f09-smask/struct-chunked": {
+    "ms": 4,
+    "analyseMs": 3,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 2.3,
+    "sampledPeakMiB": 126
+   },
+   "f09-smask/r1-chunked": {
+    "ms": 345,
+    "analyseMs": 344,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 7.8,
+    "sampledPeakMiB": 131.4
+   },
+   "f09-smask/ll-chunked": {
+    "ms": 348,
+    "analyseMs": 348,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 8,
+    "sampledPeakMiB": 131.8
+   },
+   "f09-smask/ll-chunked-owned": {
+    "ms": 85,
+    "analyseMs": 85,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 12.1,
+    "sampledPeakMiB": 135.9
+   },
+   "f09-smask/ll-chunked-pako": {
+    "ms": 716,
+    "analyseMs": 716,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 11.2,
+    "sampledPeakMiB": 135
+   },
+   "f09-smask/ll-chunked-pako-fast": {
+    "ms": 280,
+    "analyseMs": 279,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 7.4,
+    "sampledPeakMiB": 130.6
+   },
+   "f09-smask/ll-pdflib": {
+    "ms": 348,
+    "analyseMs": 344,
+    "writeMs": 4,
+    "peakOverBaselineMiB": 10.1,
+    "sampledPeakMiB": 133.6
+   },
+   "f10-structure/current": {
+    "ms": 11,
+    "peakOverBaselineMiB": 2.8,
+    "sampledPeakMiB": 126.4
+   },
+   "f10-structure/struct-chunked": {
+    "ms": 5,
+    "analyseMs": 4,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 2.5,
+    "sampledPeakMiB": 126.1
+   },
+   "f10-structure/r1-chunked": {
+    "ms": 233,
+    "analyseMs": 232,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 7.6,
+    "sampledPeakMiB": 130.8
+   },
+   "f10-structure/ll-chunked": {
+    "ms": 228,
+    "analyseMs": 226,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 7.6,
+    "sampledPeakMiB": 131.3
+   },
+   "f10-structure/ll-chunked-owned": {
+    "ms": 83,
+    "analyseMs": 82,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 11.1,
+    "sampledPeakMiB": 134.4
+   },
+   "f10-structure/ll-chunked-pako": {
+    "ms": 457,
+    "analyseMs": 457,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 8.6,
+    "sampledPeakMiB": 132.7
+   },
+   "f10-structure/ll-chunked-pako-fast": {
+    "ms": 182,
+    "analyseMs": 181,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 6.9,
+    "sampledPeakMiB": 130.5
+   },
+   "f10-structure/ll-pdflib": {
+    "ms": 235,
+    "analyseMs": 228,
+    "writeMs": 6,
+    "peakOverBaselineMiB": 7.9,
+    "sampledPeakMiB": 131.4
+   },
+   "f11-classes/current": {
+    "ms": 11,
+    "peakOverBaselineMiB": 4.2,
+    "sampledPeakMiB": 129.4
+   },
+   "f11-classes/struct-chunked": {
+    "ms": 6,
+    "analyseMs": 5,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 0.7,
+    "sampledPeakMiB": 126.3
+   },
+   "f11-classes/r1-chunked": {
+    "ms": 578,
+    "analyseMs": 576,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 12.8,
+    "sampledPeakMiB": 137.9
+   },
+   "f11-classes/ll-chunked": {
+    "ms": 584,
+    "analyseMs": 583,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 12.7,
+    "sampledPeakMiB": 138.1
+   },
+   "f11-classes/ll-chunked-owned": {
+    "ms": 130,
+    "analyseMs": 129,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 18.5,
+    "sampledPeakMiB": 143.7
+   },
+   "f11-classes/ll-chunked-pako": {
+    "ms": 1126,
+    "analyseMs": 1125,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 12.8,
+    "sampledPeakMiB": 137.5
+   },
+   "f11-classes/ll-chunked-pako-fast": {
+    "ms": 443,
+    "analyseMs": 440,
+    "writeMs": 2,
+    "peakOverBaselineMiB": 13.3,
+    "sampledPeakMiB": 138.8
+   },
+   "f11-classes/ll-pdflib": {
+    "ms": 586,
+    "analyseMs": 578,
+    "writeMs": 8,
+    "peakOverBaselineMiB": 13.1,
+    "sampledPeakMiB": 138
+   },
+   "f12-interpolate/current": {
+    "ms": 13,
+    "peakOverBaselineMiB": 13.5,
+    "sampledPeakMiB": 138.4
+   },
+   "f12-interpolate/struct-chunked": {
+    "ms": 5,
+    "analyseMs": 4,
+    "writeMs": 0,
+    "peakOverBaselineMiB": 6.3,
+    "sampledPeakMiB": 132.1
+   },
+   "f12-interpolate/r1-chunked": {
+    "ms": 780,
+    "analyseMs": 779,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 20.2,
+    "sampledPeakMiB": 146.3
+   },
+   "f12-interpolate/ll-chunked": {
+    "ms": 922,
+    "analyseMs": 921,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 20.4,
+    "sampledPeakMiB": 145.7
+   },
+   "f12-interpolate/ll-chunked-owned": {
+    "ms": 227,
+    "analyseMs": 226,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 24.2,
+    "sampledPeakMiB": 149.7
+   },
+   "f12-interpolate/ll-chunked-pako": {
+    "ms": 2237,
+    "analyseMs": 2237,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 24.4,
+    "sampledPeakMiB": 149.4
+   },
+   "f12-interpolate/ll-chunked-pako-fast": {
+    "ms": 846,
+    "analyseMs": 845,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 9.2,
+    "sampledPeakMiB": 140.8
+   },
+   "f12-interpolate/ll-pdflib": {
+    "ms": 956,
+    "analyseMs": 952,
+    "writeMs": 4,
+    "peakOverBaselineMiB": 21.2,
+    "sampledPeakMiB": 147.1
+   },
+   "f01-comparator-a1-150/ll-chunked/--drop-source": {
+    "ms": 16976,
+    "analyseMs": 16975,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 128.9,
+    "sampledPeakMiB": 747.7
+   },
+   "f01-comparator-a1-150/ll-chunked-pako-fast/--drop-source": {
+    "ms": 13508,
+    "analyseMs": 13505,
+    "writeMs": 1,
+    "peakOverBaselineMiB": 93.6,
+    "sampledPeakMiB": 711.9
+   }
+  },
+  "parseGrowth": [
+   {
+    "fixture": "f01-comparator-a1-150",
+    "parsedGrowthBytes": 261738518,
+    "nonStreamPerObject": 10240
+   },
+   {
+    "fixture": "f02-dense-drawing",
+    "parsedGrowthBytes": 783285,
+    "nonStreamPerObject": 2866
+   },
+   {
+    "fixture": "f03-schedule",
+    "parsedGrowthBytes": 51213111,
+    "nonStreamPerObject": 0
+   },
+   {
+    "fixture": "f04-gray-scan",
+    "parsedGrowthBytes": 10014225,
+    "nonStreamPerObject": 2792
+   },
+   {
+    "fixture": "f05-photo",
+    "parsedGrowthBytes": 3552046,
+    "nonStreamPerObject": 4018
+   },
+   {
+    "fixture": "f06-jpeg",
+    "parsedGrowthBytes": 338809,
+    "nonStreamPerObject": 3443
+   },
+   {
+    "fixture": "f07-mixed",
+    "parsedGrowthBytes": 2919686,
+    "nonStreamPerObject": 3899
+   },
+   {
+    "fixture": "f08-shared",
+    "parsedGrowthBytes": 5305536,
+    "nonStreamPerObject": 1954
+   },
+   {
+    "fixture": "f09-smask",
+    "parsedGrowthBytes": 2201760,
+    "nonStreamPerObject": 5961
+   },
+   {
+    "fixture": "f10-structure",
+    "parsedGrowthBytes": 2170170,
+    "nonStreamPerObject": 2753
+   },
+   {
+    "fixture": "f11-classes",
+    "parsedGrowthBytes": 2967737,
+    "nonStreamPerObject": 2072
+   },
+   {
+    "fixture": "f12-interpolate",
+    "parsedGrowthBytes": 6502000,
+    "nonStreamPerObject": 2438
+   }
+  ],
+  "PER_OBJECT": 20480
+ },
+ "checks": {
+  "everyLosslessCellVerified": true,
+  "noCellFailed": true,
+  "selftestCatchesEveryBreak": true,
+  "currentRefusedAt512": true,
+  "currentStaysLarge": true,
+  "primaryLosslessOver90pctAndUnder5MB": true,
+  "lossyNeverChosenWhereLosslessIsSmaller": true,
+  "imageWorkPricedForPako2": true,
+  "pakoStreamingEqualsOneShot": true,
+  "pakoRuntimeCapFires": true,
+  "stage1Large512Deferred": true,
+  "stage1SingleFileOnly": true,
+  "interpolateBlocksR2": true,
+  "matrixGrewNotShrank": true
+ },
+ "pass": true
+}

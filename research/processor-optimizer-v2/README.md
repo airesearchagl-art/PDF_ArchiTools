@@ -6,14 +6,15 @@ bundle (`harness/prod-entry.ts`).
 
 - Report (Human Gate): [`report.md`](report.md)
 - Limitations / instrument defects: [`limitations.md`](limitations.md)
-- Evidence: [`evidence/`](evidence/) (`gate-*.json`, `matrix-*.jsonl`, `model.json`, `selftest-*.json`, `compare-g1-g2.json`)
+- Evidence: [`evidence/`](evidence/) (`gate-*.json`, `matrix-*.jsonl`, `model.json`, `selftest-*.json`, `compare-g1-g2.json`); the superseded 99a1b3e evidence is kept unchanged in [`evidence/history/99a1b3e/`](evidence/history/99a1b3e/)
+- Stage 1 contracts (Focused Architecture Review RF-30): single file only; ~250 MiB needs the 1 GiB preset (512 MiB for that size deferred); pako 2.1.0 via `Deflate` + `onData`; `/Interpolate true` images are R1 only
 
 ## Layout
 
 | Step | Script | Output |
 |---|---|---|
 | Production bundle | `harness/prod-entry.ts` (pdfjs-dist aliased to its legacy build for Node) | `out/prod.mjs` |
-| Synthetic corpus, 11 fixtures incl. the 261 MB old-Comparator-like A1 x 5 | `corpus/make-corpus.mjs` | `out/corpus/*.pdf`, `manifest.json` (independent sample hashes + expected text) |
+| Synthetic corpus, 12 fixtures (f12: /Interpolate true vs control) incl. the 261 MB old-Comparator-like A1 x 5 | `corpus/make-corpus.mjs` | `out/corpus/*.pdf`, `manifest.json` (independent sample hashes + expected text) |
 | Optimizer prototype (census, R1 / R2 / LEAVE / opt-in LOSSY, pdf-lib or chunked writer) | `harness/optimizer.mjs` | — |
 | Independent reopen (pdf.js + pdf-lib): pages, boxes, rotation, operator stream, text, annotations, fields, metadata, every image's decoded samples | `harness/verify.mjs` | — |
 | The verifier must catch nine deliberate breaks | `harness/verify-selftest.mjs` | `evidence/selftest-*.json` |

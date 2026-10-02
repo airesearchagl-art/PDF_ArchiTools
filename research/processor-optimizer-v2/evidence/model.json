@@ -1,0 +1,352 @@
+{
+ "current": [
+  {
+   "label": "f01 (synthetic, this corpus)",
+   "sourceBytes": 261547235,
+   "sourceMiB": 249.4,
+   "plannedOutputMiB": 374.4,
+   "filePeakMiB": 873.3,
+   "presets": {
+    "512 MiB": "refused: すでに書き出し済みの0 MiBに加えてこのファイルの処理に約873 MiBが必要で、処理メモリ上限512 MiBを超えます。ファイル数を減らすか、上限設定を変更してください。",
+    "1024 MiB": "runs",
+    "2048 MiB": "runs"
+   },
+   "unchangedOutputPassesCeiling": true
+  },
+  {
+   "label": "250,000,000 B (the reported ~250 MB)",
+   "sourceBytes": 250000000,
+   "sourceMiB": 238.4,
+   "plannedOutputMiB": 357.9,
+   "filePeakMiB": 834.7,
+   "presets": {
+    "512 MiB": "refused: すでに書き出し済みの0 MiBに加えてこのファイルの処理に約835 MiBが必要で、処理メモリ上限512 MiBを超えます。ファイル数を減らすか、上限設定を変更してください。",
+    "1024 MiB": "runs",
+    "2048 MiB": "runs"
+   },
+   "unchangedOutputPassesCeiling": true
+  },
+  {
+   "label": "261,549,245 B (M4 PR #28, measured old writer)",
+   "sourceBytes": 261549245,
+   "sourceMiB": 249.4,
+   "plannedOutputMiB": 374.4,
+   "filePeakMiB": 873.3,
+   "presets": {
+    "512 MiB": "refused: すでに書き出し済みの0 MiBに加えてこのファイルの処理に約873 MiBが必要で、処理メモリ上限512 MiBを超えます。ファイル数を減らすか、上限設定を変更してください。",
+    "1024 MiB": "runs",
+    "2048 MiB": "runs"
+   },
+   "unchangedOutputPassesCeiling": true
+  }
+ ],
+ "largestAdmitted": {
+  "512 MiB": {
+   "bytes": 153316790,
+   "MiB": 146.2
+  },
+  "1024 MiB": {
+   "bytes": 306708480,
+   "MiB": 292.5
+  },
+  "2048 MiB": {
+   "bytes": 613491858,
+   "MiB": 585.1
+  }
+ },
+ "parse": [
+  {
+   "fixture": "f01-comparator-a1-150",
+   "sourceBytes": 261547235,
+   "objects": 19,
+   "streams": 10,
+   "streamBytes": 261543958,
+   "streamShare": 1,
+   "parsedGrowthBytes": 261738518,
+   "nonStreamPerObject": 10240,
+   "largestImageRgbaBytes": 69744884
+  },
+  {
+   "fixture": "f02-dense-drawing",
+   "sourceBytes": 767315,
+   "objects": 6,
+   "streams": 2,
+   "streamBytes": 766092,
+   "streamShare": 0.9984,
+   "parsedGrowthBytes": 783285,
+   "nonStreamPerObject": 2866,
+   "largestImageRgbaBytes": 69744884
+  },
+  {
+   "fixture": "f03-schedule",
+   "sourceBytes": 52309908,
+   "objects": 6,
+   "streams": 2,
+   "streamBytes": 52308702,
+   "streamShare": 1,
+   "parsedGrowthBytes": 51213111,
+   "nonStreamPerObject": 0,
+   "largestImageRgbaBytes": 69744884
+  },
+  {
+   "fixture": "f04-gray-scan",
+   "sourceBytes": 9998698,
+   "objects": 6,
+   "streams": 2,
+   "streamBytes": 9997472,
+   "streamShare": 0.9999,
+   "parsedGrowthBytes": 10014225,
+   "nonStreamPerObject": 2792,
+   "largestImageRgbaBytes": 69744884
+  },
+  {
+   "fixture": "f05-photo",
+   "sourceBytes": 3529162,
+   "objects": 6,
+   "streams": 2,
+   "streamBytes": 3527939,
+   "streamShare": 0.9997,
+   "parsedGrowthBytes": 3552046,
+   "nonStreamPerObject": 4018,
+   "largestImageRgbaBytes": 8699840
+  },
+  {
+   "fixture": "f06-jpeg",
+   "sourceBytes": 319369,
+   "objects": 6,
+   "streams": 2,
+   "streamBytes": 318150,
+   "streamShare": 0.9962,
+   "parsedGrowthBytes": 338809,
+   "nonStreamPerObject": 3443,
+   "largestImageRgbaBytes": 8699840
+  },
+  {
+   "fixture": "f07-mixed",
+   "sourceBytes": 2882509,
+   "objects": 10,
+   "streams": 4,
+   "streamBytes": 2880697,
+   "streamShare": 0.9994,
+   "parsedGrowthBytes": 2919686,
+   "nonStreamPerObject": 3899,
+   "largestImageRgbaBytes": 3840000
+  },
+  {
+   "fixture": "f08-shared",
+   "sourceBytes": 5282321,
+   "objects": 13,
+   "streams": 6,
+   "streamBytes": 5280136,
+   "streamShare": 0.9996,
+   "parsedGrowthBytes": 5305536,
+   "nonStreamPerObject": 1954,
+   "largestImageRgbaBytes": 7040000
+  },
+  {
+   "fixture": "f09-smask",
+   "sourceBytes": 2161411,
+   "objects": 7,
+   "streams": 3,
+   "streamBytes": 2160031,
+   "streamShare": 0.9994,
+   "parsedGrowthBytes": 2201760,
+   "nonStreamPerObject": 5961,
+   "largestImageRgbaBytes": 2160000
+  },
+  {
+   "fixture": "f10-structure",
+   "sourceBytes": 2106095,
+   "objects": 25,
+   "streams": 10,
+   "streamBytes": 2101338,
+   "streamShare": 0.9977,
+   "parsedGrowthBytes": 2170170,
+   "nonStreamPerObject": 2753,
+   "largestImageRgbaBytes": 2800000
+  },
+  {
+   "fixture": "f11-classes",
+   "sourceBytes": 2902771,
+   "objects": 34,
+   "streams": 21,
+   "streamBytes": 2897279,
+   "streamShare": 0.9981,
+   "parsedGrowthBytes": 2967737,
+   "nonStreamPerObject": 2072,
+   "largestImageRgbaBytes": 960000
+  },
+  {
+   "fixture": "f12-interpolate",
+   "sourceBytes": 6481722,
+   "objects": 9,
+   "streams": 4,
+   "streamBytes": 6480062,
+   "streamShare": 0.9997,
+   "parsedGrowthBytes": 6502000,
+   "nonStreamPerObject": 2438,
+   "largestImageRgbaBytes": 4320000
+  }
+ ],
+ "PER_OBJECT": 20480,
+ "f01": {
+  "sourceBytes": 261547235,
+  "objects": 19,
+  "streamBytes": 261543958,
+  "imageWorkBytes": 218245079,
+  "imageWorkBasis": "pako 2.1.0 (recommended path)",
+  "imageWorkTerms": {
+   "decodedSamples": 52308663,
+   "predictedR1Body": 52312172,
+   "largestR2Form": 8723374,
+   "bestCandidateKept": 52308663,
+   "candidateInProgressUnderRuntimeCap": 52325047,
+   "pakoStateBytes": 267160
+  }
+ },
+ "pako2": {
+  "version": "2.1.0",
+  "chunkSize": 16384,
+  "stateBytes": 267160
+ },
+ "pakoProbe": {
+  "pakoVersion": "2.1.0",
+  "inputBytes": 52308663,
+  "oneShotBytes": 175916,
+  "streamingBytes": 175916,
+  "streamingEqualsOneShot": true,
+  "streamingChunks": 11,
+  "streamingChunksAreDistinctBuffers": true,
+  "oneShotPeakHeldBytes": 356140,
+  "streamingPeakHeldBytes": 180224,
+  "cap": {
+   "capBytes": 87958,
+   "aborted": true,
+   "emittedBytes": 98304,
+   "withinCapPlusOneChunk": true
+  }
+ },
+ "policies": [
+  {
+   "variant": "B1 pdf-lib parse (copies streams), source held",
+   "fixedMiB": 707.4,
+   "policyP_MiB": 1455.7,
+   "acceptsP": [
+    false,
+    false,
+    true
+   ],
+   "parsePeakMiB": 707.4,
+   "policyR": [
+    {
+     "presetMiB": 512,
+     "arithmeticAdmits": false,
+     "headroomAtPeakMiB": -195.4,
+     "reserveMiB": -195.4
+    },
+    {
+     "presetMiB": 1024,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 316.6,
+     "reserveMiB": 316.6
+    },
+    {
+     "presetMiB": 2048,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 1340.6,
+     "reserveMiB": 1340.6
+    }
+   ]
+  },
+  {
+   "variant": "B1 pdf-lib parse, source released after parse (re-read the File for the unchanged fallback)",
+   "fixedMiB": 457.9,
+   "policyP_MiB": 1206.2,
+   "acceptsP": [
+    false,
+    false,
+    true
+   ],
+   "parsePeakMiB": 499.2,
+   "policyR": [
+    {
+     "presetMiB": 512,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 12.8,
+     "reserveMiB": 54.1
+    },
+    {
+     "presetMiB": 1024,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 524.8,
+     "reserveMiB": 566.1
+    },
+    {
+     "presetMiB": 2048,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 1548.8,
+     "reserveMiB": 1590.1
+    }
+   ]
+  },
+  {
+   "variant": "B2 owned parser (streams are views of the source)",
+   "fixedMiB": 457.9,
+   "policyP_MiB": 1206.2,
+   "acceptsP": [
+    false,
+    false,
+    true
+   ],
+   "parsePeakMiB": 457.9,
+   "policyR": [
+    {
+     "presetMiB": 512,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 54.1,
+     "reserveMiB": 54.1
+    },
+    {
+     "presetMiB": 1024,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 566.1,
+     "reserveMiB": 566.1
+    },
+    {
+     "presetMiB": 2048,
+     "arithmeticAdmits": true,
+     "headroomAtPeakMiB": 1590.1,
+     "reserveMiB": 1590.1
+    }
+   ]
+  }
+ ],
+ "stage1": {
+  "policyRConcept": "recommended",
+  "boundary": {
+   "inputs": "single file only: Optimizer v2 with more than one selected file is refused explicitly (no silent first-file processing)",
+   "why": "the UI holds every selected source in planned[] before running (PdfTools.tsx:219); releasing one source after parse bounds nothing while the others stay held",
+   "otherProcessorTools": "batch behaviour unchanged",
+   "batchAndZip": "deferred (needs its own sequential source-ownership + ZIP memory model and gate)"
+  },
+  "variant": "B1 pdf-lib parse, source released after parse (re-read the File for the unchanged fallback)",
+  "~250 MiB source": {
+   "512 MiB": {
+    "status": "DEFERRED - not yet proven",
+    "arithmeticAdmits": true,
+    "headroomAtPeakMiB": 12.8,
+    "unproven": [
+     "parse-instant headroom",
+     "PER_OBJECT measured on the synthetic corpus only",
+     "browser heap / GC / Blob not measured",
+     "pako 2.1.0 output held by a run-time cap that is a design contract, not yet implemented"
+    ]
+   },
+   "1024 MiB": {
+    "status": "required preset in Stage 1",
+    "headroomAtPeakMiB": 524.8,
+    "reserveMiB": 566.1
+   }
+  }
+ }
+}

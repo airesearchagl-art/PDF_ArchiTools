@@ -1,0 +1,42 @@
+{
+ "ok": true,
+ "results": {
+  "the unbroken output passes": true,
+  "one image sample changed": {
+   "caught": true,
+   "by": "p1 image 0: 1 samples differ (max 64)"
+  },
+  "an annotation removed": {
+   "caught": true,
+   "by": "p1 annotations differ"
+  },
+  "a link target changed": {
+   "caught": true,
+   "by": "p1 annotations differ"
+  },
+  "a form value changed": {
+   "caught": true,
+   "by": "p1 operator stream differs (56 vs 56 ops, paths 3 vs 3)"
+  },
+  "the title changed": {
+   "caught": true,
+   "by": "document metadata differs"
+  },
+  "a text string changed": {
+   "caught": true,
+   "by": "p1 operator stream differs (56 vs 56 ops, paths 3 vs 3)"
+  },
+  "the page rotated": {
+   "caught": true,
+   "by": "p1 rotate 90 != 0"
+  },
+  "the CropBox moved": {
+   "caught": true,
+   "by": "p1 view 10,10,510,710 != 0,0,595.28,841.89"
+  },
+  "a vector path added": {
+   "caught": true,
+   "by": "p1 operator stream differs (64 vs 56 ops, paths 4 vs 3)"
+  }
+ }
+}

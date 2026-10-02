@@ -1,0 +1,81 @@
+{
+ "command": "node harness/gate.mjs --compare g1 g2",
+ "exitCode": 0,
+ "stdout": [
+  "structural fields identical: true"
+ ],
+ "structuralIdentical": true,
+ "structuralKeys": [
+  "corpus",
+  "cells",
+  "currentModel",
+  "largestAdmitted",
+  "policies",
+  "parse",
+  "imageWork",
+  "pakoProbe",
+  "stage1",
+  "selftest"
+ ],
+ "runs": {
+  "g1": {
+   "head": "479114a1cec6346042f9e86b73fdb5e906c65114",
+   "srcDirty": false,
+   "pass": true,
+   "checks": {
+    "everyLosslessCellVerified": true,
+    "noCellFailed": true,
+    "selftestCatchesEveryBreak": true,
+    "currentRefusedAt512": true,
+    "currentStaysLarge": true,
+    "primaryLosslessOver90pctAndUnder5MB": true,
+    "lossyNeverChosenWhereLosslessIsSmaller": true,
+    "imageWorkPricedForPako2": true,
+    "pakoStreamingEqualsOneShot": true,
+    "pakoRuntimeCapFires": true,
+    "stage1Large512Deferred": true,
+    "stage1SingleFileOnly": true,
+    "interpolateBlocksR2": true,
+    "matrixGrewNotShrank": true
+   }
+  },
+  "g2": {
+   "head": "479114a1cec6346042f9e86b73fdb5e906c65114",
+   "srcDirty": false,
+   "pass": true,
+   "checks": {
+    "everyLosslessCellVerified": true,
+    "noCellFailed": true,
+    "selftestCatchesEveryBreak": true,
+    "currentRefusedAt512": true,
+    "currentStaysLarge": true,
+    "primaryLosslessOver90pctAndUnder5MB": true,
+    "lossyNeverChosenWhereLosslessIsSmaller": true,
+    "imageWorkPricedForPako2": true,
+    "pakoStreamingEqualsOneShot": true,
+    "pakoRuntimeCapFires": true,
+    "stage1Large512Deferred": true,
+    "stage1SingleFileOnly": true,
+    "interpolateBlocksR2": true,
+    "matrixGrewNotShrank": true
+   }
+  }
+ },
+ "measuredOnlyNotCompared": [
+  "steps",
+  "cells",
+  "parseGrowth",
+  "PER_OBJECT"
+ ],
+ "sha256": {
+  "gate-g1.json": "dc5f44fe169cacac9c0dce99d5128bde80f6ea53b6d4c17ac8b0ca31181c49c7",
+  "gate-g2.json": "48d1d20b4d3a72666e7258d40699d77719c6b0e09575242be23b1926e618c3f6",
+  "matrix-g1.jsonl": "c5b8b78f6fe64f529e2d3cc7f2074193c6d2f1e164fdb7a12ce82bbfcdc0669e",
+  "matrix-g2.jsonl": "39549ad31ef74d3240d8a6ae8e59154c6e22409734d2ab7f1d28d03411d0c93a",
+  "selftest-g1.json": "8f112d4ecc092a44406253ba14c970e78df7336212e574c4cf6340daea10ef6d",
+  "selftest-g2.json": "8f112d4ecc092a44406253ba14c970e78df7336212e574c4cf6340daea10ef6d",
+  "model.json": "a78b100598c9439a7cd139fd8783abbe45f59c542a883ff18243ce535a8b510b"
+ },
+ "headAtCompare": "479114a1cec6346042f9e86b73fdb5e906c65114",
+ "srcDirtyAtCompare": false
+}

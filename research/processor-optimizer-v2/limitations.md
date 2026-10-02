@@ -37,6 +37,32 @@ In the order they were found. Nothing is rewritten after the fact.
    signatures (refused, unchanged), XFA, very large object counts (thousands of
    pages), images inside annotation appearance streams, inline images, Type3
    glyph images, JBIG2/CCITT/JPX decoding, a batch/ZIP run of optimize.
+8. **~250 MiB at 512 MiB is not proven (RF-30-01).** With the largest image
+   priced for pako 2.1.0, releasing the source after parse leaves the
+   arithmetic inside 512 MiB, but the parse instant has only ~13 MiB of
+   headroom, the per-object constant comes from this synthetic corpus only, and
+   browser heap / GC / Blob behaviour was not measured. Stage 1 therefore
+   requires the 1 GiB preset for that size; 512 MiB is deferred to a later
+   bounded-memory phase. The policy-R figures in `model.json` are arithmetic,
+   not a support claim.
+9. **No pako 2.1.0 output bound is claimed.** The in-progress candidate is held
+   by a run-time cap (count `onData` bytes, stop when the candidate can no
+   longer win). The probe shows the cap firing within one 16 KiB chunk on one
+   input; that the production code enforces it is a contract for the
+   implementation phase, not something this research proves. The research
+   prototype still calls one-shot `pako.deflate`; the probe shows the
+   streaming path emits the same bytes. Production's `deflateUpperBound` /
+   `PAKO_STATE_BYTES` are derived from pako 1.0.11 (pdf-lib's own copy) and
+   are not reused for 2.1.0.
+10. **Stage 1 is single file only (RF-30-03).** The UI holds every selected
+   source in `planned[]` before running, so releasing one source after parse
+   bounds nothing in a batch. Multi-file Optimizer v2 is refused explicitly in
+   Stage 1; batch / ZIP is deferred and needs its own source-ownership + ZIP
+   memory model and gate. This is recorded as a contract; no UI was built.
+11. **`/Interpolate true` (RF-30-02).** R2 is forbidden for such images (R1
+   only). Whether a viewer's interpolated rendering would actually differ after
+   an exact representation change was not measured; the rule is conservative
+   by design.
 
 ## Instrument defects found (and what was done)
 
