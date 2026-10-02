@@ -68,3 +68,39 @@ export {
     rotationsOf,
 } from './runners';
 export type { FlattenSettings, LayerSettings } from './runners';
+export {
+    runOptimizeV2,
+    preflightOptimize,
+    readTrailerSize,
+    sourceFromFile,
+} from './optimize-stage1';
+export type {
+    OptimizeSource, OptimizeResult, OptimizeSummary, OptimizeImageReport, OptimizeOptions, OptimizeHooks,
+} from './optimize-stage1';
+export {
+    OPTIMIZE_USABLE_NUMERATOR,
+    OPTIMIZE_USABLE_DENOMINATOR,
+    PER_OBJECT_BYTES,
+    PAKO2,
+    PAKO2_DEFLATE_STATE_BYTES,
+    PAKO2_INFLATE_STATE_BYTES,
+    PUBLISH_THRESHOLD_PERCENT,
+    ROW_BLOCK_ROWS,
+    OptimizeLedger,
+    admitPreParse,
+    imageWorkBytes,
+    meetsPublicationThreshold,
+    parsedFixedBytes,
+    preParseNeed,
+    usableBytes,
+} from './optimize-budget';
+export {
+    censusImages,
+    compressRows,
+    decodeAsciiHex,
+    decodeExactSamples,
+    deviceGrayIsExact,
+} from './image-optimize';
+export type { ImageEntry, ImageDecision, EncodedChunks, WorkControl } from './image-optimize';
+export { ChunkedDocumentWriter, writeDocument } from './chunked-writer';
+export type { StreamReplacement, WriterState, WriteControl } from './chunked-writer';

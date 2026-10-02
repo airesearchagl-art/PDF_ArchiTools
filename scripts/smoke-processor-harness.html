@@ -47,7 +47,7 @@ import {
     runFlatten,
     runLayer,
     runMargin,
-    runOptimizeLossless,
+    runOptimizeV2,
     snapshotKey,
     unicodePathExtraBytes,
     withConfirmation,
@@ -291,9 +291,22 @@ window.__processor = {
       } else if (operation === 'margin') {
         out = await runMargin(bytes.slice(), { scale: over.scale ?? 0.8, position: over.position ?? 'center' });
       } else if (operation === 'optimize') {
-        const r = await runOptimizeLossless(bytes.slice());
-        out = r.bytes;
-        return { ran: true, code: 'SUCCEEDED', changed: r.changed, before, after: await structureOf(out) };
+        // 最適化 v2 (D-028 Stage 1), the path the UI runs: the derivative when
+        // it is at least 1% smaller, otherwise the source bytes unchanged.
+        const source = bytes.slice();
+        const r = await runOptimizeV2({
+          size: source.length,
+          read: async () => source.slice(),
+          readRange: async (s, e) => source.slice(s, e),
+        }, { memoryBytes: settings.memoryBudgetBytes, ceilings: defaultCeilings(settings.memoryBudgetBytes) });
+        if (r.kind === 'optimized') {
+          out = new Uint8Array(r.outputBytes);
+          let at = 0;
+          for (const c of r.chunks) { out.set(c, at); at += c.length; }
+        } else {
+          out = source;
+        }
+        return { ran: true, code: 'SUCCEEDED', changed: r.kind === 'optimized', before, after: await structureOf(out) };
       } else if (operation === 'normalize-size') {
         out = (await normalizePageSize(fileOf(name, bytes.slice()), { target: over.target ?? 'A1' })).data;
       } else if (operation === 'title-block-update') {

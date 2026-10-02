@@ -193,7 +193,7 @@ try {
         return out;
     });
     console.log(`  ${JSON.stringify(versions)}`);
-    check('PDF加工 shows v1.3.1', versions.processor === '1.3.1', JSON.stringify(versions));
+    check('PDF加工 shows v1.4.0', versions.processor === '1.4.0', JSON.stringify(versions));
     check('PDFテキスト化 shows v1.7.0', versions.textifier === '1.7.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
@@ -369,8 +369,12 @@ try {
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
     check('and the newest entries are the ones just added',
-        historyDates[0] === '20260929',
+        historyDates[0] === '20261002',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
+    check('the PDF加工 1.4.0 entry says lossless, one file at a time, the original under 1%, and 1 GiB for ~250 MiB',
+        historyText.includes('1.4.0') && historyText.includes('無損失') && historyText.includes('1ファイルずつ')
+        && historyText.includes('1%以上小さくならなかった場合は、元のファイルをそのまま返します')
+        && historyText.includes('1 GiB以上'));
     check('the Comparator 1.2.0 entry says the resolution is never lowered and nothing partial is written',
         historyText.includes('PDF比較') && historyText.includes('1.2.0')
         && historyText.includes('自動で下げたり減らしたりすることはありません')

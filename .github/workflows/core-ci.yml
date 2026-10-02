@@ -108,6 +108,7 @@ jobs:
           node scripts/make-comparator-a1-fixtures.mjs
           node scripts/make-comparator-members-fixtures.mjs
           node scripts/make-processor-fixtures.mjs
+          node scripts/make-processor-optimizer-v2-fixtures.mjs
           node scripts/make-m6-split-merge-fixtures.mjs
           node scripts/make-m6-remediation-fixtures.mjs
           node scripts/make-m6-round3-fixtures.mjs
@@ -207,6 +208,14 @@ jobs:
       # visible only by driving the built app.
       - name: Processor UI ownership
         run: node scripts/smoke-processor-ui.mjs
+
+      # 最適化 v2 (D-028 Stage 1), compact and deterministic: every rewritten
+      # image is decoded by pdf.js and compared, structure is read back by
+      # pdf.js and pdf-lib, the xref is checked byte by byte, and each judge is
+      # shown a broken artifact it must reject. The ~261 MB A1 x 5 run is local
+      # heavy evidence (smoke-processor-optimizer-v2-heavy.mjs), not CI.
+      - name: Processor Optimizer v2
+        run: node scripts/smoke-processor-optimizer-v2.mjs
 
       # Split / Merge, whose old contract was "it produced bytes, so it worked".
       # Most of what this asserts is that the tool refuses, by name, before it

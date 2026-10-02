@@ -70,6 +70,11 @@ export const PLAN_STATUS = {
     OVER_OUTPUT_BUDGET: 'OVER_OUTPUT_BUDGET',
     CANVAS_UNAVAILABLE: 'CANVAS_UNAVAILABLE',
     CANCELLED: 'CANCELLED',
+    /**
+     * 最適化 v2 (D-028 Stage 1) handles one PDF per run. More than one is
+     * refused as a whole — never quietly narrowed to the first file.
+     */
+    SINGLE_FILE_ONLY: 'SINGLE_FILE_ONLY',
 } as const;
 
 export type PlanStatus = typeof PLAN_STATUS[keyof typeof PLAN_STATUS];
