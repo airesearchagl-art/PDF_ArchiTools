@@ -33,7 +33,7 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
     },
     tools: {
         version: '1.4.0',
-        lastUpdate: '2026/10/02',
+        lastUpdate: '2026/10/03',
         changelog: '最適化を画像対応の無損失最適化（v2）へ更新。埋め込み画像を画質・解像度を保ったまま再圧縮し、'
             + '1%以上小さくならない場合は元のファイルを返す。最適化は1ファイルずつ処理'
     },

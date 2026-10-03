@@ -369,8 +369,28 @@ try {
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
     check('and the newest entries are the ones just added',
-        historyDates[0] === '20261002',
+        historyDates[0] === '20261003',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
+    // The banner above the guide is written by hand, so it can fall behind the
+    // history. Tie it, the newest entry and the PDF加工 header to one release.
+    const releaseHeads = await page.evaluate(() => [...document.querySelectorAll('#release-history h4')]
+        .map((h) => (h.innerText || '').replace(/\s+/g, ' ').trim()));
+    const processor140 = releaseHeads.filter((h) => h.includes('PDF加工') && h.includes('1.4.0'));
+    check('exactly one PDF加工 1.4.0 entry, dated 2026/10/03',
+        processor140.length === 1 && processor140[0].startsWith('2026/10/03'), JSON.stringify(processor140));
+    check('and it is the newest entry', releaseHeads[0] === processor140[0], releaseHeads[0]);
+    const banners = await page.evaluate(() => [...document.querySelectorAll('p')]
+        .map((p) => (p.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter((s) => s.includes('最近の更新')));
+    const banner = banners[0] ?? '';
+    console.log(`  banner: ${banner}`);
+    check('there is one 最近の更新 banner', banners.length === 1, `${banners.length}`);
+    check('the banner names PDF最適化 and PDF加工 v1.4.0',
+        banner.includes('PDF最適化') && banner.includes('PDF加工 v1.4.0'), banner);
+    check('the banner no longer names Word / PDFテキスト化 v1.5.0 as the latest update',
+        !banner.includes('Word') && !banner.includes('PDFテキスト化') && !banner.includes('v1.5.0'), banner);
+    check('the banner stays out of implementation detail',
+        !/Hybrid|Policy R|RF-?\d|pako|\/Size/.test(banner), banner);
     check('the PDF加工 1.4.0 entry says lossless, one file at a time, the original under 1%, and 1 GiB for ~250 MiB',
         historyText.includes('1.4.0') && historyText.includes('無損失') && historyText.includes('1ファイルずつ')
         && historyText.includes('1%以上小さくならなかった場合は、元のファイルをそのまま返します')

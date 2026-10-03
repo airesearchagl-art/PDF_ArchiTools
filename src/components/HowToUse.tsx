@@ -25,7 +25,7 @@ interface ReleaseNote {
 
 const releaseHistory: ReleaseNote[] = [
     {
-        date: '2026/10/02',
+        date: '2026/10/03',
         tool: 'PDF加工',
         version: '1.4.0',
         changes: [
@@ -279,7 +279,7 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: 0, fontSize: '0.85em', color: '#9fd3ff' }}>
                     <History size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>Word（.docx）書き出し</b>（PDFテキスト化 v1.5.0）
+                    最近の更新: <b>PDF最適化 v2</b>（PDF加工 v1.4.0）
                     — <a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>
                 </p>
             </div>
