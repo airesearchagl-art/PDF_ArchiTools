@@ -39,6 +39,10 @@ if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
 if (!fs.existsSync(path.join(FIXTURES, 'corpus.json'))) {
     execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'make-processor-fixtures.mjs')], { stdio: 'inherit' });
 }
+const OV2 = path.join(ROOT, 'test-fixtures', 'processor-optimizer-v2');
+if (!fs.existsSync(path.join(OV2, 'corpus.json'))) {
+    execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'make-processor-optimizer-v2-fixtures.mjs')], { stdio: 'inherit' });
+}
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -494,6 +498,99 @@ try {
         states7.some((s) => s.includes('処理できません'))
         && shown.includes('OVER_OUTPUT_BUDGET'),
         states7.join(','));
+
+    // ---- 8. 最適化 v2 (D-028 Stage 1): one file, lossless, original under 1% --
+    console.log('\n=== 8. 最適化 v2: single file, ≥1% or the original ===');
+    const fresh = async (tool) => {
+        await page.goto(ORIGIN, { waitUntil: 'networkidle0' });
+        await openProcessor();
+        await pickTool(tool);
+        clearDownloads();
+    };
+    const waitForDownload = async (ms = 60_000) => {
+        for (let t = 0; t < ms; t += 250) {
+            const done = downloadsNow();
+            if (done.length > 0) return done;
+            await settle(250);
+        }
+        return [];
+    };
+    const summaryText = () => page.evaluate(() => document.querySelector('[data-optimize-summary]')?.textContent ?? '');
+    const memoryChange = async (bytes) => page.evaluate((v) => {
+        const select = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === '536870912'));
+        if (!select) return false;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, String(v));
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+    }, bytes);
+
+    await fresh('最適化');
+    const info = await page.evaluate(() => document.querySelector('[data-optimize-info]')?.textContent ?? '');
+    check('the panel says one file at a time, lossless, 1%, and 1 GiB for ~250 MiB',
+        info.includes('1ファイルずつ') && info.includes('無損失') && info.includes('1%') && info.includes('1 GiB') && info.includes('JPEGへの変換'),
+        info.slice(0, 80));
+    await upload(path.join(OV2, 'comparator-like.pdf'));
+    await run();
+    const got8a = await waitForDownload();
+    check('one PDF: the optimized file is saved with _optimized', got8a.length === 1 && got8a[0] === 'comparator-like_optimized.pdf', got8a.join(','));
+    const srcSize = fs.statSync(path.join(OV2, 'comparator-like.pdf')).size;
+    const outSize = got8a[0] ? fs.statSync(path.join(downloads, got8a[0])).size : -1;
+    check('and it is substantially smaller', outSize > 0 && outSize * 100 <= srcSize * 99, `${srcSize} -> ${outSize}`);
+    const s8a = await rowStates();
+    const sum8a = await summaryText();
+    check('the row is 完了 and the summary reports sizes, images and no quality change',
+        s8a.some((s) => s.includes('完了')) && sum8a.includes('削減') && sum8a.includes('画質・解像度の変更: なし') && sum8a.includes('再圧縮'),
+        sum8a);
+
+    await fresh('最適化');
+    await upload(path.join(OV2, 'noise.pdf'));
+    await run();
+    const got8b = await waitForDownload();
+    const original = fs.readFileSync(path.join(OV2, 'noise.pdf'));
+    const returned = got8b[0] ? fs.readFileSync(path.join(downloads, got8b[0])) : Buffer.alloc(0);
+    check('under 1%: the original comes back under its own name', got8b.length === 1 && got8b[0] === 'noise.pdf', got8b.join(','));
+    check('byte for byte', Buffer.compare(original, returned) === 0, `${original.length} / ${returned.length}`);
+    const reason8b = await page.evaluate(() => document.querySelector('.file-list')?.textContent ?? '');
+    check('and the summary says the original was kept', (await summaryText()).includes('元のファイルのまま'), reason8b.slice(0, 80));
+
+    await fresh('最適化');
+    await upload(path.join(OV2, 'comparator-like.pdf'), path.join(OV2, 'flate-rgb.pdf'));
+    const warn = await page.evaluate(() => document.querySelector('[data-optimize-multi-warning]')?.textContent ?? '');
+    check('two files selected: the panel warns before anything runs', warn.includes('1件ずつ'), warn);
+    await run();
+    await settle(3000);
+    const s8c = await rowStates();
+    const shown8c = await page.evaluate(() => document.querySelector('.file-list')?.textContent ?? '');
+    check('two files: both refused, SINGLE_FILE_ONLY, the reason in the row',
+        s8c.length === 2 && s8c.every((s) => s.includes('処理できません')) && shown8c.includes('SINGLE_FILE_ONLY') && shown8c.includes('1ファイルずつ'),
+        s8c.join(','));
+    probe('and nothing was written — not the first file, not a ZIP', !downloadStarted(), fs.readdirSync(downloads).join(','));
+
+    // The other tools keep their batch: the same two files through the overlay.
+    await pickTool('半透明レイヤ');
+    clearDownloads();
+    await run();
+    const got8d = await waitForDownload();
+    check('半透明レイヤ追加 still takes both files and writes one ZIP', got8d.length === 1 && got8d[0].endsWith('.zip'), got8d.join(','));
+
+    await fresh('最適化');
+    await upload(path.join(OV2, 'medium.pdf'));
+    await run();
+    let running = false;
+    for (let t = 0; t < 40 && !running; t += 1) {
+        const st = await rowStates();
+        running = st.some((s) => s.includes('処理中'));
+        if (!running) await settle(50);
+    }
+    check('a long optimization is genuinely in flight', running);
+    check('the memory preset can be changed mid-run', await memoryChange(1024 * 1024 * 1024));
+    await settle(6000);
+    const s8e = await rowStates();
+    probe('changing it supersedes the run: no file, no 完了, the row says 中止',
+        !downloadStarted() && !s8e.some((s) => s.includes('完了')) && s8e.some((s) => s.includes('中止')),
+        `${s8e.join(',')} / ${fs.readdirSync(downloads).join(',')}`);
 
     check('no page error during any of it', pageErrors.length === 0, pageErrors.join(' | '));
 

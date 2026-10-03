@@ -372,7 +372,7 @@ try {
     probe('Margin refuses an applied signature', marginSigned.ran === false && marginSigned.code === 'SIGNATURE_UNSAFE');
 
     // ---- 7. Optimize ----------------------------------------------------------
-    console.log('\n=== 7. 最適化 (O2, lossless) ===');
+    console.log('\n=== 7. 最適化 (v2 Stage 1, lossless — the path the UI runs) ===');
     const optText = await call('run', 'text-a4', 'optimize');
     check('text, vectors and structure all survive',
         optText.ran

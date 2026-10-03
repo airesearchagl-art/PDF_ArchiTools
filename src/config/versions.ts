@@ -32,9 +32,10 @@ export const TOOL_VERSIONS: Record<string, ToolVersion> = {
             + '書き出し設定に、作業メモリの見積りと出力サイズの安全上限を表示'
     },
     tools: {
-        version: '1.3.1',
-        lastUpdate: '2026/09/08',
-        changelog: 'PDF表示処理に必要なPDF.js workerをアプリ同梱のlocal workerへ統一'
+        version: '1.4.0',
+        lastUpdate: '2026/10/02',
+        changelog: '最適化を画像対応の無損失最適化（v2）へ更新。埋め込み画像を画質・解像度を保ったまま再圧縮し、'
+            + '1%以上小さくならない場合は元のファイルを返す。最適化は1ファイルずつ処理'
     },
     textifier: {
         version: '1.7.0',

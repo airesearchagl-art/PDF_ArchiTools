@@ -222,9 +222,43 @@ function walkFieldEntries(
  * fact about it, and the planner decides what to do with that.
  */
 export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
-    const facts: SourceFacts = {
+    const facts = emptyFacts(bytes.length);
+    let doc: PDFDocument;
+    try {
+        // `updateMetadata: false` matters here as well as at save time: loading
+        // with the default rewrites Producer and ModDate, and this module is
+        // supposed to observe the document, not edit it. H12.
+        doc = await PDFDocument.load(bytes, { updateMetadata: false, ignoreEncryption: false });
+    } catch (error) {
+        return unreadableFacts(bytes.length, error);
+    }
+    return inspectLoaded(doc, facts);
+}
+
+/**
+ * The same facts, for a document the caller has already parsed.
+ *
+ * Optimizer v2 parses once and lets go of the source buffer as soon as pdf-lib
+ * returns, so it cannot hand this module the bytes a second time. The answers
+ * are the ones `readSourceFacts` gives for the same file.
+ */
+export function readSourceFactsFromDocument(doc: PDFDocument, sourceBytes: number): SourceFacts {
+    return inspectLoaded(doc, emptyFacts(sourceBytes));
+}
+
+/** What `readSourceFacts` reports when pdf-lib could not parse the file. */
+export function unreadableFacts(sourceBytes: number, error: unknown): SourceFacts {
+    const facts = emptyFacts(sourceBytes);
+    const message = String((error as Error)?.message ?? error);
+    facts.loadError = message;
+    facts.encrypted = /encrypt/i.test(message);
+    return facts;
+}
+
+function emptyFacts(sourceBytes: number): SourceFacts {
+    return {
         readable: false,
-        sourceBytes: bytes.length,
+        sourceBytes,
         loadError: null,
         encrypted: false,
         pageCount: 0,
@@ -241,26 +275,16 @@ export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
         formError: null,
         pages: [],
     };
+}
+
+function inspectLoaded(doc: PDFDocument, facts: SourceFacts): SourceFacts {
     const derive = (): SourceFacts => {
         facts.hasSignatureField = facts.signatureFields.length > 0;
         facts.hasAppliedSignature = facts.signatureFields.some((f) => f.signed);
         return facts;
     };
 
-    let doc: PDFDocument;
-    try {
-        // `updateMetadata: false` matters here as well as at save time: loading
-        // with the default rewrites Producer and ModDate, and this module is
-        // supposed to observe the document, not edit it. H12.
-        doc = await PDFDocument.load(bytes, { updateMetadata: false, ignoreEncryption: false });
-        facts.readable = true;
-    } catch (error) {
-        const message = String((error as Error)?.message ?? error);
-        facts.loadError = message;
-        facts.encrypted = /encrypt/i.test(message);
-        return derive();
-    }
-
+    facts.readable = true;
     facts.encrypted = doc.isEncrypted;
 
     // Loading is not the same as being usable: a damaged cross-reference region

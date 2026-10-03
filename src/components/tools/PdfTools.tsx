@@ -29,13 +29,15 @@ import {
     runFlatten,
     runLayer,
     runMargin,
-    runOptimizeLossless,
+    runOptimizeV2,
     snapshotKey,
+    sourceFromFile,
     withConfirmation,
 } from '../../utils/processor';
 import type {
-    FileResult, Plan, PlanStatus, ProcessorOperation, RunSnapshot, StructureLoss,
+    FileResult, OptimizeSummary, Plan, PlanStatus, ProcessorOperation, RunSnapshot, RunToken, StructureLoss,
 } from '../../utils/processor';
+import type { Ceilings } from '../../utils/processor';
 
 type ToolType = ProcessorOperation;
 
@@ -67,7 +69,16 @@ interface ProcessFile {
     reason?: string;
     summary?: NormalizeSummary;
     titleBlockSummary?: TitleBlockSummary;
+    optimizeSummary?: OptimizeSummary;
 }
+
+/** 最適化 v2 handles one PDF per run (D-028 Stage 1). */
+const OPTIMIZE_SINGLE_FILE_REASON = '最適化 v2 は現在1ファイルずつ処理します。'
+    + '複数のファイルが選択されているため、どのファイルも処理していません。1件だけ残して実行してください。';
+
+const formatBytes = (n: number) => (n >= 1048576
+    ? `${(n / 1048576).toFixed(1)} MiB`
+    : `${(n / 1024).toFixed(1)} KiB`);
 
 const TOOL_LABEL: Record<ToolType, string> = {
     layer: '半透明レイヤ追加',
@@ -200,7 +211,7 @@ export function PdfTools() {
         const token = ownership.current.begin(snapshot);
         setIsProcessing(true);
         setBatchNote(null);
-        setFiles(prev => prev.map(f => ({ ...f, status: 'planning', progress: 5, code: undefined, reason: undefined, summary: undefined, titleBlockSummary: undefined })));
+        setFiles(prev => prev.map(f => ({ ...f, status: 'planning', progress: 5, code: undefined, reason: undefined, summary: undefined, titleBlockSummary: undefined, optimizeSummary: undefined })));
 
         // The output ceiling can be lowered by the address bar and never raised,
         // so a gate can drive the built application into a publication its own
@@ -209,6 +220,13 @@ export function PdfTools() {
             memoryBudget,
             typeof window === 'undefined' ? '' : window.location.search,
         );
+
+        // 最適化 v2 has its own lane: one File, never read into `planned[]`.
+        if (activeTool === 'optimize') {
+            await runOptimizeLane(token, ceilings);
+            return;
+        }
+
         const results: FileResult[] = [];
 
         try {
@@ -338,9 +356,9 @@ export function PdfTools() {
                     } else if (activeTool === 'margin') {
                         out = await runMargin(bytes, { scale: marginScale, position: marginPosition }, token);
                     } else {
-                        const optimized = await runOptimizeLossless(bytes, token);
-                        out = optimized.bytes;
-                        if (!optimized.changed) suffix = '';
+                        // 最適化 runs in its own single-file lane above and
+                        // never reaches the batch loop.
+                        throw new ProcessorError('この操作はここでは実行しません。', PLAN_STATUS.UNSUPPORTED_DOCUMENT);
                     }
 
                     token.assertCurrent();
@@ -396,9 +414,7 @@ export function PdfTools() {
                         name: row.file.name,
                         status: FILE_RESULT.SUCCEEDED,
                         code: 'SUCCEEDED',
-                        reason: activeTool === 'optimize' && suffix === ''
-                            ? '再保存しても小さくならなかったため、元のファイルをそのまま返しました。'
-                            : '完了しました。',
+                        reason: '完了しました。',
                         bytes: out,
                         outputName,
                     });
@@ -484,6 +500,89 @@ export function PdfTools() {
             const cancelled = error instanceof ProcessorError && error.code === PLAN_STATUS.CANCELLED;
             setFiles(prev => prev.map(f => (
                 f.status === 'planning' || f.status === 'processing'
+                    ? { ...f, status: cancelled ? 'cancelled' : 'failed', progress: 100, reason: error instanceof Error ? error.message : String(error) }
+                    : f
+            )));
+            setBatchNote(cancelled
+                ? '設定またはファイルが変更されたため、処理を中止しました。書き出しは行っていません。'
+                : `処理を中止しました: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    /**
+     * 最適化 v2 (D-028 Stage 1): exactly one PDF.
+     *
+     * The File stays the source of truth. Its bytes are read once, inside the
+     * optimizer's parse, and nothing here keeps them: when the result is not
+     * worth handing over, the File itself is what gets saved, byte for byte.
+     */
+    const runOptimizeLane = async (token: RunToken, ceilings: Ceilings) => {
+        try {
+            if (files.length !== 1) {
+                setFiles(prev => prev.map(f => ({
+                    ...f, status: 'refused', progress: 100,
+                    code: PLAN_STATUS.SINGLE_FILE_ONLY, reason: OPTIMIZE_SINGLE_FILE_REASON,
+                })));
+                setBatchNote(OPTIMIZE_SINGLE_FILE_REASON);
+                return;
+            }
+            const row = files[0];
+            setRow(row.id, { status: 'processing', progress: 10 });
+            try {
+                const result = await runOptimizeV2(sourceFromFile(row.file), {
+                    memoryBytes: memoryBudget,
+                    ceilings,
+                    token,
+                    hooks: {
+                        afterImage: (i, total) => {
+                            setRow(row.id, { progress: 10 + Math.round((80 * (i + 1)) / Math.max(1, total)) });
+                        },
+                    },
+                });
+                token.assertCurrent();
+
+                const outputBytes = result.kind === 'optimized' ? result.outputBytes : row.file.size;
+                const actual = checkActualOutput(outputBytes, ceilings);
+                if (!actual.ok) {
+                    setRow(row.id, {
+                        status: 'refused', progress: 100,
+                        code: PLAN_STATUS.OVER_OUTPUT_BUDGET, reason: actual.reason,
+                        optimizeSummary: result.summary,
+                    });
+                    return;
+                }
+                const reason = result.kind === 'optimized'
+                    ? '完了しました。'
+                    : '1%以上の縮小が得られなかったため、元のファイルをそのまま返しました（意味のある縮小は得られませんでした）。';
+                setRow(row.id, {
+                    status: 'processed', progress: 90, code: 'SUCCEEDED', reason, optimizeSummary: result.summary,
+                });
+
+                // ---- publish, and only if this run is still the one that matters
+                const blob = result.kind === 'optimized'
+                    ? new Blob(result.chunks as BlobPart[], { type: 'application/pdf' })
+                    : row.file;
+                const name = result.kind === 'optimized'
+                    ? `${row.file.name.replace(/\.pdf$/i, '')}${SUFFIX.optimize}.pdf`
+                    : row.file.name;
+                if (!token.isCurrent()) return;
+                saveAs(blob, name);
+                setFiles(prev => prev.map(f => (
+                    f.status === 'processed' ? { ...f, status: 'succeeded', progress: 100 } : f
+                )));
+            } catch (error) {
+                const isProcessorError = error instanceof ProcessorError;
+                const code = isProcessorError ? error.code : PLAN_STATUS.UNSUPPORTED_DOCUMENT;
+                if (code === PLAN_STATUS.CANCELLED) throw error;
+                const message = error instanceof Error ? error.message : String(error);
+                setRow(row.id, { status: isProcessorError ? 'refused' : 'failed', progress: 100, code, reason: message });
+            }
+        } catch (error) {
+            const cancelled = error instanceof ProcessorError && error.code === PLAN_STATUS.CANCELLED;
+            setFiles(prev => prev.map(f => (
+                f.status === 'planning' || f.status === 'processing' || f.status === 'processed'
                     ? { ...f, status: cancelled ? 'cancelled' : 'failed', progress: 100, reason: error instanceof Error ? error.message : String(error) }
                     : f
             )));
@@ -639,6 +738,18 @@ export function PdfTools() {
                                     {f.titleBlockSummary.embeddedJapaneseFont ? '（日本語フォントを埋め込み）' : ''}
                                 </div>
                             )}
+                            {f.optimizeSummary && (
+                                <div className="file-summary" data-optimize-summary="">
+                                    元のサイズ {formatBytes(f.optimizeSummary.sourceBytes)}
+                                    {' → '}
+                                    {f.code === 'SUCCEEDED' && f.optimizeSummary.candidateBytes * 100 <= f.optimizeSummary.sourceBytes * 99
+                                        ? `最適化後 ${formatBytes(f.optimizeSummary.candidateBytes)}（${(100 * (1 - f.optimizeSummary.candidateBytes / f.optimizeSummary.sourceBytes)).toFixed(1)}% 削減）`
+                                        : '元のファイルのまま'}
+                                    {' / '}画像 {f.optimizeSummary.rewrittenImages} 件を無損失で再圧縮、
+                                    {f.optimizeSummary.unchangedImages} 件はそのまま
+                                    {' / '}画質・解像度の変更: なし
+                                </div>
+                            )}
                             {f.reason && f.status !== 'succeeded' && (
                                 <div className="file-error">
                                     {f.code && <code style={{ marginRight: 8 }}>{f.code}</code>}
@@ -766,15 +877,24 @@ export function PdfTools() {
                 )}
 
                 {activeTool === 'optimize' && (
-                    <div className="settings-group">
+                    <div className="settings-group" data-optimize-info="">
                         <p className="info-text">
-                            構造を保ったまま、ファイルを無損失で再保存します。
+                            画質と解像度を保ったまま、PDFに埋め込まれた画像のうち再圧縮に向くものを無損失で圧縮し直します。
                             検索できる文字・ベクター・注釈・リンク・フォーム・回転・メタデータはそのまま残ります。
                         </p>
                         <p className="info-text">
-                            画像化は行わないため、解像度の設定はありません。
-                            小さくならなかった場合は、元のファイルをそのまま返します。
+                            JPEGへの変換や解像度の低下は行いません。JPEGなど、すでに効率のよい形式や対応していない形式の画像はそのまま残します。
+                            1%以上小さくならなかった場合は、元のファイルをそのまま返します。
                         </p>
+                        <p className="info-text">
+                            最適化 v2 は現在1ファイルずつ処理します。約250 MiBのPDFには処理メモリ上限1 GiB以上が必要です。
+                        </p>
+                        {files.length > 1 && (
+                            <p className="info-text" style={{ color: '#ffcc80' }} data-optimize-multi-warning="">
+                                {files.length}件のファイルが選択されています。最適化は1件ずつ実行してください。
+                                このまま実行しても、どのファイルも処理しません。
+                            </p>
+                        )}
                     </div>
                 )}
 

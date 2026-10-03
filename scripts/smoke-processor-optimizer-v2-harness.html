@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>Processor 最適化 v2 gate harness</title>
+</head>
+<body>
+<script type="module">
+/**
+ * Harness for scripts/smoke-processor-optimizer-v2.mjs.
+ *
+ * Production code is imported unmodified from /src. Everything that judges the
+ * output is independent of it: images are decoded by pdf.js, structure is read
+ * back by pdf.js and pdf-lib, and the cross-reference table is checked byte by
+ * byte by a reader written here. Each judge is also shown a deliberately broken
+ * artifact and must reject it.
+ */
+import {
+    ChunkedDocumentWriter,
+    OptimizeLedger,
+    PAKO2,
+    PAKO2_DEFLATE_STATE_BYTES,
+    PLAN_STATUS,
+    RunOwnership,
+    admitPreParse,
+    compressRows,
+    defaultCeilings,
+    meetsPublicationThreshold,
+    preflightOptimize,
+    readTrailerSize,
+    runOptimizeV2,
+    usableBytes,
+    inflateExact,
+    MAX_OUTPUT_BYTES,
+    MAX_TRAILER_SIZE,
+    MEMORY_PRESETS,
+} from '/src/utils/processor/index.ts';
+import { Deflate } from 'pako';
+import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFArray, PDFHexString } from 'pdf-lib';
+
+configurePdfWorker();
+
+const MiB = 1024 * 1024;
+const fixtureCache = new Map();
+async function fixture(name, dir = 'processor-optimizer-v2') {
+    const key = `${dir}/${name}`;
+    if (!fixtureCache.has(key)) {
+        const r = await fetch(`/test-fixtures/${dir}/${name}.pdf`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`fixture ${key}: ${r.status}`);
+        fixtureCache.set(key, new Uint8Array(await r.arrayBuffer()));
+    }
+    return fixtureCache.get(key).slice();
+}
+const corpus = await (await fetch('/test-fixtures/processor-optimizer-v2/corpus.json', { cache: 'no-store' })).json();
+const manifestOf = (name) => corpus.find((c) => c.name === name);
+
+const sha = async (bytes) => {
+    const d = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+};
+const join = (chunks, total) => {
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+};
+const sourceOf = (bytes) => ({
+    size: bytes.length,
+    read: async () => bytes.slice(),
+    readRange: async (s, e) => bytes.slice(s, e),
+});
+
+/** Outputs kept between calls, so a judge can be shown the real artifact. */
+const store = new Map();
+
+// ---------------------------------------------------------------- the judges
+
+const OPS = pdfjsLib.OPS;
+const objOf = (page, id) => new Promise((resolve) => {
+    (id.startsWith('g_') ? page.commonObjs : page.objs).get(id, resolve);
+});
+/**
+ * pdf.js hands images back in whichever layout suits it — packed 1-bit gray,
+ * RGB, RGBA — and an exact change of representation can change the layout
+ * while every pixel stays the same. So pixels are compared, as RGBA.
+ */
+function toRgba(img) {
+    const { width: w, height: h, kind, data } = img;
+    if (kind === 3) return data;
+    const out = new Uint8Array(w * h * 4);
+    if (kind === 2) {
+        for (let i = 0; i < w * h; i += 1) { out[i * 4] = data[i * 3]; out[i * 4 + 1] = data[i * 3 + 1]; out[i * 4 + 2] = data[i * 3 + 2]; out[i * 4 + 3] = 255; }
+        return out;
+    }
+    if (kind === 1) {
+        const stride = (w + 7) >> 3;
+        for (let y = 0; y < h; y += 1) {
+            for (let x = 0; x < w; x += 1) {
+                const v = (data[y * stride + (x >> 3)] >> (7 - (x & 7))) & 1 ? 255 : 0;
+                const o = (y * w + x) * 4;
+                out[o] = v; out[o + 1] = v; out[o + 2] = v; out[o + 3] = 255;
+            }
+        }
+        return out;
+    }
+    return data;
+}
+async function imageHash(img, page) {
+    if (!img) return 'missing';
+    if (typeof img.data === 'string' && page) return imageHash(await objOf(page, img.data), page);
+    if (img.data && typeof img.data !== 'string') {
+        const pixels = toRgba(img);
+        return `${img.width}x${img.height}/${await sha(pixels instanceof Uint8Array || pixels instanceof Uint8ClampedArray ? pixels : new Uint8Array(pixels))}`;
+    }
+    if (img.bitmap) {
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img.bitmap, 0, 0);
+        return `${img.width}x${img.height}/bitmap/${await sha(ctx.getImageData(0, 0, img.width, img.height).data)}`;
+    }
+    return 'unreadable';
+}
+
+/** What pdf.js sees: decoded images, operators, text, annotations, metadata, geometry. */
+async function seen(bytes) {
+    const pdf = await pdfjsLib.getDocument({
+        data: bytes.slice(), isOffscreenCanvasSupported: false, isImageDecoderSupported: false, verbosity: 0,
+    }).promise;
+    try {
+        const out = { pages: [], meta: null };
+        const md = await pdf.getMetadata();
+        out.meta = JSON.stringify({
+            Title: md.info?.Title, Author: md.info?.Author, Subject: md.info?.Subject, Keywords: md.info?.Keywords,
+            Producer: md.info?.Producer, CreationDate: md.info?.CreationDate, ModDate: md.info?.ModDate,
+            xmp: md.metadata ? md.metadata.getRaw() : null,
+        });
+        for (let p = 1; p <= pdf.numPages; p += 1) {
+            const page = await pdf.getPage(p);
+            const ops = await page.getOperatorList();
+            const images = [];
+            for (let i = 0; i < ops.fnArray.length; i += 1) {
+                const fn = ops.fnArray[i];
+                if (fn === OPS.paintImageXObject || fn === OPS.paintImageXObjectRepeat) {
+                    images.push(await imageHash(await objOf(page, ops.argsArray[i][0]), page));
+                } else if (fn === OPS.paintImageMaskXObject) {
+                    images.push(`mask/${await imageHash(ops.argsArray[i][0], page)}`);
+                }
+            }
+            const text = (await page.getTextContent()).items.map((t) => t.str).join(' ');
+            const annots = (await page.getAnnotations()).map((a) => ({
+                subtype: a.subtype, rect: a.rect.map((v) => Math.round(v * 100) / 100), url: a.url ?? null,
+                contents: a.contentsObj?.str ?? null, fieldName: a.fieldName ?? null, fieldValue: a.fieldValue ?? null,
+                checked: a.checkBox ? a.exportValue === a.fieldValue : null,
+            }));
+            out.pages.push({
+                view: page.view.join(','), rotate: page.rotate, fn: ops.fnArray.join(','), images, text, annots: JSON.stringify(annots),
+            });
+            page.cleanup();
+        }
+        return out;
+    } finally {
+        await pdf.destroy();
+    }
+}
+
+/** What pdf-lib sees: boxes, rotation, AcroForm fields and values, per-image dictionaries. */
+async function libSeen(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false, throwOnInvalidObject: true });
+    const pages = doc.getPages().map((p) => ({
+        media: Object.values(p.getMediaBox()).join(','), crop: Object.values(p.getCropBox()).join(','), rot: p.getRotation().angle,
+    }));
+    let fields = [];
+    try {
+        fields = doc.getForm().getFields().map((f) => {
+            const n = f.getName();
+            const v = typeof f.getText === 'function' ? f.getText() : typeof f.isChecked === 'function' ? f.isChecked() : null;
+            return `${n}=${v}`;
+        });
+    } catch { fields = ['(unreadable)']; }
+    const images = {};
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (obj instanceof PDFRawStream && obj.dict.get(PDFName.of('Subtype'))?.toString() === '/Image') {
+            const cs = obj.dict.lookup(PDFName.of('ColorSpace'));
+            images[ref.objectNumber] = {
+                cs: cs instanceof PDFArray ? cs.get(0).toString() : String(cs),
+                bpc: obj.dict.get(PDFName.of('BitsPerComponent'))?.toString() ?? null,
+                filter: String(obj.dict.get(PDFName.of('Filter')) ?? 'none'),
+                interpolate: String(obj.dict.get(PDFName.of('Interpolate')) ?? 'none'),
+                width: String(obj.dict.get(PDFName.of('Width'))),
+                height: String(obj.dict.get(PDFName.of('Height'))),
+                bytes: obj.contents.length,
+                sha: await sha(obj.contents),
+            };
+        }
+    }
+    return { pageCount: doc.getPageCount(), pages, fields, images };
+}
+
+/**
+ * The cross-reference table, read the strict way: every in-use entry must point
+ * at exactly `N G obj`, the trailer must name /Root and /Size. pdf.js and
+ * pdf-lib both repair broken tables, so neither of them can be the judge here.
+ */
+function strictXref(bytes) {
+    const errors = [];
+    const tail = new TextDecoder('latin1').decode(bytes.subarray(Math.max(0, bytes.length - 1024)));
+    const m = [...tail.matchAll(/startxref\s+(\d+)\s+%%EOF/g)].pop();
+    if (!m) return ['no startxref'];
+    const at = Number(m[1]);
+    const text = new TextDecoder('latin1').decode(bytes.subarray(at));
+    if (!text.startsWith('xref\n')) return ['startxref does not point at an xref table'];
+    const head = /^xref\n(\d+) (\d+)\n/.exec(text);
+    if (!head || head[1] !== '0') return ['xref subsection header'];
+    const count = Number(head[2]);
+    let pos = head[0].length;
+    for (let n = 0; n < count; n += 1) {
+        const line = text.slice(pos, pos + 20);
+        const e = /^(\d{10}) (\d{5}) ([nf]) \n$/.exec(line);
+        if (!e) { errors.push(`entry ${n} is not 20 bytes in the standard form`); break; }
+        if (e[3] === 'n') {
+            const off = Number(e[1]);
+            const expect = `${n} ${Number(e[2])} obj`;
+            const actual = new TextDecoder('latin1').decode(bytes.subarray(off, off + expect.length));
+            if (actual !== expect) errors.push(`object ${n} offset ${off} reads "${actual}"`);
+        }
+        pos += 20;
+    }
+    const trailer = text.slice(pos);
+    if (!trailer.startsWith('trailer')) errors.push('no trailer after the table');
+    if (!/\/Root \d+ \d+ R/.test(trailer)) errors.push('trailer has no /Root');
+    const size = /\/Size (\d+)/.exec(trailer);
+    if (!size || Number(size[1]) !== count) errors.push('trailer /Size does not match the table');
+    return errors;
+}
+
+/** Compare a source with an output: lossless means everything pdf.js and pdf-lib see is the same. */
+async function judge(source, output, manifest) {
+    const errors = [];
+    const [a, b] = [await seen(source), await seen(output)];
+    if (a.pages.length !== b.pages.length) errors.push(`page count ${a.pages.length} != ${b.pages.length}`);
+    if (a.meta !== b.meta) errors.push('document metadata differs');
+    for (let i = 0; i < Math.min(a.pages.length, b.pages.length); i += 1) {
+        const [x, y] = [a.pages[i], b.pages[i]];
+        const at = `p${i + 1}`;
+        if (x.view !== y.view) errors.push(`${at} view ${y.view} != ${x.view}`);
+        if (x.rotate !== y.rotate) errors.push(`${at} rotate ${y.rotate} != ${x.rotate}`);
+        if (x.fn !== y.fn) errors.push(`${at} operator sequence differs`);
+        if (x.text !== y.text) errors.push(`${at} text differs`);
+        if (x.annots !== y.annots) errors.push(`${at} annotations differ`);
+        if (x.images.length !== y.images.length) errors.push(`${at} image count differs`);
+        x.images.forEach((h, k) => { if (h !== y.images[k]) errors.push(`${at} image ${k} decodes differently`); });
+    }
+    if (manifest?.expectText && !a.pages[0].text.includes(manifest.expectText)) errors.push('instrument: the source text was not read');
+    const [la, lb] = [await libSeen(source), await libSeen(output)];
+    if (JSON.stringify(la.pages) !== JSON.stringify(lb.pages)) errors.push('page boxes or rotation differ (pdf-lib)');
+    if (JSON.stringify(la.fields) !== JSON.stringify(lb.fields)) errors.push('form fields differ');
+    for (const img of manifest?.images ?? []) {
+        const s = la.images[img.obj];
+        const o = lb.images[img.obj];
+        if (!s || !o) { errors.push(`image object ${img.obj} missing`); continue; }
+        if (s.width !== o.width || s.height !== o.height) errors.push(`image ${img.obj} dimensions changed`);
+        if (img.interpolate && (o.cs !== s.cs || o.bpc !== s.bpc || o.interpolate !== s.interpolate)) {
+            errors.push(`image ${img.obj} has /Interpolate true and its representation changed (${s.cs}/${s.bpc} -> ${o.cs}/${o.bpc})`);
+        }
+        if ((img.decision === 'LEAVE' || img.rewrite === false) && (o.sha !== s.sha || o.filter !== s.filter)) errors.push(`image ${img.obj} should have been left byte-identical`);
+    }
+    const imageCount = a.pages.reduce((n, p) => n + p.images.length, 0);
+    return { ok: errors.length === 0, errors, imageCount, libSource: la, libOutput: lb };
+}
+
+// ---------------------------------------------------------------- the API
+
+async function optimizeFixture(name, memMiB = 512, extra = {}) {
+    const bytes = await fixture(name);
+    const r = await runOptimizeV2(sourceOf(bytes), {
+        memoryBytes: memMiB * MiB, ceilings: defaultCeilings(memMiB * MiB), ...extra,
+    });
+    const out = r.kind === 'optimized' ? join(r.chunks, r.outputBytes) : null;
+    if (out) store.set(name, out);
+    return { kind: r.kind, outputBytes: r.kind === 'optimized' ? r.outputBytes : null, summary: r.summary, outSha: out ? await sha(out) : null };
+}
+
+const mutations = {
+    /** One decoded sample changed in the first image the manifest names. */
+    async sample(out, m) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        const ref = doc.context.enumerateIndirectObjects().find(([r]) => r.objectNumber === m.images[0].obj);
+        const stream = ref[1];
+        const w = stream.dict.get(PDFName.of('Width')).asNumber();
+        const h = stream.dict.get(PDFName.of('Height')).asNumber();
+        // Rewritten raw as 8-bit RGB of the same picture with one pixel nudged.
+        const pdf = await pdfjsLib.getDocument({ data: out.slice(), isOffscreenCanvasSupported: false, isImageDecoderSupported: false }).promise;
+        const page = await pdf.getPage(1);
+        const ops = await page.getOperatorList();
+        const idx = ops.fnArray.indexOf(OPS.paintImageXObject);
+        const img = await objOf(page, ops.argsArray[idx][0]);
+        const rgbBytes = new Uint8Array(w * h * 3);
+        const comps = img.data.length / (w * h);
+        for (let i = 0; i < w * h; i += 1) for (let c = 0; c < 3; c += 1) rgbBytes[i * 3 + c] = img.data[i * comps + c];
+        await pdf.destroy();
+        rgbBytes[0] ^= 0x40;
+        const dict = doc.context.obj({ Type: 'XObject', Subtype: 'Image', Width: w, Height: h, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 });
+        doc.context.assign(ref[0], PDFRawStream.of(dict, rgbBytes));
+        return doc.save({ useObjectStreams: false });
+    },
+    async annotation(out) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        const annots = doc.getPages()[0].node.Annots();
+        annots.remove(annots.size() - 1);
+        return doc.save({ useObjectStreams: false });
+    },
+    async formValue(out) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        doc.getForm().getTextField('drawing.number').setText('B-202');
+        return doc.save({ useObjectStreams: false });
+    },
+    async metadata(out) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        doc.setTitle('changed');
+        return doc.save({ useObjectStreams: false });
+    },
+    async rotation(out) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        doc.getPages()[0].node.set(PDFName.of('Rotate'), PDFNumber.of(180));
+        return doc.save({ useObjectStreams: false });
+    },
+    async cropBox(out) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        doc.getPages()[0].setCropBox(10, 10, 300, 300);
+        return doc.save({ useObjectStreams: false });
+    },
+    /** The /Interpolate image given an R2 form: the rule the census enforces, broken by hand. */
+    async interpolateR2(out, m) {
+        const doc = await PDFDocument.load(out, { updateMetadata: false });
+        const target = m.images.find((i) => i.interpolate);
+        const control = m.images.find((i) => i.control);
+        const objs = doc.context.enumerateIndirectObjects();
+        const t = objs.find(([r]) => r.objectNumber === target.obj);
+        const c = objs.find(([r]) => r.objectNumber === control.obj);
+        // Same exact samples as the control, which is an exact Indexed form:
+        // pixels stay equal, only the rule is broken.
+        const dict = c[1].dict.clone(doc.context);
+        dict.set(PDFName.of('Interpolate'), t[1].dict.get(PDFName.of('Interpolate')));
+        doc.context.assign(t[0], PDFRawStream.of(dict, c[1].contents));
+        return doc.save({ useObjectStreams: false });
+    },
+};
+
+window.__ov2 = {
+    corpus,
+    constants: () => ({
+        MAX_OUTPUT_BYTES, MEMORY_PRESETS: [...MEMORY_PRESETS], PAKO2, PAKO2_DEFLATE_STATE_BYTES,
+        usable: MEMORY_PRESETS.map((m) => usableBytes(m)),
+    }),
+
+    optimize: optimizeFixture,
+
+    async pageText(name) {
+        const pdf = await pdfjsLib.getDocument({ data: await fixture(name), verbosity: 0 }).promise;
+        const out = [];
+        for (let p = 1; p <= pdf.numPages; p += 1) out.push((await (await pdf.getPage(p)).getTextContent()).items.map((t) => t.str));
+        await pdf.destroy();
+        return out;
+    },
+
+    /** Run, then judge the real artifact against its source. */
+    async verify(name, memMiB = 512) {
+        const r = await optimizeFixture(name, memMiB);
+        const m = manifestOf(name);
+        const source = await fixture(name);
+        const out = store.get(name);
+        const verdict = out ? await judge(source, out, m) : null;
+        const xref = out && r.summary.mode === 'images' ? strictXref(out) : [];
+        // Reopen strictly with pdf-lib: an invalid object throws.
+        let reopen = null;
+        if (out) {
+            try { await PDFDocument.load(out, { throwOnInvalidObject: true, updateMetadata: false }); reopen = true; } catch (e) { reopen = String(e); }
+        }
+        const lib = verdict ? verdict.libOutput.images : {};
+        const libSrc = verdict ? verdict.libSource.images : {};
+        return {
+            ...r,
+            verdict: verdict ? { ok: verdict.ok, errors: verdict.errors, imageCount: verdict.imageCount } : null,
+            xref, reopen,
+            imagesAfter: lib, imagesBefore: libSrc,
+            expect: m,
+        };
+    },
+
+    /** A judge shown a broken artifact must say so. */
+    async mutationCaught(name, kind) {
+        const m = manifestOf(name);
+        if (!store.has(name)) await optimizeFixture(name);
+        const broken = await mutations[kind](store.get(name), m);
+        const v = await judge(await fixture(name), broken, m);
+        return { caught: !v.ok, by: v.errors.slice(0, 3) };
+    },
+
+    /** The xref judge, shown an offset off by one and a trailer without /Root. */
+    async xrefNegatives(name) {
+        if (!store.has(name)) await optimizeFixture(name);
+        const out = store.get(name);
+        const good = strictXref(out);
+        const text = new TextDecoder('latin1').decode(out);
+        // '\nxref\n', not 'xref\n': the latter also matches inside 'startxref'.
+        const xrefAt = text.lastIndexOf('\nxref\n') + 1;
+        const entry = text.indexOf(' n \n', xrefAt);
+        const bad1 = out.slice();
+        const digit = entry - 7; // last digit of the 10-digit offset
+        bad1[digit] = bad1[digit] === 0x39 ? 0x30 : bad1[digit] + 1;
+        const bad2 = out.slice();
+        const rootAt = text.lastIndexOf('/Root');
+        bad2[rootAt + 1] = 0x58; // '/Xoot'
+        return { good, offset: strictXref(bad1), root: strictXref(bad2) };
+    },
+
+    /**
+     * The preflight against a file that is never materialised. `kind` shapes
+     * the tail: a real classic table + trailer, or only a stray `/Size` text
+     * with `startxref` pointing at something that is not a table.
+     */
+    async preflightLarge(sizeBytes, trailerSize, memMiB, kind = 'classic') {
+        let readCalled = false;
+        const tailText = (xrefAt) => (kind === 'classic'
+            ? `xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size ${trailerSize} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`
+            : `% not a table /Size ${trailerSize}\n(/Size ${trailerSize}) Tj\nstartxref\n${xrefAt}\n%%EOF\n`);
+        // The offset's own digit count changes the tail's length: settle it.
+        let len = new TextEncoder().encode(tailText(sizeBytes)).length;
+        for (let i = 0; i < 4; i += 1) len = new TextEncoder().encode(tailText(sizeBytes - len)).length;
+        const tail = new TextEncoder().encode(tailText(sizeBytes - len));
+        if (tail.length !== len) throw new Error('fake tail did not settle');
+        const source = {
+            size: sizeBytes,
+            read: async () => { readCalled = true; throw new Error('read() must not be reached'); },
+            readRange: async (s, e) => {
+                const out = new Uint8Array(e - s);
+                const tailStart = sizeBytes - tail.length;
+                for (let i = s; i < e; i += 1) if (i >= tailStart) out[i - s] = tail[i - tailStart];
+                return out;
+            },
+        };
+        let code = 'ADMITTED';
+        let reason = '';
+        try {
+            await preflightOptimize(source, memMiB * MiB);
+        } catch (e) { code = e.code ?? String(e); reason = e.message; }
+        let runCode = null;
+        try {
+            await runOptimizeV2(source, { memoryBytes: memMiB * MiB, ceilings: defaultCeilings(memMiB * MiB) });
+        } catch (e) { runCode = e.code ?? String(e); }
+        return {
+            code, reason, readCalled, runCode,
+            arithmetic: admitPreParse(sizeBytes, trailerSize, memMiB * MiB),
+            trailerSize: await readTrailerSize(source),
+        };
+    },
+
+    threshold() {
+        const cases = [];
+        const add = (out, src, expect) => cases.push({ out, src, expect, got: meetsPublicationThreshold(out, src) });
+        add(9_900, 10_000, true); // exactly 1% smaller
+        add(9_901, 10_000, false); // just under 1%
+        add(9_899, 10_000, true); // just over 1%
+        add(261_547_235 * 99 / 100 | 0, 261_547_235, true);
+        add(258_931_763, 261_547_235, false); // 99.0000002%
+        add(258_931_762, 261_547_235, true);
+        add(376_869, 261_547_235, true);
+        add(10_000, 10_000, false);
+        // A deliberately wrong rule must be caught by the same cases.
+        const broken = (o, s) => o * 100 < s * 99;
+        const brokenCaught = cases.some((c) => broken(c.out, c.src) !== c.expect);
+        const floatRule = (o, s) => o / s <= 0.99;
+        return { cases, allRight: cases.every((c) => c.got === c.expect), brokenCaught, floatAgrees: cases.every((c) => floatRule(c.out, c.src) === c.expect) };
+    },
+
+    /** The run-time cap on incompressible data, and the same data uncapped. */
+    async cap() {
+        const rows = 64; const rowBytes = 3000;
+        const data = new Uint8Array(rows * rowBytes);
+        let s = 7;
+        for (let i = 0; i < data.length; i += 1) { s = (Math.imul(s, 1103515245) + 12345) >>> 0; data[i] = s >>> 24; }
+        const control = { check: () => {}, yieldToTask: () => Promise.resolve() };
+        const rowAt = (y) => data.subarray(y * rowBytes, (y + 1) * rowBytes);
+        const capBytes = 20_000;
+        const capped = await compressRows(rows, rowBytes, 3, 'adaptive', rowAt, capBytes, control);
+        const free = await compressRows(rows, rowBytes, 3, 'adaptive', rowAt, Infinity, control);
+        return {
+            cappedIsNull: capped === null,
+            uncappedLength: free?.length ?? null,
+            uncappedChunks: free?.chunks.length ?? null,
+            chunkBytes: PAKO2.deflateChunkBytes,
+            // A rule that never caps would hand back a result; the check above must see null.
+            brokenCaught: free !== null && free.length > capBytes,
+        };
+    },
+
+    /** Supersede during compression, during the writer, and (negative) with no token at all. */
+    async cancel(name, where) {
+        const bytes = await fixture(name);
+        const owner = new RunOwnership();
+        const token = owner.begin({ operation: 'optimize', fileIds: [name], dpi: null, contrast: null, memoryBudgetBytes: 512 * MiB });
+        let yields = 0;
+        let inWriter = false;
+        const hooks = { beforeWrite: () => { inWriter = true; } };
+        const yieldToTask = async () => {
+            yields += 1;
+            if (where === 'compression' && !inWriter && yields === 2) owner.supersede();
+            if (where === 'writer' && inWriter) owner.supersede();
+            await new Promise((r) => setTimeout(r, 0));
+        };
+        let result = null; let code = null;
+        try {
+            const r = await runOptimizeV2(sourceOf(bytes), {
+                memoryBytes: 512 * MiB, ceilings: defaultCeilings(512 * MiB),
+                token: where === 'no-token' ? undefined : token, hooks, yieldToTask,
+            });
+            result = r.kind;
+        } catch (e) { code = e.code ?? String(e); }
+        return { result, code, yields, inWriter, published: result !== null };
+    },
+
+    /** The writer's own contract: ceiling, finish/abort ownership. */
+    async writer(name) {
+        const bytes = await fixture(name);
+        const tooSmall = await (async () => {
+            try {
+                await runOptimizeV2(sourceOf(bytes), { memoryBytes: 512 * MiB, ceilings: { ...defaultCeilings(512 * MiB), maxOutputBytes: 4096 } });
+                return 'no refusal';
+            } catch (e) { return e.code ?? String(e); }
+        })();
+        const w = new ChunkedDocumentWriter(10);
+        w.writeOwned(new Uint8Array(4));
+        let overflow = null;
+        try { w.writeView(new Uint8Array(7)); } catch (e) { overflow = e.code; }
+        let finishAfterAbort = null;
+        try { w.finish(); } catch (e) { finishAfterAbort = e.code; }
+        const v = new ChunkedDocumentWriter(100);
+        v.writeOwned(new Uint8Array([1, 2]));
+        v.writeView(new Uint8Array([3]));
+        const fin = v.finish();
+        let writeAfterFinish = null;
+        try { v.writeOwned(new Uint8Array(1)); } catch (e) { writeAfterFinish = e.code; }
+        return {
+            tooSmall, overflow, stateAfterOverflow: w.state, finishAfterAbort,
+            finished: { total: fin.total, chunks: fin.chunks.length, owned: v.ownedBytes, state: v.state }, writeAfterFinish,
+        };
+    },
+
+    async deterministic(name) {
+        const a = await optimizeFixture(name);
+        const b = await optimizeFixture(name);
+        return { a: a.outSha, b: b.outSha };
+    },
+
+    /**
+     * Source-buffer ownership: once pdf-lib has parsed it, nothing the optimizer
+     * holds keeps the source buffer alive. `window.gc` comes from
+     * --js-flags=--expose-gc. The negative control keeps a reference on purpose
+     * and must be seen as retained.
+     */
+    async ownership(name, retain) {
+        if (typeof window.gc !== 'function') return { error: 'gc unavailable' };
+        const bytes = await fixture(name);
+        let weak = null;
+        let strong = null;
+        let aliveAfterParse = null;
+        const source = {
+            size: bytes.length,
+            read: async () => {
+                const copy = bytes.slice();
+                weak = new WeakRef(copy.buffer);
+                if (retain) strong = copy;
+                return copy;
+            },
+            readRange: async (s, e) => bytes.slice(s, e),
+        };
+        const r = await runOptimizeV2(source, {
+            memoryBytes: 512 * MiB, ceilings: defaultCeilings(512 * MiB),
+            hooks: {
+                afterParse: async () => {
+                    await new Promise((res) => setTimeout(res, 0));
+                    window.gc(); window.gc();
+                    aliveAfterParse = weak.deref() !== undefined;
+                },
+            },
+        });
+        return { aliveAfterParse, kind: r.kind, retainedOnPurpose: strong !== null };
+    },
+
+    /** The Processor's existing refusals still hold on this path. */
+    async refusals() {
+        const out = {};
+        for (const name of ['signature-a4', 'invalid']) {
+            const bytes = await fixture(name, 'processor');
+            try {
+                await runOptimizeV2(sourceOf(bytes), { memoryBytes: 512 * MiB, ceilings: defaultCeilings(512 * MiB) });
+                out[name] = 'no refusal';
+            } catch (e) { out[name] = e.code ?? String(e); }
+        }
+        return out;
+    },
+
+    ledger() {
+        const l = new OptimizeLedger(512 * MiB, 100 * MiB);
+        const fitsBefore = l.fits(200 * MiB);
+        l.commit(200 * MiB);
+        let overCommit = null;
+        try { l.commit(100 * MiB, 'test'); } catch (e) { overCommit = e.code; }
+        return {
+            usable: l.usable, fitsBefore, fitsMore: l.fits(100 * MiB), peak: l.peakBytes, heldAfterRefusal: l.heldBytes,
+            overCommit, PLAN_STATUS_SINGLE: PLAN_STATUS.SINGLE_FILE_ONLY,
+        };
+    },
+
+    /** A run expected to be refused: its code, its message, and how far it got. */
+    async refusal(name, memMiB) {
+        const bytes = await fixture(name);
+        let reachedWrite = false;
+        try {
+            const r = await runOptimizeV2(sourceOf(bytes), {
+                memoryBytes: memMiB * MiB, ceilings: defaultCeilings(memMiB * MiB),
+                hooks: { beforeWrite: () => { reachedWrite = true; } },
+            });
+            return { code: null, kind: r.kind, outputBytes: r.outputBytes ?? null, reachedWrite };
+        } catch (e) { return { code: e.code ?? String(e), message: e.message, reachedWrite }; }
+    },
+
+    /** inflateExact on its own: a clean stream at chunk boundaries passes; every malformed one is refused. */
+    inflate() {
+        const make = (n, seed) => { const b = new Uint8Array(n); let s = seed; for (let i = 0; i < n; i += 1) { s = (Math.imul(s, 1103515245) + 12345) >>> 0; b[i] = (s >>> 28) * 17; } return b; };
+        const deflate = (data) => {
+            const d = new Deflate({ level: 6 });
+            const parts = [];
+            d.onData = (c) => parts.push(c);
+            d.onEnd = () => {};
+            d.push(data, true);
+            return join(parts, parts.reduce((n, c) => n + c.length, 0));
+        };
+        const out = {};
+        for (const n of [65_536, 131_072, 65_535, 65_537]) {
+            const data = make(n, n);
+            const z = deflate(data);
+            const ok = inflateExact(z, n);
+            out[`exact ${n}`] = ok !== null && ok.length === n && ok.every((v, i) => v === data[i]);
+            const badAdler = z.slice(); badAdler[badAdler.length - 1] ^= 0xFF;
+            out[`bad Adler ${n}`] = inflateExact(badAdler, n) === null;
+            out[`truncated ${n}`] = inflateExact(z.subarray(0, z.length - 8), n) === null;
+            out[`expected-1 ${n}`] = inflateExact(z, n - 1) === null;
+            out[`expected+1 ${n}`] = inflateExact(z, n + 1) === null;
+        }
+        return out;
+    },
+
+    /** The writer measured without allocating must equal what it then writes. */
+    async writePlanExact(name) {
+        const bytes = await fixture(name);
+        const r = await runOptimizeV2(sourceOf(bytes), { memoryBytes: 1024 * MiB, ceilings: defaultCeilings(1024 * MiB) });
+        return { kind: r.kind, outputBytes: r.outputBytes, candidateBytes: r.summary.candidateBytes, max: MAX_TRAILER_SIZE };
+    },
+};
+window.__ov2Ready = true;
+</script>
+</body>
+</html>
