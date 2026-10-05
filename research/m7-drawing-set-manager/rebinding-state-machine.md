@@ -127,7 +127,7 @@ from the name hint.
 
 On acceptance, page *n* of the new file is treated as the same Sheet as page *n* of the old one — **as a
 candidate only**. Nothing about that Sheet is trusted until it has been re-read and a person has re-confirmed
-it. If the new file is shorter, the Sheets whose pages are gone are **not** retired automatically: QA09
+it. If the new file is shorter, the Sheets whose pages are gone are **not** retired automatically: QA10
 reports them (`SHEET_WITHOUT_PAGE`) and a person retires them (`tests/stale.test.mjs`, "a replacement with a
 different page count…"). Whether same-position is the right default when pages were *inserted* is a real
 limitation — see Unresolved U-4 in `architecture-research.md`. Matching sheets across revisions is M8's
@@ -139,15 +139,16 @@ Staleness is **computed, not stored** (`prototype/currency.mjs`). Every derived 
 derived from; it is stale when that is no longer what is there. So the scope of a change is exactly the set
 of records that name the changed thing, and one changed Source cannot stale the whole Project.
 
-| Change ↓ / Data → | Page facts (size, rotation) | Observation (machine-read fields) | Confirmation (Human) | Findings citing those sheets | Set-wide findings (gap, size / orientation outlier) | Other Sources | Decisions |
-|---|---|---|---|---|---|---|---|
-| **Source content replaced** | STALE | STALE | RE-CONFIRM (kept, not trusted) | STALE | UNVERIFIED until the set is re-evaluated in full | untouched | kept as history |
-| **Source renamed, same bytes** | — | — | — | — | — | — | — |
-| **Source not provided this session** | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED | untouched | untouched | in force, unverified |
-| **Profile geometry or model changed** | — | STALE (that profile's sheets) | RE-CONFIRM, unless made with no profile | re-evaluated | re-evaluated | untouched | kept if evidence unchanged |
-| **Sheet moved to another profile** | — | STALE (that sheet) | RE-CONFIRM, unless made with no profile | re-evaluated | re-evaluated | untouched | kept if evidence unchanged |
-| **Sheet metadata confirmed / edited** | — | — | replaced; old one to history | re-evaluated | re-evaluated | untouched | kept if evidence unchanged |
-| **Source added / retired** | — | — | — | re-evaluated | re-evaluated | untouched | kept if evidence unchanged |
+| Change ↓ / Data → | Page facts (size, rotation) | Observation (machine-read fields) | Confirmation (Human) | Findings citing those sheets | Set-wide findings (gap, size / orientation outlier) | Declared Drawing Register (optional) | Other Sources | Decisions |
+|---|---|---|---|---|---|---|---|---|
+| **Source content replaced** | STALE | STALE | RE-CONFIRM (kept, not trusted) | STALE | UNVERIFIED until the set is re-evaluated in full | **STALE if it was declared from that Source** — QA09 is then not evaluated, and Final is blocked until it is declared again | untouched | kept as history |
+| **Source renamed, same bytes** | — | — | — | — | — | — | — | — |
+| **Source not provided this session** | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED | untouched | its QA09 findings UNVERIFIED if it was declared from that Source | untouched | in force, unverified |
+| **Profile geometry or model changed** | — | STALE (that profile's sheets) | RE-CONFIRM, unless made with no profile | re-evaluated | re-evaluated | — | untouched | kept if evidence unchanged |
+| **Sheet moved to another profile** | — | STALE (that sheet) | RE-CONFIRM, unless made with no profile | re-evaluated | re-evaluated | — | untouched | kept if evidence unchanged |
+| **Sheet metadata confirmed / edited** | — | — | replaced; old one to history | re-evaluated | re-evaluated | — (QA09 re-evaluated) | untouched | kept if evidence unchanged |
+| **Source added / retired** | — | — | — | re-evaluated | re-evaluated | retired with its Source | untouched | kept if evidence unchanged |
+| **Register declared, a row edited or retired, or the register withdrawn** | — | — | — | QA09 only: re-evaluated; closed if withdrawn | — | a re-declaration is a **new** reference; the old one is retired | untouched | kept if evidence unchanged |
 
 The same table is `STALE_MATRIX` in `prototype/currency.mjs`, and `tests/stale.test.mjs` holds the prototype
 to it one row at a time. Three distinctions in it carry weight:
@@ -169,6 +170,7 @@ to it one row at a time. Three distinctions in it carry weight:
 | per-sheet metadata | a sheet's confirmed drawing number | that sheet's Source content is replaced; or (if profile-based) its profile changes |
 | per-source derived result | observations and page facts of one PDF | that Source's content is replaced |
 | whole-drawing-set QA | "is every finding reviewed" | never stale as such: recomputed on every change |
+| declared Drawing Register | the list a person declared from one page | that page's Source is replaced (it is then declared again, as a new reference) |
 | set-wide result | duplicate number, gap, outlier | evidence cites a replaced sheet → STALE; set not fully evaluable → UNVERIFIED |
 
 ## 7. Files that change underneath the session

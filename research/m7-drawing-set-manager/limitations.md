@@ -11,7 +11,7 @@ are here so that neither has to be discovered by a reviewer.
 
 | Limitation | Consequence |
 |---|---|
-| **One browser.** Every browser figure is Chrome for Testing 143, headless. No Firefox, Safari, Edge or mobile browser was run. | Recommendation B's facts — that `digest()` blocks its calling thread, that it is no faster than the JS hash, that a BYOB reader with `min` works — are facts about this build. The design does not depend on them being universal: streaming is correct everywhere `Blob.slice` exists, and the BYOB path is feature-detected with the slice path as its fallback. |
+| **One browser.** Every browser figure is Chrome for Testing 143, headless. No Firefox, Safari, Edge or mobile browser was run. *(Review advisory: sufficient for this Research Gate; Production M7-P1 and M7-P4 must each define their target browsers and a smoke test on them.)* | Recommendation B's facts — that `digest()` blocks its calling thread, that it is no faster than the JS hash, that a BYOB reader with `min` works — are facts about this build. The design does not depend on them being universal: streaming is correct everywhere `Blob.slice` exists, and the BYOB path is feature-detected with the slice path as its fallback. |
 | **One machine**: Core Ultra 9 285K, 24 logical CPUs, 63 GiB RAM (about 7 GiB free during the runs), Windows 11. | Absolute times are optimistic for a typical office machine. The ratios between methods are what the recommendation rests on. |
 | **Headless.** A visible tab competing for memory, a throttled background tab, or a low-memory device was not tested. | The peak-memory comparison (≈ 87 MiB against ≈ 570 MiB at 250 MiB) should hold in direction; its margins were not tested under pressure. |
 | **Warm file cache.** The synthetic files had just been written when they were read. | Read times are a best case. A cold disk, a network share or a synced folder was not measured. |
@@ -28,7 +28,7 @@ are here so that neither has to be discovered by a reviewer.
 | **Nothing was rendered** except a plain-DOM table as a lower bound. | The need for list virtualisation is argued from a lower bound, not from a React measurement. |
 | **Synthetic Projects.** Findings per sheet, comment lengths and history depth are the generator's, not a real review's. | The size per sheet (≈ 1.8–2.2 kB) and the limits derived from it could be off for a heavily annotated Project. The 62.5 MiB "largest accepted" case is there to bound that. |
 | **Real title-block text was not sampled.** | The string-length limits are placeholders (Unresolved U-6). |
-| **No fuzzing.** The hostile inputs are a list a person wrote. | The scan and the interpreter have been shown specific attacks, not a search. A fuzzer over the import pipeline belongs in the Production implementation. |
+| **No fuzzing.** The hostile inputs are a list a person wrote. | The scan and the interpreter have been shown specific attacks, not a search. *(Review advisory: the scanner and the interpreter are security-sensitive; fuzz, property-based and differential testing of the Production versions is required before M7-P4 ships.)* |
 | **The differential check against ajv covers 26 mutations of one document**, not the keyword space. | It shows agreement on the constructs the schema uses, where it was tried. |
 | **Migration was exercised with a synthetic predecessor.** There is no real version 0. | The mechanism is tested; no real migration is. |
 | **`/UserUnit`** was not examined in the register path. | A page with a user unit other than 1 may be measured wrongly; the Comparator refuses such pages. |
@@ -36,6 +36,19 @@ are here so that neither has to be discovered by a reviewer.
 | **The scale matrix ran on a page thread**, not in a Worker. | Whether import should move to a Worker is argued from that number, not from a Worker measurement. |
 | **Node heap figures are not browser figures.** The same four million empty objects retained ≈ 256 MiB in Node and ≈ 104 MiB in Chrome. | Each is reported under its own heading and they are never combined. |
 | **Tamper-evidence was not designed** (Unresolved U-14). | A forged Human decision cannot be told from a real one. |
+
+### The declared Drawing Register (added after RF-33-02)
+
+| Limitation | Consequence |
+|---|---|
+| **No real drawing list was read.** The table engine was run on a *synthetic* list page — tokens and ruling lines built by the test — not on a PDF. `analysePageGeometry`, which needs a PDF.js document, was not run. | That the engine turns a real 図面一覧 into a usable grid is not shown here. Real lists have merged cells, wrapped titles, repeated headings on continuation pages and sub-headings between groups; the engine never infers merged cells and has no notion of a heading row. It should be the first thing proved when the register is implemented. |
+| The engine was loaded in Node with `pdfjs-dist` resolved to PDF.js's `legacy` build. | The pure reconstruction is the Production code; the PDF.js build beside it is not the one the app bundles. Nothing in the path that was run uses PDF.js. |
+| **A scanned list page cannot be read** (the engine is native-text only). | A register is declared from a scanned list by typing it. For a long list that is real work, and OCR of a list page is not designed. |
+| **Correspondence is the exact drawing number.** | A list typed in full-width against title blocks in half-width produces a finding on each side for every drawing. The findings name the near spelling, but the volume could be large (Unresolved U-3 (a)). |
+| QA09 compares numbers only. | A row's title, revision and date are stored and not compared with the Sheet's (Unresolved U-2). |
+| A register must be on a page of a Source in the set. | A list supplied separately (a spreadsheet, another PDF not in the set) has nowhere to be declared from (Unresolved U-3 (b)). |
+| The two register limits (64 references, 1 000 rows each) have no measurement behind them. | Placeholders (Unresolved U-6). |
+| How a person maps columns and skips heading rows is described, not designed. | It is workspace design for M7-P3. |
 
 ## 2. Instrument defects found
 
@@ -96,6 +109,24 @@ none is hidden by the final results.
     "≈ 25 ms", which is a point picked from what is really "anywhere up to one chunk"). Those are now stated
     as the ranges or bounds they are, and the evidence was collected a third time.
 
+14. **Two things the research got wrong, found by Independent Architecture Review of `4139133`.** Not
+    defects of an instrument: defects of the proposal, recorded in the same list because they were just as
+    invisible to the tests that existed.
+    - **RF-33-01.** `FALSE_POSITIVE` on a QA02 finding lifted the metadata-confirmation requirement. The
+      suite passed with it, because a test asserted that behaviour. Only `INTENTIONAL` lifts it now.
+    - **RF-33-02.** QA09 had been given a meaning that needed no new input — M7's Sheet list against the PDF
+      page inventory — and the intended one (a Human-declared Drawing Register against the actual Sheets)
+      had been filed as unresolved. The page-inventory check is kept, under QA10.
+15. **A wrong prediction about the table engine.** The first declared-register test expected a synthetic
+    list with blank cells to come back `GRID_CONFIDENT`; the engine says `GRID_NEEDS_REVIEW`. The test was
+    corrected to the engine's behaviour, which is the more useful fact: a real list is routinely "needs
+    review" structurally, and the adapter passes both statuses on to a person.
+16. **The mutation probe caught its own gaps.** After the repair, one probe could not be applied (its
+    anchor had been edited away) and one was *missed*: removing the rule that a live register cannot hang
+    off a retired Source failed no test. The probe script counts both as failures. The anchor was fixed and
+    a test added (`tests/declared-register.test.mjs`, "a file whose declared register does not hold
+    together…").
+
 ## 3. What a second run may and may not change
 
 Because the prose rounds and a second run moves, `benchmark/check-claims.mjs` holds every figure the
@@ -108,3 +139,13 @@ block "≈ 780 ms" against a measured 823 ms, among others) had drifted outside 
 JSON value counts, finding counts, refusal stages and codes, which digests agreed, what each context
 exposes — and the check that the Node and browser scale runs produced the same bytes. Times, MiB per second
 and memory are *measured-only*: they are reported, rounded in the prose, and never compared for equality.
+
+## 4. Platform behaviour observed
+
+Pushing the research branch to its pull request caused the repository's Vercel integration to build a
+**Preview** automatically (GitHub records a deployment by `vercel[bot]`, environment `Preview`, for the
+reviewed head `4139133`). That is the platform's behaviour for a pushed branch with a pull request; it is
+not a Production deployment and nothing was deployed by hand. Separately, a local build of this branch is
+byte-identical to a local build of the base commit (`evidence/gates.md`): the research directory is not
+part of the app. It is recorded here so that the Preview is not mistaken for a release, and so that
+nobody looks for one.

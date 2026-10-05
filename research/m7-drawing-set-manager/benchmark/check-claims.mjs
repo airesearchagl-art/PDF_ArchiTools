@@ -67,6 +67,7 @@ const A = 'architecture-research.md';
 const S5 = '5000 sheets';
 const S5P = '5000 sheets, one PDF per sheet';
 const S5U = '5000 sheets, nothing confirmed or decided';
+const S5R = '5000 sheets, with a declared register';
 const S20 = '20000 sheets (beyond candidate limit)';
 const b = (label) => row(scaleBrowser, label);
 const fastestOneShot = (get) => Math.min(get('subtle-main'), get('subtle-worker'));
@@ -142,9 +143,9 @@ const CLAIMS = [
     { doc: A, quote: 'costs a fresh Worker under 20 ms', checks: [c('fresh Worker ms', fp.cancellation.oneShotWorkerTerminatedAfter30Ms.freshWorkerReadyMs, under(20))] },
 
     // ---- R3 / R4 ----------------------------------------------------------
-    { doc: A, quote: '≈ 1.55× larger (≈ 13.5 vs 8.7 MiB at 5000 sheets)', checks: [
+    { doc: A, quote: '≈ 1.55× larger (≈ 13.5 vs 8.8 MiB at 5000 sheets)', checks: [
         c('indented / compact', b(S5).size.prettyBytes / b(S5).size.compactBytes, between(1.5, 1.6)),
-        c('indented MiB', b(S5).size.prettyBytes / 2 ** 20, near(13.5)), c('compact MiB', b(S5).size.compactBytes / 2 ** 20, near(8.7)),
+        c('indented MiB', b(S5).size.prettyBytes / 2 ** 20, near(13.5)), c('compact MiB', b(S5).size.compactBytes / 2 ** 20, near(8.8)),
     ] },
     { doc: A, quote: '≈ 640 MiB of heap in Node and ≈ 320 MiB in Chrome and took ≈ 1.5 s; the scan refuses it in ≈ 0.1 s', checks: [
         c('10M objects, Node heap MiB', hostileCase('array of 10,000,000').unbounded.retainedHeapMiB, near(640)),
@@ -159,11 +160,11 @@ const CLAIMS = [
         c('deep nesting, bounded refusal ms', hostileCase('deep nesting').bounded.refusedInMs, under(5)),
     ] },
     { doc: A, quote: 'A valid 62.5 MiB file opened in ≈ 0.2 s (Node)', checks: [c('largest accepted open ms', hostile.largestAccepted.at(-1).importMs, near(215))] },
-    { doc: A, quote: '≈ 8.7–10.4 MiB at 5000 sheets', checks: [
-        c('5000 sheets MiB', b(S5).size.compactBytes / 2 ** 20, between(8.6, 8.8)), c('5000 one-per-sheet MiB', b(S5P).size.compactBytes / 2 ** 20, between(10.3, 10.5)),
+    { doc: A, quote: '≈ 8.8–10.4 MiB at 5000 sheets', checks: [
+        c('5000 sheets MiB', b(S5).size.compactBytes / 2 ** 20, between(8.7, 8.9)), c('5000 one-per-sheet MiB', b(S5P).size.compactBytes / 2 ** 20, between(10.3, 10.5)),
     ] },
-    { doc: A, quote: '≈ 335 000–395 000 at 5000 sheets', checks: [
-        c('5000 sheets JSON values', b(S5).size.jsonValues, between(330_000, 340_000)), c('5000 one-per-sheet JSON values', b(S5P).size.jsonValues, between(390_000, 400_000)),
+    { doc: A, quote: '≈ 338 000–397 000 at 5000 sheets', checks: [
+        c('5000 sheets JSON values', b(S5).size.jsonValues, between(336_000, 340_000)), c('5000 one-per-sheet JSON values', b(S5P).size.jsonValues, between(395_000, 399_000)),
     ] },
     { doc: A, quote: '≈ 2 500–5 600 at 5000 sheets', checks: [c('findings, typical', b(S5).shape.findings, between(2400, 2700)), c('findings, nothing confirmed', b(S5U).shape.findings, between(5500, 5700))] },
     { doc: A, quote: 'A 5000-sheet Project opens in ≈ 90–125 ms on a page thread (Chrome); the scan is the largest single stage of that', checks: [
@@ -226,6 +227,19 @@ const CLAIMS = [
     ] },
     { doc: A, quote: '(roughly 25–75 ms at 5000 sheets)', checks: [
         c('QA 5000', b(S5).qa.evaluateAllRules.medianMs, between(20, 75)), c('QA 5000 nothing confirmed', b(S5U).qa.evaluateAllRules.medianMs, between(25, 80)),
+    ] },
+
+    // ---- the declared Drawing Register (RF-33-02) ---------------------------
+    { doc: A, quote: 'One of 4 898 rows (five references) adds ≈ 0.95 MiB to a 5000-sheet file — about 200 bytes per row — and QA with it took under 60 ms', checks: [
+        c('register rows', b(S5R).shape.registerEntries, between(4898, 4898)), c('register references', b(S5R).shape.registerReferences, between(5, 5)),
+        c('added MiB', (b(S5R).size.compactBytes - b(S5).size.compactBytes) / 2 ** 20, near(0.95)),
+        c('added bytes per row', (b(S5R).size.compactBytes - b(S5).size.compactBytes) / b(S5R).shape.registerEntries, between(170, 230)),
+        c('QA with a register, Chrome ms', b(S5R).qa.evaluateAllRules.medianMs, under(60)),
+        c('QA with a register, Node ms', row(scaleNode, S5R).qa.evaluateAllRules.medianMs, under(60)),
+    ] },
+    { doc: 'qa-rule-matrix.md', quote: 'With a declared register of 4 898 rows the same evaluation took under 60 ms.', checks: [
+        c('register rows', b(S5R).shape.registerEntries, between(4898, 4898)),
+        c('Chrome ms', b(S5R).qa.evaluateAllRules.medianMs, under(60)), c('Node ms', row(scaleNode, S5R).qa.evaluateAllRules.medianMs, under(60)),
     ] },
 
     // ---- other documents --------------------------------------------------

@@ -198,7 +198,12 @@ export function measureShape(label, shape, { repeats = 5, limits = UNBOUNDED_FOR
     const active = set.findings.filter((f) => f.lifecycle.state === 'ACTIVE').length;
     return {
         label,
-        shape: { sheets: set.sheets.length, sources: set.sources.length, findings: set.findings.length, activeFindings: active, decisions: set.decisions.length, runs: set.analysisRuns.length },
+        shape: {
+            sheets: set.sheets.length, sources: set.sources.length, findings: set.findings.length, activeFindings: active, decisions: set.decisions.length, runs: set.analysisRuns.length,
+            registerReferences: set.drawingRegisterReferences.length,
+            registerEntries: set.drawingRegisterReferences.reduce((sum, reference) => sum + reference.entries.length, 0),
+            qa09Findings: set.findings.filter((f) => f.ruleId === 'QA09_REGISTER_SHEET_MISMATCH').length,
+        },
         size: {
             compactBytes: exported.bytes.length,
             prettyBytes,
@@ -229,6 +234,7 @@ export const SCALE_MATRIX = [
     ['5000 sheets', { sheets: 5000 }, 5],
     ['5000 sheets, one PDF per sheet', { sheets: 5000, pagesPerSource: 1 }, 5],
     ['5000 sheets, nothing confirmed or decided', { sheets: 5000, confirmedShare: 0, decidedShare: 0 }, 5],
+    ['5000 sheets, with a declared register', { sheets: 5000, declaredRegister: true }, 5],
     ['10000 sheets (beyond candidate limit)', { sheets: 10000 }, 3],
     ['20000 sheets (beyond candidate limit)', { sheets: 20000 }, 3],
 ];

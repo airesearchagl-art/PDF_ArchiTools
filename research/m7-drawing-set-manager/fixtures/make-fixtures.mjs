@@ -50,6 +50,7 @@ export function buildFixtures() {
     const unused = seededUuidSource(990099);
 
     const minimal = () => baseDocument({ sheets: 3, pagesPerSource: 3, seed: 11, confirmedShare: 0.67, decidedShare: 1, duplicateEvery: 0, gapEvery: 0, variantEvery: 0, outlierEvery: 0 });
+    const withRegister = () => baseDocument({ sheets: 8, pagesPerSource: 4, seed: 13, confirmedShare: 1, decidedShare: 0.5, duplicateEvery: 0, gapEvery: 0, variantEvery: 0, outlierEvery: 0, declaredRegister: true, unlistedEvery: 4, missingEvery: 3 });
     const reviewed = () => baseDocument({ sheets: 12, pagesPerSource: 4, seed: 12, confirmedShare: 0.75, decidedShare: 0.6, duplicateEvery: 5, gapEvery: 4, variantEvery: 7, outlierEvery: 6 });
     const clone = (document) => JSON.parse(JSON.stringify(document));
 
@@ -66,6 +67,8 @@ export function buildFixtures() {
     // -- valid --------------------------------------------------------------
     valid('minimal.project.json', minimal(), 'The smallest Project that has one of everything: a source, a profile, sheets, a run, a finding, a decision.');
     valid('reviewed-12-sheets.project.json', reviewed(), 'A small Drawing Set part-way through review, with planted duplicates, a gap, a width variant and a size outlier.');
+
+    valid('declared-register.project.json', withRegister(), 'A Drawing Set with a declared Drawing Register: rows a person accepted from a table on one page. Some listed drawings have no sheet and some sheets are not listed, so QA09 has both kinds of finding.');
 
     const hostileText = minimal();
     hostileText.project.name = '<script>alert(1)</script> & "quotes"';
@@ -103,6 +106,17 @@ export function buildFixtures() {
     invalidDocument('dangling-sheet-id.json', (d) => { d.drawingSet.findings[0].sheetIds[0] = unused(); }, 'relations', 'REL_DANGLING_SHEET', 'A finding about a sheet that does not exist.');
     invalidDocument('dangling-finding-id.json', (d) => { d.drawingSet.decisions[0].findingId = unused(); }, 'relations', 'REL_DANGLING_FINDING', 'A decision about a finding that does not exist.');
     invalidDocument('decision-on-other-evidence.json', (d) => { d.drawingSet.decisions[0].evidenceDigest = '0'.repeat(64); }, 'relations', 'REL_DECISION_EVIDENCE', 'A decision whose evidence digest is not its finding\'s.');
+    invalidDocument('dangling-register-entry-id.json', (d) => { d.drawingSet.findings[0].registerEntryIds = [unused()]; }, 'relations', 'REL_DANGLING_REGISTER_ENTRY', 'A finding about a register entry that does not exist.');
+    fixtures.push((() => {
+        const document = withRegister();
+        document.drawingSet.drawingRegisterReferences[0].entries[0].drawingNumber = '   ';
+        return { file: 'invalid/register-entry-without-number.json', text: pretty(document), why: 'A declared register row that names no drawing.', expect: { status: 'REJECTED', stage: 'relations', code: 'REL_REGISTER' } };
+    })());
+    fixtures.push((() => {
+        const document = withRegister();
+        document.drawingSet.drawingRegisterReferences[0].pageText = 'every word on the list page';
+        return { file: 'invalid/register-with-page-text.json', text: pretty(document), why: 'A declared register carrying the page\'s text. The register holds field-level rows and has no property for anything else.', expect: { status: 'REJECTED', stage: 'schema', code: 'SCHEMA_UNKNOWN_FIELD' } };
+    })());
     invalidDocument('timestamp-impossible.json', (d) => { d.savedAt = '2026-13-45T00:00:00.000Z'; }, 'relations', 'REL_TIMESTAMP_INVALID', 'The right shape, and no such day.');
     invalidDocument('lifecycle-contradiction.json', (d) => { d.drawingSet.findings[0].lifecycle.state = 'SUPERSEDED'; }, 'relations', 'REL_FINDING_LIFECYCLE', 'Superseded, by nothing.');
 

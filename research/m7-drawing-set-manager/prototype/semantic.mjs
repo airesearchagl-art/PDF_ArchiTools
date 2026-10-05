@@ -33,6 +33,8 @@ export const RELATION_PROBLEM = Object.freeze({
     DANGLING_PROFILE: 'REL_DANGLING_PROFILE',
     DANGLING_RUN: 'REL_DANGLING_RUN',
     DANGLING_FINDING: 'REL_DANGLING_FINDING',
+    DANGLING_REGISTER_ENTRY: 'REL_DANGLING_REGISTER_ENTRY',
+    REGISTER: 'REL_REGISTER',
     RUN_KIND: 'REL_RUN_KIND',
     RUN_STATE: 'REL_RUN_STATE',
     PROFILE_REVISION: 'REL_PROFILE_REVISION',
@@ -266,6 +268,40 @@ export function checkRelations(project, { now, maxProblems = 20 } = {}) {
         });
     });
 
+    // -- declared Drawing Registers -----------------------------------------
+    const registerEntries = new Map();
+    set.drawingRegisterReferences.forEach((reference, i) => {
+        if (report.full) return;
+        const path = `/drawingSet/drawingRegisterReferences/${i}`;
+        claim(reference.id, `${path}/id`);
+        const declaredAt = timestamp(reference.declaredAt, `${path}/declaredAt`);
+        const updatedAt = timestamp(reference.updatedAt, `${path}/updatedAt`);
+        ordered(declaredAt, updatedAt, `${path}/updatedAt`, 'updated before it was declared');
+        optionalTimestamp(reference.retiredAt, `${path}/retiredAt`);
+        const source = sources.get(reference.sourceId);
+        if (!source) report.problem(RELATION_PROBLEM.DANGLING_SOURCE, `${path}/sourceId`, 'no such source');
+        else if (source.retiredAt !== null && reference.retiredAt === null) {
+            report.problem(RELATION_PROBLEM.RETIRED_STATE, `${path}/retiredAt`, 'a register declared from a retired source is retired');
+        }
+        // A register read from a table says where the table was; one a person typed need not.
+        if (reference.method === 'TABLE_NATIVE' && reference.region === null) {
+            report.problem(RELATION_PROBLEM.REGISTER, `${path}/region`, 'a register read from a table records where the table was');
+        }
+        if (reference.region && (!(reference.region.left < reference.region.right) || !(reference.region.top < reference.region.bottom))) {
+            report.problem(RELATION_PROBLEM.RECT_INVALID, `${path}/region`, 'a region is a non-empty rectangle');
+        }
+        const rows = new Set();
+        reference.entries.forEach((entry, j) => {
+            const at = `${path}/entries/${j}`;
+            claim(entry.id, `${at}/id`);
+            registerEntries.set(entry.id, entry);
+            optionalTimestamp(entry.retiredAt, `${at}/retiredAt`);
+            if (entry.drawingNumber.trim() === '') report.problem(RELATION_PROBLEM.REGISTER, `${at}/drawingNumber`, 'a register entry names a drawing');
+            if (rows.has(entry.row)) report.problem(RELATION_PROBLEM.REGISTER, `${at}/row`, 'two entries of one register share a row');
+            rows.add(entry.row);
+        });
+    });
+
     // -- findings -----------------------------------------------------------
     const findings = new Map();
     const activeKeys = new Map();
@@ -291,6 +327,7 @@ export function checkRelations(project, { now, maxProblems = 20 } = {}) {
         };
         unique(finding.sheetIds, 'sheetIds', (id) => sheets.has(id), RELATION_PROBLEM.DANGLING_SHEET);
         unique(finding.sourceIds, 'sourceIds', (id) => sources.has(id), RELATION_PROBLEM.DANGLING_SOURCE);
+        unique(finding.registerEntryIds, 'registerEntryIds', (id) => registerEntries.has(id), RELATION_PROBLEM.DANGLING_REGISTER_ENTRY);
         unique(finding.basis.map((b) => b.sourceId), 'basis', (id) => sources.has(id), RELATION_PROBLEM.DANGLING_SOURCE);
 
         const sheetCount = finding.sheetIds.length;
@@ -299,6 +336,7 @@ export function checkRelations(project, { now, maxProblems = 20 } = {}) {
             SHEET_GROUP: sheetCount >= 1,
             SET: true,
             SOURCE: finding.sourceIds.length >= 1,
+            REGISTER_ENTRY: finding.registerEntryIds.length >= 1,
             PROJECT: true,
         }[finding.scope];
         if (!subjectOk) report.problem(RELATION_PROBLEM.FINDING_SUBJECT, `${path}/scope`, 'the subjects do not fit the scope');

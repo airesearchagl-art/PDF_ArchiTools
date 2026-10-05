@@ -144,7 +144,7 @@
       "description": "M7 holds exactly one Active Drawing Set, so this is one object and not a list. Its collections are flat and related by id.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "createdAt", "sources", "titleBlockProfiles", "sheets", "analysisRuns", "findings", "decisions"],
+      "required": ["id", "name", "createdAt", "sources", "titleBlockProfiles", "sheets", "drawingRegisterReferences", "analysisRuns", "findings", "decisions"],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "name": { "$ref": "#/$defs/Name" },
@@ -152,6 +152,7 @@
         "sources": { "type": "array", "maxItems": 5000, "x-limit": "maxSources", "items": { "$ref": "#/$defs/Source" } },
         "titleBlockProfiles": { "type": "array", "maxItems": 64, "x-limit": "maxProfiles", "items": { "$ref": "#/$defs/TitleBlockProfile" } },
         "sheets": { "type": "array", "maxItems": 5000, "x-limit": "maxSheets", "items": { "$ref": "#/$defs/Sheet" } },
+        "drawingRegisterReferences": { "type": "array", "maxItems": 64, "x-limit": "maxRegisterReferences", "items": { "$ref": "#/$defs/DrawingRegisterReference" } },
         "analysisRuns": { "type": "array", "maxItems": 2000, "x-limit": "maxAnalysisRuns", "items": { "$ref": "#/$defs/AnalysisRun" } },
         "findings": { "type": "array", "maxItems": 50000, "x-limit": "maxFindings", "items": { "$ref": "#/$defs/Finding" } },
         "decisions": { "type": "array", "maxItems": 100000, "x-limit": "maxDecisions", "items": { "$ref": "#/$defs/ReviewDecision" } }
@@ -363,6 +364,41 @@
       }
     },
 
+    "RegisterEntry": {
+      "description": "One row of a declared Drawing Register: what a person declared the list to say about one drawing. Field-level values only -- never the table as a block of text. origin says whether the row is as it was read, was corrected by a person, or was typed by one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "row", "drawingNumber", "drawingTitle", "revision", "issueDate", "origin", "retiredAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "row": { "type": "integer", "minimum": 1, "maximum": 1000, "x-limit": "maxRegisterEntriesPerReference" },
+        "drawingNumber": { "$ref": "#/$defs/FieldValue" },
+        "drawingTitle": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/FieldValue" }] },
+        "revision": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/FieldValue" }] },
+        "issueDate": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/FieldValue" }] },
+        "origin": { "type": "string", "enum": ["EXTRACTED", "EDITED", "MANUAL"] },
+        "retiredAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] }
+      }
+    },
+    "DrawingRegisterReference": {
+      "description": "A Drawing Register a person DECLARED: which page of which Source the list is on, where on that page, from which bytes, and the rows they accepted. Optional -- a Drawing Set may have none -- and never inferred. Its basis is fixed: a register declared again, from new bytes or another page, is a new reference and this one is retired.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceId", "pageNumber", "region", "sourceSha256", "method", "declaredAt", "updatedAt", "retiredAt", "entries"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "sourceId": { "$ref": "#/$defs/Uuid" },
+        "pageNumber": { "type": "integer", "minimum": 1, "maximum": 5000, "x-limit": "maxPagesPerSource" },
+        "region": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Rect" }] },
+        "sourceSha256": { "$ref": "#/$defs/Sha256Hex" },
+        "method": { "type": "string", "enum": ["TABLE_NATIVE", "MANUAL"] },
+        "declaredAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "retiredAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] },
+        "entries": { "type": "array", "minItems": 1, "maxItems": 1000, "x-limit": "maxRegisterEntriesPerReference", "items": { "$ref": "#/$defs/RegisterEntry" } }
+      }
+    },
+
     "SourceBasis": {
       "type": "object",
       "additionalProperties": false,
@@ -442,7 +478,7 @@
       "description": "One statement by one rule about one subject. Immutable apart from its lifecycle; a changed statement is a new Finding that supersedes this one.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "runId", "ruleId", "ruleVersion", "determinism", "scope", "sheetIds", "sourceIds", "findingKey", "evidenceDigest", "basis", "params", "createdAt", "lifecycle"],
+      "required": ["id", "runId", "ruleId", "ruleVersion", "determinism", "scope", "sheetIds", "sourceIds", "registerEntryIds", "findingKey", "evidenceDigest", "basis", "params", "createdAt", "lifecycle"],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "runId": { "$ref": "#/$defs/Uuid" },
@@ -464,9 +500,10 @@
         },
         "ruleVersion": { "type": "integer", "minimum": 1, "maximum": 1000 },
         "determinism": { "type": "string", "enum": ["DETERMINISTIC", "CANDIDATE"] },
-        "scope": { "type": "string", "enum": ["SHEET", "SHEET_GROUP", "SET", "SOURCE", "PROJECT"] },
+        "scope": { "type": "string", "enum": ["SHEET", "SHEET_GROUP", "SET", "SOURCE", "REGISTER_ENTRY", "PROJECT"] },
         "sheetIds": { "type": "array", "maxItems": 5000, "x-limit": "maxSubjectsPerFinding", "items": { "$ref": "#/$defs/Uuid" } },
         "sourceIds": { "type": "array", "maxItems": 5000, "x-limit": "maxSources", "items": { "$ref": "#/$defs/Uuid" } },
+        "registerEntryIds": { "type": "array", "maxItems": 5000, "x-limit": "maxSubjectsPerFinding", "items": { "$ref": "#/$defs/Uuid" } },
         "findingKey": { "$ref": "#/$defs/Sha256Hex" },
         "evidenceDigest": { "$ref": "#/$defs/Sha256Hex" },
         "basis": { "type": "array", "maxItems": 5000, "x-limit": "maxSources", "items": { "$ref": "#/$defs/SourceBasis" } },

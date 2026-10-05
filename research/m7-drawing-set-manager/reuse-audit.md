@@ -16,12 +16,14 @@ existing engine  →  domain / service boundary (adapter)  →  M7 Workspace
 | Source of each statement | Marked |
 |---|---|
 | Read in full by the Orchestrator and/or **executed** from the research harness against Production code | **verified** |
-| Collected by two read-only sub-agents (file inventory, signatures, call sites), then spot-checked here with `grep` | *audited* |
+| Collected by read-only sub-agents (file inventory, signatures, call sites) — two for the first audit, a third for the table engine after RF-33-02 — then spot-checked here with `grep` | *audited* |
 
 Executed means `tests/reuse-parity.test.mjs` and `tests/sha256.test.mjs` import the Production module from
 `src/` unchanged and call it. That covers `drawing-register-template.ts`, `drawing-register.ts`,
 `drawing-register-types.ts`, `comparator/geometry.ts`, `page-size-normalizer.ts` (pure parts) and
-`split-merge/digest.ts`. Line numbers are given only where they were checked here.
+`split-merge/digest.ts`. After RF-33-02, `tests/declared-register.test.mjs` does the same for the table
+engine: it imports `table-reconstruct.ts` (and through it `table-detect.ts` and `table-geometry.ts`) unchanged
+and calls `reconstructSelection`. Line numbers are given only where they were checked here.
 
 ## 1. Summary
 
@@ -44,8 +46,10 @@ Executed means `tests/reuse-parity.test.mjs` and `tests/sha256.test.mjs` import 
 | 10 | Page size / orientation | **Reuse the pure helper**; the reader needs extracting | `detectPaperSize` (tested); *small future refactor* |
 | 11 | Title-block **updater** | **Not applicable** | a writer, in a different coordinate space |
 | 12 | App shell / tool registration | **Small edit at implementation time** | not an engine |
+| 13 | M2-4 table extraction (the Excel export's engine) — *added after RF-33-02* | **Reuse as is, through an adapter**, for a declared Drawing Register | `analysePageGeometry` → `reconstructSelection` → a column mapping a person supplies (tested with the engine run for real) |
 
 No candidate needs a refactor *before* M7 can start. Two need one *for* M7 (8, 10), and both are additive.
+Candidate 13 needs none.
 
 ## 2. The table the Task Packet asks for
 
@@ -202,6 +206,64 @@ Columns: **API** · **Pure / UI** (pure domain logic or UI-bound) · **Browser s
 | **M7** | A sixth mode, a sixth button, a sixth render line, a `TOOL_VERSIONS` entry and a guide section — at implementation time. M7's component mounts nothing from the other five. |
 | **Persistence in the app today** | **None.** No IndexedDB, `localStorage`, `sessionStorage` or File System Access API anywhere in `src/` (0 matches — **verified**). Files arrive only through `<input type=file>`. M7's Portable Project JSON would be the app's first durable state. |
 
+### 13. M2-4 table extraction — for a declared Drawing Register (RF-33-02)
+
+QA09 compares the Sheets with a Drawing Register a person declares. The rows of that register have to come
+from somewhere, and the app already reads tables a person points at: the Excel export.
+
+| | |
+|---|---|
+| **Path** | `src/utils/pdf-textifier/table-geometry.ts`, `table-detect.ts`, `table-reconstruct.ts`, `table-types.ts` (re-exported by `pdf-textifier/index.ts`); the UI is `src/components/ExcelTableExporter.tsx`; `excel.ts` writes the workbook and is not needed — `table-types.ts` and `reconstructSelection` **verified** (read; executed); the rest *audited* |
+| **API** | `analysePageGeometry(doc: PDFDocumentProxy, pageNumber: number): Promise<PageGeometry>` · `reconstructSelection(page: PageGeometry, selection: SelectionRect, options?: { maxGeometryTokens?, shouldCancel? }): Promise<TableCandidate>` · `canvasRectToUpright(rect, scale, page)` · types `PageGeometry`, `SelectionRect`, `TableCandidate { status, source, rows, cols, grid: string[][], bbox, structureScore, … }` |
+| **Pipeline** | page → `PageGeometry` (tokens and ruling segments, upright points) → a rectangle a person drew → `TableCandidate.grid`: the table's cells as text, row-major. Ruled grids first (the rectangle only says *which* grid; the grid's own edges are used), token geometry second, bounded. |
+| **Pure / UI** | `reconstructSelection` is **plain data in, plain data out**: it needs only `performance.now()` and `setTimeout`. `analysePageGeometry` needs a PDF.js document. No React, no DOM in either. Confirmation of a candidate is component code in `ExcelTableExporter.tsx`, not an engine function. |
+| **Browser state** | None. But the module graph loads PDF.js: `table-geometry.ts` imports `pdfjs-dist` at module level, and `table-detect.ts` and `table-reconstruct.ts` import from it — so even the pure functions cannot be loaded without PDF.js being importable. |
+| **React** | None in the engine. |
+| **PDF.js objects** | `analysePageGeometry` takes a `PDFDocumentProxy` it does not own, and cleans up its page. `reconstructSelection` takes none. |
+| **Cancel** | `shouldCancel` on the geometry route (polled at batch boundaries); the ruled route has no poll and needs none. Cancelled → a `NO_GRID` candidate, never a throw. |
+| **Memory** | `PageGeometry.tokens` is **every text run on the page**, returned to the caller. `TableCandidate` holds only the selected grid's text. Nothing is retained by the engine. |
+| **Limits** | `MAX_GEOMETRY_TOKENS = 5000` on the geometry route (a dense selection is refused as `TOO_DENSE`, not truncated). No maximum rows, columns or cells. Minimum 2 × 2. |
+| **Failure model** | Never throws by design: a non-grid is a `TableCandidate` with a status (`NO_GRID`, `UNSUPPORTED_LAYOUT`, `AMBIGUOUS_SELECTION`, `TOO_DENSE`) and a message. |
+| **Scanned pages** | **Native text only.** A page with no text of its own is reported as `scanned`, with no tokens, and `reconstructSelection` returns `UNSUPPORTED_LAYOUT` for it: "Excel export is native-only, and quietly recognising the page would be both slow and a promise the feature does not make". |
+| **What a cell is** | A string. No per-cell position, source tokens or confidence. A multi-line cell is joined with line breaks. Merged cells are never inferred. **There is no notion of a header row or of what a column means.** |
+| **Coordinate space** | Upright page space, PDF points — the same space as the register's rectangles and M7's profiles. A register's `region` is the engine's own `bbox`. |
+| **M7 reuse** | **Yes, as is.** |
+| **Adapter only?** | **Yes.** `prototype/register-list-adapter.mjs` is the whole of it: a person's column mapping (which column is the drawing number; optionally title, revision, date; how many heading rows) turns `grid` into field-level rows. A row with no drawing number is reported back, not dropped silently and not made an entry. A candidate that is not a grid is refused with the engine's own status. |
+| **Future refactor?** | **None required.** Optional, and not for M7's sake alone: a version of the pure reconstruction that does not import PDF.js at module level would let it be unit-tested without a PDF.js build. |
+
+**Two things with one name — why not the existing Drawing Register (M2-5).** The tool the app calls
+"Drawing Register" (candidates 1–3) *builds* a list by reading the title block of every page. In M7 that
+is the **actual** side of QA09: it is how a Sheet comes to have a number. It cannot also be the **declared**
+side. A register derived from the title blocks agrees with them by construction, so QA09 would compare the
+Sheets with themselves and could never find a drawing that is listed and absent. The declared register is
+read from the page where the project *states* its drawings — the 図面一覧, which is a table — or typed.
+What M2-5 does give the declared register is what it gives the rest of M7: the upright coordinate space
+and rectangle shape (a register's `region` and a profile's field rectangle are the same kind of value),
+and the rule that a value read by machine is a candidate until a person accepts it. `extractRegister`,
+`applyProfile` and `findDuplicates` are not used for it.
+
+**Other table-region or native-text geometry looked at.** `transferRect` / `applyProfile` (candidate 2)
+carry one rectangle to another page and read the text inside it: one field, not rows and columns. The
+Comparator's `pageGeometry` (candidate 9) describes a page, not its content. Neither reconstructs a table;
+the M2-4 engine is the only code in the app that does, and it is enough.
+
+**Run, not asserted.** `tests/declared-register.test.mjs` builds a synthetic list page as the engine sees
+one (tokens and ruling lines), calls Production's `reconstructSelection`, and requires: a ruled list to come
+back as the expected grid (`source: 'ruling'`); an unruled one through the geometry route; a scanned page to
+be refused (`UNSUPPORTED_LAYOUT`) and nothing to be declared from it; and, end to end, a register declared
+from the engine's grid to produce the right QA09 findings. To load the module in Node the test's resolve
+hook points `pdfjs-dist` at PDF.js's own `legacy` build (the build PDF.js ships for Node); no file under
+`src/` is touched.
+
+**What the adapter adds that the engine must not guess.** To the engine a drawing list, a legend and a door
+schedule are the same thing — "a high structural score is never a statement that the selection was a
+table". Which grid is the drawing list, and which column is the number, is a person's statement. That is
+exactly the review's requirement: *do not silently infer a Drawing Register*.
+
+**What the adapter must not carry.** `PageGeometry.tokens` is the full text of the list page. The adapter
+keeps the rows and the rectangle and nothing else; the model and the file have no property for the rest
+(`data-model.proposed.md` §2A).
+
 ## 3. The reuse boundary this implies
 
 ```mermaid
@@ -210,12 +272,14 @@ flowchart LR
         UI["React workspace<br/>sheet list / viewer pane / inspector"]
         SVC["M7 domain services (new, pure TS)<br/>project-io · rebind · currency · qa-rules"]
         ADP["Register adapter (new, pure)<br/>names · identity · arrangement"]
+        RLA["Register-list adapter (new, pure)<br/>a person's column mapping"]
         FPW["Fingerprint Worker (new)"]
     end
     subgraph EX["Existing engines (unchanged)"]
         REG["extractRegister + RegisterOcrEngine<br/>analyseRegisterPage · classifyPage"]
         TPL["transferRect / applyProfile<br/>displayValue · findDuplicates"]
         GEO["pageGeometry · detectPaperSize"]
+        TBL["analysePageGeometry · reconstructSelection<br/>(M2-4 table engine)"]
         RT["configurePdfWorker"]
         OWN["RunOwnership"]
     end
@@ -225,6 +289,8 @@ flowchart LR
     SVC --> ADP
     ADP --> REG
     ADP --> TPL
+    SVC --> RLA
+    RLA --> TBL
     SVC --> GEO
     UI --> RT
     UI --> OWN
@@ -248,3 +314,6 @@ flowchart LR
 | No maximum page count or file count exists anywhere in `src/` | (*audited*: no `maxPages` / `maxFiles`) | M7 introduces the app's first such bounds; they are research candidates here (`limits.proposed.mjs`). |
 | Two box semantics for "page size" | normaliser: CropBox ∩ MediaBox; processor facts: MediaBox | M7 uses the visible box throughout, as the register and PDF.js do. |
 | No engine version constant | `pdf-textifier` | M7's runs record an engine version; one must be introduced when M7 is implemented. |
+| The table engine hands its caller the whole page's text | `PageGeometry.tokens` | The register-list adapter keeps rows and a rectangle only; M7 must not hold the geometry longer than the declaration takes, and never persists it. |
+| The table engine reads native text only | `reconstructSelection` → `UNSUPPORTED_LAYOUT` for a scanned page | A scanned drawing list cannot be read into a register; it is declared by typing (`method: MANUAL`). OCR of a list page is not designed. |
+| The table engine does not know what a table is | `TableStatus` describes structure, never meaning | M7 never offers a detected grid *as* a drawing list. A person designates it. |

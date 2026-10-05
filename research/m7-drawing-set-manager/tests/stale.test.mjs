@@ -50,7 +50,11 @@ test('baseline: a fully confirmed, fully decided, fully bound Project is Final',
         assert.equal(currency.confirmation, DATA_CURRENCY.CURRENT);
     }
     assert.ok(model.drawingSet.findings.length > 0, 'Final is not "no findings"');
-    assert.deepEqual(readiness(model, bindings), { final: true, blockers: [] });
+    assert.deepEqual(readiness(model, bindings), {
+        final: true, blockers: [],
+        // No register was declared, so QA09 was not evaluated -- and Final says so.
+        notEvaluable: [{ ruleId: 'QA09_REGISTER_SHEET_MISMATCH', reason: 'NO_DECLARED_REGISTER' }],
+    });
 });
 
 test('completion is "no unreviewed current finding", not "no findings"', () => {
@@ -375,8 +379,8 @@ test('a replacement with a different page count leaves the mismatch for a person
     // The two sheets whose pages no longer exist were not retired behind anyone's back.
     assert.equal(sheetsOf(model, source.id).length, 6);
     runQa(model, bindings, { now: tick(), newId });
-    const orphan = model.drawingSet.findings.find((f) => f.ruleId === 'QA09_REGISTER_SHEET_MISMATCH' && f.lifecycle.state === 'ACTIVE');
-    assert.equal(orphan.params.reason, 'SHEET_WITHOUT_PAGE');
+    const orphan = model.drawingSet.findings.find((f) => f.ruleId === 'QA10_INTEGRITY' && f.lifecycle.state === 'ACTIVE' && f.params.reason === 'SHEET_WITHOUT_PAGE');
+    assert.ok(orphan, 'the Sheet list / page inventory mismatch is a Project integrity finding');
     assert.equal(orphan.params.count, 2);
 
     const longer = replaceSourceFingerprint(model, source.id, { sha256: sha256HexOfText('longer'), byteLength: 6, pageCount: 8, now: tick(), newId });

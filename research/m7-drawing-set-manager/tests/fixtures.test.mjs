@@ -54,6 +54,7 @@ test('no fixture holds anything but synthetic data', () => {
         const text = read(file);
         // Small enough to read; nothing embedded.
         assert.ok(text.length < 200_000, `${file} is ${text.length} characters`);
+        assert.ok(!/"(pageText|ocrText|tokens|thumbnail)"/.test(text) || file.startsWith('invalid/'), `${file} holds a forbidden property`);
         assert.ok(!/[A-Za-z0-9+/]{400,}/.test(text), `${file} holds a long encoded run`);
         // The only source names are the generator's.
         for (const match of text.matchAll(/"displayName": "([^"]*)"/g)) {

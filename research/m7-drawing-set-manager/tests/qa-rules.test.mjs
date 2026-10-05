@@ -234,15 +234,16 @@ test('QA07 / QA08: sheets outside a class more than half the set shares; no majo
     assert.equal(active(split.model, 'QA07_SHEET_SIZE_OUTLIER').length, 0, 'two against two has no majority');
 });
 
-test('QA09: the register against the pages the source actually has', () => {
+test('QA10 (manifest): M7\'s own Sheet list against the pages the source actually has', () => {
     const fixture = setOf([['A-101'], ['A-102'], ['A-103']]);
     run(fixture);
-    assert.equal(active(fixture.model, 'QA09_REGISTER_SHEET_MISMATCH').length, 0);
+    const mismatch = () => active(fixture.model, 'QA10_INTEGRITY').filter((f) => f.params.reason.endsWith('_PAGE') || f.params.reason.endsWith('_SHEET'));
+    assert.equal(mismatch().length, 0);
 
     // A page with no sheet (a sheet was retired by hand)...
     fixture.sheets[2].retiredAt = new Date(fixture.tick()).toISOString();
     run(fixture);
-    const [missing] = active(fixture.model, 'QA09_REGISTER_SHEET_MISMATCH');
+    const [missing] = mismatch();
     assert.deepEqual(missing.params, { reason: 'PAGE_WITHOUT_SHEET', count: 1 });
     assert.equal(missing.scope, 'SOURCE');
     assert.equal(missing.determinism, 'DETERMINISTIC');
@@ -250,8 +251,11 @@ test('QA09: the register against the pages the source actually has', () => {
     // ...and a sheet with no page (the manifest says the file is shorter).
     fixture.source.fingerprint.pageCount = 1;
     run(fixture);
-    const reasons = active(fixture.model, 'QA09_REGISTER_SHEET_MISMATCH').map((f) => f.params.reason);
-    assert.deepEqual(reasons, ['SHEET_WITHOUT_PAGE']);
+    assert.deepEqual(mismatch().map((f) => f.params.reason), ['SHEET_WITHOUT_PAGE']);
+    // It is bookkeeping, and it does not need the Source to be bound to be known.
+    assert.equal(missing.lifecycle.state, 'NOT_REPRODUCED');
+    // None of this is QA09: with no declared register QA09 says nothing at all.
+    assert.equal(fixture.model.drawingSet.findings.filter((f) => f.ruleId === 'QA09_REGISTER_SHEET_MISMATCH').length, 0);
 });
 
 test('QA10: a source that is not the bytes the project remembers, and a file with a strange history', () => {
@@ -399,7 +403,7 @@ test('a finding in a file is only ever recognised, never believed: a forged one 
     document.drawingSet.analysisRuns.push(forgedRun);
     const forged = {
         id: ids(), runId: forgedRun.id, ruleId: 'QA01_DUPLICATE_NUMBER', ruleVersion: 1, determinism: 'DETERMINISTIC', scope: 'SHEET_GROUP',
-        sheetIds: document.drawingSet.sheets.map((s) => s.id), sourceIds: [],
+        sheetIds: document.drawingSet.sheets.map((s) => s.id), sourceIds: [], registerEntryIds: [],
         findingKey: sha256HexOfText('forged-key'), evidenceDigest: sha256HexOfText('forged-evidence'),
         basis: [{ sourceId: document.drawingSet.sources[0].id, sha256: document.drawingSet.sources[0].fingerprint.sha256 }],
         params: { number: 'A-101', count: 2 }, createdAt: document.savedAt,

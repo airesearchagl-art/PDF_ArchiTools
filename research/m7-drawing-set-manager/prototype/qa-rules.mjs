@@ -29,7 +29,7 @@
 
 import { sha256HexOfText } from './sha256-stream.mjs';
 import { toTimestamp } from './ids.mjs';
-import { BINDING, DATA_CURRENCY, indexModel, setCurrency } from './currency.mjs';
+import { BINDING, DATA_CURRENCY, REGISTER_STATUS, indexModel, setCurrency } from './currency.mjs';
 import { draftQaRun } from './model-ops.mjs';
 
 export const QA_ENGINE_VERSION = '0.1.0-research';
@@ -53,7 +53,7 @@ export const RULES = Object.freeze({
     QA06_ISSUE_DATE_MISMATCH: { version: 1, determinism: 'DETERMINISTIC', scope: 'SHEET_GROUP', input: 'metadata' },
     QA07_SHEET_SIZE_OUTLIER: { version: 1, determinism: 'CANDIDATE', scope: 'SHEET_GROUP', input: 'facts' },
     QA08_ORIENTATION_OUTLIER: { version: 1, determinism: 'CANDIDATE', scope: 'SHEET_GROUP', input: 'facts' },
-    QA09_REGISTER_SHEET_MISMATCH: { version: 1, determinism: 'DETERMINISTIC', scope: 'SOURCE', input: 'manifest' },
+    QA09_REGISTER_SHEET_MISMATCH: { version: 1, determinism: 'DETERMINISTIC', scope: 'SHEET', input: 'register' },
     QA10_INTEGRITY: { version: 1, determinism: 'DETERMINISTIC', scope: 'SOURCE', input: 'binding' },
 });
 
@@ -173,21 +173,25 @@ export function evaluateRules(model, bindings, { importWarnings, maxGapRun = MAX
     const drafts = [];
 
     const shaOf = (sheet) => index.sources.get(sheet.sourceId).fingerprint.sha256;
-    const draft = (ruleId, { sheets = [], sources = [], key, evidence, params }) => {
+    const draft = (ruleId, { sheets = [], sources = [], registerEntries = [], scope, key, evidence, params }) => {
         const rule = RULES[ruleId];
         const orderedSheets = [...sheets].sort((a, b) => (a.id < b.id ? -1 : 1));
         const basisSources = new Map();
         for (const sheet of orderedSheets) basisSources.set(sheet.sourceId, shaOf(sheet));
         for (const source of sources) basisSources.set(source.id, source.fingerprint.sha256);
+        // A register entry is cited through the Source its register was declared from.
+        const orderedEntries = [...registerEntries].sort((a, b) => (a.entry.id < b.entry.id ? -1 : 1));
+        for (const { reference } of orderedEntries) basisSources.set(reference.sourceId, index.sources.get(reference.sourceId).fingerprint.sha256);
         const basis = [...basisSources].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([sourceId, sha256]) => ({ sourceId, sha256 }));
         drafts.push({
-            ruleId, ruleVersion: rule.version, determinism: rule.determinism, scope: rule.scope,
+            ruleId, ruleVersion: rule.version, determinism: rule.determinism, scope: scope ?? rule.scope,
             sheetIds: orderedSheets.map((s) => s.id),
             sourceIds: [...sources].map((s) => s.id).sort(),
+            registerEntryIds: orderedEntries.map((item) => item.entry.id),
             findingKey: digest([ruleId, ...key]),
             // The grounds: the rule's version, what it cites, the bytes each cited
             // sheet was read from, and the values that make the statement true.
-            evidenceDigest: digest([ruleId, rule.version, orderedSheets.map((s) => [s.id, shaOf(s)]), basis, evidence]),
+            evidenceDigest: digest([ruleId, rule.version, orderedSheets.map((s) => [s.id, shaOf(s)]), orderedEntries.map((item) => item.entry.id), basis, evidence]),
             basis, params,
         });
     };
@@ -314,7 +318,54 @@ export function evaluateRules(model, bindings, { importWarnings, maxGapRun = MAX
     outliers('QA07_SHEET_SIZE_OUTLIER', (f) => sizeClass(f.uprightWidthPt, f.uprightHeightPt), ['sizeClass', 'majoritySizeClass']);
     outliers('QA08_ORIENTATION_OUTLIER', displayedOrientation, ['orientation', 'majorityOrientation']);
 
-    // QA09: the register against the pages the Source actually has.
+    // QA09: a Drawing Register a person DECLARED, against the sheets that are
+    // actually here. Nothing is inferred. With no declared register there is
+    // nothing to compare with and the rule states nothing -- which is "not
+    // evaluable", not "no mismatch". Correspondence is the exact drawing number,
+    // the same key QA01 uses; a spelling that would match once folded is offered
+    // as a hint and never counted as a match.
+    const register = coverage.register;
+    if (register.status === REGISTER_STATUS.CURRENT) {
+        const listed = new Map();
+        const listedSpellings = new Map();
+        for (const item of register.liveEntries) {
+            const exact = exactKey(item.entry.drawingNumber);
+            if (!listed.has(exact)) listed.set(exact, []);
+            listed.get(exact).push(item);
+            const folded = comparisonKey(exact);
+            if (!listedSpellings.has(folded)) listedSpellings.set(folded, new Set());
+            listedSpellings.get(folded).add(exact);
+        }
+        const registerBasis = register.references.map((r) => [r.id, r.sourceSha256]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+        const hint = (spellings) => (spellings.length > 0 ? { values: spellings.slice(0, 64) } : {});
+
+        for (const [exact, items] of listed) {
+            if (byExact.has(exact)) continue;
+            const near = [...(byComparison.get(comparisonKey(exact))?.keys() ?? [])].sort();
+            for (const item of items) {
+                draft('QA09_REGISTER_SHEET_MISMATCH', {
+                    registerEntries: [item], scope: 'REGISTER_ENTRY',
+                    key: ['LISTED_BUT_MISSING', item.entry.id], evidence: ['LISTED_BUT_MISSING', exact],
+                    params: { reason: 'LISTED_BUT_MISSING', number: exact, ...hint(near) },
+                });
+            }
+        }
+        for (const [exact, group] of byExact) {
+            if (listed.has(exact)) continue;
+            const near = [...(listedSpellings.get(comparisonKey(exact)) ?? [])].sort();
+            for (const row of group) {
+                draft('QA09_REGISTER_SHEET_MISMATCH', {
+                    sheets: [row.sheet], scope: 'SHEET',
+                    key: ['ACTUAL_NOT_LISTED', row.sheet.id], evidence: ['ACTUAL_NOT_LISTED', exact, registerBasis],
+                    params: { reason: 'ACTUAL_NOT_LISTED', number: exact, ...hint(near) },
+                });
+            }
+        }
+    }
+
+    // QA10 (manifest): M7's own Sheet list against the pages each Source
+    // actually has. An integrity fact about the Project's bookkeeping, not a
+    // statement about the drawings -- which is why it is not QA09.
     const pagesBySource = new Map();
     for (const sheet of model.drawingSet.sheets) {
         if (sheet.retiredAt !== null) continue;
@@ -330,14 +381,14 @@ export function evaluateRules(model, bindings, { importWarnings, maxGapRun = MAX
         let unregistered = 0;
         for (let page = 1; page <= pageCount; page += 1) if (!registered.has(page)) unregistered += 1;
         if (orphaned.length > 0) {
-            draft('QA09_REGISTER_SHEET_MISMATCH', {
+            draft('QA10_INTEGRITY', {
                 sheets: orphaned, sources: [source], key: [source.id, 'SHEET_WITHOUT_PAGE'],
                 evidence: [pageCount, orphaned.map((s) => s.pageNumber).sort((a, b) => a - b)],
                 params: { reason: 'SHEET_WITHOUT_PAGE', count: orphaned.length },
             });
         }
         if (unregistered > 0) {
-            draft('QA09_REGISTER_SHEET_MISMATCH', {
+            draft('QA10_INTEGRITY', {
                 sources: [source], key: [source.id, 'PAGE_WITHOUT_SHEET'], evidence: [pageCount, unregistered],
                 params: { reason: 'PAGE_WITHOUT_SHEET', count: unregistered },
             });
@@ -361,7 +412,7 @@ export function evaluateRules(model, bindings, { importWarnings, maxGapRun = MAX
         const codes = [...new Set(importWarnings.map((w) => w.code))].sort();
         drafts.push({
             ruleId: 'QA10_INTEGRITY', ruleVersion: RULES.QA10_INTEGRITY.version, determinism: 'DETERMINISTIC', scope: 'PROJECT',
-            sheetIds: [], sourceIds: [],
+            sheetIds: [], sourceIds: [], registerEntryIds: [],
             findingKey: digest(['QA10_INTEGRITY', 'PROJECT_FILE']),
             evidenceDigest: digest(['QA10_INTEGRITY', RULES.QA10_INTEGRITY.version, codes]),
             basis: [], params: { reason: 'PROJECT_FILE_ANOMALY', count: importWarnings.length },
@@ -376,6 +427,7 @@ export function evaluateRules(model, bindings, { importWarnings, maxGapRun = MAX
             factSheets: new Set(factRows.map((r) => r.sheet.id)),
             bindingSources: bindingEvaluated,
             projectFile: importWarnings !== undefined,
+            register: register.status,
         },
     };
 }
@@ -392,6 +444,14 @@ function couldEvaluate(finding, evaluation, index) {
     const { evaluated, coverage } = evaluation;
     const liveSubjects = finding.sheetIds.filter((id) => index.sheets.get(id)?.retiredAt === null);
     const input = RULES[finding.ruleId].input;
+    if (input === 'register') {
+        // No declared register: the rule no longer applies, and what it once said is closed --
+        // with nothing declared there is no QA09 finding, which is not a pass either.
+        if (evaluated.register === REGISTER_STATUS.NOT_DESIGNATED) return true;
+        // A register that is not current was not compared with anything.
+        if (evaluated.register !== REGISTER_STATUS.CURRENT) return false;
+        return liveSubjects.every((id) => evaluated.metadataSheets.has(id));
+    }
     if (input === 'metadata') {
         if (finding.ruleId === 'QA03_NUMBER_GAP' && !coverage.metadataComplete) return false;
         return liveSubjects.every((id) => evaluated.metadataSheets.has(id));
@@ -399,9 +459,11 @@ function couldEvaluate(finding, evaluation, index) {
     if (input === 'facts') return coverage.factsComplete;
     if (input === 'binding') {
         if (finding.scope === 'PROJECT') return evaluated.projectFile;
+        // The Sheet list against the page inventory needs only the manifest.
+        if (finding.params.reason === 'PAGE_WITHOUT_SHEET' || finding.params.reason === 'SHEET_WITHOUT_PAGE') return true;
         return finding.sourceIds.every((id) => evaluated.bindingSources.has(id) || index.sources.get(id)?.retiredAt !== null);
     }
-    return true; // 'sheet' and 'manifest' rules see every live sheet and source
+    return true; // a 'sheet' rule sees every live sheet
 }
 
 /**
@@ -434,7 +496,7 @@ export function reconcile(model, evaluation, { now, newId, engineVersion = QA_EN
         const finding = {
             id: newId(), runId: run.id,
             ruleId: draft.ruleId, ruleVersion: draft.ruleVersion, determinism: draft.determinism, scope: draft.scope,
-            sheetIds: draft.sheetIds, sourceIds: draft.sourceIds,
+            sheetIds: draft.sheetIds, sourceIds: draft.sourceIds, registerEntryIds: draft.registerEntryIds,
             findingKey: draft.findingKey, evidenceDigest: draft.evidenceDigest,
             basis: draft.basis, params: draft.params, createdAt: at,
             lifecycle: { state: 'ACTIVE', supersededByFindingId: null, closedByRunId: null, closedAt: null },

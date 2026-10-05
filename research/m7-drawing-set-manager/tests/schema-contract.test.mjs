@@ -81,7 +81,7 @@ test('every x-limit in the schema names a real limit, and the number written bes
     }
     // Every count/length limit the schema can express is actually used by it.
     const used = new Set(limitBindings.map((b) => b.limit));
-    const schemaLimits = ['maxSources', 'maxSheets', 'maxProfiles', 'maxAnalysisRuns', 'maxFindings', 'maxDecisions', 'maxFingerprintHistoryPerSource',
+    const schemaLimits = ['maxSources', 'maxSheets', 'maxProfiles', 'maxRegisterReferences', 'maxRegisterEntriesPerReference', 'maxAnalysisRuns', 'maxFindings', 'maxDecisions', 'maxFingerprintHistoryPerSource',
         'maxConfirmationHistoryPerSheet', 'maxSubjectsPerFinding', 'maxNameLength', 'maxFileNameLength', 'maxFieldValueLength', 'maxFieldRawTextLength',
         'maxCommentLength', 'maxSourceBytes', 'maxPagesPerSource', 'maxPagePoints'];
     for (const name of schemaLimits) assert.ok(used.has(name), `${name} is not bound to anything in the schema`);

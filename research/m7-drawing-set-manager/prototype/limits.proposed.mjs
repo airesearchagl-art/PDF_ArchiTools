@@ -24,7 +24,7 @@ const MiB = 1024 * 1024;
 export const CANDIDATE_LIMITS = Object.freeze({
     /**
      * Checked against `file.size` before a single byte is read. A 5000-sheet
-     * set measured 8.7 to 10.4 MiB; this is about six times the largest. A file
+     * set measured 8.8 to 10.4 MiB; this is about six times the largest. A file
      * at the bound opens in ~0.2 s (hostile-node.json, largestAccepted).
      */
     maxProjectBytes: 64 * MiB,
@@ -34,7 +34,7 @@ export const CANDIDATE_LIMITS = Object.freeze({
     maxNestingDepth: 16,
     /**
      * Every JSON value: containers and primitives alike. A 5000-sheet set
-     * measured 335 000 to 395 000; the entity-count limits below, all reached
+     * measured 338 000 to 397 000; the entity-count limits below, all reached
      * at once, admit roughly 2.4 million.
      */
     maxJsonValues: 4_000_000,
@@ -44,10 +44,10 @@ export const CANDIDATE_LIMITS = Object.freeze({
      * \uXXXX escapes that is 24 000.
      */
     maxStringSourceLength: 24_000,
-    /** The longest key in the schema is 21 characters. */
+    /** The longest key in the schema is 25 characters. */
     maxKeySourceLength: 64,
     /**
-     * The widest object in the schema has 14 properties. Without this bound an
+     * The widest object in the schema has 15 properties. Without this bound an
      * object with two million distinct keys stayed under every other limit and
      * cost two seconds and 600 MiB before the schema refused it (the first
      * run of bench-hostile.mjs; the figures are kept in limitations.md).
@@ -60,6 +60,10 @@ export const CANDIDATE_LIMITS = Object.freeze({
     /** The largest set this research was asked to consider. */
     maxSheets: 5_000,
     maxProfiles: 64,
+    /** One reference is one designated table on one page; a long list spans several. Not measured. */
+    maxRegisterReferences: 64,
+    /** Rows of one designated table. Not measured. */
+    maxRegisterEntriesPerReference: 1_000,
     maxAnalysisRuns: 2_000,
     /**
      * A 5000-sheet set measured 2534 to 5607 findings. Findings are never

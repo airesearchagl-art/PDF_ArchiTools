@@ -852,6 +852,7 @@
         "confirmationHistory": []
       }
     ],
+    "drawingRegisterReferences": [],
     "analysisRuns": [
       {
         "id": "7c9e0db1-1826-4785-800d-872e2de3b41a",
@@ -898,8 +899,9 @@
           "9e433a73-d8a9-4855-93c6-5b04cc705db7"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "7471df475d1be3029c06a196881ff3774a936584a306b582cf589dd27248d936",
-        "evidenceDigest": "ef6222e81cb672154f5ba16b1a0801eea1a895900fc5ecabd222749fd67240c7",
+        "evidenceDigest": "cc14b7745f56b78b31573a9416ee7e72e23aedd5b463d53285917be059bfb55f",
         "basis": [
           {
             "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
@@ -928,8 +930,9 @@
           "1d83ad44-6d48-4371-8fe2-faa24664cdd9"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "2ea9670b0ffc5dbb9a0dfa3c6605ba22486b4810edb923bf5b2f4b4c2b70fa94",
-        "evidenceDigest": "49718b30478fd61a7dc49e7b36c437427d90e3bd5de611edf0bfe64949d9651c",
+        "evidenceDigest": "7e344881d653b6dba59bf37d3532214a7482dd62463f8c5413a7fefe919a7bac",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -958,8 +961,9 @@
           "242fc4f6-4a9c-4f6e-a342-a316d32f6846"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "ef6a107413abb5082873ab9469f516bee89b1a1fee37021238dedbab2e8384a8",
-        "evidenceDigest": "c6083db66dedfa3c0e5fffac9192a566288c42a8ba4393fad20b32c206fbbde3",
+        "evidenceDigest": "2ddf1c76382ee3943140b722323fb1c5895769b10c7c5c72410f24db85756cd7",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -988,8 +992,9 @@
           "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "4dc3e5f773e9093a4c085aaf05eeed1f1a2fa59cfcb8bce983e2ec1413c2ea82",
-        "evidenceDigest": "9dc2581d3e87be59967e36ac478c80db59c6272e9f8c6987917357447df91c4e",
+        "evidenceDigest": "15aee0d733a708c2177fd70c29102b988f796e03ffef922548b058e4084a46ad",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1018,8 +1023,9 @@
           "afacb14e-0928-4c0c-8783-fe583154adfc"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "fd799c337f649ec251976a691297f7a83b045fb977c38d94d668d35254305710",
-        "evidenceDigest": "7920d88e5f5f8635b1ee399feec979aef61bf533e4403dff90d7aee4e99af141",
+        "evidenceDigest": "21aa9d6c48333850b7508810fdb66f2e5911f5bde1d0e3e2d9bfd3a21da9be6d",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1048,8 +1054,9 @@
           "39848ea9-a26e-4aa1-906c-96bc55d9ebc1"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "3862a7b0cd5e8a03588c1f5d3a1415744c334c454cd9e2928ee6ffdad0900af3",
-        "evidenceDigest": "6c143bda19e8be89d146fcabbb32a499bed195a16185ee62cdf0af53200a290f",
+        "evidenceDigest": "2a7e5b1e44332e2e74ebffa687dccdfade5f482bf81b443cf2888a7cfcee33dd",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1079,8 +1086,9 @@
           "9e433a73-d8a9-4855-93c6-5b04cc705db7"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "ec1b7ad766fe6a196ae91dba03ded57adb9e1ab0a501e90afe36e0ceb56bad49",
-        "evidenceDigest": "dcba18ec4a87b9b19ed12286ebb47f10a86361730ed1e7bbe412678e555882c7",
+        "evidenceDigest": "53e150aaed5cd093209d2b21f61a138f0575afe77a94a1f0cf667e7723e85331",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -1115,8 +1123,9 @@
           "9e433a73-d8a9-4855-93c6-5b04cc705db7"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "f78a9562802c790053cacf0ba4d626b12da77bd0523631f93b3f831280b7ea93",
-        "evidenceDigest": "80c9e32efffef2bcb7864f2f39ceea5ae58d03e2e42adbfbe3e3b37eef7775a3",
+        "evidenceDigest": "50bfd334851eb1f60649afb747c1bae94455843d8ea8c28e239a1698be976fa5",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -1154,8 +1163,9 @@
           "9e433a73-d8a9-4855-93c6-5b04cc705db7"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "cbaf5a40f3334bb2a89e07b67753e8723241c756a39aaa19615f44e6ebb9b40b",
-        "evidenceDigest": "99c5306ed1282c934d296421dd595764d1758025ba2139a261596f372234c73e",
+        "evidenceDigest": "29527a74de63033ea30ddf63046ec44567586b8f039847113173762b35c4c038",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -1193,8 +1203,9 @@
           "9e433a73-d8a9-4855-93c6-5b04cc705db7"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "d1fc65b4e446883be04e33530b487088c697ee15a13e6cc6df29a7fd5e7ce978",
-        "evidenceDigest": "9420db0dd0b1d1b6558e58a4c31630517eb155406f37d2b327a3b6742d1b9a18",
+        "evidenceDigest": "6cf2aa2f3261ca19029932fce5e9bbae726c50dbf187e0c5cd89f8c93938ace7",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -1232,8 +1243,9 @@
           "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "e94151b3fda26d9d20eb93e3fa651de0098f587e5c66d5395c1ea27cbe994cc0",
-        "evidenceDigest": "0676cb406e0532e05bc29707073a39f39d5012916b6cddd42696340ea5ad46f1",
+        "evidenceDigest": "c719ea60e67a9904ed4443f2c34ac733bfe09c5b4dbd50bca447fe9760947162",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1264,8 +1276,9 @@
           "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "4f6d150d32a4f62d1156a06a25bb97a496f9cc870923f07d4e0a98695b27a3c9",
-        "evidenceDigest": "9810d538421ff01eb77623cca60cf1c51d784a615f9a1a7df38769e0192703b9",
+        "evidenceDigest": "b35a69ad824896f66872a26297c851b8d61d43226996186b4bae2cce15c336be",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1299,8 +1312,9 @@
           "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "58c4f049e3ca23bd72f4130fdc6c9cdbc7a69d36418d921714c25fdbaa69f5b7",
-        "evidenceDigest": "269bbfbba42a2fcfcb2f25fe4d42821fc231a8c19024b611b407709d3795a82e",
+        "evidenceDigest": "ece313190c13d0fc025de0ab1a304b0506b3977ae61b0fdbdc198c7f77b265e0",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1334,8 +1348,9 @@
           "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "8941c87c98df92e7d05b083e6739bffdbcaa1af80b81dad2635d973ed7e0943a",
-        "evidenceDigest": "254b80968639fc06577096e080dd3d29b37ae01c5e8c4073c5f5833edcc5cb45",
+        "evidenceDigest": "7198a812895a67051a2220ddcfcab64c18c0a9e8fa1f350f98db3bca4103e75d",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1369,8 +1384,9 @@
           "242fc4f6-4a9c-4f6e-a342-a316d32f6846"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "1ad4e7f2362ba7b78676323c99258137246d6f8389ff2c28dcd2577e2c123a4e",
-        "evidenceDigest": "fb5f40450e90e4da2f05ebdbc5e47d1d7b3cf3b5b2b059545c75c80b4ae01cbd",
+        "evidenceDigest": "37704193e8e8030cb70749b4ea2002abd27a9543371a111f6e4409c288e39f2d",
         "basis": [
           {
             "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
@@ -1405,8 +1421,9 @@
           "afacb14e-0928-4c0c-8783-fe583154adfc"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "b96ad4178c586ff5a9c8577216f3f0b3c55dac2eed037a1bff7ccbc7f6d14f58",
-        "evidenceDigest": "236a15f4bf0b5e050b6e49afa63e8f2a92eb6c1abda94ddf7fa6d1d831189ae9",
+        "evidenceDigest": "40a973222d50b7996dfa48c67d57131e4689f931a305901fd14133d7c0d50123",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1439,8 +1456,9 @@
           "39848ea9-a26e-4aa1-906c-96bc55d9ebc1"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "1360bbac473a966b4e7f52140f7cde3f541031f419217a84d6199daed3ca4877",
-        "evidenceDigest": "4e359115436bc00da4ff00eb925dd6363bdfac4c8fbe8daa43ec30db412e315b",
+        "evidenceDigest": "0e6a2d1c0eae4338a60673500aec866ec7253786a3e214bcd0b0c032c963b2f5",
         "basis": [
           {
             "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
@@ -1474,7 +1492,7 @@
         "outcome": "INTENTIONAL",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.070Z",
-        "evidenceDigest": "c6083db66dedfa3c0e5fffac9192a566288c42a8ba4393fad20b32c206fbbde3"
+        "evidenceDigest": "2ddf1c76382ee3943140b722323fb1c5895769b10c7c5c72410f24db85756cd7"
       },
       {
         "id": "d9baa7b8-24f1-42de-89eb-9debb08698c0",
@@ -1483,7 +1501,7 @@
         "outcome": "FALSE_POSITIVE",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.080Z",
-        "evidenceDigest": "9dc2581d3e87be59967e36ac478c80db59c6272e9f8c6987917357447df91c4e"
+        "evidenceDigest": "15aee0d733a708c2177fd70c29102b988f796e03ffef922548b058e4084a46ad"
       },
       {
         "id": "104b88ef-4b9d-40c4-9131-a0c6400b5812",
@@ -1492,7 +1510,7 @@
         "outcome": "INTENTIONAL",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.090Z",
-        "evidenceDigest": "dcba18ec4a87b9b19ed12286ebb47f10a86361730ed1e7bbe412678e555882c7"
+        "evidenceDigest": "53e150aaed5cd093209d2b21f61a138f0575afe77a94a1f0cf667e7723e85331"
       },
       {
         "id": "4a28bf56-e588-4757-853c-8f26cfd4cc0a",
@@ -1501,7 +1519,7 @@
         "outcome": "HOLD",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.100Z",
-        "evidenceDigest": "80c9e32efffef2bcb7864f2f39ceea5ae58d03e2e42adbfbe3e3b37eef7775a3"
+        "evidenceDigest": "50bfd334851eb1f60649afb747c1bae94455843d8ea8c28e239a1698be976fa5"
       },
       {
         "id": "9ce14320-2426-4522-b2c2-88039b91a5a2",
@@ -1510,7 +1528,7 @@
         "outcome": "INTENTIONAL",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.110Z",
-        "evidenceDigest": "9420db0dd0b1d1b6558e58a4c31630517eb155406f37d2b327a3b6742d1b9a18"
+        "evidenceDigest": "6cf2aa2f3261ca19029932fce5e9bbae726c50dbf187e0c5cd89f8c93938ace7"
       },
       {
         "id": "4b93f430-97a8-49fa-8271-0791f2edacd0",
@@ -1519,7 +1537,7 @@
         "outcome": "ACTION_REQUIRED",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.120Z",
-        "evidenceDigest": "9810d538421ff01eb77623cca60cf1c51d784a615f9a1a7df38769e0192703b9"
+        "evidenceDigest": "b35a69ad824896f66872a26297c851b8d61d43226996186b4bae2cce15c336be"
       },
       {
         "id": "a986620b-dd21-4de8-ab16-6566d0ec61db",
@@ -1528,7 +1546,7 @@
         "outcome": "INTENTIONAL",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.130Z",
-        "evidenceDigest": "269bbfbba42a2fcfcb2f25fe4d42821fc231a8c19024b611b407709d3795a82e"
+        "evidenceDigest": "ece313190c13d0fc025de0ab1a304b0506b3977ae61b0fdbdc198c7f77b265e0"
       },
       {
         "id": "c632d9b0-3d96-4172-84b1-5d6e4c8596e0",
@@ -1537,7 +1555,7 @@
         "outcome": "FALSE_POSITIVE",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.140Z",
-        "evidenceDigest": "fb5f40450e90e4da2f05ebdbc5e47d1d7b3cf3b5b2b059545c75c80b4ae01cbd"
+        "evidenceDigest": "37704193e8e8030cb70749b4ea2002abd27a9543371a111f6e4409c288e39f2d"
       },
       {
         "id": "3564d04c-42cd-48ba-8682-0cb7e589089d",
@@ -1546,7 +1564,7 @@
         "outcome": "HOLD",
         "comment": "synthetic review note",
         "decidedAt": "2026-10-05T00:00:08.150Z",
-        "evidenceDigest": "236a15f4bf0b5e050b6e49afa63e8f2a92eb6c1abda94ddf7fa6d1d831189ae9"
+        "evidenceDigest": "40a973222d50b7996dfa48c67d57131e4689f931a305901fd14133d7c0d50123"
       }
     ]
   }

@@ -111,8 +111,39 @@ export function indexModel(model) {
         profiles: new Map(set.titleBlockProfiles.map((p) => [p.id, p])),
         sheets: new Map(set.sheets.map((s) => [s.id, s])),
         runs: new Map(set.analysisRuns.map((r) => [r.id, r])),
+        registerEntries: new Map(set.drawingRegisterReferences.flatMap((reference) => reference.entries.map((entry) => [entry.id, { entry, reference }]))),
         findings: new Map(set.findings.map((f) => [f.id, f])),
     };
+}
+
+export const REGISTER_STATUS = Object.freeze({
+    /** No register has been declared (or every one was withdrawn). QA09 has nothing to compare with. */
+    NOT_DESIGNATED: 'NOT_DESIGNATED',
+    /** A declared register was read from bytes its Source no longer has. */
+    STALE: 'STALE',
+    CURRENT: 'CURRENT',
+});
+
+/**
+ * The declared Drawing Register, judged against what is there now.
+ *
+ * A register is declared from one page of one Source, and it is bound to those
+ * bytes exactly as an observation is. Replace the Source and nobody has declared
+ * what the list on the new bytes says: the register is STALE, QA09 cannot be
+ * evaluated, and a person declares it again. One stale reference makes the
+ * whole declared list incomplete, so the status is that of the worst.
+ */
+export function registerCurrency(model, index = indexModel(model)) {
+    const references = model.drawingSet.drawingRegisterReferences.filter((r) => r.retiredAt === null);
+    const stale = references.filter((reference) => {
+        const source = index.sources.get(reference.sourceId);
+        return !source || source.retiredAt !== null || source.fingerprint.sha256 !== reference.sourceSha256;
+    });
+    const liveEntries = references.flatMap((reference) => reference.entries.filter((e) => e.retiredAt === null).map((entry) => ({ entry, reference })));
+    let status = REGISTER_STATUS.CURRENT;
+    if (references.length === 0) status = REGISTER_STATUS.NOT_DESIGNATED;
+    else if (stale.length > 0) status = REGISTER_STATUS.STALE;
+    return { status, references, staleReferences: stale, liveEntries };
 }
 
 /** Currency of every live sheet, and whether the whole set could be evaluated. */
@@ -127,7 +158,7 @@ export function setCurrency(model, index = indexModel(model)) {
         if (!currency.effective) metadataComplete = false;
         if (currency.pageFacts !== DATA_CURRENCY.CURRENT) factsComplete = false;
     }
-    return { bySheet, metadataComplete, factsComplete };
+    return { bySheet, metadataComplete, factsComplete, register: registerCurrency(model, index) };
 }
 
 const bindingOf = (bindings, sourceId) => bindings?.get(sourceId) ?? BINDING.UNBOUND;
@@ -153,11 +184,25 @@ export function findingCurrency(finding, index, bindings, coverage) {
         const sheet = index.sheets.get(sheetId);
         if (!sheet || sheet.retiredAt !== null) reasons.push('SHEET_RETIRED');
     }
+    for (const entryId of finding.registerEntryIds) {
+        const item = index.registerEntries.get(entryId);
+        if (!item || item.entry.retiredAt !== null || item.reference.retiredAt !== null) reasons.push('REGISTER_ENTRY_RETIRED');
+    }
+    // QA09 is a statement against the declared register as a whole. If that is
+    // withdrawn or no longer current, the statement is about a list nobody stands behind.
+    if (finding.ruleId === 'QA09_REGISTER_SHEET_MISMATCH' && coverage && coverage.register.status !== REGISTER_STATUS.CURRENT) {
+        reasons.push(coverage.register.status === REGISTER_STATUS.STALE ? 'REGISTER_NOT_CURRENT' : 'REGISTER_NOT_DESIGNATED');
+    }
     if (reasons.length > 0) return { currency: FINDING_CURRENCY.STALE, reasons: [...new Set(reasons)] };
 
     if (SET_GLOBAL_RULES.has(finding.ruleId) && coverage) {
         const complete = finding.ruleId === 'QA03_NUMBER_GAP' ? coverage.metadataComplete : coverage.factsComplete;
         if (!complete) reasons.push('SET_NOT_FULLY_EVALUATED');
+    }
+    // "Listed but missing" is true only if NO sheet carries the number, so a sheet
+    // that could not be read leaves it open.
+    if (finding.ruleId === 'QA09_REGISTER_SHEET_MISMATCH' && finding.scope === 'REGISTER_ENTRY' && coverage && !coverage.metadataComplete) {
+        reasons.push('SET_NOT_FULLY_EVALUATED');
     }
     for (const basis of finding.basis) {
         if (bindingOf(bindings, basis.sourceId) !== BINDING.MATCHED) { reasons.push('SOURCE_NOT_MATCHED'); break; }
@@ -172,9 +217,22 @@ export const FINAL_BLOCKER = Object.freeze({
     FINDINGS_NOT_CURRENT: 'FINDINGS_NOT_CURRENT',
     FINDINGS_UNREVIEWED: 'FINDINGS_UNREVIEWED',
     FINDINGS_ON_HOLD: 'FINDINGS_ON_HOLD',
+    REGISTER_NOT_CURRENT: 'REGISTER_NOT_CURRENT',
 });
 
-const EXEMPTING = new Set(['INTENTIONAL', 'FALSE_POSITIVE']);
+/**
+ * The one decision that lifts the metadata-confirmation requirement from a sheet.
+ *
+ * QA02 states a fact: nobody has confirmed this sheet's metadata. INTENTIONAL is
+ * a person saying the metadata is deliberately not applicable here (a cover
+ * sheet with no title block), and that is an answer to the requirement.
+ * FALSE_POSITIVE is not: it says the finding is wrong, and if it really is wrong
+ * the thing to do is confirm the sheet, after which the next run does not state
+ * the finding at all. Letting FALSE_POSITIVE clear the blocker would let a Final
+ * report go out over metadata nobody confirmed and nobody declared unnecessary.
+ * ACTION_REQUIRED and HOLD say the work is still to do.
+ */
+const EXEMPTS_FROM_METADATA_CONFIRMATION = new Set(['INTENTIONAL']);
 
 /**
  * Whether a QA Report may be called Final.
@@ -183,6 +241,9 @@ const EXEMPTING = new Set(['INTENTIONAL', 'FALSE_POSITIVE']);
  * was about, every sheet's metadata has been confirmed by a person (or a person
  * has said, on the record, that it is intentionally not), and no current
  * finding is waiting for a decision.
+ *
+ * A QA02 finding lifts the metadata requirement from its sheet only when a
+ * person has decided it INTENTIONAL (see EXEMPTS_FROM_METADATA_CONFIRMATION).
  *
  * `holdBlocksFinal` is a question for the Human Gate, not something this
  * research decides: the adopted contract lists HOLD among the Human outcomes,
@@ -207,7 +268,7 @@ export function finalReadiness(model, bindings, { holdBlocksFinal = false, effec
         const state = findingCurrency(finding, index, bindings, coverage);
         const decision = decisions.get(finding.id);
         if (finding.ruleId === 'QA02_METADATA_UNCONFIRMED' && state.currency === FINDING_CURRENCY.CURRENT
-            && decision && EXEMPTING.has(decision.outcome)) exemptSheets.add(finding.sheetIds[0]);
+            && decision && EXEMPTS_FROM_METADATA_CONFIRMATION.has(decision.outcome)) exemptSheets.add(finding.sheetIds[0]);
         if (state.currency !== FINDING_CURRENCY.CURRENT) { block(FINAL_BLOCKER.FINDINGS_NOT_CURRENT); continue; }
         if (!decision) block(FINAL_BLOCKER.FINDINGS_UNREVIEWED);
         else if (holdBlocksFinal && decision.outcome === 'HOLD') block(FINAL_BLOCKER.FINDINGS_ON_HOLD);
@@ -217,9 +278,23 @@ export function finalReadiness(model, bindings, { holdBlocksFinal = false, effec
         if (currency.confirmation !== DATA_CURRENCY.CURRENT && !exemptSheets.has(sheetId)) block(FINAL_BLOCKER.METADATA_NOT_CONFIRMED);
     }
 
+    // A declared register that is no longer current blocks: a person asked for
+    // this comparison and it cannot be made. No declared register does not block
+    // -- it is optional -- but QA09 is then NOT EVALUABLE, and a report must say
+    // so rather than count the absence of findings as a pass.
+    for (const reference of coverage.register.staleReferences) { void reference; block(FINAL_BLOCKER.REGISTER_NOT_CURRENT); }
+    const notEvaluable = [];
+    if (coverage.register.status !== REGISTER_STATUS.CURRENT) {
+        notEvaluable.push({
+            ruleId: 'QA09_REGISTER_SHEET_MISMATCH',
+            reason: coverage.register.status === REGISTER_STATUS.STALE ? 'DECLARED_REGISTER_NOT_CURRENT' : 'NO_DECLARED_REGISTER',
+        });
+    }
+
     return {
         final: blockers.size === 0,
         blockers: [...blockers].map(([code, count]) => ({ code, count })),
+        notEvaluable,
     };
 }
 
@@ -237,41 +312,55 @@ export const STALE_MATRIX = Object.freeze({
         pageFacts: 'STALE', observation: 'STALE', confirmation: 'RECONFIRM',
         findingsCitingThoseSheets: 'STALE', setGlobalFindings: 'UNVERIFIED_UNTIL_REEVALUATED',
         otherSources: 'UNAFFECTED', decisions: 'KEPT_AS_HISTORY',
+        declaredRegister: 'STALE_IF_DECLARED_FROM_THAT_SOURCE',
     },
     SOURCE_RENAMED_SAME_CONTENT: {
         scope: 'NONE',
         pageFacts: 'UNAFFECTED', observation: 'UNAFFECTED', confirmation: 'UNAFFECTED',
         findingsCitingThoseSheets: 'UNAFFECTED', setGlobalFindings: 'UNAFFECTED',
         otherSources: 'UNAFFECTED', decisions: 'UNAFFECTED',
+        declaredRegister: 'UNAFFECTED',
     },
     SOURCE_NOT_PROVIDED: {
         scope: 'SHEETS_OF_THAT_SOURCE',
         pageFacts: 'UNVERIFIED', observation: 'UNVERIFIED', confirmation: 'UNVERIFIED',
         findingsCitingThoseSheets: 'UNVERIFIED', setGlobalFindings: 'UNAFFECTED',
         otherSources: 'UNAFFECTED', decisions: 'KEPT_IN_FORCE_BUT_UNVERIFIED',
+        declaredRegister: 'UNVERIFIED_IF_DECLARED_FROM_THAT_SOURCE',
     },
     PROFILE_GEOMETRY_CHANGED: {
         scope: 'SHEETS_ASSIGNED_TO_THAT_PROFILE',
         pageFacts: 'UNAFFECTED', observation: 'STALE', confirmation: 'RECONFIRM_UNLESS_MADE_WITHOUT_PROFILE',
         findingsCitingThoseSheets: 'REEVALUATED', setGlobalFindings: 'REEVALUATED',
         otherSources: 'UNAFFECTED', decisions: 'KEPT_IF_EVIDENCE_UNCHANGED',
+        declaredRegister: 'UNAFFECTED',
     },
     SHEET_REASSIGNED_TO_ANOTHER_PROFILE: {
         scope: 'THAT_SHEET',
         pageFacts: 'UNAFFECTED', observation: 'STALE', confirmation: 'RECONFIRM_UNLESS_MADE_WITHOUT_PROFILE',
         findingsCitingThoseSheets: 'REEVALUATED', setGlobalFindings: 'REEVALUATED',
         otherSources: 'UNAFFECTED', decisions: 'KEPT_IF_EVIDENCE_UNCHANGED',
+        declaredRegister: 'UNAFFECTED',
     },
     SHEET_METADATA_CONFIRMED_OR_EDITED: {
         scope: 'THAT_SHEET',
         pageFacts: 'UNAFFECTED', observation: 'UNAFFECTED', confirmation: 'REPLACED_WITH_HISTORY',
         findingsCitingThoseSheets: 'REEVALUATED', setGlobalFindings: 'REEVALUATED',
         otherSources: 'UNAFFECTED', decisions: 'KEPT_IF_EVIDENCE_UNCHANGED',
+        declaredRegister: 'UNAFFECTED',
     },
     SOURCE_ADDED_OR_RETIRED: {
         scope: 'SET_WIDE_RESULTS',
         pageFacts: 'UNAFFECTED', observation: 'UNAFFECTED', confirmation: 'UNAFFECTED',
         findingsCitingThoseSheets: 'REEVALUATED', setGlobalFindings: 'REEVALUATED',
         otherSources: 'UNAFFECTED', decisions: 'KEPT_IF_EVIDENCE_UNCHANGED',
+        declaredRegister: 'RETIRED_WITH_ITS_SOURCE',
+    },
+    DECLARED_REGISTER_DECLARED_EDITED_OR_WITHDRAWN: {
+        scope: 'QA09_ONLY',
+        pageFacts: 'UNAFFECTED', observation: 'UNAFFECTED', confirmation: 'UNAFFECTED',
+        findingsCitingThoseSheets: 'QA09_REEVALUATED', setGlobalFindings: 'UNAFFECTED',
+        otherSources: 'UNAFFECTED', decisions: 'KEPT_IF_EVIDENCE_UNCHANGED',
+        declaredRegister: 'REPLACED_BY_A_NEW_REFERENCE_OR_RETIRED',
     },
 });

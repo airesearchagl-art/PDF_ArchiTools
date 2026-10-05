@@ -20,7 +20,7 @@ Small synthetic Portable Project JSON files, and the verdict the importer must g
 
 | Directory | Contents |
 |---|---|
-| `valid/` | a minimal Project; a 12-sheet Project part-way through review; hostile-looking free text; a timestamp ten years ahead (accepted, with warnings) |
-| `invalid/` | one file per refusal: truncated, trailing comma, duplicate key, nesting too deep, `1e400`, future version, foreign file, unknown field, missing field, malformed SHA-256, Windows and UNC paths as a file name, unknown enum, over-long comment, duplicate ids, dangling source / sheet / finding ids, a decision on other evidence, an impossible timestamp, a lifecycle contradiction |
+| `valid/` | a minimal Project; a 12-sheet Project part-way through review; a Drawing Set with a **declared Drawing Register** (and both kinds of QA09 finding); hostile-looking free text; a timestamp ten years ahead (accepted, with warnings) |
+| `invalid/` | one file per refusal: truncated, trailing comma, duplicate key, nesting too deep, `1e400`, future version, foreign file, unknown field, missing field, malformed SHA-256, Windows and UNC paths as a file name, unknown enum, over-long comment, duplicate ids, dangling source / sheet / finding / register-entry ids, a register row that names no drawing, a register carrying page text, a decision on other evidence, an impossible timestamp, a lifecycle contradiction |
 
 The files are indented for reading. The exporter writes compact JSON; the importer accepts both.

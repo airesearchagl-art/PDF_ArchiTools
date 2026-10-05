@@ -82,13 +82,14 @@ export function newProject({ name, drawingSetName = name, toolVersion = '0.0.0-r
         project: { id: newId(), name, createdAt: at },
         drawingSet: {
             id: newId(), name: drawingSetName, createdAt: at,
-            sources: [], titleBlockProfiles: [], sheets: [], analysisRuns: [], findings: [], decisions: [],
+            sources: [], titleBlockProfiles: [], sheets: [], drawingRegisterReferences: [], analysisRuns: [], findings: [], decisions: [],
         },
     };
 }
 
 export const liveSources = (model) => model.drawingSet.sources.filter((s) => s.retiredAt === null);
 export const liveSheets = (model) => model.drawingSet.sheets.filter((s) => s.retiredAt === null);
+export const liveRegisterReferences = (model) => model.drawingSet.drawingRegisterReferences.filter((r) => r.retiredAt === null);
 
 function newSheet(sourceId, pageNumber, now, newId) {
     return {
@@ -160,6 +161,10 @@ export function retireSource(model, sourceId, now) {
     source.retiredAt = at;
     for (const sheet of model.drawingSet.sheets) {
         if (sheet.sourceId === sourceId && sheet.retiredAt === null) sheet.retiredAt = at;
+    }
+    // A register declared from a page of this Source goes with it.
+    for (const reference of model.drawingSet.drawingRegisterReferences) {
+        if (reference.sourceId === sourceId && reference.retiredAt === null) reference.retiredAt = at;
     }
     return { ok: true };
 }
@@ -370,6 +375,102 @@ export function decide(model, findingId, { outcome, comment = '', now, newId }) 
     };
     model.drawingSet.decisions.push(decision);
     return { ok: true, decision };
+}
+
+// -- a declared Drawing Register ---------------------------------------------
+
+const optionalField = (value) => (value === undefined || value === null ? null : sanitizeSingleLine(value, 300));
+
+/**
+ * A person declares a Drawing Register.
+ *
+ * This is the only way a register comes to exist. `rows` are what the person
+ * accepted -- read from a table they pointed at, corrected as they saw fit, or
+ * typed -- and the reference records where the list was and which bytes it was
+ * on. Nothing here looks for a list on its own, and a row with no drawing
+ * number is refused rather than dropped: an empty row silently skipped is a
+ * drawing silently missing from the comparison.
+ */
+export function declareDrawingRegister(model, { sourceId, pageNumber, region = null, method = 'TABLE_NATIVE', rows, now, newId }) {
+    const source = model.drawingSet.sources.find((s) => s.id === sourceId);
+    if (!source || source.retiredAt !== null) return { ok: false, code: 'NO_SUCH_SOURCE' };
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > source.fingerprint.pageCount) return { ok: false, code: 'NO_SUCH_PAGE' };
+    if (method === 'TABLE_NATIVE' && region === null) return { ok: false, code: 'REGION_REQUIRED' };
+    if (!Array.isArray(rows) || rows.length === 0) return { ok: false, code: 'EMPTY_REGISTER' };
+    const entries = [];
+    for (const [i, row] of rows.entries()) {
+        const drawingNumber = sanitizeSingleLine(row.drawingNumber ?? '', 300);
+        if (drawingNumber === '') return { ok: false, code: 'EMPTY_NUMBER', row: i + 1 };
+        entries.push({
+            id: newId(), row: i + 1, drawingNumber,
+            drawingTitle: optionalField(row.drawingTitle), revision: optionalField(row.revision), issueDate: optionalField(row.issueDate),
+            origin: row.origin ?? (method === 'MANUAL' ? 'MANUAL' : 'EXTRACTED'), retiredAt: null,
+        });
+    }
+    const at = toTimestamp(now);
+    const reference = {
+        id: newId(), sourceId, pageNumber, region: region === null ? null : { ...region },
+        sourceSha256: source.fingerprint.sha256, method, declaredAt: at, updatedAt: at, retiredAt: null, entries,
+    };
+    model.drawingSet.drawingRegisterReferences.push(reference);
+    return { ok: true, reference };
+}
+
+function findRegisterEntry(model, entryId) {
+    for (const reference of model.drawingSet.drawingRegisterReferences) {
+        const entry = reference.entries.find((e) => e.id === entryId);
+        if (entry) return { reference, entry };
+    }
+    return null;
+}
+
+/** A person corrects one row. The row keeps its identity and says it was edited. */
+export function editRegisterEntry(model, entryId, values, now) {
+    const found = findRegisterEntry(model, entryId);
+    if (!found || found.entry.retiredAt !== null || found.reference.retiredAt !== null) return { ok: false, code: 'NO_SUCH_ENTRY' };
+    const { entry, reference } = found;
+    if (values.drawingNumber !== undefined) {
+        const drawingNumber = sanitizeSingleLine(values.drawingNumber, 300);
+        if (drawingNumber === '') return { ok: false, code: 'EMPTY_NUMBER' };
+        entry.drawingNumber = drawingNumber;
+    }
+    for (const field of ['drawingTitle', 'revision', 'issueDate']) if (values[field] !== undefined) entry[field] = optionalField(values[field]);
+    if (entry.origin === 'EXTRACTED') entry.origin = 'EDITED';
+    reference.updatedAt = toTimestamp(now);
+    return { ok: true, entry };
+}
+
+/** A person adds a row the table did not yield. */
+export function addRegisterEntry(model, referenceId, values, { now, newId }) {
+    const reference = model.drawingSet.drawingRegisterReferences.find((r) => r.id === referenceId);
+    if (!reference || reference.retiredAt !== null) return { ok: false, code: 'NO_SUCH_REGISTER' };
+    const drawingNumber = sanitizeSingleLine(values.drawingNumber ?? '', 300);
+    if (drawingNumber === '') return { ok: false, code: 'EMPTY_NUMBER' };
+    const entry = {
+        id: newId(), row: Math.max(0, ...reference.entries.map((e) => e.row)) + 1, drawingNumber,
+        drawingTitle: optionalField(values.drawingTitle), revision: optionalField(values.revision), issueDate: optionalField(values.issueDate),
+        origin: 'MANUAL', retiredAt: null,
+    };
+    reference.entries.push(entry);
+    reference.updatedAt = toTimestamp(now);
+    return { ok: true, entry };
+}
+
+/** A row a person removes is retired; a finding that cited it still resolves. */
+export function retireRegisterEntry(model, entryId, now) {
+    const found = findRegisterEntry(model, entryId);
+    if (!found || found.entry.retiredAt !== null) return { ok: false, code: 'NO_SUCH_ENTRY' };
+    found.entry.retiredAt = toTimestamp(now);
+    found.reference.updatedAt = found.entry.retiredAt;
+    return { ok: true };
+}
+
+/** A person withdraws a declared register. It stays in the file, retired. */
+export function retireDrawingRegister(model, referenceId, now) {
+    const reference = model.drawingSet.drawingRegisterReferences.find((r) => r.id === referenceId);
+    if (!reference || reference.retiredAt !== null) return { ok: false, code: 'NO_SUCH_REGISTER' };
+    reference.retiredAt = toTimestamp(now);
+    return { ok: true };
 }
 
 /** The decision in force for each finding: the one with the highest sequence. */

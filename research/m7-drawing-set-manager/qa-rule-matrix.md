@@ -2,7 +2,12 @@
 
 > **RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL.**
 > A proposal for Independent Architecture Review. Nothing here is adopted.
-> Prototype: `prototype/qa-rules.mjs`. Tests: `tests/qa-rules.test.mjs`, `tests/reuse-parity.test.mjs`.
+> Prototype: `prototype/qa-rules.mjs`, `prototype/currency.mjs`. Tests: `tests/qa-rules.test.mjs`,
+> `tests/declared-register.test.mjs`, `tests/final-readiness.test.mjs`, `tests/reuse-parity.test.mjs`.
+>
+> Revised after Independent Architecture Review of `4139133`: **RF-33-01** (only `INTENTIONAL` lifts the
+> metadata-confirmation requirement) and **RF-33-02** (QA09 is a Human-declared Drawing Register against the
+> actual Sheets; the Sheet-list / page-inventory check moved to QA10). §7 records what changed.
 
 The ten QA items of Product Definition v1, sorted into what a machine can state and what it can only ask.
 
@@ -32,7 +37,7 @@ every finding is in the left-hand column.
 
 ## 2. Human-confirmed values and machine-observed values
 
-One rule for every QA rule that reads metadata (`sheetCurrency` in `prototype/currency.mjs`):
+One rule for every QA rule that reads sheet metadata (`sheetCurrency` in `prototype/currency.mjs`):
 
 1. If the sheet's **confirmation** stands (same bytes, same profile arrangement) → read the confirmed values.
 2. Else if its **observation** stands and was read successfully → read the observed values.
@@ -41,6 +46,9 @@ One rule for every QA rule that reads metadata (`sheetCurrency` in `prototype/cu
 The machine's reading is never overwritten by a correction and a score never promotes it — both are the
 existing Drawing Register's rules (`drawing-register-types.ts`: "A row is a candidate until a person says
 otherwise. Confidence never promotes a row").
+
+The **declared Drawing Register** (QA09) is Human-declared by construction: it exists only because a person
+pointed at a list and accepted its rows. There is no "machine-observed register" state in the model.
 
 ## 3. The matrix
 
@@ -58,8 +66,8 @@ closed and when it is unverified (§5).
 | 6 | issue-date mismatch | `QA06_ISSUE_DATE_MISMATCH` | **DETERMINISTIC** | a QA01 group; effective `issueDate` | unambiguous numeric dates to ISO; anything else compared as text; blank is unknown | sheet group | the member sheets |
 | 7 | sheet-size outlier | `QA07_SHEET_SIZE_OUTLIER` | CANDIDATE | page facts of every sheet | A-series class, 5 mm tolerance (the normaliser's `detectPaperSize`) | sheet group | **the whole set** |
 | 8 | orientation outlier | `QA08_ORIENTATION_OUTLIER` | CANDIDATE | page facts of every sheet | orientation as displayed (after `/Rotate`); square counts as landscape | sheet group | **the whole set** |
-| 9 | drawing-register vs actual-sheet mismatch | `QA09_REGISTER_SHEET_MISMATCH` | **DETERMINISTIC** | live Sheets and `pageCount` of each Source | none | one Source | that Source's manifest entry |
-| 10 | Source / Project integrity abnormality | `QA10_INTEGRITY` | **DETERMINISTIC** | runtime binding state; import warnings | none | one Source, or the Project | binding state this session |
+| 9 | drawing-register vs actual-sheet mismatch | `QA09_REGISTER_SHEET_MISMATCH` | **DETERMINISTIC** | a **declared Drawing Register**; effective `drawingNumber` of every sheet | trim only (a folded spelling is a hint, never a match) | one register entry, or one sheet | **the declared register as a whole**, and the whole set |
+| 10 | Source / Project integrity abnormality | `QA10_INTEGRITY` | **DETERMINISTIC** | runtime binding state; import warnings; the manifest (Sheets vs each Source's page count) | none | one Source, or the Project | binding state this session; the manifest |
 
 ### Per-rule detail
 
@@ -77,7 +85,7 @@ closed and when it is unverified (§5).
 
 #### QA01B — the same number, written differently · CANDIDATE
 - **States:** "these sheets' numbers are equal once width, case, dashes and spacing are folded, and are not
-  written identically." `Ａ－１０１` and `A-101`; `a-101` and `A-101`; `A‐101` (U+2010) and `A-101`.
+  written identically." `Ａ－１０１` and `A-101`; `a-101` and `A-101`; a Unicode hyphen (U+2010) and `-`.
 - **Why it is separate from QA01:** folding is a judgement about which differences do not matter. The fold
   is deliberately narrow — it never inserts a missing hyphen (`A101` stays apart) and never strips a leading
   zero. It only decides what this rule *asks about*; it never feeds a DETERMINISTIC rule or changes a value.
@@ -90,14 +98,30 @@ closed and when it is unverified (§5).
   `NOT_READ` · `UNCONFIRMED` · `OCR_FAILED` · `READ_IS_STALE` · `RECONFIRM_REQUIRED`.
 - **Resolved by doing the work, not by a decision:** confirming the sheet makes the next run stop stating
   the finding (`NOT_REPRODUCED`). Nobody "closes" it.
-- **The one decision that matters:** `INTENTIONAL` or `FALSE_POSITIVE` on a QA02 finding exempts that sheet
-  from the "required metadata confirmed" condition of a Final report (a cover sheet with no title block).
-  The exemption is thereby a recorded Human decision, not a flag. Proposed; see Unresolved U-11.
+- **Exactly one decision lifts the metadata-confirmation requirement: `INTENTIONAL`** — a person deciding,
+  on the record, that metadata is intentionally not applicable for this sheet (a cover sheet with no title
+  block). The exemption is that decision; it is not a flag, and it does not outlive the evidence it was made
+  on (replace the Source and it is history).
+- **`FALSE_POSITIVE` does not lift it.** QA02 is a deterministic statement of a fact, so it cannot be
+  "false" while the sheet is unconfirmed. If a person believes the finding is wrong, the answer is to
+  correct the underlying state — confirm the sheet — after which the next run does not reproduce QA02 at
+  all. Letting `FALSE_POSITIVE` clear the blocker would let a Final report go out over metadata nobody
+  confirmed and nobody declared unnecessary. *(RF-33-01. The research's first proposal allowed it.)*
+- **`ACTION_REQUIRED` and `HOLD` do not lift it:** they say the work is still to do.
 - **False-positive risk:** none as a fact. **Bulk review:** yes — this is the rule that most needs it (a
   fresh 5000-sheet set has 5000 of these).
 
+| QA02 finding with… | Counts as reviewed | Lifts `METADATA_NOT_CONFIRMED` for that sheet |
+|---|---|---|
+| no decision | no | no |
+| `INTENTIONAL` | yes | **yes** |
+| `FALSE_POSITIVE` | yes | **no** — confirm the sheet instead |
+| `ACTION_REQUIRED` | yes | no |
+| `HOLD` | yes (U-1) | no |
+| the sheet is then confirmed | — (the finding is `NOT_REPRODUCED`) | the requirement is met |
+
 #### QA03 — possible drawing-number gap · CANDIDATE
-- **States:** "within the series *prefix…suffix*, the numbers *a+1 … b−1* are absent between *a* and *b*,
+- **States:** "within the series *prefix…suffix*, the numbers *a+1 … b-1* are absent between *a* and *b*,
   which are present." One finding per missing run; the two neighbours are the cited evidence.
 - **Series:** the comparison key split as `prefix` + digits + `suffix` (`A-101a` → `A-`, 101, `A`). Sheets
   are grouped by (prefix, suffix); numbers that do not end in digits-then-non-digits take no part.
@@ -120,10 +144,11 @@ closed and when it is unverified (§5).
   compared as text. Guessing a date is a quiet decision this tool does not make.
 - **False-positive risk:** low as facts.
 - **These are the proposed *MVP* semantics, and they are narrower than the item names might suggest.**
-  "Revision mismatch" could also mean "differs from the revision this issue is supposed to be", and
-  "issue-date mismatch" "differs from the set's issue date". Both need an expectation **declared by a
-  person**; inferring one from the majority would be exactly the guess the Task Packet rules out (sheets in
-  one set legitimately carry different revisions and dates). See Unresolved U-2.
+  "Revision mismatch" could also mean "differs from the revision this issue is supposed to be". That needs
+  an expectation **declared by a person** — and the declared Drawing Register (QA09) is now a place such an
+  expectation could come from, since a register row may carry a revision and a date. Comparing a sheet's
+  revision or date with its register row is **not designed here**; inferring an expectation from the
+  majority would be exactly the guess the Task Packet rules out. See Unresolved U-2.
 
 #### QA07 / QA08 — sheet-size / orientation outlier · CANDIDATE
 - **State:** "these *k* sheets are *A3* (portrait) while *m* of the set's sheets are *A1* (landscape)."
@@ -139,48 +164,93 @@ closed and when it is unverified (§5).
 - **False-positive risk:** moderate (A3 detail sheets in an A1 set are normal). **Bulk review:** the group is
   one decision.
 
-#### QA09 — drawing register vs actual sheets · DETERMINISTIC
-- **States, per Source:** `PAGE_WITHOUT_SHEET` (the PDF has pages no live Sheet represents) or
-  `SHEET_WITHOUT_PAGE` (a live Sheet's page number is beyond the Source's page count — what a shorter
-  replacement leaves behind).
-- **"Register" here is M7's own Sheet list.** That is the reading under which the item is deterministic and
-  needs no new input.
-- **The other reading** — comparing sheets with a register *list* (a 図面リスト page inside the set, or an
-  imported one) — needs an entity Product Definition v1 does not list (an expected register), table
-  extraction, and is candidate-only. It is not designed here. See Unresolved U-3.
-- **False-positive risk:** none. **Bulk review:** no; each is one Source and is resolved by adding or
-  retiring sheets.
+#### QA09 — declared Drawing Register vs actual Sheets · DETERMINISTIC
+*(RF-33-02. The research's first proposal used this item for M7's own Sheet list against the PDF page
+inventory. That check is kept — as QA10 — and QA09 has the meaning the M7 discussion intended.)*
+
+- **What is compared:** a **Drawing Register a person declared** (図面一覧) with the **live Sheets** of the
+  Drawing Set. The register is optional and is never inferred: a person designates the list — which page of
+  which Source, where on the page — and accepts its rows (`data-model.proposed.md` §2A).
+- **States, exactly two things:**
+
+  | Reason | Statement | Scope / cites |
+  |---|---|---|
+  | `LISTED_BUT_MISSING` | "the declared register lists drawing number *X*, and no live Sheet carries it" | one register entry |
+  | `ACTUAL_NOT_LISTED` | "a live Sheet carries drawing number *X*, and no entry of the declared register does" | one Sheet |
+
+- **Correspondence** is the drawing number under `trim()` — the same exact key as QA01. When the other side
+  holds a number that would match once folded (`Ａ－１０２` against `A-102`), the finding names that spelling
+  as a **hint** (`params.values`); it is never counted as a match. A register typed in full-width against
+  title blocks in half-width therefore produces findings on both sides, each pointing at the other, and a
+  person corrects whichever is wrong. Whether folded spellings should correspond is Unresolved U-3.
+- **A Sheet with an empty drawing number is outside QA09** (it has nothing to be listed under), and a Sheet
+  nobody has read is not evaluated at all — QA02 reports it.
+- **If no Drawing Register is declared, QA09 is `NOT_EVALUABLE`: no finding — and not a pass.** The
+  Final-readiness result carries `notEvaluable: [{ QA09, NO_DECLARED_REGISTER }]` so that a report says "the
+  set was not compared with a drawing list", never "no mismatch". It does not block Final: the register is
+  optional.
+- **If a declared register is no longer current** (its Source's bytes were replaced after it was declared),
+  QA09 is not evaluated either — nothing is compared with a list nobody has declared against the new bytes —
+  and **that does block Final** (`REGISTER_NOT_CURRENT`): a person asked for this comparison and it cannot be
+  made until the register is declared again.
+- **Several references are one register.** A list that runs over several pages is several
+  `DrawingRegisterReference`s; QA09 compares the Sheets with all live entries together.
+- **False-positive risk:** none as facts under the exact key; the *noise* risk is spelling differences
+  between a list and the title blocks (above), and a register read from a table whose heading row was taken
+  as an entry — which a person removes (the row is retired, and the finding is closed, not deleted).
+- **Bulk review:** yes, for both reasons (a set under issue is routinely missing listed sheets).
+- **Not designed here:** comparing a Sheet's *title, revision or date* with its register row; a register
+  that does not come from a page of a Source in the set (an external list); OCR of a scanned list page (the
+  existing table engine reads native text only — a scanned list is declared by typing it, `method: MANUAL`).
 
 #### QA10 — Source / Project integrity · DETERMINISTIC
-- **States:** `SOURCE_MISSING` · `SOURCE_CHANGED` · `SOURCE_AMBIGUOUS` (from this session's binding), and
-  `PROJECT_FILE_ANOMALY` (an accepted file carried warnings — a timestamp in the future, an order that does
-  not add up).
+- **States:**
+
+  | Reason | Statement | Needs |
+  |---|---|---|
+  | `SOURCE_MISSING` · `SOURCE_CHANGED` · `SOURCE_AMBIGUOUS` | this Source is not the bytes the Project remembers | this session's binding |
+  | `PAGE_WITHOUT_SHEET` | the PDF has pages no live Sheet represents | the manifest only |
+  | `SHEET_WITHOUT_PAGE` | a live Sheet's page number is beyond its Source's page count — what a shorter replacement leaves behind | the manifest only |
+  | `PROJECT_FILE_ANOMALY` | an accepted file carried warnings (a timestamp in the future, an order that does not add up) | the import warnings |
+
+- **`PAGE_WITHOUT_SHEET` and `SHEET_WITHOUT_PAGE` are bookkeeping**, not statements about the drawings: M7's
+  own Sheet list no longer agrees with the page inventory of a Source. That is a Project-integrity fact,
+  which is why it belongs here and not under QA09. *(RF-33-02.)*
 - **`UNBOUND` is not an abnormality.** A Source nobody has looked for yet is not evaluated, and a finding
   from an earlier session is not closed by a run that did not re-check it.
 - **A decision does not waive a missing Source.** Final requires every Source `MATCHED` independently of any
   decision here (§4). `PROJECT_FILE_ANOMALY` can be decided like any finding — a wrong clock is permanent in
   the file, and it must be possible to say so and move on.
-- **Bulk review:** no.
+- **Bulk review:** no; each is resolved in the model (bind the Source, add or retire Sheets).
 
 ## 4. Effect on the Final QA condition
 
 Completion is **"no unreviewed current finding"**, not "no findings" (adopted contract M). The proposed
-gate (`finalReadiness`, `prototype/currency.mjs`):
+gate (`finalReadiness`, `prototype/currency.mjs`; `tests/final-readiness.test.mjs`):
 
 | Blocker | Condition |
 |---|---|
-| `SOURCES_NOT_MATCHED` | a live Source is not `MATCHED` this session |
-| `METADATA_NOT_CONFIRMED` | a live sheet has no standing confirmation, and its QA02 finding does not carry an effective `INTENTIONAL` / `FALSE_POSITIVE` decision |
+| `SOURCES_NOT_MATCHED` | a live Source is not `MATCHED` this session — **independently of every decision** |
+| `METADATA_NOT_CONFIRMED` | a live sheet has no standing confirmation, and its current QA02 finding does not carry an effective **`INTENTIONAL`** decision |
+| `REGISTER_NOT_CURRENT` | a declared Drawing Register was declared from bytes its Source no longer has |
 | `FINDINGS_NOT_CURRENT` | an `ACTIVE` finding is `STALE` or `UNVERIFIED` |
 | `FINDINGS_UNREVIEWED` | an `ACTIVE`, `CURRENT` finding has no decision |
 | `FINDINGS_ON_HOLD` | *(only if the Human Gate chooses so)* an effective decision is `HOLD` |
 
+And beside the blockers, **what was not evaluated**:
+
+| `notEvaluable` | Meaning | Blocks Final |
+|---|---|---|
+| `QA09` / `NO_DECLARED_REGISTER` | no register was declared; the set was not compared with a drawing list | no — the register is optional — but the report must say so |
+| `QA09` / `DECLARED_REGISTER_NOT_CURRENT` | a register is declared and is stale | yes, through `REGISTER_NOT_CURRENT` |
+
 | Rule | Blocks Final while undecided | Decision can clear it | Notes |
 |---|---|---|---|
 | QA01, QA01B, QA03–QA08 | yes | any of the four outcomes | `ACTION_REQUIRED` is a review: the report lists it as open work |
-| QA02 | yes | only `INTENTIONAL` / `FALSE_POSITIVE` clear the *metadata* blocker | otherwise confirm the sheet |
-| QA09 | yes | any outcome | usually resolved in the model instead |
+| QA02 | yes | a decision makes it *reviewed*; **only `INTENTIONAL` clears the metadata blocker** | otherwise confirm the sheet |
+| QA09 | yes | any outcome | usually `ACTION_REQUIRED` (a listed sheet not yet issued) or `INTENTIONAL` |
 | QA10 `SOURCE_*` | yes | a decision clears the finding, **not** `SOURCES_NOT_MATCHED` | |
+| QA10 `PAGE_WITHOUT_SHEET` / `SHEET_WITHOUT_PAGE` | yes | any outcome | usually resolved in the model instead |
 | QA10 `PROJECT_FILE_ANOMALY` | yes | any outcome | |
 
 **`HOLD`.** By the letter of the adopted contract `HOLD` is one of the four Human outcomes, so a held finding
@@ -190,7 +260,8 @@ is a product question; the prototype makes it one option (`holdBlocksFinal`). Se
 ## 5. Stale triggers and closing rules
 
 A finding is identified by its **key** (the question) and versioned by its **evidence** (the grounds: the
-rule's version, the sheets it cites, the fingerprint each was read from, and the values that make it true).
+rule's version, the sheets and register entries it cites, the fingerprint each was read from, and the values
+that make it true).
 
 | On the next run… | Result |
 |---|---|
@@ -207,8 +278,21 @@ rule's version, the sheets it cites, the fingerprint each was read from, and the
 | the whole set — metadata | QA03 | **every** live sheet has effective values |
 | the whole set — page facts | QA07, QA08 | **every** live sheet has current page facts |
 | one sheet | QA02 | always |
-| one Source's manifest entry | QA09 | always |
+| the declared register | QA09 | the register is **current** (and the cited sheet has effective values) — **or no register is declared any more**, in which case the rule no longer applies and its findings are closed |
+| the manifest | QA10 `PAGE_WITHOUT_SHEET` / `SHEET_WITHOUT_PAGE` | always |
 | binding state | QA10 `SOURCE_*` | that Source's binding was evaluated (it is not `UNBOUND`) |
+| the import warnings | QA10 `PROJECT_FILE_ANOMALY` | the run was given the import warnings |
+
+QA09 in particular:
+
+| Change | What happens to QA09 |
+|---|---|
+| A person corrects a register row, or a sheet's number | re-evaluated; a finding the correction resolves is `NOT_REPRODUCED` |
+| A person retires a row (a heading read as an entry) | the finding citing it is `STALE` until the next run, then `NOT_REPRODUCED`; the row stays in the file |
+| The register's Source is replaced | the register is `STALE`; QA09 is not evaluated; its findings stay `ACTIVE` and are `STALE`; Final is blocked |
+| The register is declared again | a **new** reference and new entries; the old reference is retired; old findings are closed, new ones are unreviewed; old decisions are history |
+| The register is withdrawn | its findings are `NOT_REPRODUCED` on the next run; QA09 is `NOT_EVALUABLE` again |
+| A sheet has not been read | `LISTED_BUT_MISSING` findings are `UNVERIFIED` — the unread sheet might be the one |
 
 So one replaced Source makes the findings that *cite* it `STALE`, makes the set-wide candidates
 `UNVERIFIED` until the set is whole again, and leaves every other finding — and every decision — exactly as
@@ -218,6 +302,14 @@ it was (`tests/stale.test.mjs`).
 
 Every rule reads only what is already in the model. Evaluating all of them over 5000 sheets took
 ≈ 27 ms on a page thread in Chrome and ≈ 26 ms in Node; with nothing confirmed (5 607 findings) ≈ 62 ms and
-≈ 46 ms (`benchmark/results/SUMMARY.md` §4–5). That is what allows "re-evaluate after every change" in place
-of dependency tracking for metadata edits, and why a re-evaluation that changes nothing writes nothing — no
-run record, no growth of the file (`tests/roundtrip.test.mjs`).
+≈ 46 ms (`benchmark/results/SUMMARY.md` §4–5). With a declared register of 4 898 rows the same evaluation
+took under 60 ms. That is what allows "re-evaluate after every change" in place of dependency tracking for
+metadata edits, and why a re-evaluation that changes nothing writes nothing — no run record, no growth of
+the file (`tests/roundtrip.test.mjs`).
+
+## 7. What Independent Architecture Review changed
+
+| Finding | The first proposal (`4139133`) | Now |
+|---|---|---|
+| **RF-33-01** | `INTENTIONAL` **or `FALSE_POSITIVE`** on a QA02 finding exempted the sheet from "required metadata confirmed" | only `INTENTIONAL` does; a QA02 that is believed wrong is answered by confirming the sheet |
+| **RF-33-02** | QA09 compared M7's own Sheet list with each Source's page count (`PAGE_WITHOUT_SHEET`, `SHEET_WITHOUT_PAGE`) | QA09 compares a Human-declared Drawing Register with the actual Sheets (`LISTED_BUT_MISSING`, `ACTUAL_NOT_LISTED`); the page-inventory check is QA10 |

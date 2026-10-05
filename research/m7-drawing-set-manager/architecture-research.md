@@ -10,6 +10,7 @@
 | Product Definition | M7 Product Definition v1 — HUMAN ADOPTED 2026-10-05 (`obsidian-vault@d48034ba`, `01_Projects/PDF-ArchiTools/11_M7_Product_Definition.md`) |
 | App baseline | `airesearchagl-art/PDF_ArchiTools@1b5f9eda59a583a6b8fe7e07013ba38fc3053d1f` |
 | Scope of change | `research/m7-drawing-set-manager/**` only |
+| Revision | Focused repair after Independent Architecture Review of `4139133`: **RF-33-01** (QA02 exemption) and **RF-33-02** (QA09 is a Human-declared Drawing Register vs actual Sheets). §15 lists what changed. |
 | Data Model Gate | Class B (unchanged by this research); recommendation in §12-J |
 
 Detail lives in the companion documents; this one states what was found and what is recommended.
@@ -44,8 +45,8 @@ and Node evidence are never combined into one figure.
 
 ## 1. The recommendation in one page
 
-1. **The Portable Project JSON is a flat, relational document**: one Drawing Set holding six collections
-   (sources, profiles, sheets, runs, findings, decisions) related by internal UUIDs. No bytes, no paths, no
+1. **The Portable Project JSON is a flat, relational document**: one Drawing Set holding seven collections
+   (sources, profiles, sheets, declared drawing registers, runs, findings, decisions) related by internal UUIDs. No bytes, no paths, no
    text dumps — and no property in the schema where one could be put.
 2. **Nothing in the file says "stale".** Every derived record names what it was derived *from* (which
    bytes, which profile revision). Staleness is one comparison against what is there now, so a change cannot
@@ -72,7 +73,10 @@ and Node evidence are never combined into one figure.
    extraction, profile geometry and duplicate rule, the Comparator's page geometry and the normaliser's
    paper-size detection are called as they are; the research harness runs the Production functions to show
    it. One additive change is needed in `src/`: an incremental form of the SHA-256 it already owns.
-9. **Promote the Data Model Gate to Class A at Human Architecture Adoption** — not before.
+9. **The Data Model Gate moves to Class A at Human Architecture Adoption** — not before — and the adopted
+   schema and relation contract are canonical **before** M7-P1 is implemented, not reconciled at P4.
+10. **QA09 is a Drawing Register a person declared, against the Sheets that are there.** The register is
+    optional and never inferred; with none, QA09 is *not evaluable* — no finding, and not a pass.
 
 ---
 
@@ -221,6 +225,7 @@ to a subset the owned interpreter executes.
     "sources": [],             // Source Manifest: fingerprint + fingerprintHistory
     "titleBlockProfiles": [],
     "sheets": [],              // pageFacts · profileAssignment · observation · confirmation · history
+    "drawingRegisterReferences": [],  // OPTIONAL: a list a person declared, as field-level rows
     "analysisRuns": [],
     "findings": [],
     "decisions": []
@@ -247,7 +252,7 @@ to a subset the owned interpreter executes.
 | Text | every string bounded and in one storable domain: no control characters, no direction overrides, no lone surrogates | Machine-read text is brought into that domain where it enters the model, so a title block with a control character cannot make a Project unsaveable. |
 | Timestamps | UTC, millisecond, `toISOString()` form; calendar validity checked | A wrong clock is surfaced as a warning (QA10), not a refusal. |
 | Numbers | finite; integers safe; every one ranged | `JSON.parse("1e400")` is `Infinity`, silently. |
-| Serialisation | canonical: the schema's property order, compact | The same model always gives the same bytes. An indented copy is accepted on import but is ≈ 1.55× larger (≈ 13.5 vs 8.7 MiB at 5000 sheets). |
+| Serialisation | canonical: the schema's property order, compact | The same model always gives the same bytes. An indented copy is accepted on import but is ≈ 1.55× larger (≈ 13.5 vs 8.8 MiB at 5000 sheets). |
 | Not in the file | binding state, stale flags, file handles, paths, bytes, images, page text, the author of a decision | Runtime state, derived state, or forbidden content. |
 
 ### Migration
@@ -343,11 +348,11 @@ measurement behind it, it says so.
 
 | Limit | Candidate | Measured need | Basis |
 |---|---|---|---|
-| `maxProjectBytes` | 64 MiB | ≈ 8.7–10.4 MiB at 5000 sheets | ≈ 6× the largest measured. A valid 62.5 MiB file opened in ≈ 0.2 s (Node). |
+| `maxProjectBytes` | 64 MiB | ≈ 8.8–10.4 MiB at 5000 sheets | ≈ 6× the largest measured. A valid 62.5 MiB file opened in ≈ 0.2 s (Node). |
 | `maxNestingDepth` | 16 | 7 | ≈ 2× |
-| `maxJsonValues` | 4 000 000 | ≈ 335 000–395 000 at 5000 sheets | ≈ 10×, and above the ≈ 2.4 M the entity limits admit together |
-| `maxObjectKeys` | 32 | 14 (widest object in the schema) | ≈ 2×; **added because a measurement found the hole** — see `limitations.md` |
-| `maxKeySourceLength` | 64 | 21 | ≈ 3× |
+| `maxJsonValues` | 4 000 000 | ≈ 338 000–397 000 at 5000 sheets | ≈ 10×, and above the ≈ 2.4 M the entity limits admit together |
+| `maxObjectKeys` | 32 | 15 (widest object in the schema) | ≈ 2×; **added because a measurement found the hole** — see `limitations.md` |
+| `maxKeySourceLength` | 64 | 25 | ≈ 2.5× |
 | `maxStringSourceLength` | 24 000 | 4 000 × 6 | the longest field, written entirely as `\uXXXX` |
 | `maxSheets` | 5 000 | — | the upper bound this research was asked to consider |
 | `maxSources` | 5 000 | — | one PDF per sheet is a real way drawing sets arrive |
@@ -357,7 +362,7 @@ measurement behind it, it says so.
 | `maxPagesPerSource` | 5 000 | — | one Source may hold the whole set |
 | `maxPagePoints` | 14 400 | — | 200 inches: the largest page PDF allows without `/UserUnit` |
 | `maxFileNameLength` | 255 | — | the file-name limit of the common file systems |
-| `maxProfiles` 64 · `maxAnalysisRuns` 2 000 · history per Source 64 · per Sheet 32 | | **not measured** | placeholders; Unresolved U-6 |
+| `maxProfiles` 64 · `maxAnalysisRuns` 2 000 · history per Source 64 · per Sheet 32 · `maxRegisterReferences` 64 · `maxRegisterEntriesPerReference` 1 000 | | **not measured** | placeholders; Unresolved U-6 |
 | name 200 · field value 300 · field raw text 1 000 · comment 4 000 | | **not measured** | placeholders; need real title blocks or a product decision — U-6 |
 
 **What the bounds cost and what they leave.** A 5000-sheet Project opens in ≈ 90–125 ms on a page thread
@@ -383,8 +388,12 @@ result. Recommended: page thread for the first implementation; revisit if the li
   Source's `(id, sha256)`), and each observation and finding carries the exact fingerprints of what it
   cites. A list of fingerprints per run was tried first and dropped: with one PDF per sheet it adds
   ≈ 650 KB per run at 5000 sheets (5000 × ≈ 130 bytes; computed, not measured).
-- **A Finding may depend on one Sheet, several, or the whole set**, and that is recorded as its `scope` and
-  decides when a run may close it (`qa-rule-matrix.md` §5).
+- **A Finding may depend on one Sheet, several, the whole set, or an entry of a declared register**, and
+  that is recorded as its `scope` and decides when a run may close it (`qa-rule-matrix.md` §5).
+- **An optional declared Drawing Register is two more entity types** (`DrawingRegisterReference`,
+  `RegisterEntry`): a list a person designated on one page of one Source, bound to those bytes, holding
+  field-level rows only. It is never inferred, and its basis is fixed — declared again, it is a new
+  reference and the old one is retired (`data-model.proposed.md` §2A).
 - **A Review Decision depends on the Finding version — by construction.** A Finding is immutable; a changed
   statement is a new Finding; a Decision names one Finding and repeats its evidence digest, and import
   refuses a mismatch.
@@ -405,7 +414,7 @@ result. Recommended: page thread for the first implementation; revisit if the li
 
 | Reuse as is, through an adapter | Do not reuse | Additive change needed |
 |---|---|---|
-| `extractRegister` + `RegisterOcrEngine` (and through them native tokens, OCR, classification) · `transferRect` / `applyProfile` · `displayValue` · `findDuplicates` · `pageGeometry` · `detectPaperSize` · `configurePdfWorker` · `RunOwnership` · the one-Worker-per-job pattern | the annotator's viewer components · the Comparator's source handling · whole-document text extraction · the title-block **updater** (a writer, in another coordinate space) · `processor/source-facts` page sizes (MediaBox) | an incremental SHA-256 beside `contentDigest` · (optional) an exported orientation helper · an engine version constant |
+| `extractRegister` + `RegisterOcrEngine` (and through them native tokens, OCR, classification) · `transferRect` / `applyProfile` · `displayValue` · `findDuplicates` · `pageGeometry` · `detectPaperSize` · `configurePdfWorker` · `RunOwnership` · the one-Worker-per-job pattern · **`analysePageGeometry` + `reconstructSelection` (the M2-4 table engine), for a declared Drawing Register** | the annotator's viewer components · the Comparator's source handling · whole-document text extraction · the title-block **updater** (a writer, in another coordinate space) · `processor/source-facts` page sizes (MediaBox) | an incremental SHA-256 beside `contentDigest` · (optional) an exported orientation helper · an engine version constant |
 
 No existing file has to change for M7 to begin. The claim is run, not asserted:
 `tests/reuse-parity.test.mjs` imports the Production modules unchanged and requires (i) a profile saved by
@@ -414,6 +423,12 @@ report exactly the groups `findDuplicates` reports; (iii) M7's page facts to equ
 size class to equal `detectPaperSize` on 2 350 sizes. Check (iv) **failed on its first run** — the
 prototype's copy of the 5 mm rule disagreed at exactly 5 mm — which is the argument for importing the
 function instead of restating it.
+
+The same is done for the declared Drawing Register (RF-33-02): `tests/declared-register.test.mjs` runs
+Production's `reconstructSelection` on a synthetic list page — ruled, unruled, and scanned — and declares a
+register from the grid it returns through `prototype/register-list-adapter.mjs`, then evaluates QA09. The
+table engine is unchanged. It reads native text only, so a scanned list is refused by the engine and is
+declared by typing it; and its reading of the *whole page's* text never leaves the adapter.
 
 ---
 
@@ -442,13 +457,24 @@ function instead of restating it.
 
 | Deterministic — a fact | Candidate — a question |
 |---|---|
-| 1 duplicate number (exact, as the register defines it) · 2 metadata unconfirmed · 4 same number / different title · 5 revision mismatch *within one number* · 6 issue-date mismatch *within one number* · 9 register vs pages · 10 Source / Project integrity | 1b the same number written differently · 3 number gap · 7 sheet-size outlier · 8 orientation outlier |
+| 1 duplicate number (exact, as the register engine defines it) · 2 metadata unconfirmed · 4 same number / different title · 5 revision mismatch *within one number* · 6 issue-date mismatch *within one number* · 9 **declared Drawing Register vs actual Sheets** (`LISTED_BUT_MISSING`, `ACTUAL_NOT_LISTED`) · 10 Source / Project integrity, including M7's Sheet list vs each Source's pages | 1b the same number written differently · 3 number gap · 7 sheet-size outlier · 8 orientation outlier |
 
 - No rule says a drawing is wrong, and none closes itself.
 - Determinism is about the rule, not its inputs: a fact about a value only the OCR has read is a fact about
   an unconfirmed value. Final requires confirmed metadata, so at Final every input is confirmed.
-- Three item names admit a wider reading than the one proposed (5, 6, 9); the wider readings need an
-  expectation or a register **declared by a person**. They are listed as unresolved, not designed (U-2, U-3).
+- **QA09 compares a Drawing Register a person declared with the Sheets that are actually there.** The
+  register is optional and never inferred. With none declared QA09 is `NOT_EVALUABLE` — no finding, and
+  not a pass: the Final-readiness result says the comparison was not made. A declared register that is no
+  longer current (its Source's bytes were replaced) is not compared with anything either, and blocks Final
+  until it is declared again. M7's own Sheet list against each Source's page inventory is kept, under
+  QA10 (`PAGE_WITHOUT_SHEET`, `SHEET_WITHOUT_PAGE`). *(RF-33-02.)*
+- **Only `INTENTIONAL` on a QA02 finding lifts the metadata-confirmation requirement from a sheet.**
+  `FALSE_POSITIVE` does not: QA02 states a fact, and a QA02 believed wrong is answered by confirming the
+  sheet, after which the next run does not reproduce it. `ACTION_REQUIRED` and `HOLD` do not either, and a
+  Source that is not `MATCHED` blocks Final independently of every decision. *(RF-33-01.)*
+- Two item names admit a wider reading than the one proposed (5, 6): "differs from what this issue is
+  supposed to be" needs an expectation **declared by a person**. A declared register row can carry a
+  revision and a date, so it is now a possible source of one; that comparison is not designed here (U-2).
 
 ---
 
@@ -459,7 +485,7 @@ run-to-run variation):
 
 | | 200 sheets | 1 000 sheets | 5 000 sheets | 5 000, one PDF per sheet | 20 000 (beyond the limit) |
 |---|---|---|---|---|---|
-| File, compact | ≈ 0.35 MiB | ≈ 1.75 MiB | ≈ 8.7 MiB | ≈ 10.4 MiB | ≈ 35 MiB |
+| File, compact | ≈ 0.35 MiB | ≈ 1.77 MiB | ≈ 8.8 MiB | ≈ 10.4 MiB | ≈ 35 MiB |
 | Save (project, validate, serialise) | ≈ 3 ms | ≈ 15 ms | ≈ 95 ms | ≈ 115 ms | ≈ 400 ms |
 | Open (decode, scan, parse, schema, relations) | ≈ 4 ms | ≈ 18 ms | ≈ 92 ms | ≈ 120 ms | ≈ 420 ms |
 | QA, all rules | ≈ 1 ms | ≈ 5 ms | ≈ 27 ms | ≈ 31 ms | ≈ 120 ms |
@@ -474,6 +500,8 @@ run-to-run variation):
 - **5 000 sheets is comfortable**: about a tenth of a second to open or save, tens of milliseconds for a
   full QA evaluation. With nothing confirmed (5 607 findings) QA is ≈ 62 ms.
 - **Re-evaluating after every edit is affordable**, which is what the stale design relies on.
+- **A declared register is cheap.** One of 4 898 rows (five references) adds ≈ 0.95 MiB to a 5000-sheet
+  file — about 200 bytes per row — and QA with it took under 60 ms.
 - **The portable state is not what makes a large set slow.** Fingerprinting costs ≈ 4 ms per MiB (§2) and
   extraction costs a page read — and, for scanned sheets, a recognition — per sheet. Neither was
   re-measured here; they belong to the existing engines.
@@ -502,6 +530,7 @@ run-to-run variation):
 | Blob URL | the same | `blob:` does not reach the file |
 | token / credential | no property | `authToken`, `cookies` on the model do not reach the file |
 | debug object dump | no property; unknown keys are not carried | `debug.objectGraph`, a PDF.js proxy do not reach the file |
+| a drawing list's page text, table grid or cell image | a declared register holds **field-level rows only** (number, title, revision, date) plus where the table was; the adapter drops the page's tokens and the engine's grid | `declared-register.test.mjs` — `pageText`, `tokens`, `grid`, `candidate`, `cellImage` on a register do not reach the file; `fixtures/invalid/register-with-page-text.json` is refused |
 
 The allow-list is the mechanism: **export walks the schema, not the object.** Whatever a session hangs on
 the in-memory model, the file holds only what the schema declares, in the schema's order, and is then
@@ -516,8 +545,9 @@ Unresolved U-5.
 ### The file is confidential
 
 **A Project JSON holds project metadata that is confidential in its own right**: the project's name, source
-file names (which often name the client or the job), drawing numbers and titles, revisions and dates, what
-QA found, and a reviewer's own comments. The absence of the PDF does **not** make it non-sensitive, and the
+file names (which often name the client or the job), drawing numbers and titles, revisions and dates, the
+declared drawing list — which is the project's whole issue schedule in one place — what QA found, and a
+reviewer's own comments. The absence of the PDF does **not** make it non-sensitive, and the
 workspace must not describe it that way (Product Definition, "Portable Project Security Boundary").
 `tests/privacy.test.mjs` ends by asserting what the file *does* contain, so this is not lost among the
 things that are absent.
@@ -552,8 +582,9 @@ One recommended architecture. Each item is a decision *proposed* for Human Archi
 
 ### A. Portable Project JSON structure
 A single JSON document: an envelope (`format`, integer `schemaVersion`, per-save `projectFileId`,
-`lineage`, `savedAt`, `writer`), a `project`, and one `drawingSet` with six flat collections related by
-UUID. Everything required, `null` for "not yet". Retire, never delete. Canonical compact serialisation.
+`lineage`, `savedAt`, `writer`), a `project`, and one `drawingSet` with seven flat collections related by
+UUID — sources, profiles, sheets, **declared drawing registers (optional, each with its rows)**, runs,
+findings, decisions. Everything required, `null` for "not yet". Retire, never delete. Canonical compact serialisation.
 The in-memory model has the same shape as the file, with all runtime state kept outside it.
 
 ### B. Fingerprint implementation
@@ -600,7 +631,8 @@ moment recorded. Several profiles per Drawing Set.
 ### H. Existing-engine reuse boundary
 M7 calls existing engines through a pure adapter and mounts none of the existing components. Reused as
 they are: register extraction (and through it tokens, OCR, classification), profile transfer geometry,
-`displayValue`, `findDuplicates`, `pageGeometry`, `detectPaperSize`, `configurePdfWorker`, `RunOwnership`.
+`displayValue`, `findDuplicates`, `pageGeometry`, `detectPaperSize`, `configurePdfWorker`, `RunOwnership`,
+and the M2-4 table engine (`analysePageGeometry`, `reconstructSelection`) for a declared Drawing Register.
 Not reused: the annotator's viewer, the Comparator's source handling, whole-document text extraction, the
 title-block updater. One additive change in `src/`: an incremental SHA-256.
 
@@ -608,14 +640,24 @@ title-block updater. One additive change in `src/`: an incremental SHA-256.
 Pure functions over the model — no PDF, no DOM, no React — returning drafts; a separate reconcile step
 writes them. Findings keyed by question and versioned by evidence. Rules are DETERMINISTIC (a fact) or
 CANDIDATE (a question); none judges a design. QA is re-evaluated on every change and on open; a
-re-evaluation that changes nothing writes nothing.
+re-evaluation that changes nothing writes nothing. QA09 is evaluated only against a Drawing Register a
+person declared and that is current; otherwise it is reported as not evaluable, never as passed. The
+metadata-confirmation requirement is lifted from a sheet only by `INTENTIONAL` on its QA02 finding.
 
 ### J. Data Model Gate recommendation
-**Promote from Class B to Class A — at Human Architecture Adoption, not now.** Every Class-A criterion of
-the Gate holds for the proposed model, and adoption of a Portable Project schema is the Gate's own B → A
-trigger; until then nothing is canonical and the diagrams are proposed projections. On adoption the
-canonical source is the machine-readable schema plus its relation rules, not a diagram, and the first
-Production M7 PR is `data_model_impact: NEW`. Detail: `data-model.proposed.md` §8.
+**Class B now; Class A at Human Architecture Adoption.** Every Class-A criterion of the Gate holds for the
+proposed model — ten entity types after RF-33-02 (eight, plus Drawing Register Reference and Register
+Entry) — and adoption of a Portable Project schema is the Gate's own B → A trigger. This research does not
+change the class, and until adoption nothing here is canonical and the diagrams are proposed projections.
+
+The timing, stated exactly (`data-model.proposed.md` §8):
+
+| When | What is true |
+|---|---|
+| At Human Architecture Adoption | The Data Model moves B → A. The adopted **machine-readable schema and its semantic relation contract become the canonical source** — not a diagram. |
+| Before M7-P1 implementation | That canonical contract already exists. P1 is implemented against it (`data_model_impact: NEW`). |
+| During P1–P3 | No Portable Project file has shipped, so the schema is pre-release and may change **without an end-user migration** — but **any semantic change of shape updates the canonical contract first and passes review**. Implementation does not drift from the adopted model to be reconciled at P4. |
+| At M7-P4 | `schemaVersion: 1` is fixed with the first release that writes a file. After that, a change of shape is a new version with a migration. |
 
 ### K. Implementation split
 
@@ -626,13 +668,16 @@ repository's existing style (`scripts/smoke-*.mjs`).
 |---|---|---|---|
 | **M7-P1 — Workspace and Source foundation** | the sixth workspace; select PDFs; fingerprint in a Worker; Source Manifest and Sheet inventory in memory; page facts; a virtualised Sheet List; a read-only viewer pane | incremental SHA-256 (additive, beside `contentDigest`); fingerprint Worker; M7 domain core (ids, model operations) as pure TypeScript with Node tests; PDF.js document discipline (one open, destroyed on change) | profiles, QA, saving |
 | **M7-P2 — Title Block Profiles and register metadata** | several profiles; per-sheet assignment (with bulk operations); extraction through the register adapter; Human confirmation with history; per-profile staleness | register adapter; currency (stale) module; an engine version constant | QA, saving |
-| **M7-P3 — QA and Human review** | the rule engine and reconciliation; append-only decisions; currency of findings; the Final-readiness gate; inspector and history; bulk review | QA rules; reconcile; readiness | saving |
+| **M7-P3 — QA and Human review** | the rule engine and reconciliation; **declaring a Drawing Register from a table a person points at (or by typing it), and QA09 against it**; append-only decisions; currency of findings; the Final-readiness gate (including "not evaluable"); inspector and history; bulk review | QA rules; reconcile; readiness; the register-list adapter over the M2-4 table engine | saving |
 | **M7-P4 — Portable Project save / resume** | the adopted schema as a file; owned interpreter; relations; bounded import; allow-list export; rebinding and its Human flows (`CHANGED`, `AMBIGUOUS`); QA re-evaluation on open; migration framework (no migration yet); Final QA Report | schema, interpreter, import / export, rebind | — |
 
-- **The domain core comes first and the save button last.** The model the workspace keeps in memory *is*
-  the file's shape from P1, and each phase extends it under test; but `schemaVersion: 1` is not written to
-  a person's disk until P4. Until then the shape can change without a migration, and the first released
-  format has been exercised by three phases of use.
+- **The canonical contract comes before the code, and the save button comes last.** The adopted schema
+  and relation contract exist before P1 starts (J). The model the workspace keeps in memory *is* that
+  contract's shape from P1 on, and each phase implements more of it under test. `schemaVersion: 1` is not
+  written to a person's disk until P4, so until then a change of shape needs **no end-user migration** —
+  but it is never informal: **it is a reviewed change to the canonical contract, made before the
+  implementation that depends on it.** P1–P3 do not drift from the adopted model and catch up at P4. What
+  P4 fixes is the *version*, of a format three phases have already been held to.
 - **The alternative** — ship save / resume second — finds persistence problems earlier, at the price of
   versioning a format that is still growing. This research has already exercised the complete format, which
   is the main argument for the order above.
@@ -648,16 +693,16 @@ For Independent Architecture Review and the Human Gate. None is decided by this 
 | # | Question | What the proposal assumes meanwhile |
 |---|---|---|
 | **U-1** | Does `HOLD` count as reviewed for a *Final* QA Report? | By the letter of the adopted contract, yes; the stricter reading is one option (`holdBlocksFinal`). |
-| **U-2** | What do "revision mismatch" and "issue-date mismatch" mean in one Drawing Set? | Differences *within one drawing number*. A comparison with an expected revision or issue date needs that expectation declared by a person. |
-| **U-3** | Is "drawing-register vs actual-sheet" M7's Sheet list against the pages, or sheets against a register *list*? | The former (deterministic, no new input). The latter needs an entity the Product Definition does not list. |
+| **U-2** | What do "revision mismatch" and "issue-date mismatch" mean in one Drawing Set? | Differences *within one drawing number*. A comparison with an expected revision or issue date needs that expectation declared by a person; a declared register row may now carry one, and comparing a Sheet with its row beyond the number is not designed. |
+| **U-3** | *Resolved by review (RF-33-02):* QA09 is a Human-declared Drawing Register vs actual Sheets. **What remains open about it:** (a) should a number that matches only once folded (full-width vs half-width) correspond, rather than be a hint? (b) a register that is not on a page of a Source in the set (an externally supplied list); (c) a scanned list page — the table engine reads native text only; (d) whether a register row's machine reading should be kept beside the declared value. | (a) No: exact number only, the folded spelling is a hint. (b) Not modelled. (c) Declared by typing (`MANUAL`). (d) No: the register is Human-declared; only `origin` records that a row was read, corrected or typed. |
 | **U-4** | When a person accepts changed bytes, is "page *n* is the same sheet as before" an acceptable default? | Yes, as a candidate that must be re-read and re-confirmed. Inserted pages break it; matching sheets across revisions is M8. |
 | **U-5** | May a bounded excerpt of title-block field text (`rawText`) be persisted? | Yes, ≤ 1 000 characters per field. The alternative is to store only the proposed value and re-read on demand. |
-| **U-6** | (a) The string lengths and four count limits have no measurement behind them. (b) What happens when a Project reaches a limit — what may be compacted, and what does the person see? | (a) Placeholders. (b) Save is refused; no compaction beyond unreferenced runs. |
+| **U-6** | (a) The string lengths and six count limits (including the two for a declared register) have no measurement behind them. (b) What happens when a Project reaches a limit — what may be compacted, and what does the person see? | (a) Placeholders. (b) Save is refused; no compaction beyond unreferenced runs. |
 | **U-7** | Must a Source pass M6's Load Boundary before PDF.js opens it in M7? | Not decided. The boundary protects pdf-lib's loader; M7 reads with PDF.js. Split / Merge does run it before its PDF.js preview. |
 | **U-8** | Is the engine's `revision_date` (shown as 日付) M7's `issueDate`? | Mapped one to the other; the name is the Task Packet's. |
 | **U-9** | Should a decision record who made it? | No — there are no accounts in M7. |
 | **U-10** | How many old schema versions must stay readable? | All of them, until decided otherwise. |
-| **U-11** | Does `INTENTIONAL` / `FALSE_POSITIVE` on a QA02 finding exempt that sheet from "required metadata confirmed"? | Yes; it makes the exemption a recorded decision. |
+| **U-11** | *Resolved by review (RF-33-01):* only `INTENTIONAL` on a QA02 finding lifts the metadata-confirmation requirement; `FALSE_POSITIVE`, `ACTION_REQUIRED` and `HOLD` do not. | Implemented and tested (`tests/final-readiness.test.mjs`). |
 | **U-12** | Must every Source be `MATCHED` for a report to be Final? | Yes. |
 | **U-13** | Are the candidate sub-tier QA01B, the gap run bound (5) and the outlier majority (> 50 %) wanted, and at those values? | Present, at those values, each removable without touching anything else. |
 | **U-14** | Is a Project file that is not tamper-evident acceptable? | Yes for M7; the file is never believed about the drawings, but a forged decision cannot be told from a real one. |
@@ -676,8 +721,42 @@ For Independent Architecture Review and the Human Gate. None is decided by this 
 | Referential-integrity rejection | `tests/relations.test.mjs` |
 | Source rebinding cases | `tests/rebind.test.mjs` |
 | Stale propagation cases | `tests/stale.test.mjs` |
+| Final readiness and the QA02 exemption (RF-33-01) | `tests/final-readiness.test.mjs` |
+| Declared Drawing Register and QA09, with the Production table engine run unchanged (RF-33-02) | `tests/declared-register.test.mjs`; `prototype/register-list-adapter.mjs` |
 | Performance matrix | `benchmark/results/SUMMARY.md` (from `*.json`); `benchmark/results/structural.json` |
 | Every quoted figure held to the committed results | `benchmark/check-claims.mjs`; `benchmark/results/CLAIMS.md` |
 | Existing-engine reuse audit | `reuse-audit.md`; `tests/reuse-parity.test.mjs` |
 | Production source delta = 0; existing checks unaffected | `evidence/gates.md` |
 | What was not measured, and every instrument defect found | `limitations.md` |
+
+---
+
+## 15. Independent Architecture Review of `4139133`: repairs and advisories
+
+### Repairs
+
+| Finding | What was wrong | What changed | Where |
+|---|---|---|---|
+| **RF-33-01** | `FALSE_POSITIVE` on a QA02 finding exempted the sheet from the metadata-confirmation requirement. QA02 states a fact; calling it false does not make the metadata confirmed. | Only `INTENTIONAL` lifts the requirement. `FALSE_POSITIVE`, `ACTION_REQUIRED` and `HOLD` do not. A QA02 believed wrong is answered by confirming the sheet, and the next run does not reproduce it. | `prototype/currency.mjs` (`EXEMPTS_FROM_METADATA_CONFIRMATION`); `qa-rule-matrix.md` QA02, §4; `tests/final-readiness.test.mjs`; two mutation probes |
+| **RF-33-02** | QA09 was redefined as M7's internal Sheet list vs the PDF page inventory. The intended meaning is a Human-declared Drawing Register (図面一覧) vs actual Sheets. | QA09 = `LISTED_BUT_MISSING` / `ACTUAL_NOT_LISTED` against an **optional, declared** register; not evaluable (no finding, not a pass) when none is declared. The page-inventory check is kept as QA10 (`PAGE_WITHOUT_SHEET`, `SHEET_WITHOUT_PAGE`). Two entity types added: `DrawingRegisterReference`, `RegisterEntry`. The M2-4 table engine is reached through an adapter, unchanged. | schema; `prototype/qa-rules.mjs`, `currency.mjs`, `model-ops.mjs`, `semantic.mjs`, `register-list-adapter.mjs`; `data-model.proposed.md` §2A; `qa-rule-matrix.md` QA09 / QA10; `reuse-audit.md` candidate 13; `tests/declared-register.test.mjs`; mutation probes |
+| Clarification | §12-J and §12-K could be read as letting P1–P3 drift from the adopted model until P4. | The canonical contract exists before P1; P1–P3 may revise it without an end-user migration, but only through a reviewed change to the contract. | §12-J, §12-K; `data-model.proposed.md` §8 |
+
+### Advisories recorded
+
+These are not changes to the recommendation. They are conditions on what follows it.
+
+1. **The bounded JSON scanner and the owned schema interpreter are security-sensitive code.** In this
+   research they have been shown a hand-written list of hostile inputs, a set of mutation probes, and a
+   differential comparison with ajv over 26 mutations of one document. **Before M7-P4 ships**, the Production
+   versions must additionally have **fuzz testing, property-based testing and differential testing** — a
+   search, not a list — over the whole import pipeline. `limitations.md` already records that no fuzzing was
+   done here; this makes closing that gap a release condition of P4.
+2. **Evidence from Chrome 143 is sufficient for this Research Gate, and not for release.** Production
+   **M7-P1** (fingerprinting in a Worker, the BYOB reader and its fallback) and **M7-P4** (file open and
+   save) must each define the browsers they target and a smoke test that runs on them. The design's
+   fallbacks exist for exactly the cases this research did not measure.
+3. **A Vercel Preview built automatically when a pull request is pushed is not a Production deployment.**
+   It is the platform's behaviour for a pushed branch with a pull request, and it happened for this
+   research branch (a deployment by `vercel[bot]`, environment `Preview`). It is recorded as platform
+   behaviour (`limitations.md` §4). Nothing is deployed by hand from a research branch; a local build of
+   this branch is byte-identical to a local build of the base commit (`evidence/gates.md`).

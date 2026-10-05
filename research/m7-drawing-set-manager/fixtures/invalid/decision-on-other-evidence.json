@@ -273,6 +273,7 @@
         "confirmationHistory": []
       }
     ],
+    "drawingRegisterReferences": [],
     "analysisRuns": [
       {
         "id": "daea1889-a695-4af4-a0a5-b43152583b20",
@@ -319,8 +320,9 @@
           "be00e79d-fc91-4a64-be78-39ca5169e82a"
         ],
         "sourceIds": [],
+        "registerEntryIds": [],
         "findingKey": "75bcb1255a2112027bfad06fc2a68531365f678cc2774b332be15478e11cc639",
-        "evidenceDigest": "29bdd91f1af76edddbf96a85adffd4bc6601cf17da68796a33d7ac9d1fbffffa",
+        "evidenceDigest": "869a05e4ba953eb634323bd35e4f9b2995bb54d1a6f167411164ca7cc4cbe601",
         "basis": [
           {
             "sourceId": "12e54993-c139-4b78-b486-0e335d4286f3",

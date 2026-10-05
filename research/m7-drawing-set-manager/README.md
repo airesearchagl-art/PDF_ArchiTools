@@ -14,7 +14,8 @@
 | App baseline | `airesearchagl-art/PDF_ArchiTools@1b5f9eda59a583a6b8fe7e07013ba38fc3053d1f` |
 | Changes outside this directory | none |
 | Data used | synthetic only — no customer PDF, no real project, no real file name, no path, no secret |
-| Next step | Independent Architecture Review → Human Architecture Adoption. Nothing here proceeds without both. |
+| Revision | Focused repair after Independent Architecture Review of `4139133` (RF-33-01, RF-33-02) — `architecture-research.md` §15 |
+| Next step | Independent Focused Re-review → Human Architecture Adoption. Nothing here proceeds without both. |
 
 ## Read in this order
 
@@ -22,8 +23,8 @@
 |---|---|
 | **`architecture-research.md`** | The findings for R1–R9, the security and privacy review, the **Architecture Recommendation (A–K)**, the proposed implementation split, and the required unresolved items. Start here. |
 | `rebinding-state-machine.md` | R2: the binding states, the algorithm, the seven cases, the stale matrix. |
-| `data-model.proposed.md` | R5: proposed conceptual and logical models, the contract table, lifecycles, and the Data Model Gate re-evaluation. |
-| `qa-rule-matrix.md` | R8: the ten QA items as deterministic facts or candidate questions. |
+| `data-model.proposed.md` | R5: proposed conceptual and logical models, the optional declared Drawing Register (§2A), the contract table, lifecycles, and the Data Model Gate re-evaluation with its timing. |
+| `qa-rule-matrix.md` | R8: the ten QA items as deterministic facts or candidate questions; the Final-readiness gate. |
 | `reuse-audit.md` | R6: every existing engine considered, and what M7 can reach through an adapter. |
 | `title-block-profile.md` | R7: profile representation, assignment, stale scope. |
 | `portable-project.schema.proposed.json` | R3: the proposed schema. **Proposed, non-canonical.** |
@@ -53,6 +54,7 @@ research/m7-drawing-set-manager/
 │  ├─ qa-rules.mjs                     the QA rules and reconciliation
 │  ├─ model-ops.mjs                    the operations that change a Project
 │  ├─ register-adapter.mjs             the boundary to the existing Drawing Register
+│  ├─ register-list-adapter.mjs        from the existing table engine's grid to declared register rows
 │  └─ synthetic-project.mjs            seeded synthetic Drawing Sets
 ├─ tests/                              node:test suites, a TS-resolve hook, the mutation probe
 ├─ fixtures/                           small synthetic Project files and the verdict each must get
@@ -106,8 +108,9 @@ Nothing. It reads `src/` and changes none of it:
 
 - `tests/reuse-parity.test.mjs`, `tests/sha256.test.mjs` and `benchmark/bench-fingerprint-node.mjs` **import**
   Production modules read-only, to show that the existing engines can be called as they are.
-  `tests/ts-resolve-hook.mjs` is what lets Node resolve their extensionless relative imports; it is loaded
-  only by the test that needs it and changes no file.
+  `tests/declared-register.test.mjs` does the same for the table engine. `tests/ts-resolve-hook.mjs` is what
+  lets Node resolve their extensionless relative imports and load PDF.js's own Node build where a Production
+  module imports `pdfjs-dist`; it is loaded only by the tests that need it and changes no file.
 - The repository's TypeScript build covers `src/` only, ESLint's rules cover `*.ts` / `*.tsx` only, and Core
   CI runs a fixed list of scripts under `scripts/`. None of them reads this directory.
   `evidence/gates.md` records the check.

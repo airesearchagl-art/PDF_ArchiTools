@@ -18,7 +18,7 @@ import { seededUuidSource } from './ids.mjs';
 import { sha256HexOfText } from './sha256-stream.mjs';
 import { BINDING } from './currency.mjs';
 import {
-    addProfile, addSource, assignProfile, confirmSheet, decide, liveSheets, newProject, recordExtraction,
+    addProfile, addSource, assignProfile, confirmSheet, decide, declareDrawingRegister, liveSheets, newProject, recordExtraction,
 } from './model-ops.mjs';
 import { runQa } from './qa-rules.mjs';
 
@@ -55,11 +55,15 @@ const toFullWidth = (text) => text.replace(/[!-~]/g, (c) => String.fromCharCode(
  *   duplicateEvery / gapEvery / variantEvery / outlierEvery
  *                     how often each kind of QA condition is planted
  *                     (0 = never)
+ *   declaredRegister  declare a Drawing Register that lists the set, leaving
+ *                     out every `unlistedEvery`-th sheet and adding a row for a
+ *                     drawing that is not there every `missingEvery` rows
  */
 export function buildSyntheticProject({
     sheets = 200, pagesPerSource = 25, seed = 20261005,
     confirmedShare = 0.6, decidedShare = 0.5,
     duplicateEvery = 40, gapEvery = 30, variantEvery = 90, outlierEvery = 50,
+    declaredRegister = false, unlistedEvery = 60, missingEvery = 75,
     comment = 'synthetic review note',
 } = {}) {
     const random = rng(seed);
@@ -139,6 +143,28 @@ export function buildSyntheticProject({
 
     for (const sheet of all) {
         if (random() < confirmedShare) confirmSheet(model, sheet.id, {}, tick(10));
+    }
+
+    // A declared register: the list a person pointed at on the first page of the
+    // first source. One reference per 1000 rows, as a long list spans pages.
+    if (declaredRegister) {
+        const seen = new Set();
+        const listed = [];
+        results.forEach((result, i) => {
+            const number = result.fields.drawingNumber.value.trim();
+            if (seen.has(number) || (unlistedEvery && i % unlistedEvery === unlistedEvery - 1)) return;
+            seen.add(number);
+            listed.push({ drawingNumber: number, drawingTitle: result.fields.drawingTitle.value, revision: result.fields.revision.value, issueDate: null });
+            if (missingEvery && listed.length % missingEvery === 0) listed.push({ drawingNumber: `X-${900 + listed.length}`, drawingTitle: '未収録図', revision: null, issueDate: null });
+        });
+        const first = model.drawingSet.sources[0];
+        for (let offset = 0, page = 1; offset < listed.length; offset += 1000, page += 1) {
+            declareDrawingRegister(model, {
+                sourceId: first.id, pageNumber: Math.min(page, first.fingerprint.pageCount),
+                region: { left: 100, top: 100 + page, right: 1400, bottom: 1500 },
+                rows: listed.slice(offset, offset + 1000), now: tick(), newId,
+            });
+        }
     }
 
     runQa(model, bindings, { now: tick(), newId });
