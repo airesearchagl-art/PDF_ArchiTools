@@ -28,6 +28,7 @@
 | `title-block-profile.md` | R7: profile representation, assignment, stale scope. |
 | `portable-project.schema.proposed.json` | R3: the proposed schema. **Proposed, non-canonical.** |
 | `benchmark/results/SUMMARY.md` | Every measurement, generated from the result files. |
+| `benchmark/results/CLAIMS.md` | Every figure the documents quote, checked against those files. |
 | `limitations.md` | What was not measured, and every defect found in the research's own instruments. |
 | `evidence/` | Test output, the mutation-probe result, and the gate record (Production delta, build, lint). |
 
@@ -87,6 +88,9 @@ node research/m7-drawing-set-manager/benchmark/bench-browser.mjs
 # tables and the run-independent fields, from the result files
 node research/m7-drawing-set-manager/benchmark/summarise.mjs
 node research/m7-drawing-set-manager/benchmark/structural.mjs
+
+# hold every figure the documents quote to the result files
+node research/m7-drawing-set-manager/benchmark/check-claims.mjs
 
 # everything above for one committed head: tests, probes, every benchmark twice, build, lint
 # (refuses to run unless the source is exactly what is committed)

@@ -30,11 +30,15 @@ Detail lives in the companion documents; this one states what was found and what
 | Required unresolved items | §13 | |
 | What was not measured | — | `limitations.md` |
 
-**On the numbers.** Figures quoted here are rounded from one run on one machine (Chrome for Testing 143,
-headless; Node 24; Windows 11; Core Ultra 9 285K). The exact record is `benchmark/results/SUMMARY.md`,
-generated mechanically from the result files. Times and memory vary from run to run and are marked
-*measured-only*; sizes, counts, verdicts and digests are *structural* and must be identical across runs
-(`benchmark/results/structural.json`). Browser and Node evidence are never combined into one figure.
+**On the numbers.** Figures quoted here are rounded, from one machine (Chrome for Testing 143, headless;
+Node 24; Windows 11; Core Ultra 9 285K). The exact record is `benchmark/results/SUMMARY.md`, generated
+mechanically from the result files. Times and memory vary from run to run and are *measured-only*; sizes,
+counts, verdicts and digests are *structural* and must be identical across runs
+(`benchmark/results/structural.json`). Because a rounded figure can drift away from the run committed
+beside it, **every figure quoted from a benchmark is checked against the committed result files** by
+`benchmark/check-claims.mjs` — the quoted words must still be in the document and the measured value must
+be within what they allow ("≈ X" allows X ± 25 %); the outcome is `benchmark/results/CLAIMS.md`. Browser
+and Node evidence are never combined into one figure.
 
 ---
 
@@ -61,7 +65,7 @@ generated mechanically from the result files. Times and memory vary from run to 
    schema it cannot fully enforce. Export copies only what the schema declares and then runs the import
    checks on what it is about to write.
 7. **QA rules are pure functions over metadata and never touch a PDF.** They are cheap enough to re-run
-   after every change (≈ 27–60 ms at 5000 sheets), so only source-bound work — extraction, OCR — ever has to
+   after every change (roughly 25–75 ms at 5000 sheets), so only source-bound work — extraction, OCR — ever has to
    be *waited out*. A finding is identified by its question and versioned by its evidence; that is what
    carries a Human decision across re-runs and retires it when the evidence changes.
 8. **Existing engines are reached through an adapter and are not modified.** The Drawing Register's
@@ -96,23 +100,23 @@ One 250 MiB file; baseline (file selected, nothing read) ≈ 66 MiB:
 
 | | `subtle-main` | `subtle-worker` | `stream-worker` | `byob-worker` |
 |---|---|---|---|---|
-| Elapsed | ≈ 0.88 s | ≈ 0.96 s | ≈ 1.15 s | ≈ 0.98 s |
-| Longest time the page thread was unavailable | **≈ 780 ms** | ≈ 11 ms | ≈ 6 ms | ≈ 6 ms |
-| Renderer peak working set | ≈ 567 MiB | ≈ 571 MiB | ≈ 162 MiB | **≈ 87 MiB** |
+| Elapsed | ≈ 0.9 s | ≈ 0.9 s | ≈ 1.15 s | ≈ 1.0 s |
+| Longest time the page thread was unavailable | **≈ 0.8 s** | under 30 ms | under 15 ms | under 15 ms |
+| Renderer peak working set | ≈ 570 MiB | ≈ 570 MiB | ≈ 160 MiB | **≈ 87 MiB** |
 | Works when served over plain HTTP | **no** | **no** | yes | yes |
 | Can be stopped | no | only by terminating the Worker | between chunks (≈ 25 ms) | between reads |
 
 1. **`SubtleCrypto.digest()` needs the whole input in memory.** It refuses a `ReadableStream`
-   (`TypeError`); there is no way to feed it pieces. At 250 MiB the renderer peaked about 500 MiB above
-   baseline — the file, twice.
+   (`TypeError`); there is no way to feed it pieces. At 250 MiB the renderer peaked about 500 MiB above baseline
+   — the file, twice.
 2. **The digest blocked the calling thread.** `file.arrayBuffer()` and `digest()` were measured separately
-   on the page thread, each under a 4 ms heartbeat: reading 250 MiB took ≈ 140 ms and left the thread free
-   (≈ 5 ms gaps); the digest took ≈ 740–780 ms and **the thread was unavailable for all of it**. An
+   on the page thread, each under a 4 ms heartbeat: reading 250 MiB took ≈ 150 ms and left the thread free
+   (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**. An
    asynchronous signature is not an asynchronous implementation. This is one browser build; why it behaves
    so was not investigated.
-3. **Web Crypto was not faster where it matters.** End to end it ran at ≈ 260–280 MiB/s; the JavaScript
-   hash refilling one buffer ran at ≈ 250–256 MiB/s. (In Node the same CPU's OpenSSL does ≈ 1 700–2 100
-   MiB/s and the JavaScript hash ≈ 280–300 MiB/s — Node evidence, quoted only to show the JS figure is
+3. **Web Crypto was not faster where it matters.** End to end it ran at ≈ 270 MiB/s; the JavaScript hash
+   refilling one buffer ran at ≈ 250 MiB/s. (In Node the same CPU's OpenSSL does ≈ 2 000 MiB/s and the
+   JavaScript hash ≈ 290 MiB/s — Node evidence, quoted only to show the JS figure is
    about what the implementation can do.)
 4. **In an insecure context there is no Web Crypto at all.** Served from an origin that is neither
    `localhost` nor HTTPS, `crypto.subtle` and `crypto.randomUUID` are `undefined`, in the page and in a
@@ -124,9 +128,9 @@ One 250 MiB file; baseline (file selected, nothing read) ≈ 66 MiB:
    collector had not caught up — against ≈ 158 MiB for sliced streaming and **≈ 120 MiB with one reused
    buffer**.
 6. **4 MiB is the chunk size the measurement chooses.** 64 KiB ≈ 85 MiB/s, 1 MiB ≈ 186, 4 MiB ≈ 215,
-   16 MiB ≈ 230; cancellation latency ≈ 6 ms, ≈ 21–29 ms and ≈ 60–124 ms at 1, 4 and 16 MiB.
+   16 MiB ≈ 230; cancellation latency ≈ 6 ms, ≈ 25 ms and ≈ 60–120 ms at 1, 4 and 16 MiB.
 7. **A `File` reaches a Worker without its bytes being read on the page thread** (structured clone of a
-   10 MiB `File`: ≈ 0.4 ms).
+   10 MiB `File`: under 2 ms).
 8. **A detached buffer hashes silently to the digest of nothing.** After an ArrayBuffer is transferred
    away its `byteLength` is 0 and `digest()` returns `e3b0c442…`, the SHA-256 of zero bytes, without an
    error. PDF.js detaches the buffer it is given.
@@ -155,7 +159,7 @@ flowchart TB
 ```
 
 - **One implementation, everywhere.** No Web Crypto path. The measured cost of giving it up in Chrome is
-  ≈ 2–10 % of elapsed time with one reused buffer and ≈ 20–25 % on the slice fallback; what is bought is
+  under 20 % of elapsed time with one reused buffer and 15–40 % on the slice fallback; what is bought is
   flat memory, no dependence on a secure context, cancellation, and a digest that cannot depend on which
   implementation ran.
 - **A dedicated Worker per job**, in the pattern Split / Merge already uses, given `File` objects, never
@@ -163,7 +167,7 @@ flowchart TB
 - **Strictly sequential, one reused buffer.** Expected cost ≈ 4 ms per MiB: a 250 MiB file ≈ 1 s, a
   500 MiB set ≈ 2 s, in the background.
 - **Cancellation** is a message honoured between reads (≈ one chunk); terminating the Worker is the hard
-  stop and costs a fresh Worker ≈ 7 ms.
+  stop and costs a fresh Worker under 20 ms.
 - **The size the digest covered must equal `file.size`**, which is the guard against both a short read and
   a detached buffer.
 - **The fingerprint is re-checked over the bytes an analysis actually loads**, before PDF.js takes them —
@@ -295,10 +299,10 @@ Why a scan before `JSON.parse`, when `JSON.parse` is the right parser:
   is version 2 to this app and version 1 to a tool that keeps the first. Only something that looks at the
   text can refuse it.
 - **Cost.** A byte bound alone does not bound memory. `JSON.parse` on 28.6 MiB of `{},{},…` retained
-  ≈ 640 MiB of heap in Node and ≈ 320 MiB in Chrome and took ≈ 1.4–1.6 s; the scan refuses it in ≈ 110 ms
-  having allocated nothing.
-- **Depth.** `JSON.parse` *accepts* a million levels of nesting (≈ 75–115 ms); the next thing to walk the
-  result recursively overflows the stack. The scan refuses it in under a millisecond. (The owned schema
+  ≈ 640 MiB of heap in Node and ≈ 320 MiB in Chrome and took ≈ 1.5 s; the scan refuses it in ≈ 0.1 s having
+  allocated nothing.
+- **Depth.** `JSON.parse` *accepts* a million levels of nesting (≈ 0.1 s); the next thing to walk the result
+  recursively overflows the stack. The scan refuses it in a millisecond or so. (The owned schema
   walk is immune anyway — the schema has no recursion, so it never descends further than the schema is
   deep — but that is a second line, not the first.)
 
@@ -355,8 +359,8 @@ measurement behind it, it says so.
 | `maxProfiles` 64 · `maxAnalysisRuns` 2 000 · history per Source 64 · per Sheet 32 | | **not measured** | placeholders; Unresolved U-6 |
 | name 200 · field value 300 · field raw text 1 000 · comment 4 000 | | **not measured** | placeholders; need real title blocks or a product decision — U-6 |
 
-**What the bounds cost and what they leave.** A 5000-sheet Project opens in ≈ 90–120 ms on a page thread
-(Chrome); the scan is the largest single stage of that, at a little over a third. The costliest input the scan lets through is ≈ 4 million empty
+**What the bounds cost and what they leave.** A 5000-sheet Project opens in ≈ 90–125 ms on a page thread
+(Chrome); the scan is the largest single stage of that. The costliest input the scan lets through is ≈ 4 million empty
 objects (11.4 MiB): refused at `schema` after ≈ 0.55 s and ≈ 256 MiB of heap in Node (≈ 104 MiB in
 Chrome). That is the residual worst case of *these* candidates, and it is the price of leaving room for a
 Project's findings to accumulate; a tighter `maxJsonValues` buys it down proportionally.
@@ -455,25 +459,25 @@ run-to-run variation):
 | | 200 sheets | 1 000 sheets | 5 000 sheets | 5 000, one PDF per sheet | 20 000 (beyond the limit) |
 |---|---|---|---|---|---|
 | File, compact | ≈ 0.35 MiB | ≈ 1.75 MiB | ≈ 8.7 MiB | ≈ 10.4 MiB | ≈ 35 MiB |
-| Save (project, validate, serialise) | ≈ 3 ms | ≈ 15 ms | ≈ 95 ms | ≈ 112 ms | ≈ 400 ms |
-| Open (decode, scan, parse, schema, relations) | ≈ 4 ms | ≈ 18 ms | ≈ 90 ms | ≈ 120 ms | ≈ 390 ms |
-| QA, all rules | ≈ 1 ms | ≈ 5 ms | ≈ 27 ms | ≈ 30 ms | ≈ 115 ms |
-| — duplicate-number detection alone | < 0.1 ms | ≈ 0.1 ms | ≈ 0.3 ms | ≈ 0.2 ms | ≈ 0.8 ms |
-| — gap detection alone | < 0.1 ms | ≈ 0.3 ms | ≈ 1 ms | ≈ 1 ms | ≈ 3.4 ms |
-| Sort by drawing number (collated, shuffled input) | ≈ 0.1 ms | ≈ 0.7 ms | ≈ 5 ms | ≈ 7 ms | ≈ 31 ms |
-| Filter | < 0.1 ms | < 0.1 ms | ≈ 0.1 ms | ≈ 0.3 ms | ≈ 0.5 ms |
-| Currency of every sheet and finding | < 0.1 ms | ≈ 0.1 ms | ≈ 0.6 ms | ≈ 0.8 ms | ≈ 2.5 ms |
+| Save (project, validate, serialise) | ≈ 3 ms | ≈ 15 ms | ≈ 95 ms | ≈ 115 ms | ≈ 400 ms |
+| Open (decode, scan, parse, schema, relations) | ≈ 4 ms | ≈ 18 ms | ≈ 92 ms | ≈ 120 ms | ≈ 420 ms |
+| QA, all rules | ≈ 1 ms | ≈ 5 ms | ≈ 27 ms | ≈ 31 ms | ≈ 120 ms |
+| — duplicate-number detection alone | under 1 ms | under 1 ms | under 1 ms | under 1 ms | ≈ 1 ms |
+| — gap detection alone | under 1 ms | under 1 ms | ≈ 1 ms | ≈ 1.5 ms | ≈ 4 ms |
+| Sort by drawing number (collated, shuffled input) | under 1 ms | ≈ 1 ms | ≈ 5 ms | ≈ 6.5 ms | ≈ 33 ms |
+| Filter | under 1 ms | under 1 ms | under 1 ms | under 1 ms | under 2 ms |
+| Currency of every sheet and finding | under 1 ms | under 1 ms | under 2 ms | under 2 ms | under 6 ms |
 | One Source replaced: what goes stale | 25 of 200 sheets | 25 of 1 000 | 25 of 5 000 | 1 of 5 000 | 25 of 20 000 |
 
 - **Everything is linear** in the number of sheets, at ≈ 1.8–2.2 kB and ≈ 67–79 JSON values per sheet.
 - **5 000 sheets is comfortable**: about a tenth of a second to open or save, tens of milliseconds for a
-  full QA evaluation. With nothing confirmed (5 607 findings) QA is ≈ 60 ms.
+  full QA evaluation. With nothing confirmed (5 607 findings) QA is ≈ 62 ms.
 - **Re-evaluating after every edit is affordable**, which is what the stale design relies on.
 - **The portable state is not what makes a large set slow.** Fingerprinting costs ≈ 4 ms per MiB (§2) and
   extraction costs a page read — and, for scanned sheets, a recognition — per sheet. Neither was
   re-measured here; they belong to the existing engines.
 - **List virtualisation is needed.** As a lower bound (plain DOM, no framework, eight cells per row): 1 000
-  rows take ≈ 30 ms for a layout pass and ≈ 30 ms for a restyle; 5 000 rows ≈ 150 ms each; 20 000 ≈ 600 ms.
+  rows take ≈ 30 ms for a layout pass and ≈ 30 ms for a restyle; 5 000 rows ≈ 150 ms each; 20 000 ≈ 650 ms.
   A React list pays that plus reconciliation. The existing viewer mounts every page with no virtualisation,
   which M7 must not copy. Recommended: virtualise the Sheet List from the start.
 - **Cancellation:** a fingerprint stops in ≈ 25 ms; an extraction stops between pages (the engine's
@@ -672,6 +676,7 @@ For Independent Architecture Review and the Human Gate. None is decided by this 
 | Source rebinding cases | `tests/rebind.test.mjs` |
 | Stale propagation cases | `tests/stale.test.mjs` |
 | Performance matrix | `benchmark/results/SUMMARY.md` (from `*.json`); `benchmark/results/structural.json` |
+| Every quoted figure held to the committed results | `benchmark/check-claims.mjs`; `benchmark/results/CLAIMS.md` |
 | Existing-engine reuse audit | `reuse-audit.md`; `tests/reuse-parity.test.mjs` |
 | Production source delta = 0; existing checks unaffected | `evidence/gates.md` |
 | What was not measured, and every instrument defect found | `limitations.md` |

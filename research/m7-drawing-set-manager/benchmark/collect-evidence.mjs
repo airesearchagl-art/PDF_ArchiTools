@@ -10,7 +10,8 @@
  *
  *   1. the research tests, and the mutation probes over them
  *   2. every benchmark, TWICE; after each pass the run-independent fields are
- *      extracted, and the two extractions must be identical
+ *      extracted, and the two extractions must be identical; then every figure
+ *      the documents quote is checked against the second pass
  *   3. the repository's own checks: `npm run build`, and ESLint with the
  *      findings inside this directory counted apart from the baseline
  *   4. the change against the base commit, which must touch nothing outside
@@ -95,6 +96,9 @@ const structuralIdentical = passes[0].structuralSha256 === passes[1].structuralS
 const nodeAndBrowserAgree = JSON.parse(fs.readFileSync(path.join(RESULTS, 'structural.json'), 'utf8')).scale.nodeAndBrowserAgree;
 log(`structural fields identical across the two passes: ${structuralIdentical}`);
 const summarise = node(`${REL}/benchmark/summarise.mjs`);
+const claimsRun = node(`${REL}/benchmark/check-claims.mjs`);
+const claims = { exitCode: claimsRun.status, ...JSON.parse(fs.readFileSync(path.join(RESULTS, 'claims.json'), 'utf8')) };
+log(`claims: ${JSON.stringify(claims)}`);
 
 // -- 3. the repository's own checks -------------------------------------------
 const eslintOut = path.join(os.tmpdir(), `m7-eslint-${process.pid}.json`);
@@ -148,6 +152,7 @@ const gates = {
     change: { files: changed.length, outsideResearchDirectory: outside, productionSourceDelta: changed.filter((f) => f.startsWith('src/')).length },
     tests: testSummary, mutationProbes: probeSummary,
     benchmarks: { passes, structuralIdenticalAcrossPasses: structuralIdentical, nodeAndBrowserScaleRowsAgree: nodeAndBrowserAgree, summariseExit: summarise.status },
+    claims,
     eslint: lint, build: { exitCode: build.status }, builtApp: dist,
 };
 fs.writeFileSync(path.join(EVIDENCE, 'gates.json'), `${JSON.stringify(gates, null, 2)}\n`);
@@ -188,6 +193,7 @@ const md = [
     `- Structural fields identical across the two passes: ${yes(structuralIdentical)}`,
     `- The same synthetic Projects are the same bytes in Node and in Chrome: ${yes(nodeAndBrowserAgree)}`,
     '- Times and memory are measured-only and are not compared. `benchmark/results/` holds the second pass.',
+    `- Figures quoted in the documents, checked against the second pass (\`check-claims.mjs\`): ${claims.statements} statements, ${claims.checks} checks, **${claims.failed} failed**`,
     '',
     '## The repository\'s own checks',
     '',
@@ -205,6 +211,6 @@ fs.writeFileSync(path.join(EVIDENCE, 'gates.md'), md);
 log('written: evidence/gates.json, evidence/gates.md');
 
 const ok = testSummary.exitCode === 0 && probeSummary.exitCode === 0 && structuralIdentical && nodeAndBrowserAgree
-    && passes.every((p) => Object.values(p.exits).every((code) => code === 0))
+    && passes.every((p) => Object.values(p.exits).every((code) => code === 0)) && claims.exitCode === 0
     && outside.length === 0 && build.status === 0 && lint.problemsInResearch === 0 && (!dist.compared || dist.byteIdentical);
 process.exit(ok ? 0 : 1);

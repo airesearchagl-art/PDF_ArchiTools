@@ -69,7 +69,7 @@ none is hidden by the final results.
 7. **A wide object went through the scan.** In the first run of `bench-hostile.mjs`, an object with
    2 000 000 distinct keys (23.7 MiB) stayed under every limit: the pipeline reached `JSON.parse`, took
    **1 960.6 ms** and peaked at **618.1 MiB** before the schema refused it. `maxObjectKeys` was added;
-   the same input is now refused by the scan in ≈ 9 ms without being parsed.
+   the same input is now refused by the scan in about 10 ms without being parsed.
 8. **A meaningless heartbeat.** The browser scale run wrapped the whole synchronous matrix in the
    page-thread heartbeat and reported an 18-second "gap" — the length of the matrix. Removed; the question
    is asked per operation instead (`importOnMainThread`).
@@ -80,8 +80,22 @@ none is hidden by the final results.
     one-shot method did not produce a digest. It now records the Worker's reply (`failed`).
 11. **Quoting between Node and PowerShell.** The operating-system memory query is passed with
     `-EncodedCommand` so that no quoting rule sits between the benchmark and the query.
+12. **The prose drifted from the evidence.** The documents were written with figures rounded from an
+    earlier run. The first evidence collection (from source head `1425e0c`) passed every gate and still left
+    several of those figures outside what their wording claimed for the run being committed -- the
+    page-thread block written as "≈ 780 ms" measured 823 ms, the two one-shot timings had swapped order, the
+    20 000-sheet open written as "≈ 390 ms" measured 451 ms. None changed a conclusion; all were wrong as
+    written. `benchmark/check-claims.mjs` was added, the figures were restated, and the evidence was collected
+    again from the corrected head. The checker was shown an edited sentence and a moved measurement and
+    failed on both.
 
 ## 3. What a second run may and may not change
+
+Because the prose rounds and a second run moves, `benchmark/check-claims.mjs` holds every figure the
+documents quote from a benchmark to the result files committed beside them: the quoted words must still be in
+the document, and the measured value must be within what they allow. `collect-evidence.mjs` runs it. It exists
+because the first evidence run did exactly that: several figures written after an earlier run (the page-thread
+block "≈ 780 ms" against a measured 823 ms, among others) had drifted outside what their wording claimed.
 
 `benchmark/results/structural.json` holds the fields that must be identical on every run — file sizes,
 JSON value counts, finding counts, refusal stages and codes, which digests agreed, what each context

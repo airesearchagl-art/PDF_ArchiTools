@@ -217,7 +217,7 @@ it was (`tests/stale.test.mjs`).
 ## 6. Cost
 
 Every rule reads only what is already in the model. Evaluating all of them over 5000 sheets took
-26.8 ms on a page thread in Chrome and 26.1 ms in Node; with nothing confirmed (5607 findings) 59.9 ms and
-45.8 ms (`benchmark/results/SUMMARY.md` §4–5). That is what allows "re-evaluate after every change" in place
+≈ 27 ms on a page thread in Chrome and ≈ 26 ms in Node; with nothing confirmed (5 607 findings) ≈ 62 ms and
+≈ 46 ms (`benchmark/results/SUMMARY.md` §4–5). That is what allows "re-evaluate after every change" in place
 of dependency tracking for metadata edits, and why a re-evaluation that changes nothing writes nothing — no
 run record, no growth of the file (`tests/roundtrip.test.mjs`).
