@@ -18,6 +18,11 @@
  *      this directory; and, if a baseline build is supplied, a byte-for-byte
  *      comparison of the built app with the base commit's
  *
+ * A benchmark that does not finish ends the collection: the gate record of the
+ * collection before is removed at the start, each pass removes the result
+ * files before it measures, and nothing is written after a failure. There is
+ * no retry. A collection is run again, whole, by whoever reads why it stopped.
+ *
  * Writes evidence/gates.json, evidence/gates.md, evidence/tests.txt,
  * evidence/mutation-probe.json, evidence/structural.run1.json / run2.json, and
  * leaves the second pass's results and SUMMARY.md under benchmark/results/.
@@ -63,6 +68,8 @@ if (dirty.length > 0) {
 }
 log(`source head ${head}, clean`);
 fs.mkdirSync(EVIDENCE, { recursive: true });
+// A collection that does not finish must not leave the last one's gate record standing.
+for (const name of ['gates.json', 'gates.md', 'structural.run1.json', 'structural.run2.json']) fs.rmSync(path.join(EVIDENCE, name), { force: true });
 
 // -- 1. tests and mutation probes ---------------------------------------------
 const tests = node('--test', `${REL}/tests/*.test.mjs`);
@@ -78,21 +85,36 @@ log(`mutation probes: ${JSON.stringify(probeSummary)}`);
 
 // -- 2. benchmarks, twice -----------------------------------------------------
 const BENCHMARKS = ['bench-scale.mjs', 'bench-hostile.mjs', 'bench-fingerprint-node.mjs', 'bench-browser.mjs'];
+/** What the benchmarks and the extraction write. Removed before each pass: see below. */
+const MEASURED = ['scale-node.json', 'hostile-node.json', 'fingerprint-node.json', 'fingerprint-browser.json',
+    'fingerprint-browser-extra.json', 'browser-probes.json', 'scale-browser.json', 'structural.json'];
+const freeMemoryGiB = () => Number((os.freemem() / 2 ** 30).toFixed(1));
+const tail = (text) => String(text ?? '').split('\n').slice(-25).join('\n');
 const passes = [];
 for (const pass of [1, 2]) {
     const started = Date.now();
     const exits = {};
+    // What this pass does not write must not be there. A benchmark that ended
+    // without a result would otherwise be compared with the pass before it,
+    // and found identical.
+    for (const name of MEASURED) fs.rmSync(path.join(RESULTS, name), { force: true });
+    const freeMemoryGiBAtStart = freeMemoryGiB();
     for (const script of BENCHMARKS) {
         const result = node(`${REL}/benchmark/${script}`);
         exits[script] = result.status;
         log(`pass ${pass}: ${script} exit ${result.status}`);
-        if (result.status !== 0) console.error(result.stderr.split('\n').slice(0, 8).join('\n'));
+        if (result.status !== 0) {
+            console.error(`[evidence] ${script} did not finish: exit ${result.status}, signal ${result.signal}, free memory ${freeMemoryGiB()} GiB (${freeMemoryGiBAtStart} GiB when the pass began)`);
+            console.error(`--- its last output\n${tail(result.stdout)}\n--- its stderr\n${tail(result.stderr)}`);
+            console.error('[evidence] collection abandoned. No gate record is written from a pass in which a benchmark did not finish.');
+            process.exit(1);
+        }
     }
     const structural = node(`${REL}/benchmark/structural.mjs`);
     exits['structural.mjs'] = structural.status;
     const target = path.join(EVIDENCE, `structural.run${pass}.json`);
     fs.copyFileSync(path.join(RESULTS, 'structural.json'), target);
-    passes.push({ pass, exits, seconds: Math.round((Date.now() - started) / 1000), structuralSha256: createHash('sha256').update(fs.readFileSync(target)).digest('hex') });
+    passes.push({ pass, exits, freeMemoryGiBAtStart, seconds: Math.round((Date.now() - started) / 1000), structuralSha256: createHash('sha256').update(fs.readFileSync(target)).digest('hex') });
 }
 const structuralIdentical = passes[0].structuralSha256 === passes[1].structuralSha256;
 const nodeAndBrowserAgree = JSON.parse(fs.readFileSync(path.join(RESULTS, 'structural.json'), 'utf8')).scale.nodeAndBrowserAgree;
@@ -188,9 +210,9 @@ const md = [
     '',
     '## Benchmarks, two passes',
     '',
-    '| Pass | bench-scale | bench-hostile | bench-fingerprint-node | bench-browser | structural | seconds | `structural.json` SHA-256 |',
-    '|---|---|---|---|---|---|---|---|',
-    ...passes.map((p) => `| ${p.pass} | exit ${p.exits['bench-scale.mjs']} | exit ${p.exits['bench-hostile.mjs']} | exit ${p.exits['bench-fingerprint-node.mjs']} | exit ${p.exits['bench-browser.mjs']} | exit ${p.exits['structural.mjs']} | ${p.seconds} | \`${p.structuralSha256.slice(0, 16)}…\` |`),
+    '| Pass | bench-scale | bench-hostile | bench-fingerprint-node | bench-browser | structural | seconds | free memory at start (GiB) | `structural.json` SHA-256 |',
+    '|---|---|---|---|---|---|---|---|---|',
+    ...passes.map((p) => `| ${p.pass} | exit ${p.exits['bench-scale.mjs']} | exit ${p.exits['bench-hostile.mjs']} | exit ${p.exits['bench-fingerprint-node.mjs']} | exit ${p.exits['bench-browser.mjs']} | exit ${p.exits['structural.mjs']} | ${p.seconds} | ${p.freeMemoryGiBAtStart} | \`${p.structuralSha256.slice(0, 16)}…\` |`),
     '',
     `- Structural fields identical across the two passes: ${yes(structuralIdentical)}`,
     `- The same synthetic Projects are the same bytes in Node and in Chrome: ${yes(nodeAndBrowserAgree)}`,

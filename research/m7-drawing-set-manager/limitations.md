@@ -136,6 +136,20 @@ none is hidden by the final results.
     or unchanged). The status is now read untrimmed, and the collection was run again from the commit
     that fixes it.
 
+18. **A collection in which a benchmark did not finish, and what the collector then got wrong.** In the
+    collection from `28ef6eb`, the second pass of `bench-browser.mjs` ended with Windows status
+    `0xC0000409` (exit 3221226505) and nothing on stderr, during the fingerprint cases, before it had
+    written a result. The collector recorded the exit and failed, as it should. Run on its own from the
+    same commit, the same script completed. Looked at some twenty minutes later, the machine had about
+    6 GiB of commit headroom, other applications holding the rest; **the cause was not established**, and
+    no claim is made that it was memory. Two faults of the collector showed: it kept none of the benchmark's output, so
+    there was nothing to diagnose from; and because the first pass's browser results were still on
+    disk, the "identical across the two passes" line was computed for them against themselves — true,
+    and empty. The collector now removes the last gate record when it starts and the result files before
+    each pass, prints the output of a benchmark that does not finish, and stops there, writing nothing.
+    It does not retry. The evidence committed is from a later, whole collection; `evidence/gates.md`
+    records every exit of it.
+
 ## 3. What a second run may and may not change
 
 Because the prose rounds and a second run moves, `benchmark/check-claims.mjs` holds every figure the
