@@ -127,6 +127,15 @@ none is hidden by the final results.
     a test added (`tests/declared-register.test.mjs`, "a file whose declared register does not hold
     together…").
 
+17. **The evidence collector refused its own output.** Its first step requires the source to be exactly a
+    commit, ignoring the two output directories. It read `git status --porcelain` through a helper that
+    trims the whole output — which removes the leading space of the first line (` M path`), so that one
+    path lost its first character and no longer matched an output directory. The collection from
+    `76ca72b` stopped there, before measuring anything: it failed closed. Earlier collections had not
+    shown it because their first status line did not begin with a space (the output files were untracked,
+    or unchanged). The status is now read untrimmed, and the collection was run again from the commit
+    that fixes it.
+
 ## 3. What a second run may and may not change
 
 Because the prose rounds and a second run moves, `benchmark/check-claims.mjs` holds every figure the

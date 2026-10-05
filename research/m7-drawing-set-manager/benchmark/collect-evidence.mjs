@@ -53,7 +53,9 @@ const log = (text) => console.log(`[evidence] ${text}`);
 // -- 0. the source under test is exactly a commit -----------------------------
 const head = git('rev-parse', 'HEAD');
 const outputs = [`${REL}/evidence/`, `${REL}/benchmark/results/`];
-const dirty = git('status', '--porcelain', '--untracked-files=all').split('\n').filter(Boolean)
+// Not through git(): that trims, and the first porcelain line may begin with a
+// space (' M path'). Trimming it shifts the path by one and hides the prefix.
+const dirty = run('git', ['status', '--porcelain', '--untracked-files=all']).stdout.split('\n').filter(Boolean)
     .filter((line) => !outputs.some((prefix) => line.slice(3).replace(/"/g, '').startsWith(prefix)));
 if (dirty.length > 0) {
     console.error(`the source is not what is committed:\n${dirty.join('\n')}`);
