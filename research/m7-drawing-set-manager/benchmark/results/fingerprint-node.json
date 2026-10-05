@@ -1,0 +1,139 @@
+{
+  "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Synthetic files in the OS temp directory. NODE evidence -- not a browser measurement.",
+  "runtime": "node",
+  "environment": {
+    "node": "v24.15.0",
+    "v8": "13.6.233.17-node.48",
+    "openssl": "3.5.5",
+    "platform": "win32 10.0.26200",
+    "cpu": "Intel(R) Core(TM) Ultra 9 285K"
+  },
+  "units": "milliseconds, median of `repeats` runs; MiB per second derived from the median",
+  "rows": [
+    {
+      "sizeMiB": 1,
+      "repeats": 5,
+      "allFiveDigestsAgree": true,
+      "nativeStream": {
+        "ms": 2.2,
+        "MiBPerSecond": 455
+      },
+      "webcryptoOneShot": {
+        "ms": 0.5,
+        "MiBPerSecond": 2000
+      },
+      "jsIncrementalInMemory": {
+        "ms": 3.4,
+        "MiBPerSecond": 294
+      },
+      "jsOneShotProductionDigestTs": {
+        "ms": 3.7,
+        "MiBPerSecond": 270
+      },
+      "jsIncrementalFromBlob": {
+        "ms": 5.6,
+        "MiBPerSecond": 179
+      }
+    },
+    {
+      "sizeMiB": 10,
+      "repeats": 5,
+      "allFiveDigestsAgree": true,
+      "nativeStream": {
+        "ms": 7.6,
+        "MiBPerSecond": 1316
+      },
+      "webcryptoOneShot": {
+        "ms": 5.1,
+        "MiBPerSecond": 1961
+      },
+      "jsIncrementalInMemory": {
+        "ms": 33.3,
+        "MiBPerSecond": 300
+      },
+      "jsOneShotProductionDigestTs": {
+        "ms": 35.9,
+        "MiBPerSecond": 279
+      },
+      "jsIncrementalFromBlob": {
+        "ms": 50.8,
+        "MiBPerSecond": 197
+      }
+    },
+    {
+      "sizeMiB": 50,
+      "repeats": 5,
+      "allFiveDigestsAgree": true,
+      "nativeStream": {
+        "ms": 29.7,
+        "MiBPerSecond": 1684
+      },
+      "webcryptoOneShot": {
+        "ms": 24.9,
+        "MiBPerSecond": 2008
+      },
+      "jsIncrementalInMemory": {
+        "ms": 167.6,
+        "MiBPerSecond": 298
+      },
+      "jsOneShotProductionDigestTs": {
+        "ms": 178.6,
+        "MiBPerSecond": 280
+      },
+      "jsIncrementalFromBlob": {
+        "ms": 260.3,
+        "MiBPerSecond": 192
+      }
+    },
+    {
+      "sizeMiB": 100,
+      "repeats": 3,
+      "allFiveDigestsAgree": true,
+      "nativeStream": {
+        "ms": 60.7,
+        "MiBPerSecond": 1647
+      },
+      "webcryptoOneShot": {
+        "ms": 45.4,
+        "MiBPerSecond": 2203
+      },
+      "jsIncrementalInMemory": {
+        "ms": 365.7,
+        "MiBPerSecond": 273
+      },
+      "jsOneShotProductionDigestTs": {
+        "ms": 371.6,
+        "MiBPerSecond": 269
+      },
+      "jsIncrementalFromBlob": {
+        "ms": 524.7,
+        "MiBPerSecond": 191
+      }
+    },
+    {
+      "sizeMiB": 250,
+      "repeats": 3,
+      "allFiveDigestsAgree": true,
+      "nativeStream": {
+        "ms": 148.9,
+        "MiBPerSecond": 1679
+      },
+      "webcryptoOneShot": {
+        "ms": 119.7,
+        "MiBPerSecond": 2089
+      },
+      "jsIncrementalInMemory": {
+        "ms": 875.7,
+        "MiBPerSecond": 285
+      },
+      "jsOneShotProductionDigestTs": {
+        "ms": 939.3,
+        "MiBPerSecond": 266
+      },
+      "jsIncrementalFromBlob": {
+        "ms": 1325.8,
+        "MiBPerSecond": 189
+      }
+    }
+  ]
+}
