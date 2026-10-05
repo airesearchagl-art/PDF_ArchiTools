@@ -1,0 +1,1553 @@
+{
+  "format": "pdf-architools/drawing-set-project",
+  "schemaVersion": 1,
+  "projectFileId": "0031818c-3003-480c-b552-d32d49d3b276",
+  "lineage": {
+    "saveSequence": 1,
+    "previousProjectFileId": null,
+    "migratedFrom": null
+  },
+  "savedAt": "2026-10-05T00:00:09.150Z",
+  "writer": {
+    "app": "PDF_ArchiTools",
+    "toolVersion": "0.0.0-research"
+  },
+  "project": {
+    "id": "babda7e8-c654-49c8-bcdf-bebeea0f5c7a",
+    "name": "Synthetic Project 12",
+    "createdAt": "2026-10-05T00:00:01.000Z"
+  },
+  "drawingSet": {
+    "id": "31838bfa-5f61-4b04-ac24-8d84cf125a8e",
+    "name": "Synthetic Drawing Set",
+    "createdAt": "2026-10-05T00:00:01.000Z",
+    "sources": [
+      {
+        "id": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+        "displayName": "synthetic-set-0001.pdf",
+        "addedAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "fingerprint": {
+          "algorithm": "SHA-256",
+          "sha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "byteLength": 1000004,
+          "pageCount": 4,
+          "recordedAt": "2026-10-05T00:00:03.000Z"
+        },
+        "fingerprintHistory": []
+      },
+      {
+        "id": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+        "displayName": "synthetic-set-0002.pdf",
+        "addedAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "fingerprint": {
+          "algorithm": "SHA-256",
+          "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "byteLength": 1004100,
+          "pageCount": 4,
+          "recordedAt": "2026-10-05T00:00:04.000Z"
+        },
+        "fingerprintHistory": []
+      },
+      {
+        "id": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+        "displayName": "synthetic-set-0003.pdf",
+        "addedAt": "2026-10-05T00:00:05.000Z",
+        "retiredAt": null,
+        "fingerprint": {
+          "algorithm": "SHA-256",
+          "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "byteLength": 1008196,
+          "pageCount": 4,
+          "recordedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "fingerprintHistory": []
+      }
+    ],
+    "titleBlockProfiles": [
+      {
+        "id": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+        "name": "A1 title block",
+        "revision": 1,
+        "transferModel": "corner-anchored",
+        "referencePage": {
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78
+        },
+        "fields": {
+          "drawingNumber": {
+            "left": 2150,
+            "top": 1600,
+            "right": 2360,
+            "bottom": 1640
+          },
+          "drawingTitle": {
+            "left": 1850,
+            "top": 1600,
+            "right": 2140,
+            "bottom": 1640
+          },
+          "revision": {
+            "left": 2150,
+            "top": 1645,
+            "right": 2250,
+            "bottom": 1675
+          },
+          "issueDate": {
+            "left": 2255,
+            "top": 1645,
+            "right": 2360,
+            "bottom": 1675
+          }
+        },
+        "createdAt": "2026-10-05T00:00:02.000Z",
+        "updatedAt": "2026-10-05T00:00:02.000Z",
+        "retiredAt": null
+      }
+    ],
+    "sheets": [
+      {
+        "id": "04d2f670-1987-44be-8d10-65f6347a0101",
+        "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+        "pageNumber": 1,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "A-101",
+              "rawText": "図面番号\nA-101",
+              "source": "ocr",
+              "ocrScore": 64
+            },
+            "drawingTitle": {
+              "value": "3階矩計図",
+              "rawText": "図面名称\n3階矩計図",
+              "source": "ocr",
+              "ocrScore": 75
+            },
+            "revision": {
+              "value": "B",
+              "rawText": "版\nB",
+              "source": "ocr",
+              "ocrScore": 80
+            },
+            "issueDate": {
+              "value": "2026.06.18",
+              "rawText": "日付\n2026.06.18",
+              "source": "ocr",
+              "ocrScore": 70
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:07.010Z",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "A-101",
+            "drawingTitle": "3階矩計図",
+            "revision": "B",
+            "issueDate": "2026.06.18"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "ff197eac-c95e-4f8a-954e-f47db3e7023d",
+        "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+        "pageNumber": 2,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "A-102",
+              "rawText": "図面番号\nA-102",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "3階詳細図",
+              "rawText": "図面名称\n3階詳細図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.07.04",
+              "rawText": "日付\n2026.07.04",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:07.020Z",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "A-102",
+            "drawingTitle": "3階詳細図",
+            "revision": "A",
+            "issueDate": "2026.07.04"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "27b1f64d-3673-44d1-8bc8-fb0501aa3b71",
+        "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+        "pageNumber": 3,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "A-103",
+              "rawText": "図面番号\nA-103",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "西天井伏図",
+              "rawText": "図面名称\n西天井伏図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.08.09",
+              "rawText": "日付\n2026.08.09",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:07.030Z",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "A-103",
+            "drawingTitle": "西天井伏図",
+            "revision": "A",
+            "issueDate": "2026.08.09"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "9e433a73-d8a9-4855-93c6-5b04cc705db7",
+        "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+        "pageNumber": 4,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "S-102",
+              "rawText": "図面番号\nS-102",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "2階天井伏図",
+              "rawText": "図面名称\n2階天井伏図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.08.05",
+              "rawText": "日付\n2026.08.05",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      },
+      {
+        "id": "8b123a76-47cf-4758-81ac-fc8a59838114",
+        "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+        "pageNumber": 1,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "S-102",
+              "rawText": "図面番号\nS-102",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "東矩計図",
+              "rawText": "図面名称\n東矩計図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "B",
+              "rawText": "版\nB",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.07.20",
+              "rawText": "日付\n2026.07.20",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:07.040Z",
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "S-102",
+            "drawingTitle": "東矩計図",
+            "revision": "B",
+            "issueDate": "2026.07.20"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "1d83ad44-6d48-4371-8fe2-faa24664cdd9",
+        "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+        "pageNumber": 2,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "uprightWidthPt": 1190.55,
+          "uprightHeightPt": 841.89,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "S-103",
+              "rawText": "図面番号\nS-103",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "その1平面図",
+              "rawText": "図面名称\nその1平面図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.07.09",
+              "rawText": "日付\n2026.07.09",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      },
+      {
+        "id": "242fc4f6-4a9c-4f6e-a342-a316d32f6846",
+        "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+        "pageNumber": 3,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "Ｓ－１０３",
+              "rawText": "図面番号\nＳ－１０３",
+              "source": "ocr",
+              "ocrScore": 94
+            },
+            "drawingTitle": {
+              "value": "東矩計図",
+              "rawText": "図面名称\n東矩計図",
+              "source": "ocr",
+              "ocrScore": 73
+            },
+            "revision": {
+              "value": "C",
+              "rawText": "版\nC",
+              "source": "ocr",
+              "ocrScore": 90
+            },
+            "issueDate": {
+              "value": "2026.05.14",
+              "rawText": "日付\n2026.05.14",
+              "source": "ocr",
+              "ocrScore": 80
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      },
+      {
+        "id": "fad15df5-fc9d-4d02-bc97-431c4a6185a6",
+        "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+        "pageNumber": 4,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "M-103",
+              "rawText": "図面番号\nM-103",
+              "source": "ocr",
+              "ocrScore": 70
+            },
+            "drawingTitle": {
+              "value": "西展開図",
+              "rawText": "図面名称\n西展開図",
+              "source": "ocr",
+              "ocrScore": 88
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "ocr",
+              "ocrScore": 97
+            },
+            "issueDate": {
+              "value": "2026.05.04",
+              "rawText": "日付\n2026.05.04",
+              "source": "ocr",
+              "ocrScore": 72
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:07.050Z",
+          "sourceSha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "M-103",
+            "drawingTitle": "西展開図",
+            "revision": "A",
+            "issueDate": "2026.05.04"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e",
+        "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+        "pageNumber": 1,
+        "createdAt": "2026-10-05T00:00:05.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "M-104",
+              "rawText": "図面番号\nM-104",
+              "source": "ocr",
+              "ocrScore": 82
+            },
+            "drawingTitle": {
+              "value": "B1階立面図",
+              "rawText": "図面名称\nB1階立面図",
+              "source": "ocr",
+              "ocrScore": 80
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "ocr",
+              "ocrScore": 95
+            },
+            "issueDate": {
+              "value": "2026.01.16",
+              "rawText": "日付\n2026.01.16",
+              "source": "ocr",
+              "ocrScore": 71
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      },
+      {
+        "id": "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2",
+        "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+        "pageNumber": 2,
+        "createdAt": "2026-10-05T00:00:05.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "M-104",
+              "rawText": "図面番号\nM-104",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "南仕上表",
+              "rawText": "図面名称\n南仕上表",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "C",
+              "rawText": "版\nC",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.08.01",
+              "rawText": "日付\n2026.08.01",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:07.060Z",
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "M-104",
+            "drawingTitle": "南仕上表",
+            "revision": "C",
+            "issueDate": "2026.08.01"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "afacb14e-0928-4c0c-8783-fe583154adfc",
+        "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+        "pageNumber": 3,
+        "createdAt": "2026-10-05T00:00:05.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "E-101",
+              "rawText": "図面番号\nE-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "B1階詳細図",
+              "rawText": "図面名称\nB1階詳細図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "C",
+              "rawText": "版\nC",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.09.09",
+              "rawText": "日付\n2026.09.09",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      },
+      {
+        "id": "39848ea9-a26e-4aa1-906c-96bc55d9ebc1",
+        "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+        "pageNumber": 4,
+        "createdAt": "2026-10-05T00:00:05.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "uprightWidthPt": 1190.55,
+          "uprightHeightPt": 841.89,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+          "confirmedAt": "2026-10-05T00:00:06.000Z"
+        },
+        "observation": {
+          "runId": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+          "sourceSha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6",
+          "profile": {
+            "profileId": "0c38cd4f-a7b5-4767-b67e-00abbb00285e",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "E-103",
+              "rawText": "図面番号\nE-103",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "B1階仕上表",
+              "rawText": "図面名称\nB1階仕上表",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.02.13",
+              "rawText": "日付\n2026.02.13",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      }
+    ],
+    "analysisRuns": [
+      {
+        "id": "7c9e0db1-1826-4785-800d-872e2de3b41a",
+        "kind": "EXTRACTION",
+        "startedAt": "2026-10-05T00:00:07.000Z",
+        "completedAt": "2026-10-05T00:00:07.000Z",
+        "outcome": "COMPLETED",
+        "engine": {
+          "name": "register-extraction",
+          "version": "0.1.0-research"
+        },
+        "manifestDigest": "e87cdee6cf9b9e87fc9c41b826aa29f08ffdfa3fc668a6fd75bfc28323dc53f6",
+        "coverage": {
+          "sheetsEvaluated": 12,
+          "sheetsExcluded": 0
+        }
+      },
+      {
+        "id": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "kind": "QA",
+        "startedAt": "2026-10-05T00:00:08.060Z",
+        "completedAt": "2026-10-05T00:00:08.060Z",
+        "outcome": "COMPLETED",
+        "engine": {
+          "name": "drawing-set-qa",
+          "version": "0.1.0-research"
+        },
+        "manifestDigest": "e87cdee6cf9b9e87fc9c41b826aa29f08ffdfa3fc668a6fd75bfc28323dc53f6",
+        "coverage": {
+          "sheetsEvaluated": 12,
+          "sheetsExcluded": 0
+        }
+      }
+    ],
+    "findings": [
+      {
+        "id": "9eabcc7a-03bb-42e8-9f20-507bb0c8676c",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "9e433a73-d8a9-4855-93c6-5b04cc705db7"
+        ],
+        "sourceIds": [],
+        "findingKey": "7471df475d1be3029c06a196881ff3774a936584a306b582cf589dd27248d936",
+        "evidenceDigest": "ef6222e81cb672154f5ba16b1a0801eea1a895900fc5ecabd222749fd67240c7",
+        "basis": [
+          {
+            "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+            "sha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "389296be-22e9-401c-9db8-9d49cc26f261",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "1d83ad44-6d48-4371-8fe2-faa24664cdd9"
+        ],
+        "sourceIds": [],
+        "findingKey": "2ea9670b0ffc5dbb9a0dfa3c6605ba22486b4810edb923bf5b2f4b4c2b70fa94",
+        "evidenceDigest": "49718b30478fd61a7dc49e7b36c437427d90e3bd5de611edf0bfe64949d9651c",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "5f31b1d4-486b-4f71-8d37-a7d340729d95",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "242fc4f6-4a9c-4f6e-a342-a316d32f6846"
+        ],
+        "sourceIds": [],
+        "findingKey": "ef6a107413abb5082873ab9469f516bee89b1a1fee37021238dedbab2e8384a8",
+        "evidenceDigest": "c6083db66dedfa3c0e5fffac9192a566288c42a8ba4393fad20b32c206fbbde3",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "6bc6bad5-2f14-47fb-8896-4ccee0f26569",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e"
+        ],
+        "sourceIds": [],
+        "findingKey": "4dc3e5f773e9093a4c085aaf05eeed1f1a2fa59cfcb8bce983e2ec1413c2ea82",
+        "evidenceDigest": "9dc2581d3e87be59967e36ac478c80db59c6272e9f8c6987917357447df91c4e",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "27bd7b86-9172-43e0-b0c3-078796465c5e",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "afacb14e-0928-4c0c-8783-fe583154adfc"
+        ],
+        "sourceIds": [],
+        "findingKey": "fd799c337f649ec251976a691297f7a83b045fb977c38d94d668d35254305710",
+        "evidenceDigest": "7920d88e5f5f8635b1ee399feec979aef61bf533e4403dff90d7aee4e99af141",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "e47be5b8-8159-421e-905b-79f353cd8e61",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "39848ea9-a26e-4aa1-906c-96bc55d9ebc1"
+        ],
+        "sourceIds": [],
+        "findingKey": "3862a7b0cd5e8a03588c1f5d3a1415744c334c454cd9e2928ee6ffdad0900af3",
+        "evidenceDigest": "6c143bda19e8be89d146fcabbb32a499bed195a16185ee62cdf0af53200a290f",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "a23a3341-6e1e-4c68-95f0-eb81589d17e1",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA01_DUPLICATE_NUMBER",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "8b123a76-47cf-4758-81ac-fc8a59838114",
+          "9e433a73-d8a9-4855-93c6-5b04cc705db7"
+        ],
+        "sourceIds": [],
+        "findingKey": "ec1b7ad766fe6a196ae91dba03ded57adb9e1ab0a501e90afe36e0ceb56bad49",
+        "evidenceDigest": "dcba18ec4a87b9b19ed12286ebb47f10a86361730ed1e7bbe412678e555882c7",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          },
+          {
+            "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+            "sha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa"
+          }
+        ],
+        "params": {
+          "number": "S-102",
+          "count": 2
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "b64810f1-3e9b-419a-8da3-e40e1565af7f",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA04_SAME_NUMBER_DIFFERENT_TITLE",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "8b123a76-47cf-4758-81ac-fc8a59838114",
+          "9e433a73-d8a9-4855-93c6-5b04cc705db7"
+        ],
+        "sourceIds": [],
+        "findingKey": "f78a9562802c790053cacf0ba4d626b12da77bd0523631f93b3f831280b7ea93",
+        "evidenceDigest": "80c9e32efffef2bcb7864f2f39ceea5ae58d03e2e42adbfbe3e3b37eef7775a3",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          },
+          {
+            "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+            "sha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa"
+          }
+        ],
+        "params": {
+          "number": "S-102",
+          "values": [
+            "2階天井伏図",
+            "東矩計図"
+          ]
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "b1c9f87a-5619-4c39-865e-d836b65ac5da",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA05_REVISION_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "8b123a76-47cf-4758-81ac-fc8a59838114",
+          "9e433a73-d8a9-4855-93c6-5b04cc705db7"
+        ],
+        "sourceIds": [],
+        "findingKey": "cbaf5a40f3334bb2a89e07b67753e8723241c756a39aaa19615f44e6ebb9b40b",
+        "evidenceDigest": "99c5306ed1282c934d296421dd595764d1758025ba2139a261596f372234c73e",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          },
+          {
+            "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+            "sha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa"
+          }
+        ],
+        "params": {
+          "number": "S-102",
+          "values": [
+            "A",
+            "B"
+          ]
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "32dfa7ea-0272-4b9b-a12a-387be28c2649",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA06_ISSUE_DATE_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "8b123a76-47cf-4758-81ac-fc8a59838114",
+          "9e433a73-d8a9-4855-93c6-5b04cc705db7"
+        ],
+        "sourceIds": [],
+        "findingKey": "d1fc65b4e446883be04e33530b487088c697ee15a13e6cc6df29a7fd5e7ce978",
+        "evidenceDigest": "9420db0dd0b1d1b6558e58a4c31630517eb155406f37d2b327a3b6742d1b9a18",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          },
+          {
+            "sourceId": "7f7d5c3b-4bb0-4e86-946e-24768cf52cc6",
+            "sha256": "970360404b13ad5da051be7c35150e2c7fe094a6e9d5bd523ae2e1d5ce7d4afa"
+          }
+        ],
+        "params": {
+          "number": "S-102",
+          "values": [
+            "2026-07-20",
+            "2026-08-05"
+          ]
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "aee3980b-61b0-49ba-b860-82d96f494e44",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA01_DUPLICATE_NUMBER",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e",
+          "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
+        ],
+        "sourceIds": [],
+        "findingKey": "e94151b3fda26d9d20eb93e3fa651de0098f587e5c66d5395c1ea27cbe994cc0",
+        "evidenceDigest": "0676cb406e0532e05bc29707073a39f39d5012916b6cddd42696340ea5ad46f1",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "number": "M-104",
+          "count": 2
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "96bc4d84-fe94-4242-b542-50ac15a24fe7",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA04_SAME_NUMBER_DIFFERENT_TITLE",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e",
+          "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
+        ],
+        "sourceIds": [],
+        "findingKey": "4f6d150d32a4f62d1156a06a25bb97a496f9cc870923f07d4e0a98695b27a3c9",
+        "evidenceDigest": "9810d538421ff01eb77623cca60cf1c51d784a615f9a1a7df38769e0192703b9",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "number": "M-104",
+          "values": [
+            "B1階立面図",
+            "南仕上表"
+          ]
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "d78eb8c8-1260-48e3-a8e5-a0fdc3bffe80",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA05_REVISION_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e",
+          "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
+        ],
+        "sourceIds": [],
+        "findingKey": "58c4f049e3ca23bd72f4130fdc6c9cdbc7a69d36418d921714c25fdbaa69f5b7",
+        "evidenceDigest": "269bbfbba42a2fcfcb2f25fe4d42821fc231a8c19024b611b407709d3795a82e",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "number": "M-104",
+          "values": [
+            "A",
+            "C"
+          ]
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "b193f657-2477-4e9b-b92d-4169f10134c9",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA06_ISSUE_DATE_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "0b59b7b2-8852-45c5-8dab-bbb0e1613d1e",
+          "1e91519f-a0f7-420e-8c71-d5f5ef22bcd2"
+        ],
+        "sourceIds": [],
+        "findingKey": "8941c87c98df92e7d05b083e6739bffdbcaa1af80b81dad2635d973ed7e0943a",
+        "evidenceDigest": "254b80968639fc06577096e080dd3d29b37ae01c5e8c4073c5f5833edcc5cb45",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "number": "M-104",
+          "values": [
+            "2026-01-16",
+            "2026-08-01"
+          ]
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "24979fa5-3b09-4694-bab1-99593acd0f14",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA01B_DUPLICATE_NUMBER_VARIANT",
+        "ruleVersion": 1,
+        "determinism": "CANDIDATE",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "1d83ad44-6d48-4371-8fe2-faa24664cdd9",
+          "242fc4f6-4a9c-4f6e-a342-a316d32f6846"
+        ],
+        "sourceIds": [],
+        "findingKey": "1ad4e7f2362ba7b78676323c99258137246d6f8389ff2c28dcd2577e2c123a4e",
+        "evidenceDigest": "fb5f40450e90e4da2f05ebdbc5e47d1d7b3cf3b5b2b059545c75c80b4ae01cbd",
+        "basis": [
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          }
+        ],
+        "params": {
+          "comparisonKey": "S-103",
+          "values": [
+            "S-103",
+            "Ｓ－１０３"
+          ],
+          "count": 2
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "fed792e3-9df5-4066-8ece-abdaad054600",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA03_NUMBER_GAP",
+        "ruleVersion": 1,
+        "determinism": "CANDIDATE",
+        "scope": "SET",
+        "sheetIds": [
+          "39848ea9-a26e-4aa1-906c-96bc55d9ebc1",
+          "afacb14e-0928-4c0c-8783-fe583154adfc"
+        ],
+        "sourceIds": [],
+        "findingKey": "b96ad4178c586ff5a9c8577216f3f0b3c55dac2eed037a1bff7ccbc7f6d14f58",
+        "evidenceDigest": "236a15f4bf0b5e050b6e49afa63e8f2a92eb6c1abda94ddf7fa6d1d831189ae9",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          }
+        ],
+        "params": {
+          "seriesPrefix": "E-",
+          "rangeFrom": "E-102",
+          "rangeTo": "E-102",
+          "count": 1
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "bd6dd8a2-c94a-485e-9c6d-2dbe828c9b33",
+        "runId": "377becea-1637-4ab9-8d7d-ab297b0e5385",
+        "ruleId": "QA07_SHEET_SIZE_OUTLIER",
+        "ruleVersion": 1,
+        "determinism": "CANDIDATE",
+        "scope": "SHEET_GROUP",
+        "sheetIds": [
+          "1d83ad44-6d48-4371-8fe2-faa24664cdd9",
+          "39848ea9-a26e-4aa1-906c-96bc55d9ebc1"
+        ],
+        "sourceIds": [],
+        "findingKey": "1360bbac473a966b4e7f52140f7cde3f541031f419217a84d6199daed3ca4877",
+        "evidenceDigest": "4e359115436bc00da4ff00eb925dd6363bdfac4c8fbe8daa43ec30db412e315b",
+        "basis": [
+          {
+            "sourceId": "207a614c-e629-4bc5-ab6e-96cd0f5268d6",
+            "sha256": "62d291d462f855df8fcf15d1753785078a5283d5dde159378f64d6300438cab6"
+          },
+          {
+            "sourceId": "3f1d14d4-2d7c-48f7-b226-df06910f3745",
+            "sha256": "ed0c3b3b905b13d1aa99c5c8e343ea0ae942b72bbc6f7e2d424718e93e2ed3ba"
+          }
+        ],
+        "params": {
+          "sizeClass": "A3",
+          "majoritySizeClass": "A1",
+          "count": 2,
+          "majorityCount": 10
+        },
+        "createdAt": "2026-10-05T00:00:08.060Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      }
+    ],
+    "decisions": [
+      {
+        "id": "2cb48b06-0756-486c-9933-696177f95eae",
+        "findingId": "5f31b1d4-486b-4f71-8d37-a7d340729d95",
+        "sequence": 1,
+        "outcome": "INTENTIONAL",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.070Z",
+        "evidenceDigest": "c6083db66dedfa3c0e5fffac9192a566288c42a8ba4393fad20b32c206fbbde3"
+      },
+      {
+        "id": "d9baa7b8-24f1-42de-89eb-9debb08698c0",
+        "findingId": "6bc6bad5-2f14-47fb-8896-4ccee0f26569",
+        "sequence": 1,
+        "outcome": "FALSE_POSITIVE",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.080Z",
+        "evidenceDigest": "9dc2581d3e87be59967e36ac478c80db59c6272e9f8c6987917357447df91c4e"
+      },
+      {
+        "id": "104b88ef-4b9d-40c4-9131-a0c6400b5812",
+        "findingId": "a23a3341-6e1e-4c68-95f0-eb81589d17e1",
+        "sequence": 1,
+        "outcome": "INTENTIONAL",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.090Z",
+        "evidenceDigest": "dcba18ec4a87b9b19ed12286ebb47f10a86361730ed1e7bbe412678e555882c7"
+      },
+      {
+        "id": "4a28bf56-e588-4757-853c-8f26cfd4cc0a",
+        "findingId": "b64810f1-3e9b-419a-8da3-e40e1565af7f",
+        "sequence": 1,
+        "outcome": "HOLD",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.100Z",
+        "evidenceDigest": "80c9e32efffef2bcb7864f2f39ceea5ae58d03e2e42adbfbe3e3b37eef7775a3"
+      },
+      {
+        "id": "9ce14320-2426-4522-b2c2-88039b91a5a2",
+        "findingId": "32dfa7ea-0272-4b9b-a12a-387be28c2649",
+        "sequence": 1,
+        "outcome": "INTENTIONAL",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.110Z",
+        "evidenceDigest": "9420db0dd0b1d1b6558e58a4c31630517eb155406f37d2b327a3b6742d1b9a18"
+      },
+      {
+        "id": "4b93f430-97a8-49fa-8271-0791f2edacd0",
+        "findingId": "96bc4d84-fe94-4242-b542-50ac15a24fe7",
+        "sequence": 1,
+        "outcome": "ACTION_REQUIRED",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.120Z",
+        "evidenceDigest": "9810d538421ff01eb77623cca60cf1c51d784a615f9a1a7df38769e0192703b9"
+      },
+      {
+        "id": "a986620b-dd21-4de8-ab16-6566d0ec61db",
+        "findingId": "d78eb8c8-1260-48e3-a8e5-a0fdc3bffe80",
+        "sequence": 1,
+        "outcome": "INTENTIONAL",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.130Z",
+        "evidenceDigest": "269bbfbba42a2fcfcb2f25fe4d42821fc231a8c19024b611b407709d3795a82e"
+      },
+      {
+        "id": "c632d9b0-3d96-4172-84b1-5d6e4c8596e0",
+        "findingId": "24979fa5-3b09-4694-bab1-99593acd0f14",
+        "sequence": 1,
+        "outcome": "FALSE_POSITIVE",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.140Z",
+        "evidenceDigest": "fb5f40450e90e4da2f05ebdbc5e47d1d7b3cf3b5b2b059545c75c80b4ae01cbd"
+      },
+      {
+        "id": "3564d04c-42cd-48ba-8682-0cb7e589089d",
+        "findingId": "fed792e3-9df5-4066-8ece-abdaad054600",
+        "sequence": 1,
+        "outcome": "HOLD",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:08.150Z",
+        "evidenceDigest": "236a15f4bf0b5e050b6e49afa63e8f2a92eb6c1abda94ddf7fa6d1d831189ae9"
+      }
+    ]
+  }
+}

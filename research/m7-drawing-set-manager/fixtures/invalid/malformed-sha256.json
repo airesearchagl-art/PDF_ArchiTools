@@ -1,0 +1,354 @@
+{
+  "format": "pdf-architools/drawing-set-project",
+  "schemaVersion": 1,
+  "projectFileId": "002d616b-2c0a-4a0b-9237-126eff2fe033",
+  "lineage": {
+    "saveSequence": 1,
+    "previousProjectFileId": null,
+    "migratedFrom": null
+  },
+  "savedAt": "2026-10-05T00:00:07.030Z",
+  "writer": {
+    "app": "PDF_ArchiTools",
+    "toolVersion": "0.0.0-research"
+  },
+  "project": {
+    "id": "baa1470f-da5d-4bcf-9bba-7ffd5cf30e3f",
+    "name": "Synthetic Project 11",
+    "createdAt": "2026-10-05T00:00:01.000Z"
+  },
+  "drawingSet": {
+    "id": "9baae405-226e-4590-a349-963ee049e1d9",
+    "name": "Synthetic Drawing Set",
+    "createdAt": "2026-10-05T00:00:01.000Z",
+    "sources": [
+      {
+        "id": "12e54993-c139-4b78-b486-0e335d4286f3",
+        "displayName": "synthetic-set-0001.pdf",
+        "addedAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "fingerprint": {
+          "algorithm": "SHA-256",
+          "sha256": "BAF4E5350CECE6FF92DD7FE0D528CEEFB13FEC064DC967E2EFAECE4CB2235919",
+          "byteLength": 1000003,
+          "pageCount": 3,
+          "recordedAt": "2026-10-05T00:00:03.000Z"
+        },
+        "fingerprintHistory": []
+      }
+    ],
+    "titleBlockProfiles": [
+      {
+        "id": "522753e0-b33a-466d-9313-32569e64f7ba",
+        "name": "A1 title block",
+        "revision": 1,
+        "transferModel": "corner-anchored",
+        "referencePage": {
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78
+        },
+        "fields": {
+          "drawingNumber": {
+            "left": 2150,
+            "top": 1600,
+            "right": 2360,
+            "bottom": 1640
+          },
+          "drawingTitle": {
+            "left": 1850,
+            "top": 1600,
+            "right": 2140,
+            "bottom": 1640
+          },
+          "revision": {
+            "left": 2150,
+            "top": 1645,
+            "right": 2250,
+            "bottom": 1675
+          },
+          "issueDate": {
+            "left": 2255,
+            "top": 1645,
+            "right": 2360,
+            "bottom": 1675
+          }
+        },
+        "createdAt": "2026-10-05T00:00:02.000Z",
+        "updatedAt": "2026-10-05T00:00:02.000Z",
+        "retiredAt": null
+      }
+    ],
+    "sheets": [
+      {
+        "id": "be00e79d-fc91-4a64-be78-39ca5169e82a",
+        "sourceId": "12e54993-c139-4b78-b486-0e335d4286f3",
+        "pageNumber": 1,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+          "confirmedAt": "2026-10-05T00:00:04.000Z"
+        },
+        "observation": {
+          "runId": "daea1889-a695-4af4-a0a5-b43152583b20",
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "profile": {
+            "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "A-101",
+              "rawText": "図面番号\nA-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "3階断面図",
+              "rawText": "図面名称\n3階断面図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.07.24",
+              "rawText": "日付\n2026.07.24",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": null,
+        "confirmationHistory": []
+      },
+      {
+        "id": "e1ff5d9c-43d7-4ffa-bf32-8f2e743410e5",
+        "sourceId": "12e54993-c139-4b78-b486-0e335d4286f3",
+        "pageNumber": 2,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+          "confirmedAt": "2026-10-05T00:00:04.000Z"
+        },
+        "observation": {
+          "runId": "daea1889-a695-4af4-a0a5-b43152583b20",
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "profile": {
+            "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "S-101",
+              "rawText": "図面番号\nS-101",
+              "source": "ocr",
+              "ocrScore": 68
+            },
+            "drawingTitle": {
+              "value": "1階仕上表",
+              "rawText": "図面名称\n1階仕上表",
+              "source": "ocr",
+              "ocrScore": 91
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "ocr",
+              "ocrScore": 74
+            },
+            "issueDate": {
+              "value": "2026.04.15",
+              "rawText": "日付\n2026.04.15",
+              "source": "ocr",
+              "ocrScore": 85
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:05.010Z",
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "profile": {
+            "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "S-101",
+            "drawingTitle": "1階仕上表",
+            "revision": "A",
+            "issueDate": "2026.04.15"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "3331b5d1-b4f9-4594-933c-ae919b3b1126",
+        "sourceId": "12e54993-c139-4b78-b486-0e335d4286f3",
+        "pageNumber": 3,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+          "confirmedAt": "2026-10-05T00:00:04.000Z"
+        },
+        "observation": {
+          "runId": "daea1889-a695-4af4-a0a5-b43152583b20",
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "profile": {
+            "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "M-101",
+              "rawText": "図面番号\nM-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "B1階天井伏図",
+              "rawText": "図面名称\nB1階天井伏図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "B",
+              "rawText": "版\nB",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.02.21",
+              "rawText": "日付\n2026.02.21",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:05.020Z",
+          "sourceSha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919",
+          "profile": {
+            "profileId": "522753e0-b33a-466d-9313-32569e64f7ba",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "M-101",
+            "drawingTitle": "B1階天井伏図",
+            "revision": "B",
+            "issueDate": "2026.02.21"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      }
+    ],
+    "analysisRuns": [
+      {
+        "id": "daea1889-a695-4af4-a0a5-b43152583b20",
+        "kind": "EXTRACTION",
+        "startedAt": "2026-10-05T00:00:05.000Z",
+        "completedAt": "2026-10-05T00:00:05.000Z",
+        "outcome": "COMPLETED",
+        "engine": {
+          "name": "register-extraction",
+          "version": "0.1.0-research"
+        },
+        "manifestDigest": "f74b306554057320c2ab23be1fbf5ddb8759a92ce30736b6f4752f4e263566b5",
+        "coverage": {
+          "sheetsEvaluated": 3,
+          "sheetsExcluded": 0
+        }
+      },
+      {
+        "id": "f2be267e-f84e-4586-ad2f-13d965dafa13",
+        "kind": "QA",
+        "startedAt": "2026-10-05T00:00:06.020Z",
+        "completedAt": "2026-10-05T00:00:06.020Z",
+        "outcome": "COMPLETED",
+        "engine": {
+          "name": "drawing-set-qa",
+          "version": "0.1.0-research"
+        },
+        "manifestDigest": "f74b306554057320c2ab23be1fbf5ddb8759a92ce30736b6f4752f4e263566b5",
+        "coverage": {
+          "sheetsEvaluated": 3,
+          "sheetsExcluded": 0
+        }
+      }
+    ],
+    "findings": [
+      {
+        "id": "69886cbf-e7e8-48b0-b53d-a42f36b0da93",
+        "runId": "f2be267e-f84e-4586-ad2f-13d965dafa13",
+        "ruleId": "QA02_METADATA_UNCONFIRMED",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "be00e79d-fc91-4a64-be78-39ca5169e82a"
+        ],
+        "sourceIds": [],
+        "findingKey": "75bcb1255a2112027bfad06fc2a68531365f678cc2774b332be15478e11cc639",
+        "evidenceDigest": "29bdd91f1af76edddbf96a85adffd4bc6601cf17da68796a33d7ac9d1fbffffa",
+        "basis": [
+          {
+            "sourceId": "12e54993-c139-4b78-b486-0e335d4286f3",
+            "sha256": "baf4e5350cece6ff92dd7fe0d528ceefb13fec064dc967e2efaece4cb2235919"
+          }
+        ],
+        "params": {
+          "reason": "UNCONFIRMED"
+        },
+        "createdAt": "2026-10-05T00:00:06.020Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      }
+    ],
+    "decisions": [
+      {
+        "id": "91b72022-c3d8-459b-ae0b-81ee18f3f055",
+        "findingId": "69886cbf-e7e8-48b0-b53d-a42f36b0da93",
+        "sequence": 1,
+        "outcome": "FALSE_POSITIVE",
+        "comment": "synthetic review note",
+        "decidedAt": "2026-10-05T00:00:06.030Z",
+        "evidenceDigest": "29bdd91f1af76edddbf96a85adffd4bc6601cf17da68796a33d7ac9d1fbffffa"
+      }
+    ]
+  }
+}

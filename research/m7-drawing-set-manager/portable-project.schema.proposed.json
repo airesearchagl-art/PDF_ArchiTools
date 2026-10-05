@@ -1,0 +1,494 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://research.invalid/pdf-architools/m7/portable-project.schema.proposed.json",
+  "title": "M7 Portable Project JSON -- PROPOSED / NON-CANONICAL / RESEARCH ONLY",
+  "description": "Architecture Research evidence for M7 Drawing Set Manager. This is NOT an adopted schema and NOT a Production contract. Every bound marked x-limit is a research candidate. Structural rules only: identity uniqueness, referential integrity and lifecycle consistency are in prototype/semantic.mjs because JSON Schema cannot state them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schemaVersion", "projectFileId", "lineage", "savedAt", "writer", "project", "drawingSet"],
+  "properties": {
+    "format": { "type": "string", "const": "pdf-architools/drawing-set-project" },
+    "schemaVersion": { "type": "integer", "const": 1, "minimum": 1, "maximum": 1 },
+    "projectFileId": { "$ref": "#/$defs/Uuid" },
+    "lineage": { "$ref": "#/$defs/Lineage" },
+    "savedAt": { "$ref": "#/$defs/Timestamp" },
+    "writer": { "$ref": "#/$defs/Writer" },
+    "project": { "$ref": "#/$defs/Project" },
+    "drawingSet": { "$ref": "#/$defs/DrawingSet" }
+  },
+  "$defs": {
+    "Uuid": {
+      "description": "Lower-case RFC 9562 UUID. Minted by the app; never derived from content or from a drawing number.",
+      "type": "string",
+      "maxLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "Sha256Hex": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "Timestamp": {
+      "description": "UTC, millisecond precision, exactly as Date.prototype.toISOString() writes it. Calendar validity is a semantic check.",
+      "type": "string",
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "VersionString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]*$"
+    },
+    "Name": {
+      "description": "Single-line human text. Inert: rendered as text only, never as markup, a link or a path.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "x-limit": "maxNameLength",
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "FileName": {
+      "description": "A display label derived from File.name. A bare name only: no path separator and no drive colon can appear, so an absolute or UNC path cannot be stored here. It is a hint for a person and for rebinding; it is never identity and is never opened.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "x-limit": "maxFileNameLength",
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069/\\\\:]+$"
+    },
+    "FieldValue": {
+      "description": "One title-block field value on one line. May be empty: a field a person confirmed as blank is a value.",
+      "type": "string",
+      "maxLength": 300,
+      "x-limit": "maxFieldValueLength",
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "FieldRawText": {
+      "description": "What the extraction layer read inside ONE field rectangle, line breaks kept. A bounded excerpt of a title-block cell -- not page text, not OCR page output.",
+      "type": "string",
+      "maxLength": 1000,
+      "x-limit": "maxFieldRawTextLength",
+      "pattern": "^[^\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "Comment": {
+      "description": "Multi-line human text. Inert, like Name.",
+      "type": "string",
+      "maxLength": 4000,
+      "x-limit": "maxCommentLength",
+      "pattern": "^[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "ReasonCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "FieldName": {
+      "type": "string",
+      "enum": ["drawingNumber", "drawingTitle", "revision", "issueDate"]
+    },
+    "Orientation": {
+      "type": "string",
+      "enum": ["landscape", "portrait"]
+    },
+    "PagePoints": {
+      "description": "PDF points at scale 1.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 14400,
+      "x-limit": "maxPagePoints"
+    },
+
+    "Lineage": {
+      "description": "projectFileId names ONE saved file. Every save mints a new one and records the one it was saved from, so two files of the same Project can be ordered without trusting a clock.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["saveSequence", "previousProjectFileId", "migratedFrom"],
+      "properties": {
+        "saveSequence": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "previousProjectFileId": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Uuid" }] },
+        "migratedFrom": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/MigrationOrigin" }] }
+      }
+    },
+    "MigrationOrigin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "projectFileId", "migratedAt"],
+      "properties": {
+        "schemaVersion": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "projectFileId": { "$ref": "#/$defs/Uuid" },
+        "migratedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "Writer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "toolVersion"],
+      "properties": {
+        "app": { "type": "string", "const": "PDF_ArchiTools" },
+        "toolVersion": { "$ref": "#/$defs/VersionString" }
+      }
+    },
+    "Project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "name": { "$ref": "#/$defs/Name" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+
+    "DrawingSet": {
+      "description": "M7 holds exactly one Active Drawing Set, so this is one object and not a list. Its collections are flat and related by id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "createdAt", "sources", "titleBlockProfiles", "sheets", "analysisRuns", "findings", "decisions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "name": { "$ref": "#/$defs/Name" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "sources": { "type": "array", "maxItems": 5000, "x-limit": "maxSources", "items": { "$ref": "#/$defs/Source" } },
+        "titleBlockProfiles": { "type": "array", "maxItems": 64, "x-limit": "maxProfiles", "items": { "$ref": "#/$defs/TitleBlockProfile" } },
+        "sheets": { "type": "array", "maxItems": 5000, "x-limit": "maxSheets", "items": { "$ref": "#/$defs/Sheet" } },
+        "analysisRuns": { "type": "array", "maxItems": 2000, "x-limit": "maxAnalysisRuns", "items": { "$ref": "#/$defs/AnalysisRun" } },
+        "findings": { "type": "array", "maxItems": 50000, "x-limit": "maxFindings", "items": { "$ref": "#/$defs/Finding" } },
+        "decisions": { "type": "array", "maxItems": 100000, "x-limit": "maxDecisions", "items": { "$ref": "#/$defs/ReviewDecision" } }
+      }
+    },
+
+    "SourceFingerprint": {
+      "description": "Facts about one exact byte sequence. sha256 is the authoritative match evidence; byteLength and pageCount are facts of those same bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "sha256", "byteLength", "pageCount", "recordedAt"],
+      "properties": {
+        "algorithm": { "type": "string", "const": "SHA-256" },
+        "sha256": { "$ref": "#/$defs/Sha256Hex" },
+        "byteLength": { "type": "integer", "minimum": 1, "maximum": 268435456, "x-limit": "maxSourceBytes" },
+        "pageCount": { "type": "integer", "minimum": 1, "maximum": 5000, "x-limit": "maxPagesPerSource" },
+        "recordedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "RetiredFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fingerprint", "retiredAt", "reason"],
+      "properties": {
+        "fingerprint": { "$ref": "#/$defs/SourceFingerprint" },
+        "retiredAt": { "$ref": "#/$defs/Timestamp" },
+        "reason": { "type": "string", "enum": ["REPLACED_BY_HUMAN"] }
+      }
+    },
+    "Source": {
+      "description": "One entry of the Source Manifest: a slot a PDF is bound to. The id is the slot; the fingerprint is the bytes currently accepted for it. A Source a person removes is retired, not deleted, so nothing that refers to it is left dangling.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "addedAt", "retiredAt", "fingerprint", "fingerprintHistory"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "displayName": { "$ref": "#/$defs/FileName" },
+        "addedAt": { "$ref": "#/$defs/Timestamp" },
+        "retiredAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] },
+        "fingerprint": { "$ref": "#/$defs/SourceFingerprint" },
+        "fingerprintHistory": { "type": "array", "maxItems": 64, "x-limit": "maxFingerprintHistoryPerSource", "items": { "$ref": "#/$defs/RetiredFingerprint" } }
+      }
+    },
+
+    "Rect": {
+      "description": "Upright page space: origin top-left of the page as it would be without its /Rotate, y downwards, PDF points at scale 1. The same space as the Drawing Register's SelectionRect.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "top", "right", "bottom"],
+      "properties": {
+        "left": { "$ref": "#/$defs/PagePoints" },
+        "top": { "$ref": "#/$defs/PagePoints" },
+        "right": { "$ref": "#/$defs/PagePoints" },
+        "bottom": { "$ref": "#/$defs/PagePoints" }
+      }
+    },
+    "TitleBlockProfile": {
+      "description": "Field rectangles on a reference page, and how they move to a page of another size. revision counts every change to the geometry or the model. A profile a person removes is retired, not deleted: observations and confirmations made under it still name it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "revision", "transferModel", "referencePage", "fields", "createdAt", "updatedAt", "retiredAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "name": { "$ref": "#/$defs/Name" },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "transferModel": { "type": "string", "enum": ["normalised", "corner-anchored"] },
+        "referencePage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["uprightWidthPt", "uprightHeightPt"],
+          "properties": {
+            "uprightWidthPt": { "$ref": "#/$defs/PagePoints" },
+            "uprightHeightPt": { "$ref": "#/$defs/PagePoints" }
+          }
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["drawingNumber", "drawingTitle", "revision", "issueDate"],
+          "properties": {
+            "drawingNumber": { "$ref": "#/$defs/Rect" },
+            "drawingTitle": { "$ref": "#/$defs/Rect" },
+            "revision": { "$ref": "#/$defs/Rect" },
+            "issueDate": { "$ref": "#/$defs/Rect" }
+          }
+        },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "retiredAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] }
+      }
+    },
+
+    "FieldValues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drawingNumber", "drawingTitle", "revision", "issueDate"],
+      "properties": {
+        "drawingNumber": { "$ref": "#/$defs/FieldValue" },
+        "drawingTitle": { "$ref": "#/$defs/FieldValue" },
+        "revision": { "$ref": "#/$defs/FieldValue" },
+        "issueDate": { "$ref": "#/$defs/FieldValue" }
+      }
+    },
+    "ProfileBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId", "profileRevision"],
+      "properties": {
+        "profileId": { "$ref": "#/$defs/Uuid" },
+        "profileRevision": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    },
+    "PageFacts": {
+      "description": "Read from the page boxes, no recognition involved. Sizes are of the visible box (CropBox within MediaBox) with /Rotate undone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceSha256", "uprightWidthPt", "uprightHeightPt", "rotate", "kind"],
+      "properties": {
+        "sourceSha256": { "$ref": "#/$defs/Sha256Hex" },
+        "uprightWidthPt": { "$ref": "#/$defs/PagePoints" },
+        "uprightHeightPt": { "$ref": "#/$defs/PagePoints" },
+        "rotate": { "type": "integer", "enum": [0, 90, 180, 270], "minimum": 0, "maximum": 270 },
+        "kind": { "type": "string", "enum": ["text-native", "scanned"] }
+      }
+    },
+    "ProfileAssignment": {
+      "description": "A sheet belongs to a profile because a person said so; the moment is part of the record.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId", "confirmedAt"],
+      "properties": {
+        "profileId": { "$ref": "#/$defs/Uuid" },
+        "confirmedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ObservedField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "rawText", "source", "ocrScore"],
+      "properties": {
+        "value": { "$ref": "#/$defs/FieldValue" },
+        "rawText": { "$ref": "#/$defs/FieldRawText" },
+        "source": { "type": "string", "enum": ["native", "ocr", "none"] },
+        "ocrScore": { "anyOf": [{ "type": "null" }, { "type": "integer", "minimum": 0, "maximum": 100 }] }
+      }
+    },
+    "Observation": {
+      "description": "What the machine read from one sheet, and exactly what it read it from. Never promoted to confirmed by a score.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "sourceSha256", "profile", "status", "fields"],
+      "properties": {
+        "runId": { "$ref": "#/$defs/Uuid" },
+        "sourceSha256": { "$ref": "#/$defs/Sha256Hex" },
+        "profile": { "$ref": "#/$defs/ProfileBasis" },
+        "status": { "type": "string", "enum": ["READ", "OCR_FAILED"] },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["drawingNumber", "drawingTitle", "revision", "issueDate"],
+          "properties": {
+            "drawingNumber": { "$ref": "#/$defs/ObservedField" },
+            "drawingTitle": { "$ref": "#/$defs/ObservedField" },
+            "revision": { "$ref": "#/$defs/ObservedField" },
+            "issueDate": { "$ref": "#/$defs/ObservedField" }
+          }
+        }
+      }
+    },
+    "Confirmation": {
+      "description": "What a person confirmed, and against which bytes and which profile arrangement. profile is null when the values were typed with no profile involved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmedAt", "sourceSha256", "profile", "values", "editedFields"],
+      "properties": {
+        "confirmedAt": { "$ref": "#/$defs/Timestamp" },
+        "sourceSha256": { "$ref": "#/$defs/Sha256Hex" },
+        "profile": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ProfileBasis" }] },
+        "values": { "$ref": "#/$defs/FieldValues" },
+        "editedFields": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/FieldName" } }
+      }
+    },
+    "RetiredConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmation", "retiredAt", "reason"],
+      "properties": {
+        "confirmation": { "$ref": "#/$defs/Confirmation" },
+        "retiredAt": { "$ref": "#/$defs/Timestamp" },
+        "reason": { "type": "string", "enum": ["RECONFIRMED", "WITHDRAWN"] }
+      }
+    },
+    "Sheet": {
+      "description": "One page of one Source, with an identity of its own. drawingNumber is something a sheet has, not what it is.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceId", "pageNumber", "createdAt", "retiredAt", "pageFacts", "profileAssignment", "observation", "confirmation", "confirmationHistory"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "sourceId": { "$ref": "#/$defs/Uuid" },
+        "pageNumber": { "type": "integer", "minimum": 1, "maximum": 5000, "x-limit": "maxPagesPerSource" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "retiredAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] },
+        "pageFacts": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/PageFacts" }] },
+        "profileAssignment": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ProfileAssignment" }] },
+        "observation": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Observation" }] },
+        "confirmation": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Confirmation" }] },
+        "confirmationHistory": { "type": "array", "maxItems": 32, "x-limit": "maxConfirmationHistoryPerSheet", "items": { "$ref": "#/$defs/RetiredConfirmation" } }
+      }
+    },
+
+    "SourceBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "sha256"],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/Uuid" },
+        "sha256": { "$ref": "#/$defs/Sha256Hex" }
+      }
+    },
+    "AnalysisRun": {
+      "description": "One execution of an analyser. manifestDigest is the SHA-256 of the sorted (sourceId, sha256) pairs of every live Source at the time, so a run is bound to the exact set of bytes it saw in constant space; each observation and finding carries the exact fingerprints of what it cites. Append-only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "startedAt", "completedAt", "outcome", "engine", "manifestDigest", "coverage"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "kind": { "type": "string", "enum": ["EXTRACTION", "QA"] },
+        "startedAt": { "$ref": "#/$defs/Timestamp" },
+        "completedAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] },
+        "outcome": { "type": "string", "enum": ["COMPLETED", "CANCELLED", "FAILED"] },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "type": "string", "enum": ["register-extraction", "drawing-set-qa"] },
+            "version": { "$ref": "#/$defs/VersionString" }
+          }
+        },
+        "manifestDigest": { "$ref": "#/$defs/Sha256Hex" },
+        "coverage": {
+          "description": "How many sheets the run could evaluate and how many it had to leave out. A run that left sheets out cannot close a finding about them.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sheetsEvaluated", "sheetsExcluded"],
+          "properties": {
+            "sheetsEvaluated": { "type": "integer", "minimum": 0, "maximum": 5000, "x-limit": "maxSheets" },
+            "sheetsExcluded": { "type": "integer", "minimum": 0, "maximum": 5000, "x-limit": "maxSheets" }
+          }
+        }
+      }
+    },
+
+    "FindingParams": {
+      "description": "The small, rule-specific facts a finding states. A closed set: a rule cannot attach arbitrary data.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reason": { "$ref": "#/$defs/ReasonCode" },
+        "number": { "$ref": "#/$defs/FieldValue" },
+        "comparisonKey": { "$ref": "#/$defs/FieldValue" },
+        "seriesPrefix": { "$ref": "#/$defs/FieldValue" },
+        "rangeFrom": { "$ref": "#/$defs/FieldValue" },
+        "rangeTo": { "$ref": "#/$defs/FieldValue" },
+        "values": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/FieldValue" } },
+        "sizeClass": { "type": "string", "maxLength": 32, "pattern": "^[0-9A-Za-z x.]*$" },
+        "majoritySizeClass": { "type": "string", "maxLength": 32, "pattern": "^[0-9A-Za-z x.]*$" },
+        "orientation": { "$ref": "#/$defs/Orientation" },
+        "majorityOrientation": { "$ref": "#/$defs/Orientation" },
+        "count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "majorityCount": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+      }
+    },
+    "FindingLifecycle": {
+      "description": "ACTIVE: the latest statement of this finding. SUPERSEDED: a later run stated it with different evidence. NOT_REPRODUCED: a later run that could evaluate it no longer found it. STALE is not stored: it is derived from the basis, so a file cannot claim to be fresh.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "supersededByFindingId", "closedByRunId", "closedAt"],
+      "properties": {
+        "state": { "type": "string", "enum": ["ACTIVE", "SUPERSEDED", "NOT_REPRODUCED"] },
+        "supersededByFindingId": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Uuid" }] },
+        "closedByRunId": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Uuid" }] },
+        "closedAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Timestamp" }] }
+      }
+    },
+    "Finding": {
+      "description": "One statement by one rule about one subject. Immutable apart from its lifecycle; a changed statement is a new Finding that supersedes this one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "runId", "ruleId", "ruleVersion", "determinism", "scope", "sheetIds", "sourceIds", "findingKey", "evidenceDigest", "basis", "params", "createdAt", "lifecycle"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "runId": { "$ref": "#/$defs/Uuid" },
+        "ruleId": {
+          "type": "string",
+          "enum": [
+            "QA01_DUPLICATE_NUMBER",
+            "QA01B_DUPLICATE_NUMBER_VARIANT",
+            "QA02_METADATA_UNCONFIRMED",
+            "QA03_NUMBER_GAP",
+            "QA04_SAME_NUMBER_DIFFERENT_TITLE",
+            "QA05_REVISION_MISMATCH",
+            "QA06_ISSUE_DATE_MISMATCH",
+            "QA07_SHEET_SIZE_OUTLIER",
+            "QA08_ORIENTATION_OUTLIER",
+            "QA09_REGISTER_SHEET_MISMATCH",
+            "QA10_INTEGRITY"
+          ]
+        },
+        "ruleVersion": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "determinism": { "type": "string", "enum": ["DETERMINISTIC", "CANDIDATE"] },
+        "scope": { "type": "string", "enum": ["SHEET", "SHEET_GROUP", "SET", "SOURCE", "PROJECT"] },
+        "sheetIds": { "type": "array", "maxItems": 5000, "x-limit": "maxSubjectsPerFinding", "items": { "$ref": "#/$defs/Uuid" } },
+        "sourceIds": { "type": "array", "maxItems": 5000, "x-limit": "maxSources", "items": { "$ref": "#/$defs/Uuid" } },
+        "findingKey": { "$ref": "#/$defs/Sha256Hex" },
+        "evidenceDigest": { "$ref": "#/$defs/Sha256Hex" },
+        "basis": { "type": "array", "maxItems": 5000, "x-limit": "maxSources", "items": { "$ref": "#/$defs/SourceBasis" } },
+        "params": { "$ref": "#/$defs/FindingParams" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "lifecycle": { "$ref": "#/$defs/FindingLifecycle" }
+      }
+    },
+    "ReviewDecision": {
+      "description": "What a person decided about one Finding. Append-only: a change of mind is a new decision with the next sequence, and the earlier one stays.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "findingId", "sequence", "outcome", "comment", "decidedAt", "evidenceDigest"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "findingId": { "$ref": "#/$defs/Uuid" },
+        "sequence": { "type": "integer", "minimum": 1, "maximum": 100000, "x-limit": "maxDecisions" },
+        "outcome": { "type": "string", "enum": ["ACTION_REQUIRED", "INTENTIONAL", "FALSE_POSITIVE", "HOLD"] },
+        "comment": { "$ref": "#/$defs/Comment" },
+        "decidedAt": { "$ref": "#/$defs/Timestamp" },
+        "evidenceDigest": { "$ref": "#/$defs/Sha256Hex" }
+      }
+    }
+  }
+}
