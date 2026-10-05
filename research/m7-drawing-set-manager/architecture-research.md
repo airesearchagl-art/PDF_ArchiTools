@@ -104,13 +104,13 @@ One 250 MiB file; baseline (file selected, nothing read) ≈ 66 MiB:
 | Longest time the page thread was unavailable | **≈ 0.8 s** | under 30 ms | under 15 ms | under 15 ms |
 | Renderer peak working set | ≈ 570 MiB | ≈ 570 MiB | ≈ 160 MiB | **≈ 87 MiB** |
 | Works when served over plain HTTP | **no** | **no** | yes | yes |
-| Can be stopped | no | only by terminating the Worker | between chunks (≈ 25 ms) | between reads |
+| Can be stopped | no | only by terminating the Worker | between chunks (under 60 ms) | between reads |
 
 1. **`SubtleCrypto.digest()` needs the whole input in memory.** It refuses a `ReadableStream`
    (`TypeError`); there is no way to feed it pieces. At 250 MiB the renderer peaked about 500 MiB above baseline
    — the file, twice.
 2. **The digest blocked the calling thread.** `file.arrayBuffer()` and `digest()` were measured separately
-   on the page thread, each under a 4 ms heartbeat: reading 250 MiB took ≈ 150 ms and left the thread free
+   on the page thread, each under a 4 ms heartbeat: reading 250 MiB took 0.1–0.25 s and left the thread free
    (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**. An
    asynchronous signature is not an asynchronous implementation. This is one browser build; why it behaves
    so was not investigated.
@@ -128,7 +128,8 @@ One 250 MiB file; baseline (file selected, nothing read) ≈ 66 MiB:
    collector had not caught up — against ≈ 158 MiB for sliced streaming and **≈ 120 MiB with one reused
    buffer**.
 6. **4 MiB is the chunk size the measurement chooses.** 64 KiB ≈ 85 MiB/s, 1 MiB ≈ 186, 4 MiB ≈ 215,
-   16 MiB ≈ 230; cancellation latency ≈ 6 ms, ≈ 25 ms and ≈ 60–120 ms at 1, 4 and 16 MiB.
+   16 MiB ≈ 230; a cancellation took effect in under 20 ms, under 60 ms and under 200 ms at 1, 4 and 16 MiB
+   (anywhere up to one chunk, depending on where in a chunk the request lands).
 7. **A `File` reaches a Worker without its bytes being read on the page thread** (structured clone of a
    10 MiB `File`: under 2 ms).
 8. **A detached buffer hashes silently to the digest of nothing.** After an ArrayBuffer is transferred
@@ -159,7 +160,7 @@ flowchart TB
 ```
 
 - **One implementation, everywhere.** No Web Crypto path. The measured cost of giving it up in Chrome is
-  under 20 % of elapsed time with one reused buffer and 15–40 % on the slice fallback; what is bought is
+  under 25 % of elapsed time with one reused buffer and 10–40 % on the slice fallback; what is bought is
   flat memory, no dependence on a secure context, cancellation, and a digest that cannot depend on which
   implementation ran.
 - **A dedicated Worker per job**, in the pattern Split / Merge already uses, given `File` objects, never
@@ -365,7 +366,7 @@ objects (11.4 MiB): refused at `schema` after ≈ 0.55 s and ≈ 256 MiB of heap
 Chrome). That is the residual worst case of *these* candidates, and it is the price of leaving room for a
 Project's findings to accumulate; a tighter `maxJsonValues` buys it down proportionally.
 
-**Where import runs.** On the page thread it is one task of ≈ 100 ms at 5000 sheets. That is acceptable for
+**Where import runs.** On the page thread it is one task of about a tenth of a second at 5000 sheets. That is acceptable for
 an action a person takes once per session, and moving it to a Worker costs a structured clone of the
 result. Recommended: page thread for the first implementation; revisit if the limits are raised.
 
@@ -464,7 +465,7 @@ run-to-run variation):
 | QA, all rules | ≈ 1 ms | ≈ 5 ms | ≈ 27 ms | ≈ 31 ms | ≈ 120 ms |
 | — duplicate-number detection alone | under 1 ms | under 1 ms | under 1 ms | under 1 ms | ≈ 1 ms |
 | — gap detection alone | under 1 ms | under 1 ms | ≈ 1 ms | ≈ 1.5 ms | ≈ 4 ms |
-| Sort by drawing number (collated, shuffled input) | under 1 ms | ≈ 1 ms | ≈ 5 ms | ≈ 6.5 ms | ≈ 33 ms |
+| Sort by drawing number (collated, shuffled input) | under 1 ms | ≈ 1 ms | 3–9 ms | 4–10 ms | 25–50 ms |
 | Filter | under 1 ms | under 1 ms | under 1 ms | under 1 ms | under 2 ms |
 | Currency of every sheet and finding | under 1 ms | under 1 ms | under 2 ms | under 2 ms | under 6 ms |
 | One Source replaced: what goes stale | 25 of 200 sheets | 25 of 1 000 | 25 of 5 000 | 1 of 5 000 | 25 of 20 000 |
@@ -480,7 +481,7 @@ run-to-run variation):
   rows take ≈ 30 ms for a layout pass and ≈ 30 ms for a restyle; 5 000 rows ≈ 150 ms each; 20 000 ≈ 650 ms.
   A React list pays that plus reconciliation. The existing viewer mounts every page with no virtualisation,
   which M7 must not copy. Recommended: virtualise the Sheet List from the start.
-- **Cancellation:** a fingerprint stops in ≈ 25 ms; an extraction stops between pages (the engine's
+- **Cancellation:** a fingerprint stops within one chunk (under 60 ms at 4 MiB); an extraction stops between pages (the engine's
   existing `shouldCancel`), but a recognition already running cannot be interrupted (≤ one page).
 
 ---

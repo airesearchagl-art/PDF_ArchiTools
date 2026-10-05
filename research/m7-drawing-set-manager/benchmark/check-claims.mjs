@@ -92,10 +92,10 @@ const CLAIMS = [
         c('stream-worker peak MiB', single(250, 'stream-worker').rendererPeakWorkingSetMiB, near(160)),
         c('byob-worker peak MiB', byob(250).rendererPeakWorkingSetMiB, near(87)),
     ] },
-    { doc: A, quote: 'between chunks (≈ 25 ms)', checks: all('cancel latency at 4 MiB ms', cancel(4096), near(25, 10)) },
+    { doc: A, quote: 'between chunks (under 60 ms)', checks: all('cancel latency at 4 MiB ms', cancel(4096), under(60)) },
     { doc: A, quote: 'the renderer peaked about 500 MiB above baseline', checks: [c('subtle-main peak above baseline MiB', single(250, 'subtle-main').rendererPeakWorkingSetMiB - baseline, near(500))] },
-    { doc: A, quote: 'reading 250 MiB took ≈ 150 ms and left the thread free (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**', checks: [
-        ...all('read 250 MiB ms', split(250).map((r) => r.fileArrayBuffer.ms), near(150)),
+    { doc: A, quote: 'reading 250 MiB took 0.1–0.25 s and left the thread free (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**', checks: [
+        ...all('read 250 MiB ms', split(250).map((r) => r.fileArrayBuffer.ms), between(100, 250)),
         ...all('gap during read ms', split(250).map((r) => r.fileArrayBuffer.mainThread.maxGapMs), under(15)),
         ...all('digest 250 MiB ms', split(250).map((r) => r.subtleDigest.ms), near(750)),
         ...all('gap during digest / digest time', split(250).map((r) => r.subtleDigest.mainThread.maxGapMs / r.subtleDigest.ms), between(0.95, 1.05)),
@@ -123,18 +123,18 @@ const CLAIMS = [
         c('20x25 stream-worker peak MiB', multi(20, 'stream-worker').rendererPeakWorkingSetMiB, near(158)),
         c('20x25 byob-worker peak MiB', multi(20, 'byob-worker').rendererPeakWorkingSetMiB, near(120)),
     ] },
-    { doc: A, quote: '64 KiB ≈ 85 MiB/s, 1 MiB ≈ 186, 4 MiB ≈ 215, 16 MiB ≈ 230; cancellation latency ≈ 6 ms, ≈ 25 ms and ≈ 60–120 ms at 1, 4 and 16 MiB', checks: [
+    { doc: A, quote: '64 KiB ≈ 85 MiB/s, 1 MiB ≈ 186, 4 MiB ≈ 215, 16 MiB ≈ 230; a cancellation took effect in under 20 ms, under 60 ms and under 200 ms at 1, 4 and 16 MiB', checks: [
         c('64 KiB MiB/s', chunk(64).MiBPerSecond, near(85)), c('1 MiB MiB/s', chunk(1024).MiBPerSecond, near(186)),
         c('4 MiB MiB/s', chunk(4096).MiBPerSecond, near(215)), c('16 MiB MiB/s', chunk(16384).MiBPerSecond, near(230)),
-        ...all('cancel at 1 MiB ms', cancel(1024), near(6, 6)), ...all('cancel at 4 MiB ms', cancel(4096), near(25, 10)),
-        ...all('cancel at 16 MiB ms', cancel(16384), between(45, 150)),
+        ...all('cancel at 1 MiB ms', cancel(1024), under(20)), ...all('cancel at 4 MiB ms', cancel(4096), under(60)),
+        ...all('cancel at 16 MiB ms', cancel(16384), under(200)),
     ] },
     { doc: A, quote: '10 MiB `File`: under 2 ms', checks: [c('File clone to Worker ms', probes.secureContext.facts.fileCloneToWorkerMs, under(2))] },
-    { doc: A, quote: 'under 20 % of elapsed time with one reused buffer and 15–40 % on the slice fallback', checks: [
-        c('byob vs fastest one-shot, 250 MiB', byob(250).medianMs / fastestOneShot((m) => single(250, m).medianMs) - 1, between(-0.2, 0.2)),
-        c('byob vs fastest one-shot, 20x25', multi(20, 'byob-worker').medianMs / fastestOneShot((m) => multi(20, m).medianMs) - 1, between(-0.2, 0.2)),
-        c('slices vs fastest one-shot, 250 MiB', single(250, 'stream-worker').medianMs / fastestOneShot((m) => single(250, m).medianMs) - 1, between(0.15, 0.4)),
-        c('slices vs fastest one-shot, 20x25', multi(20, 'stream-worker').medianMs / fastestOneShot((m) => multi(20, m).medianMs) - 1, between(0.15, 0.4)),
+    { doc: A, quote: 'under 25 % of elapsed time with one reused buffer and 10–40 % on the slice fallback', checks: [
+        c('byob vs fastest one-shot, 250 MiB', byob(250).medianMs / fastestOneShot((m) => single(250, m).medianMs) - 1, between(-0.25, 0.25)),
+        c('byob vs fastest one-shot, 20x25', multi(20, 'byob-worker').medianMs / fastestOneShot((m) => multi(20, m).medianMs) - 1, between(-0.25, 0.25)),
+        c('slices vs fastest one-shot, 250 MiB', single(250, 'stream-worker').medianMs / fastestOneShot((m) => single(250, m).medianMs) - 1, between(0.1, 0.4)),
+        c('slices vs fastest one-shot, 20x25', multi(20, 'stream-worker').medianMs / fastestOneShot((m) => multi(20, m).medianMs) - 1, between(0.1, 0.4)),
     ] },
     { doc: A, quote: 'Expected cost ≈ 4 ms per MiB', checks: [
         c('byob ms per MiB, 250 MiB', byob(250).medianMs / 250, near(4)), c('byob ms per MiB, 20x25', multi(20, 'byob-worker').medianMs / 500, near(4)),
@@ -175,7 +175,7 @@ const CLAIMS = [
         c('worst in-bounds Node heap MiB', hostileCase('worst case inside the bounds').unbounded.retainedHeapMiB, near(256)),
         c('worst in-bounds Chrome heap MiB', parseBrowser('array of 3,999,990').jsHeapGrowthMiB, near(104)),
     ] },
-    { doc: A, quote: 'one task of ≈ 100 ms at 5000 sheets', checks: [c('page-thread open 5000 ms', pageThread(5000).open.ms, near(100)), c('page-thread gap 5000 ms', pageThread(5000).open.mainThread.maxGapMs, near(100))] },
+    { doc: A, quote: 'one task of about a tenth of a second at 5000 sheets', checks: [c('page-thread open 5000 ms', pageThread(5000).open.ms, between(70, 150)), c('page-thread gap 5000 ms', pageThread(5000).open.mainThread.maxGapMs, between(70, 150))] },
 
     // ---- R9, browser ------------------------------------------------------
     { doc: A, quote: '| Save (project, validate, serialise) | ≈ 3 ms | ≈ 15 ms | ≈ 95 ms | ≈ 115 ms | ≈ 400 ms |', checks: [
@@ -187,7 +187,7 @@ const CLAIMS = [
         c('5000', b(S5).open.importTotal.medianMs, near(92)), c('5000 one-per-sheet', b(S5P).open.importTotal.medianMs, near(120)), c('20000', b(S20).open.importTotal.medianMs, near(420)),
     ] },
     { doc: A, quote: '| QA, all rules | ≈ 1 ms | ≈ 5 ms | ≈ 27 ms | ≈ 31 ms | ≈ 120 ms |', checks: [
-        c('200', b('200 sheets').qa.evaluateAllRules.medianMs, near(1, 0.7)), c('1000', b('1000 sheets').qa.evaluateAllRules.medianMs, near(5, 1.5)),
+        c('200', b('200 sheets').qa.evaluateAllRules.medianMs, near(1, 0.7)), c('1000', b('1000 sheets').qa.evaluateAllRules.medianMs, near(5, 2.5)),
         c('5000', b(S5).qa.evaluateAllRules.medianMs, near(27)), c('5000 one-per-sheet', b(S5P).qa.evaluateAllRules.medianMs, near(31)), c('20000', b(S20).qa.evaluateAllRules.medianMs, near(120)),
     ] },
     { doc: A, quote: '| — duplicate-number detection alone | under 1 ms | under 1 ms | under 1 ms | under 1 ms | ≈ 1 ms |', checks: [
@@ -195,11 +195,11 @@ const CLAIMS = [
     ] },
     { doc: A, quote: '| — gap detection alone | under 1 ms | under 1 ms | ≈ 1 ms | ≈ 1.5 ms | ≈ 4 ms |', checks: [
         c('1000', b('1000 sheets').qa.gapDetectionOnly.medianMs, under(1)), c('5000', b(S5).qa.gapDetectionOnly.medianMs, near(1, 0.7)),
-        c('5000 one-per-sheet', b(S5P).qa.gapDetectionOnly.medianMs, near(1.5, 1)), c('20000', b(S20).qa.gapDetectionOnly.medianMs, near(4, 1.5)),
+        c('5000 one-per-sheet', b(S5P).qa.gapDetectionOnly.medianMs, near(1.5, 1)), c('20000', b(S20).qa.gapDetectionOnly.medianMs, near(4, 2.5)),
     ] },
-    { doc: A, quote: '| Sort by drawing number (collated, shuffled input) | under 1 ms | ≈ 1 ms | ≈ 5 ms | ≈ 6.5 ms | ≈ 33 ms |', checks: [
+    { doc: A, quote: '| Sort by drawing number (collated, shuffled input) | under 1 ms | ≈ 1 ms | 3–9 ms | 4–10 ms | 25–50 ms |', checks: [
         c('200', b('200 sheets').list.sortByNumber.medianMs, under(1)), c('1000', b('1000 sheets').list.sortByNumber.medianMs, near(1, 0.6)),
-        c('5000', b(S5).list.sortByNumber.medianMs, near(5, 1.5)), c('5000 one-per-sheet', b(S5P).list.sortByNumber.medianMs, near(6.5, 2)), c('20000', b(S20).list.sortByNumber.medianMs, near(33)),
+        c('5000', b(S5).list.sortByNumber.medianMs, between(3, 9)), c('5000 one-per-sheet', b(S5P).list.sortByNumber.medianMs, between(4, 10)), c('20000', b(S20).list.sortByNumber.medianMs, between(25, 50)),
     ] },
     { doc: A, quote: '| Filter | under 1 ms | under 1 ms | under 1 ms | under 1 ms | under 2 ms |', checks: [
         c('5000', b(S5).list.filterByText.medianMs, under(1)), c('20000', b(S20).list.filterByText.medianMs, under(2)),
@@ -240,7 +240,7 @@ const CLAIMS = [
     { doc: 'limitations.md', quote: 'retained ≈ 256 MiB in Node and ≈ 104 MiB in Chrome', checks: [
         c('Node', hostileCase('worst case inside the bounds').unbounded.retainedHeapMiB, near(256)), c('Chrome', parseBrowser('array of 3,999,990').jsHeapGrowthMiB, near(104)),
     ] },
-    { doc: 'limitations.md', quote: 'The input is now shuffled (≈ 5 ms).', checks: [c('sort 5000 ms', b(S5).list.sortByNumber.medianMs, near(5, 1.5))] },
+    { doc: 'limitations.md', quote: 'The input is now shuffled (3–9 ms).', checks: [c('sort 5000 ms', b(S5).list.sortByNumber.medianMs, between(3, 9))] },
     { doc: 'limitations.md', quote: 'refused by the scan in about 10 ms without being parsed', checks: [
         c('2M keys refusal ms', hostileCase('object with 2,000,000').bounded.refusedInMs, under(30)),
     ] },

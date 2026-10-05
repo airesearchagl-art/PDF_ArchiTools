@@ -65,7 +65,7 @@ none is hidden by the final results.
    for a page exactly 5 mm short of A0 on both edges the copy said `OTHER` and Production said `A0`. The
    copy now uses the same arithmetic, and the recommendation is to have no copy.
 6. **The sort benchmark sorted nearly-sorted input.** The synthetic rows arrive almost in order; the first
-   run reported 0.7 ms for 5000 rows. The input is now shuffled (≈ 5 ms).
+   run reported 0.7 ms for 5000 rows. The input is now shuffled (3–9 ms).
 7. **A wide object went through the scan.** In the first run of `bench-hostile.mjs`, an object with
    2 000 000 distinct keys (23.7 MiB) stayed under every limit: the pipeline reached `JSON.parse`, took
    **1 960.6 ms** and peaked at **618.1 MiB** before the schema refused it. `maxObjectKeys` was added;
@@ -88,6 +88,13 @@ none is hidden by the final results.
     written. `benchmark/check-claims.mjs` was added, the figures were restated, and the evidence was collected
     again from the corrected head. The checker was shown an edited sentence and a moved measurement and
     failed on both.
+13. **And then the checker caught one more.** The collection from the corrected head (`7c4f665`) passed
+    everything except one claim of 179: sorting 20 000 rows, written "≈ 33 ms", measured 42.1 ms. Across four
+    runs that figure had been 30.7, 34.3, 35.3 and 42.1 ms -- three repeats of a short operation on the page
+    thread -- so "≈ 33 ms" was more precise than the measurement. The same review found five other
+    figures sitting at the edge of what their wording allowed (a cancellation latency of exactly 35 ms against
+    "≈ 25 ms", which is a point picked from what is really "anywhere up to one chunk"). Those are now stated
+    as the ranges or bounds they are, and the evidence was collected a third time.
 
 ## 3. What a second run may and may not change
 
