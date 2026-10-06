@@ -219,8 +219,18 @@ So the repair adds **two durable entity types**, taking the proposed model from 
 
 The existing table engine (M2-4) reconstructs a table a person points at into a grid of cell text; an adapter
 turns that grid into rows with one more piece of knowledge the person supplies — which column is the drawing
-number (`reuse-audit.md`, candidate 13). The engine is not changed, and it is run for real from the tests.
-The engine reads native text only, so a scanned list is declared by typing it (`method: MANUAL`).
+number (`reuse-audit.md`, candidate 13). The engine is not changed. Its table reconstruction
+(`reconstructSelection`) is run for real from the tests, on a synthetic list page; reading a real PDF page
+into the engine's input (`analysePageGeometry`) was not run (`limitations.md`). The engine reads native text
+only, so a scanned list is declared by typing it (`method: MANUAL`).
+
+**`region` is the origin of the rows, not the rectangle the person dragged.** The person's selection only
+tells the engine where to look, and may take in margin or a neighbouring legend the engine leaves out; the
+table the person designated is the grid the engine reconstructed inside it, and `region` is that grid's box
+(`candidate.bbox`, the same upright page space as the profiles). That the person chose it is recorded by the
+declaration itself — `method: TABLE_NATIVE` and `declaredAt` — not by a second rectangle. Only a register
+read from a table must carry a `region` (`REGION_REQUIRED`; a file without one is refused at the relations
+stage); one typed by hand (`MANUAL`) may have none.
 
 ### What is deliberately not modelled
 

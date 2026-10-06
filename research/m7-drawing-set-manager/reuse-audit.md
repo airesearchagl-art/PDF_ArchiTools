@@ -46,7 +46,7 @@ and calls `reconstructSelection`. Line numbers are given only where they were ch
 | 10 | Page size / orientation | **Reuse the pure helper**; the reader needs extracting | `detectPaperSize` (tested); *small future refactor* |
 | 11 | Title-block **updater** | **Not applicable** | a writer, in a different coordinate space |
 | 12 | App shell / tool registration | **Small edit at implementation time** | not an engine |
-| 13 | M2-4 table extraction (the Excel export's engine) — *added after RF-33-02* | **Reuse as is, through an adapter**, for a declared Drawing Register | `analysePageGeometry` → `reconstructSelection` → a column mapping a person supplies (tested with the engine run for real) |
+| 13 | M2-4 table extraction (the Excel export's engine) — *added after RF-33-02* | **Reuse as is, through an adapter**, for a declared Drawing Register | `analysePageGeometry` → `reconstructSelection` → a column mapping a person supplies (`reconstructSelection` run for real on a synthetic list page; `analysePageGeometry` not run — `limitations.md`) |
 
 No candidate needs a refactor *before* M7 can start. Two need one *for* M7 (8, 10), and both are additive.
 Candidate 13 needs none.
