@@ -150,6 +150,21 @@ none is hidden by the final results.
     It does not retry. The evidence committed is from a later, whole collection; `evidence/gates.md`
     records every exit of it.
 
+19. **After the repair: a collection lost with its session, an overstatement, and one more claim.**
+    - The collection from `f72f0c3` stopped in the second pass of `bench-browser.mjs` (after the
+      fingerprint cases, before the probes) when the session running it ended. No process was left and no
+      output was kept, so nothing is concluded from it.
+    - A read-only check of the documents against the repair found `reuse-audit.md` and
+      `data-model.proposed.md` saying the table engine was "run for real" beside a chain that begins with
+      `analysePageGeometry`, which was not run (§1 above). Both now name the part that was:
+      `reconstructSelection`, on a synthetic list page.
+    - The collection from `ff1b9e9` passed everything except one claim of 191: reading 250 MiB, written
+      "0.1–0.25 s", measured 352.8 ms in the first of three repeats (126.4 and 134.2 ms in the other two;
+      169.2, 162.8 and 146.1 ms in the collection from `ecc38e7`). A range drawn from earlier runs was
+      narrower than the measurement. What the sentence is for -- the read leaves the thread free and the
+      digest does not -- is unchanged. It is now stated as the bound it is, "under 0.5 s", and the evidence
+      was collected again.
+
 ## 3. What a second run may and may not change
 
 Because the prose rounds and a second run moves, `benchmark/check-claims.mjs` holds every figure the

@@ -114,7 +114,7 @@ One 250 MiB file; baseline (file selected, nothing read) ≈ 66 MiB:
    (`TypeError`); there is no way to feed it pieces. At 250 MiB the renderer peaked about 500 MiB above baseline
    — the file, twice.
 2. **The digest blocked the calling thread.** `file.arrayBuffer()` and `digest()` were measured separately
-   on the page thread, each under a 4 ms heartbeat: reading 250 MiB took 0.1–0.25 s and left the thread free
+   on the page thread, each under a 4 ms heartbeat: reading 250 MiB took under 0.5 s and left the thread free
    (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**. An
    asynchronous signature is not an asynchronous implementation. This is one browser build; why it behaves
    so was not investigated.

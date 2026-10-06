@@ -95,8 +95,8 @@ const CLAIMS = [
     ] },
     { doc: A, quote: 'between chunks (under 60 ms)', checks: all('cancel latency at 4 MiB ms', cancel(4096), under(60)) },
     { doc: A, quote: 'the renderer peaked about 500 MiB above baseline', checks: [c('subtle-main peak above baseline MiB', single(250, 'subtle-main').rendererPeakWorkingSetMiB - baseline, near(500))] },
-    { doc: A, quote: 'reading 250 MiB took 0.1–0.25 s and left the thread free (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**', checks: [
-        ...all('read 250 MiB ms', split(250).map((r) => r.fileArrayBuffer.ms), between(100, 250)),
+    { doc: A, quote: 'reading 250 MiB took under 0.5 s and left the thread free (≈ 5 ms gaps); the digest took ≈ 0.75 s and **the thread was unavailable for all of it**', checks: [
+        ...all('read 250 MiB ms', split(250).map((r) => r.fileArrayBuffer.ms), under(500)),
         ...all('gap during read ms', split(250).map((r) => r.fileArrayBuffer.mainThread.maxGapMs), under(15)),
         ...all('digest 250 MiB ms', split(250).map((r) => r.subtleDigest.ms), near(750)),
         ...all('gap during digest / digest time', split(250).map((r) => r.subtleDigest.mainThread.maxGapMs / r.subtleDigest.ms), between(0.95, 1.05)),
