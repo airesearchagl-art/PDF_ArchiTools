@@ -1,14 +1,14 @@
 {
   "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. BROWSER evidence (Chrome for Testing, headless).",
   "runtime": "browser",
-  "startedAt": "2026-10-05T12:14:24.287Z",
+  "startedAt": "2026-10-06T22:12:49.094Z",
   "browserVersion": "Chrome/143.0.7499.169",
   "secureContext": {
     "env": {
       "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36",
       "hardwareConcurrency": 24,
       "deviceMemoryGiB": 8,
-      "origin": "http://127.0.0.1:53746",
+      "origin": "http://127.0.0.1:54202",
       "isSecureContext": true,
       "crossOriginIsolated": false,
       "cryptoSubtleDigest": "function",
@@ -39,7 +39,7 @@
         "digestAfterIsEmptyDigest": true
       },
       "digestLeavesInputUsable": true,
-      "fileCloneToWorkerMs": 0.4,
+      "fileCloneToWorkerMs": 0.3,
       "fileCloneBytes": 10485760,
       "uuidFromGetRandomValues": true
     }
@@ -50,7 +50,7 @@
       "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36",
       "hardwareConcurrency": 24,
       "deviceMemoryGiB": null,
-      "origin": "http://insecure.test:53746",
+      "origin": "http://insecure.test:54202",
       "isSecureContext": false,
       "crossOriginIsolated": false,
       "cryptoSubtleDigest": "undefined",
@@ -79,17 +79,17 @@
       "subtle-worker": {
         "ok": false,
         "workerReply": "failed",
-        "totalMs": 7.1
+        "totalMs": 7
       },
       "stream-worker": {
         "ok": true,
         "workerReply": "done",
-        "totalMs": 50.7
+        "totalMs": 49.1
       },
       "stream-main": {
         "ok": true,
         "workerReply": null,
-        "totalMs": 50.7
+        "totalMs": 49.7
       }
     }
   },
@@ -98,13 +98,13 @@
       "selected": {
         "name": "mutable-appended.bin",
         "size": 1048576,
-        "lastModified": 1791202724889,
+        "lastModified": 1791324987054,
         "type": "application/octet-stream"
       },
       "afterChange": {
         "name": "mutable-appended.bin",
         "sizeReportedByFileObject": 1048576,
-        "lastModified": 1791202724889,
+        "lastModified": 1791324987054,
         "sliceError": "NotReadableError",
         "wholeError": "NotReadableError",
         "streamError": "NotReadableError"
@@ -114,13 +114,13 @@
       "selected": {
         "name": "mutable-overwritten-same-size.bin",
         "size": 1048576,
-        "lastModified": 1791202725465,
+        "lastModified": 1791324987580,
         "type": "application/octet-stream"
       },
       "afterChange": {
         "name": "mutable-overwritten-same-size.bin",
         "sizeReportedByFileObject": 1048576,
-        "lastModified": 1791202725465,
+        "lastModified": 1791324987580,
         "sliceError": "NotReadableError",
         "wholeError": "NotReadableError",
         "streamError": "NotReadableError"
@@ -130,13 +130,13 @@
       "selected": {
         "name": "mutable-deleted.bin",
         "size": 1048576,
-        "lastModified": 1791202726058,
+        "lastModified": 1791324988082,
         "type": "application/octet-stream"
       },
       "afterChange": {
         "name": "mutable-deleted.bin",
         "sizeReportedByFileObject": 1048576,
-        "lastModified": 1791202726058,
+        "lastModified": 1791324988082,
         "sliceError": "NotFoundError",
         "wholeError": "NotFoundError",
         "streamError": "NotFoundError"
@@ -148,15 +148,15 @@
       "input": "deep nesting, 1,000,000 levels",
       "inputMiB": 1.91,
       "jsonParse": "parsed",
-      "parseMs": 80.1,
-      "jsHeapGrowthMiB": 28.6,
+      "parseMs": 71,
+      "jsHeapGrowthMiB": 28.5,
       "recursiveWalk": "RangeError"
     },
     {
       "input": "array of 3,999,990 empty objects",
       "inputMiB": 11.44,
       "jsonParse": "parsed",
-      "parseMs": 223.7,
+      "parseMs": 206,
       "jsHeapGrowthMiB": 104.4,
       "recursiveWalk": "walked"
     },
@@ -164,7 +164,7 @@
       "input": "array of 10,000,000 empty objects",
       "inputMiB": 28.61,
       "jsonParse": "parsed",
-      "parseMs": 1401.6,
+      "parseMs": 1363,
       "jsHeapGrowthMiB": 320.3,
       "recursiveWalk": "walked"
     }
@@ -172,28 +172,28 @@
   "projectOpenAndSaveOnPageThread": [
     {
       "sheets": 200,
-      "bytes": 361951,
+      "bytes": 364094,
       "open": {
         "status": "ACCEPTED",
-        "ms": 8.9,
+        "ms": 7.9,
         "stages": {
           "decodeMs": 0.5,
-          "scanMs": 4,
+          "scanMs": 3.8,
           "parseMs": 0.5,
-          "schemaMs": 2,
-          "relationsMs": 1
+          "schemaMs": 1.6,
+          "relationsMs": 0.7
         },
         "mainThread": {
-          "maxGapMs": 9.2,
+          "maxGapMs": 8.1,
           "gapsOver50Ms": 0,
           "longTasks": 0,
           "longestTaskMs": 0
         }
       },
       "save": {
-        "ms": 4.6,
+        "ms": 5.1,
         "mainThread": {
-          "maxGapMs": 4.7,
+          "maxGapMs": 5.2,
           "gapsOver50Ms": 0,
           "longTasks": 0,
           "longestTaskMs": 0
@@ -202,28 +202,28 @@
     },
     {
       "sheets": 1000,
-      "bytes": 1839296,
+      "bytes": 1850745,
       "open": {
         "status": "ACCEPTED",
-        "ms": 21.9,
+        "ms": 23.1,
         "stages": {
-          "decodeMs": 2.6,
-          "scanMs": 7.3,
+          "decodeMs": 2.5,
+          "scanMs": 7.4,
           "parseMs": 2,
-          "schemaMs": 3.6,
-          "relationsMs": 2.8
+          "schemaMs": 4.3,
+          "relationsMs": 3.2
         },
         "mainThread": {
-          "maxGapMs": 21.9,
+          "maxGapMs": 23.3,
           "gapsOver50Ms": 0,
           "longTasks": 0,
           "longestTaskMs": 0
         }
       },
       "save": {
-        "ms": 18.3,
+        "ms": 17.7,
         "mainThread": {
-          "maxGapMs": 18.4,
+          "maxGapMs": 17.8,
           "gapsOver50Ms": 0,
           "longTasks": 0,
           "longestTaskMs": 0
@@ -232,31 +232,31 @@
     },
     {
       "sheets": 5000,
-      "bytes": 9121063,
+      "bytes": 9176842,
       "open": {
         "status": "ACCEPTED",
-        "ms": 106.7,
+        "ms": 108.7,
         "stages": {
-          "decodeMs": 12.4,
-          "scanMs": 34.2,
-          "parseMs": 10.8,
-          "schemaMs": 17.7,
-          "relationsMs": 18.1
+          "decodeMs": 12.7,
+          "scanMs": 34.6,
+          "parseMs": 10.6,
+          "schemaMs": 19,
+          "relationsMs": 18.7
         },
         "mainThread": {
-          "maxGapMs": 98.8,
+          "maxGapMs": 100.6,
           "gapsOver50Ms": 1,
           "longTasks": 0,
           "longestTaskMs": 0
         }
       },
       "save": {
-        "ms": 103.8,
+        "ms": 98.1,
         "mainThread": {
-          "maxGapMs": 104,
+          "maxGapMs": 98.3,
           "gapsOver50Ms": 1,
           "longTasks": 1,
-          "longestTaskMs": 104
+          "longestTaskMs": 98
         }
       }
     }
@@ -269,60 +269,60 @@
         "domNodes": 452,
         "heightPx": 1430,
         "buildMs": 0.5,
-        "layoutMs": 2.8,
+        "layoutMs": 3.1,
         "restyleAllMs": 1.2,
-        "editOneRowMs": 0.2,
-        "jsHeapGrowthMiB": 0.1
+        "editOneRowMs": 0.1,
+        "jsHeapGrowthMiB": 0
       },
       {
         "rows": 200,
         "domNodes": 1802,
         "heightPx": 5719,
-        "buildMs": 0.6,
-        "layoutMs": 6.2,
-        "restyleAllMs": 5.2,
-        "editOneRowMs": 0.5,
+        "buildMs": 0.8,
+        "layoutMs": 4.8,
+        "restyleAllMs": 4.3,
+        "editOneRowMs": 0.4,
         "jsHeapGrowthMiB": 0.2
       },
       {
         "rows": 500,
         "domNodes": 4502,
         "heightPx": 14297,
-        "buildMs": 1.8,
-        "layoutMs": 14.9,
-        "restyleAllMs": 14.1,
-        "editOneRowMs": 1.4,
+        "buildMs": 1.6,
+        "layoutMs": 12.5,
+        "restyleAllMs": 13,
+        "editOneRowMs": 1.1,
         "jsHeapGrowthMiB": 0.2
       },
       {
         "rows": 1000,
         "domNodes": 9002,
         "heightPx": 28594,
-        "buildMs": 5.2,
-        "layoutMs": 31.5,
-        "restyleAllMs": 31.4,
-        "editOneRowMs": 2.4,
-        "jsHeapGrowthMiB": -0.7
+        "buildMs": 4.7,
+        "layoutMs": 28.5,
+        "restyleAllMs": 27.8,
+        "editOneRowMs": 2.3,
+        "jsHeapGrowthMiB": -0.6
       },
       {
         "rows": 5000,
         "domNodes": 45002,
         "heightPx": 142969,
-        "buildMs": 18.1,
-        "layoutMs": 167.2,
-        "restyleAllMs": 154.4,
-        "editOneRowMs": 16.3,
-        "jsHeapGrowthMiB": 0.2
+        "buildMs": 17.1,
+        "layoutMs": 150.5,
+        "restyleAllMs": 140.9,
+        "editOneRowMs": 12.7,
+        "jsHeapGrowthMiB": 0.9
       },
       {
         "rows": 20000,
         "domNodes": 180002,
         "heightPx": 571875,
-        "buildMs": 58.8,
-        "layoutMs": 616.3,
-        "restyleAllMs": 611.8,
-        "editOneRowMs": 63.5,
-        "jsHeapGrowthMiB": 0.2
+        "buildMs": 58.5,
+        "layoutMs": 607.9,
+        "restyleAllMs": 606.5,
+        "editOneRowMs": 63,
+        "jsHeapGrowthMiB": 1.8
       }
     ]
   }

@@ -1,12 +1,12 @@
 {
   "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Synthetic files. BROWSER evidence (Chrome for Testing, headless) -- not a Node measurement.",
   "runtime": "browser",
-  "startedAt": "2026-10-05T12:14:24.287Z",
+  "startedAt": "2026-10-06T22:12:49.094Z",
   "environment": {
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36",
     "hardwareConcurrency": 24,
     "deviceMemoryGiB": 8,
-    "origin": "http://127.0.0.1:53746",
+    "origin": "http://127.0.0.1:54202",
     "isSecureContext": true,
     "crossOriginIsolated": false,
     "cryptoSubtleDigest": "function",
@@ -27,7 +27,7 @@
     "cpu": "Intel(R) Core(TM) Ultra 9 285K",
     "logicalCpus": 24,
     "totalMemoryGiB": 63.4,
-    "freeMemoryGiBAtStart": 5.9,
+    "freeMemoryGiBAtStart": 15.6,
     "node": "v24.15.0"
   },
   "methods": {
@@ -38,92 +38,92 @@
     {
       "sizeMiB": 10,
       "method": "stream-worker",
-      "medianMs": 61.3,
-      "minMs": 59.5,
-      "maxMs": 63.4,
+      "medianMs": 57,
+      "minMs": 56.9,
+      "maxMs": 59.8,
       "runs": 3,
-      "MiBPerSecond": 163,
-      "maxMainThreadGapMs": 5.1,
+      "MiBPerSecond": 175,
+      "maxMainThreadGapMs": 5.3,
       "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 87.4,
-      "rendererPeakCommitMiB": 47.6,
-      "browserProcessPeakWorkingSetMiB": 117.1,
-      "allProcessesPeakWorkingSetSumMiB": 471.9
+      "rendererPeakWorkingSetMiB": 87.5,
+      "rendererPeakCommitMiB": 49,
+      "browserProcessPeakWorkingSetMiB": 117.9,
+      "allProcessesPeakWorkingSetSumMiB": 471.1
     },
     {
       "sizeMiB": 10,
       "method": "byob-worker",
-      "medianMs": 55.1,
-      "minMs": 53.2,
-      "maxMs": 55.7,
+      "medianMs": 54.2,
+      "minMs": 50.7,
+      "maxMs": 54.3,
       "runs": 3,
-      "MiBPerSecond": 181,
-      "maxMainThreadGapMs": 5.6,
+      "MiBPerSecond": 185,
+      "maxMainThreadGapMs": 5.5,
       "longestTaskMs": 0,
       "rendererPeakWorkingSetMiB": 84.3,
-      "rendererPeakCommitMiB": 44.5,
+      "rendererPeakCommitMiB": 44.7,
       "browserProcessPeakWorkingSetMiB": 116.3,
-      "allProcessesPeakWorkingSetSumMiB": 468.7
+      "allProcessesPeakWorkingSetSumMiB": 468.3
     },
     {
       "sizeMiB": 100,
       "method": "stream-worker",
-      "medianMs": 466.1,
-      "minMs": 462.3,
-      "maxMs": 469.6,
-      "runs": 3,
-      "MiBPerSecond": 215,
-      "maxMainThreadGapMs": 6,
-      "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 125.5,
-      "rendererPeakCommitMiB": 90.1,
-      "browserProcessPeakWorkingSetMiB": 120.7,
-      "allProcessesPeakWorkingSetSumMiB": 516.3
-    },
-    {
-      "sizeMiB": 100,
-      "method": "byob-worker",
-      "medianMs": 409.1,
-      "minMs": 408,
-      "maxMs": 411.6,
-      "runs": 3,
-      "MiBPerSecond": 244,
-      "maxMainThreadGapMs": 5.7,
-      "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 85.5,
-      "rendererPeakCommitMiB": 44.6,
-      "browserProcessPeakWorkingSetMiB": 119.4,
-      "allProcessesPeakWorkingSetSumMiB": 469.2
-    },
-    {
-      "sizeMiB": 250,
-      "method": "stream-worker",
-      "medianMs": 1146.8,
-      "minMs": 1141.1,
-      "maxMs": 1149.5,
+      "medianMs": 459.3,
+      "minMs": 456.7,
+      "maxMs": 463.1,
       "runs": 3,
       "MiBPerSecond": 218,
-      "maxMainThreadGapMs": 5.6,
+      "maxMainThreadGapMs": 5.7,
       "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 161.9,
-      "rendererPeakCommitMiB": 121.9,
-      "browserProcessPeakWorkingSetMiB": 138.9,
-      "allProcessesPeakWorkingSetSumMiB": 602.3
+      "rendererPeakWorkingSetMiB": 125.2,
+      "rendererPeakCommitMiB": 88.6,
+      "browserProcessPeakWorkingSetMiB": 118.8,
+      "allProcessesPeakWorkingSetSumMiB": 513.6
+    },
+    {
+      "sizeMiB": 100,
+      "method": "byob-worker",
+      "medianMs": 399.6,
+      "minMs": 398.4,
+      "maxMs": 400.1,
+      "runs": 3,
+      "MiBPerSecond": 250,
+      "maxMainThreadGapMs": 5.9,
+      "longestTaskMs": 0,
+      "rendererPeakWorkingSetMiB": 82.8,
+      "rendererPeakCommitMiB": 41.5,
+      "browserProcessPeakWorkingSetMiB": 118.9,
+      "allProcessesPeakWorkingSetSumMiB": 468.1
+    },
+    {
+      "sizeMiB": 250,
+      "method": "stream-worker",
+      "medianMs": 1122.4,
+      "minMs": 1120.6,
+      "maxMs": 1127,
+      "runs": 3,
+      "MiBPerSecond": 223,
+      "maxMainThreadGapMs": 5.9,
+      "longestTaskMs": 0,
+      "rendererPeakWorkingSetMiB": 159.2,
+      "rendererPeakCommitMiB": 118.9,
+      "browserProcessPeakWorkingSetMiB": 137.6,
+      "allProcessesPeakWorkingSetSumMiB": 597.5
     },
     {
       "sizeMiB": 250,
       "method": "byob-worker",
-      "medianMs": 979,
-      "minMs": 974.1,
-      "maxMs": 984.1,
+      "medianMs": 968.7,
+      "minMs": 968.2,
+      "maxMs": 977.1,
       "runs": 3,
-      "MiBPerSecond": 255,
-      "maxMainThreadGapMs": 5.9,
+      "MiBPerSecond": 258,
+      "maxMainThreadGapMs": 6,
       "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 87,
-      "rendererPeakCommitMiB": 47.4,
-      "browserProcessPeakWorkingSetMiB": 137.8,
-      "allProcessesPeakWorkingSetSumMiB": 524.9
+      "rendererPeakWorkingSetMiB": 84,
+      "rendererPeakCommitMiB": 42.9,
+      "browserProcessPeakWorkingSetMiB": 135.2,
+      "allProcessesPeakWorkingSetSumMiB": 525.4
     }
   ],
   "multiFileSequential": [
@@ -132,34 +132,34 @@
       "eachMiB": 25,
       "totalMiB": 500,
       "method": "stream-worker",
-      "medianMs": 2381.5,
-      "minMs": 2326.4,
-      "maxMs": 2436.6,
+      "medianMs": 2342.8,
+      "minMs": 2288.4,
+      "maxMs": 2397.1,
       "runs": 2,
-      "MiBPerSecond": 210,
+      "MiBPerSecond": 213,
       "maxMainThreadGapMs": 6.1,
       "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 155.6,
-      "rendererPeakCommitMiB": 119.4,
-      "browserProcessPeakWorkingSetMiB": 140.7,
-      "allProcessesPeakWorkingSetSumMiB": 600.8
+      "rendererPeakWorkingSetMiB": 157.8,
+      "rendererPeakCommitMiB": 118,
+      "browserProcessPeakWorkingSetMiB": 140.2,
+      "allProcessesPeakWorkingSetSumMiB": 599.3
     },
     {
       "files": 20,
       "eachMiB": 25,
       "totalMiB": 500,
       "method": "byob-worker",
-      "medianMs": 2027.6,
-      "minMs": 2019.9,
-      "maxMs": 2035.3,
+      "medianMs": 1984.8,
+      "minMs": 1973.7,
+      "maxMs": 1995.9,
       "runs": 2,
-      "MiBPerSecond": 247,
-      "maxMainThreadGapMs": 6,
+      "MiBPerSecond": 252,
+      "maxMainThreadGapMs": 26.4,
       "longestTaskMs": 0,
-      "rendererPeakWorkingSetMiB": 113.9,
-      "rendererPeakCommitMiB": 80.1,
-      "browserProcessPeakWorkingSetMiB": 138,
-      "allProcessesPeakWorkingSetSumMiB": 548.5
+      "rendererPeakWorkingSetMiB": 114,
+      "rendererPeakCommitMiB": 76.6,
+      "browserProcessPeakWorkingSetMiB": 137.8,
+      "allProcessesPeakWorkingSetSumMiB": 551.8
     }
   ],
   "oneShotPageThreadSplit": {
@@ -169,7 +169,7 @@
         "sizeMiB": 100,
         "bytes": 104857600,
         "fileArrayBuffer": {
-          "ms": 57.1,
+          "ms": 56.3,
           "mainThread": {
             "maxGapMs": 5,
             "gapsOver50Ms": 0,
@@ -178,12 +178,12 @@
           }
         },
         "subtleDigest": {
-          "ms": 297.4,
+          "ms": 296.3,
           "mainThread": {
-            "maxGapMs": 299,
+            "maxGapMs": 297,
             "gapsOver50Ms": 1,
             "longTasks": 1,
-            "longestTaskMs": 297
+            "longestTaskMs": 296
           }
         }
       },
@@ -191,21 +191,21 @@
         "sizeMiB": 100,
         "bytes": 104857600,
         "fileArrayBuffer": {
-          "ms": 61.4,
+          "ms": 54.9,
           "mainThread": {
-            "maxGapMs": 5.1,
+            "maxGapMs": 5.6,
             "gapsOver50Ms": 0,
             "longTasks": 0,
             "longestTaskMs": 0
           }
         },
         "subtleDigest": {
-          "ms": 333.2,
+          "ms": 295.5,
           "mainThread": {
-            "maxGapMs": 333.8,
+            "maxGapMs": 296.3,
             "gapsOver50Ms": 1,
             "longTasks": 1,
-            "longestTaskMs": 333
+            "longestTaskMs": 295
           }
         }
       },
@@ -213,29 +213,7 @@
         "sizeMiB": 100,
         "bytes": 104857600,
         "fileArrayBuffer": {
-          "ms": 57.5,
-          "mainThread": {
-            "maxGapMs": 5.5,
-            "gapsOver50Ms": 0,
-            "longTasks": 0,
-            "longestTaskMs": 0
-          }
-        },
-        "subtleDigest": {
-          "ms": 299.6,
-          "mainThread": {
-            "maxGapMs": 300.2,
-            "gapsOver50Ms": 1,
-            "longTasks": 1,
-            "longestTaskMs": 299
-          }
-        }
-      },
-      {
-        "sizeMiB": 250,
-        "bytes": 262144000,
-        "fileArrayBuffer": {
-          "ms": 169.2,
+          "ms": 54.3,
           "mainThread": {
             "maxGapMs": 5,
             "gapsOver50Ms": 0,
@@ -244,12 +222,12 @@
           }
         },
         "subtleDigest": {
-          "ms": 836.8,
+          "ms": 334.2,
           "mainThread": {
-            "maxGapMs": 837.4,
+            "maxGapMs": 336,
             "gapsOver50Ms": 1,
             "longTasks": 1,
-            "longestTaskMs": 836
+            "longestTaskMs": 334
           }
         }
       },
@@ -257,21 +235,21 @@
         "sizeMiB": 250,
         "bytes": 262144000,
         "fileArrayBuffer": {
-          "ms": 162.8,
+          "ms": 135.2,
           "mainThread": {
-            "maxGapMs": 5,
+            "maxGapMs": 5.2,
             "gapsOver50Ms": 0,
             "longTasks": 0,
             "longestTaskMs": 0
           }
         },
         "subtleDigest": {
-          "ms": 754.1,
+          "ms": 743.1,
           "mainThread": {
-            "maxGapMs": 754.9,
+            "maxGapMs": 743.8,
             "gapsOver50Ms": 1,
             "longTasks": 1,
-            "longestTaskMs": 754
+            "longestTaskMs": 743
           }
         }
       },
@@ -279,21 +257,43 @@
         "sizeMiB": 250,
         "bytes": 262144000,
         "fileArrayBuffer": {
-          "ms": 146.1,
+          "ms": 132.9,
           "mainThread": {
-            "maxGapMs": 4.9,
+            "maxGapMs": 4.8,
             "gapsOver50Ms": 0,
             "longTasks": 0,
             "longestTaskMs": 0
           }
         },
         "subtleDigest": {
-          "ms": 833.8,
+          "ms": 736.2,
           "mainThread": {
-            "maxGapMs": 834.2,
+            "maxGapMs": 736.9,
             "gapsOver50Ms": 1,
             "longTasks": 1,
-            "longestTaskMs": 833
+            "longestTaskMs": 736
+          }
+        }
+      },
+      {
+        "sizeMiB": 250,
+        "bytes": 262144000,
+        "fileArrayBuffer": {
+          "ms": 143.7,
+          "mainThread": {
+            "maxGapMs": 4.7,
+            "gapsOver50Ms": 0,
+            "longTasks": 0,
+            "longestTaskMs": 0
+          }
+        },
+        "subtleDigest": {
+          "ms": 744.4,
+          "mainThread": {
+            "maxGapMs": 745.3,
+            "gapsOver50Ms": 1,
+            "longTasks": 1,
+            "longestTaskMs": 744
           }
         }
       }

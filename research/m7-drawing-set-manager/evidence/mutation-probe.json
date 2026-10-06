@@ -1,15 +1,15 @@
 {
   "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Each probe removes one safeguard from the prototype and requires the test suite to fail.",
   "baseline": {
-    "pass": 163,
+    "pass": 201,
     "fail": 0
   },
-  "probes": 34,
-  "caught": 34,
+  "probes": 51,
+  "caught": 51,
   "missedOrNotApplied": 0,
   "prototypeFilesRestoredByteIdentical": true,
   "suiteAfterRestore": {
-    "pass": 163,
+    "pass": 201,
     "fail": 0
   },
   "results": [
@@ -61,11 +61,11 @@
       "file": "prototype/schema-subset.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 4,
+      "failingTests": 5,
       "firstFailing": [
         "an unexpected key is refused, including the ones that are special in JavaScript",
-        "the importer says about every fixture what expected.json says it must",
-        "an old file is held to its own schema before anything is converted"
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must"
       ]
     },
     {
@@ -94,8 +94,9 @@
       "file": "prototype/semantic.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 2,
+      "failingTests": 3,
       "firstFailing": [
+        "a file whose declared register does not hold together is refused whole",
         "the importer says about every fixture what expected.json says it must",
         "a duplicate id is refused for every kind of entity, and across kinds"
       ]
@@ -151,8 +152,9 @@
       "file": "prototype/project-io.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 2,
+      "failingTests": 3,
       "firstFailing": [
+        "what a session hangs on a register does not reach the file",
         "the writer is an allow-list: runtime state on the model does not reach the file",
         "the serialisation is canonical: the same model always gives the same bytes"
       ]
@@ -207,8 +209,9 @@
       "file": "prototype/currency.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 2,
+      "failingTests": 3,
       "firstFailing": [
+        "4. stale confirmation: still blocked -- by a replaced source, and by a changed profile",
         "SOURCE_CONTENT_REPLACED: only that source's sheets go stale; the other sources are untouched",
         "after a replacement, a QA run does not close what it could not look at"
       ]
@@ -218,8 +221,9 @@
       "file": "prototype/currency.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 1,
+      "failingTests": 2,
       "firstFailing": [
+        "4. stale confirmation: still blocked -- by a replaced source, and by a changed profile",
         "PROFILE_GEOMETRY_CHANGED: observations and profile-based confirmations of that profile's sheets, nothing else"
       ]
     },
@@ -235,14 +239,71 @@
       ]
     },
     {
+      "what": "FALSE_POSITIVE on QA02 lifts the metadata-confirmation requirement",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "1. unconfirmed + FALSE_POSITIVE: Final is blocked by METADATA_NOT_CONFIRMED",
+        "the exemption is per sheet: one INTENTIONAL does not cover a sheet decided FALSE_POSITIVE",
+        "the decision in force is the latest: INTENTIONAL withdrawn to FALSE_POSITIVE blocks again"
+      ]
+    },
+    {
+      "what": "any decision on QA02 lifts the metadata-confirmation requirement",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 6,
+      "firstFailing": [
+        "1. unconfirmed + FALSE_POSITIVE: Final is blocked by METADATA_NOT_CONFIRMED",
+        "ACTION_REQUIRED and HOLD do not lift the metadata requirement either",
+        "the exemption is per sheet: one INTENTIONAL does not cover a sheet decided FALSE_POSITIVE"
+      ]
+    },
+    {
+      "what": "a stale declared register still counts as current",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "a stale declared register does not block Final",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "Final does not say that QA09 was not evaluated",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "with no declared register QA09 states nothing, and that is \"not evaluable\", not a pass",
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated",
+        "withdrawing the register closes its findings: with nothing declared there is no QA09 finding"
+      ]
+    },
+    {
       "what": "Final does not require every finding to be decided",
       "file": "prototype/currency.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 2,
+      "failingTests": 4,
       "firstFailing": [
-        "completion is \"no unreviewed current finding\", not \"no findings\"",
-        "re-reading and re-confirming the replaced source supersedes its findings; the old decisions become history"
+        "the starting point: six unconfirmed sheets, six QA02 findings, nothing decided",
+        "an INTENTIONAL decision does not outlive the evidence it was made on",
+        "completion is \"no unreviewed current finding\", not \"no findings\""
       ]
     },
     {
@@ -250,8 +311,9 @@
       "file": "prototype/qa-rules.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 2,
+      "failingTests": 3,
       "firstFailing": [
+        "an INTENTIONAL decision does not outlive the evidence it was made on",
         "changed evidence supersedes: a third sheet joining a duplicate asks the question again",
         "re-reading and re-confirming the replaced source supersedes its findings; the old decisions become history"
       ]
@@ -267,15 +329,66 @@
       ]
     },
     {
+      "what": "QA09 is evaluated against a register that is not current",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "a withdrawn register leaves its QA09 findings open",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "withdrawing the register closes its findings: with nothing declared there is no QA09 finding"
+      ]
+    },
+    {
+      "what": "a QA09 finding is closed by a run that compared nothing",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "a folded spelling counts as listed",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "correspondence is the exact drawing number; a spelling that would match once folded is a hint, never a match"
+      ]
+    },
+    {
+      "what": "the Sheet list / page inventory mismatch is filed as QA09",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "QA10 (manifest): M7's own Sheet list against the pages the source actually has",
+        "a replacement with a different page count leaves the mismatch for a person and reports it"
+      ]
+    },
+    {
       "what": "a run closes findings it could not look at",
       "file": "prototype/qa-rules.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 3,
+      "failingTests": 4,
       "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated",
         "QA10: a source that is not the bytes the project remembers, and a file with a strange history",
-        "QA10 does not call an unlooked-for source abnormal, and does not close a finding it did not re-check",
-        "after a replacement, a QA run does not close what it could not look at"
+        "QA10 does not call an unlooked-for source abnormal, and does not close a finding it did not re-check"
       ]
     },
     {
@@ -294,11 +407,11 @@
       "file": "prototype/qa-rules.mjs",
       "applied": true,
       "caught": true,
-      "failingTests": 3,
+      "failingTests": 4,
       "firstFailing": [
+        "correspondence is the exact drawing number; a spelling that would match once folded is a hint, never a match",
         "exactKey trims and does nothing else, exactly like the existing register",
-        "QA01 does not merge A-101 with A101, or with its full-width spelling; QA01B asks about the latter",
-        "QA01 reports exactly the groups the register's own findDuplicates reports"
+        "QA01 does not merge A-101 with A101, or with its full-width spelling; QA01B asks about the latter"
       ]
     },
     {
@@ -339,6 +452,80 @@
       "failingTests": 1,
       "firstFailing": [
         "a live sheet cannot be assigned to a retired profile"
+      ]
+    },
+    {
+      "what": "a register row with no drawing number is declared anyway",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a declaration is refused if it names no source, no page, no region, no rows, or a row with no number"
+      ]
+    },
+    {
+      "what": "a register can be declared with no rows",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a declaration is refused if it names no source, no page, no region, no rows, or a row with no number"
+      ]
+    },
+    {
+      "what": "a dangling register entry is accepted",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "a register row naming no drawing is accepted from a file",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "a live register may hang off a retired source",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole"
+      ]
+    },
+    {
+      "what": "an empty drawing-number cell becomes a register row",
+      "file": "prototype/register-list-adapter.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "Production reconstructSelection reads a ruled list page; the adapter turns its grid into register rows",
+        "from a table a person pointed at to QA09, with the engine untouched",
+        "the adapter keeps a cell on one line, bounds it, and insists on a drawing-number column"
+      ]
+    },
+    {
+      "what": "a grid the engine could not read is offered for declaration",
+      "file": "prototype/register-list-adapter.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a scanned list page is refused by the engine, and nothing is declared from it"
       ]
     },
     {

@@ -11,9 +11,12 @@
         "activeFindings": 23,
         "decisions": 15,
         "runs": 2,
-        "compactBytes": 92156,
-        "prettyBytes": 142590,
-        "jsonValues": 3399,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 92693,
+        "prettyBytes": 143363,
+        "jsonValues": 3423,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -28,9 +31,12 @@
         "activeFindings": 96,
         "decisions": 43,
         "runs": 2,
-        "compactBytes": 361951,
-        "prettyBytes": 561267,
-        "jsonValues": 13347,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 364094,
+        "prettyBytes": 564376,
+        "jsonValues": 13444,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -45,9 +51,12 @@
         "activeFindings": 280,
         "decisions": 155,
         "runs": 2,
-        "compactBytes": 931942,
-        "prettyBytes": 1438170,
-        "jsonValues": 34140,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 938133,
+        "prettyBytes": 1447167,
+        "jsonValues": 34421,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -62,9 +71,12 @@
         "activeFindings": 519,
         "decisions": 282,
         "runs": 2,
-        "compactBytes": 1839296,
-        "prettyBytes": 2843715,
-        "jsonValues": 67493,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 1850745,
+        "prettyBytes": 2860360,
+        "jsonValues": 68013,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -79,9 +91,12 @@
         "activeFindings": 2534,
         "decisions": 1282,
         "runs": 2,
-        "compactBytes": 9121063,
-        "prettyBytes": 14116945,
-        "jsonValues": 335099,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 9176842,
+        "prettyBytes": 14198070,
+        "jsonValues": 337634,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -96,9 +111,12 @@
         "activeFindings": 2534,
         "decisions": 1282,
         "runs": 2,
-        "compactBytes": 10895953,
-        "prettyBytes": 16611785,
-        "jsonValues": 394712,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 10951732,
+        "prettyBytes": 16692910,
+        "jsonValues": 397247,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 1,
@@ -113,13 +131,36 @@
         "activeFindings": 5607,
         "decisions": 0,
         "runs": 2,
-        "compactBytes": 9987133,
-        "prettyBytes": 15293250,
-        "jsonValues": 364792,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 10110518,
+        "prettyBytes": 15472711,
+        "jsonValues": 370400,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
           "staleFindings": 25
+        }
+      },
+      {
+        "label": "5000 sheets, with a declared register",
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 2641,
+        "activeFindings": 2641,
+        "decisions": 1337,
+        "runs": 2,
+        "registerReferences": 5,
+        "registerEntries": 4898,
+        "qa09Findings": 107,
+        "compactBytes": 10168897,
+        "prettyBytes": 15888117,
+        "jsonValues": 385041,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 116
         }
       },
       {
@@ -130,9 +171,12 @@
         "activeFindings": 5253,
         "decisions": 2566,
         "runs": 2,
-        "compactBytes": 18328747,
-        "prettyBytes": 28346221,
-        "jsonValues": 672622,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 18444344,
+        "prettyBytes": 28514354,
+        "jsonValues": 677876,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -147,9 +191,12 @@
         "activeFindings": 10412,
         "decisions": 5249,
         "runs": 2,
-        "compactBytes": 36654266,
-        "prettyBytes": 56680324,
-        "jsonValues": 1344556,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 36883361,
+        "prettyBytes": 57013545,
+        "jsonValues": 1354969,
         "maxDepth": 7,
         "afterOneSourceReplaced": {
           "staleSheets": 25,
@@ -255,19 +302,19 @@
     "largestAccepted": [
       {
         "targetMiB": 16,
-        "bytes": 16252902,
+        "bytes": 16308681,
         "decisions": 1865,
         "status": "ACCEPTED"
       },
       {
         "targetMiB": 32,
-        "bytes": 33024345,
+        "bytes": 33080124,
         "decisions": 3236,
         "status": "ACCEPTED"
       },
       {
         "targetMiB": 63,
-        "bytes": 65539659,
+        "bytes": 65595438,
         "decisions": 5894,
         "status": "ACCEPTED"
       }
@@ -425,17 +472,17 @@
     "projectOpenOnPageThread": [
       {
         "sheets": 200,
-        "bytes": 361951,
+        "bytes": 364094,
         "status": "ACCEPTED"
       },
       {
         "sheets": 1000,
-        "bytes": 1839296,
+        "bytes": 1850745,
         "status": "ACCEPTED"
       },
       {
         "sheets": 5000,
-        "bytes": 9121063,
+        "bytes": 9176842,
         "status": "ACCEPTED"
       }
     ],

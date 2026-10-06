@@ -15,24 +15,24 @@
       "repeats": 5,
       "allFiveDigestsAgree": true,
       "nativeStream": {
-        "ms": 2.2,
-        "MiBPerSecond": 455
+        "ms": 2,
+        "MiBPerSecond": 500
       },
       "webcryptoOneShot": {
         "ms": 0.5,
         "MiBPerSecond": 2000
       },
       "jsIncrementalInMemory": {
-        "ms": 3.4,
-        "MiBPerSecond": 294
+        "ms": 3.3,
+        "MiBPerSecond": 303
       },
       "jsOneShotProductionDigestTs": {
         "ms": 3.7,
         "MiBPerSecond": 270
       },
       "jsIncrementalFromBlob": {
-        "ms": 5.6,
-        "MiBPerSecond": 179
+        "ms": 5.7,
+        "MiBPerSecond": 175
       }
     },
     {
@@ -40,24 +40,24 @@
       "repeats": 5,
       "allFiveDigestsAgree": true,
       "nativeStream": {
-        "ms": 7.6,
-        "MiBPerSecond": 1316
+        "ms": 7.5,
+        "MiBPerSecond": 1333
       },
       "webcryptoOneShot": {
-        "ms": 5.1,
-        "MiBPerSecond": 1961
+        "ms": 4.9,
+        "MiBPerSecond": 2041
       },
       "jsIncrementalInMemory": {
-        "ms": 33.3,
-        "MiBPerSecond": 300
+        "ms": 33.4,
+        "MiBPerSecond": 299
       },
       "jsOneShotProductionDigestTs": {
-        "ms": 35.9,
-        "MiBPerSecond": 279
+        "ms": 35.7,
+        "MiBPerSecond": 280
       },
       "jsIncrementalFromBlob": {
-        "ms": 50.8,
-        "MiBPerSecond": 197
+        "ms": 50.1,
+        "MiBPerSecond": 200
       }
     },
     {
@@ -65,24 +65,24 @@
       "repeats": 5,
       "allFiveDigestsAgree": true,
       "nativeStream": {
-        "ms": 29.7,
-        "MiBPerSecond": 1684
+        "ms": 29.2,
+        "MiBPerSecond": 1712
       },
       "webcryptoOneShot": {
-        "ms": 24.9,
-        "MiBPerSecond": 2008
+        "ms": 24.2,
+        "MiBPerSecond": 2066
       },
       "jsIncrementalInMemory": {
-        "ms": 167.6,
-        "MiBPerSecond": 298
+        "ms": 168.3,
+        "MiBPerSecond": 297
       },
       "jsOneShotProductionDigestTs": {
-        "ms": 178.6,
-        "MiBPerSecond": 280
+        "ms": 180.8,
+        "MiBPerSecond": 277
       },
       "jsIncrementalFromBlob": {
-        "ms": 260.3,
-        "MiBPerSecond": 192
+        "ms": 263.9,
+        "MiBPerSecond": 189
       }
     },
     {
@@ -90,24 +90,24 @@
       "repeats": 3,
       "allFiveDigestsAgree": true,
       "nativeStream": {
-        "ms": 60.7,
-        "MiBPerSecond": 1647
+        "ms": 59,
+        "MiBPerSecond": 1695
       },
       "webcryptoOneShot": {
-        "ms": 45.4,
-        "MiBPerSecond": 2203
+        "ms": 45.6,
+        "MiBPerSecond": 2193
       },
       "jsIncrementalInMemory": {
-        "ms": 365.7,
-        "MiBPerSecond": 273
+        "ms": 368.5,
+        "MiBPerSecond": 271
       },
       "jsOneShotProductionDigestTs": {
-        "ms": 371.6,
-        "MiBPerSecond": 269
+        "ms": 376.4,
+        "MiBPerSecond": 266
       },
       "jsIncrementalFromBlob": {
-        "ms": 524.7,
-        "MiBPerSecond": 191
+        "ms": 528.6,
+        "MiBPerSecond": 189
       }
     },
     {
@@ -115,24 +115,24 @@
       "repeats": 3,
       "allFiveDigestsAgree": true,
       "nativeStream": {
-        "ms": 148.9,
-        "MiBPerSecond": 1679
+        "ms": 139.9,
+        "MiBPerSecond": 1787
       },
       "webcryptoOneShot": {
-        "ms": 119.7,
-        "MiBPerSecond": 2089
+        "ms": 116.2,
+        "MiBPerSecond": 2151
       },
       "jsIncrementalInMemory": {
-        "ms": 875.7,
-        "MiBPerSecond": 285
+        "ms": 884.1,
+        "MiBPerSecond": 283
       },
       "jsOneShotProductionDigestTs": {
-        "ms": 939.3,
-        "MiBPerSecond": 266
+        "ms": 949.1,
+        "MiBPerSecond": 263
       },
       "jsIncrementalFromBlob": {
-        "ms": 1325.8,
-        "MiBPerSecond": 189
+        "ms": 1339,
+        "MiBPerSecond": 187
       }
     }
   ]

@@ -1,12 +1,12 @@
 {
   "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Synthetic data. BROWSER evidence (Chrome for Testing, headless), page thread.",
   "runtime": "browser",
-  "startedAt": "2026-10-05T12:14:24.287Z",
+  "startedAt": "2026-10-06T22:12:49.094Z",
   "environment": {
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36",
     "hardwareConcurrency": 24,
     "deviceMemoryGiB": 8,
-    "origin": "http://127.0.0.1:53746",
+    "origin": "http://127.0.0.1:54202",
     "isSecureContext": true,
     "crossOriginIsolated": false,
     "cryptoSubtleDigest": "function",
@@ -27,7 +27,7 @@
     "cpu": "Intel(R) Core(TM) Ultra 9 285K",
     "logicalCpus": 24,
     "totalMemoryGiB": 63.4,
-    "freeMemoryGiBAtStart": 5.9,
+    "freeMemoryGiBAtStart": 15.6,
     "node": "v24.15.0"
   },
   "units": "milliseconds; each figure is the median of `repeats` runs after one discarded warm-up",
@@ -44,26 +44,29 @@
         "findings": 23,
         "activeFindings": 23,
         "decisions": 15,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 92156,
-        "prettyBytes": 142590,
-        "bytesPerSheet": 1843,
-        "jsonValues": 3399,
+        "compactBytes": 92693,
+        "prettyBytes": 143363,
+        "bytesPerSheet": 1854,
+        "jsonValues": 3423,
         "maxDepth": 7
       },
-      "buildMs": 5.7,
+      "buildMs": 5.6,
       "save": {
         "exportTotal": {
-          "medianMs": 1,
+          "medianMs": 0.9,
           "minMs": 0.7,
           "maxMs": 1.1,
           "repeats": 9
         },
         "jsonStringifyOnly": {
           "medianMs": 0.1,
-          "minMs": 0,
+          "minMs": 0.1,
           "maxMs": 0.2,
           "repeats": 9
         }
@@ -71,12 +74,12 @@
       "open": {
         "importTotal": {
           "medianMs": 1.1,
-          "minMs": 0.9,
+          "minMs": 0.8,
           "maxMs": 1.4,
           "repeats": 9
         },
         "stageMedians": {
-          "decodeMs": 0.1,
+          "decodeMs": 0.2,
           "scanMs": 0.4,
           "parseMs": 0.1,
           "schemaMs": 0.2,
@@ -86,14 +89,14 @@
       "qa": {
         "evaluateAllRules": {
           "medianMs": 0.4,
-          "minMs": 0.2,
-          "maxMs": 0.6,
+          "minMs": 0.3,
+          "maxMs": 0.5,
           "repeats": 9
         },
         "evaluateAndReconcileNoChange": {
           "medianMs": 0.3,
           "minMs": 0.2,
-          "maxMs": 0.5,
+          "maxMs": 0.6,
           "repeats": 9
         },
         "duplicateNumberDetectionOnly": {
@@ -145,7 +148,7 @@
         "currencyOfEverything": {
           "medianMs": 0,
           "minMs": 0,
-          "maxMs": 0.2,
+          "maxMs": 0.1,
           "repeats": 9
         },
         "finalReadiness": {
@@ -174,62 +177,65 @@
         "findings": 96,
         "activeFindings": 96,
         "decisions": 43,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 361951,
-        "prettyBytes": 561267,
-        "bytesPerSheet": 1810,
-        "jsonValues": 13347,
+        "compactBytes": 364094,
+        "prettyBytes": 564376,
+        "bytesPerSheet": 1820,
+        "jsonValues": 13444,
         "maxDepth": 7
       },
-      "buildMs": 2.9,
+      "buildMs": 2.8,
       "save": {
         "exportTotal": {
-          "medianMs": 2.9,
-          "minMs": 2.7,
-          "maxMs": 3.2,
+          "medianMs": 3.2,
+          "minMs": 2.9,
+          "maxMs": 3.8,
           "repeats": 9
         },
         "jsonStringifyOnly": {
           "medianMs": 0.2,
           "minMs": 0.1,
-          "maxMs": 0.4,
+          "maxMs": 0.3,
           "repeats": 9
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 3.8,
-          "minMs": 3.4,
-          "maxMs": 4.3,
+          "medianMs": 3.6,
+          "minMs": 3.3,
+          "maxMs": 4,
           "repeats": 9
         },
         "stageMedians": {
-          "decodeMs": 0.6,
+          "decodeMs": 0.5,
           "scanMs": 1.3,
           "parseMs": 0.4,
-          "schemaMs": 0.8,
-          "relationsMs": 0.6
+          "schemaMs": 0.7,
+          "relationsMs": 0.5
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 1,
-          "minMs": 0.7,
-          "maxMs": 1.6,
+          "medianMs": 0.9,
+          "minMs": 0.8,
+          "maxMs": 1.5,
           "repeats": 9
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 1,
-          "minMs": 0.8,
-          "maxMs": 1.5,
+          "medianMs": 0.9,
+          "minMs": 0.7,
+          "maxMs": 1.6,
           "repeats": 9
         },
         "duplicateNumberDetectionOnly": {
           "medianMs": 0,
           "minMs": 0,
-          "maxMs": 0,
+          "maxMs": 0.1,
           "repeats": 9
         },
         "gapDetectionOnly": {
@@ -249,7 +255,7 @@
         "buildRows": {
           "medianMs": 0,
           "minMs": 0,
-          "maxMs": 0.2,
+          "maxMs": 0.1,
           "repeats": 9
         },
         "sortByNumber": {
@@ -273,9 +279,9 @@
       },
       "stale": {
         "currencyOfEverything": {
-          "medianMs": 0,
+          "medianMs": 0.1,
           "minMs": 0,
-          "maxMs": 0.1,
+          "maxMs": 0.5,
           "repeats": 9
         },
         "finalReadiness": {
@@ -285,7 +291,7 @@
           "repeats": 9
         },
         "afterOneSourceReplaced": {
-          "medianMs": 0.1,
+          "medianMs": 0,
           "minMs": 0,
           "maxMs": 0.1,
           "repeats": 9,
@@ -304,56 +310,59 @@
         "findings": 280,
         "activeFindings": 280,
         "decisions": 155,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 931942,
-        "prettyBytes": 1438170,
-        "bytesPerSheet": 1864,
-        "jsonValues": 34140,
+        "compactBytes": 938133,
+        "prettyBytes": 1447167,
+        "bytesPerSheet": 1876,
+        "jsonValues": 34421,
         "maxDepth": 7
       },
-      "buildMs": 7.4,
+      "buildMs": 6.4,
       "save": {
         "exportTotal": {
-          "medianMs": 7.6,
+          "medianMs": 8,
           "minMs": 7.3,
-          "maxMs": 8.4,
+          "maxMs": 8.6,
           "repeats": 7
         },
         "jsonStringifyOnly": {
           "medianMs": 0.5,
           "minMs": 0.4,
-          "maxMs": 0.6,
+          "maxMs": 1,
           "repeats": 7
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 9.2,
-          "minMs": 8.6,
-          "maxMs": 10,
+          "medianMs": 9.6,
+          "minMs": 8.8,
+          "maxMs": 10.2,
           "repeats": 7
         },
         "stageMedians": {
-          "decodeMs": 1.6,
-          "scanMs": 3.2,
-          "parseMs": 1,
+          "decodeMs": 1.5,
+          "scanMs": 3.3,
+          "parseMs": 1.1,
           "schemaMs": 1.8,
-          "relationsMs": 1.4
+          "relationsMs": 1.5
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 2.5,
-          "minMs": 2.2,
+          "medianMs": 2.8,
+          "minMs": 2.3,
           "maxMs": 3.6,
           "repeats": 7
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 2.4,
-          "minMs": 2.3,
-          "maxMs": 4.2,
+          "medianMs": 2.6,
+          "minMs": 2.2,
+          "maxMs": 4,
           "repeats": 7
         },
         "duplicateNumberDetectionOnly": {
@@ -379,25 +388,25 @@
         "buildRows": {
           "medianMs": 0.1,
           "minMs": 0,
-          "maxMs": 0.2,
+          "maxMs": 0.1,
           "repeats": 7
         },
         "sortByNumber": {
           "medianMs": 0.3,
-          "minMs": 0.3,
+          "minMs": 0.2,
           "maxMs": 0.4,
           "repeats": 7
         },
         "filterByText": {
           "medianMs": 0,
           "minMs": 0,
-          "maxMs": 0.1,
+          "maxMs": 0,
           "repeats": 7
         },
         "filterNeedsAttention": {
           "medianMs": 0,
           "minMs": 0,
-          "maxMs": 0,
+          "maxMs": 0.1,
           "repeats": 7
         }
       },
@@ -405,19 +414,19 @@
         "currencyOfEverything": {
           "medianMs": 0.1,
           "minMs": 0,
-          "maxMs": 0.2,
+          "maxMs": 0.1,
           "repeats": 7
         },
         "finalReadiness": {
           "medianMs": 0.1,
           "minMs": 0,
-          "maxMs": 0.2,
+          "maxMs": 0.1,
           "repeats": 7
         },
         "afterOneSourceReplaced": {
           "medianMs": 0.1,
           "minMs": 0,
-          "maxMs": 0.1,
+          "maxMs": 1.1,
           "repeats": 7,
           "staleSheets": 25,
           "staleFindings": 8,
@@ -434,81 +443,84 @@
         "findings": 519,
         "activeFindings": 519,
         "decisions": 282,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 1839296,
-        "prettyBytes": 2843715,
-        "bytesPerSheet": 1839,
-        "jsonValues": 67493,
+        "compactBytes": 1850745,
+        "prettyBytes": 2860360,
+        "bytesPerSheet": 1851,
+        "jsonValues": 68013,
         "maxDepth": 7
       },
-      "buildMs": 12.8,
+      "buildMs": 11.7,
       "save": {
         "exportTotal": {
-          "medianMs": 15.2,
-          "minMs": 14.7,
-          "maxMs": 15.9,
+          "medianMs": 14.9,
+          "minMs": 14.3,
+          "maxMs": 15.5,
           "repeats": 7
         },
         "jsonStringifyOnly": {
-          "medianMs": 1,
-          "minMs": 0.8,
-          "maxMs": 1.1,
+          "medianMs": 1.4,
+          "minMs": 1,
+          "maxMs": 2,
           "repeats": 7
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 18.6,
-          "minMs": 17.8,
-          "maxMs": 20.8,
+          "medianMs": 18,
+          "minMs": 17.1,
+          "maxMs": 21,
           "repeats": 7
         },
         "stageMedians": {
           "decodeMs": 3,
-          "scanMs": 6.8,
+          "scanMs": 6.4,
           "parseMs": 2,
           "schemaMs": 3.5,
-          "relationsMs": 3
+          "relationsMs": 2.9
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 5.1,
-          "minMs": 3.8,
-          "maxMs": 7.7,
+          "medianMs": 5.3,
+          "minMs": 4.4,
+          "maxMs": 7,
           "repeats": 7
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 5.1,
-          "minMs": 4.2,
+          "medianMs": 5.8,
+          "minMs": 4.7,
           "maxMs": 8,
           "repeats": 7
         },
         "duplicateNumberDetectionOnly": {
-          "medianMs": 0.1,
+          "medianMs": 0,
           "minMs": 0,
-          "maxMs": 0.1,
+          "maxMs": 0.2,
           "repeats": 7
         },
         "gapDetectionOnly": {
           "medianMs": 0.2,
           "minMs": 0.1,
-          "maxMs": 3.5,
+          "maxMs": 0.3,
           "repeats": 7
         },
         "comparisonKeyAll": {
           "medianMs": 0.1,
           "minMs": 0,
-          "maxMs": 0.1,
+          "maxMs": 0.2,
           "repeats": 7
         }
       },
       "list": {
         "buildRows": {
-          "medianMs": 0.2,
-          "minMs": 0,
+          "medianMs": 0.1,
+          "minMs": 0.1,
           "maxMs": 0.2,
           "repeats": 7
         },
@@ -519,7 +531,7 @@
           "repeats": 7
         },
         "filterByText": {
-          "medianMs": 0,
+          "medianMs": 0.1,
           "minMs": 0,
           "maxMs": 0.1,
           "repeats": 7
@@ -534,20 +546,20 @@
       "stale": {
         "currencyOfEverything": {
           "medianMs": 0.1,
-          "minMs": 0.1,
+          "minMs": 0,
           "maxMs": 0.2,
           "repeats": 7
         },
         "finalReadiness": {
-          "medianMs": 0.2,
+          "medianMs": 0.1,
           "minMs": 0.1,
           "maxMs": 0.2,
           "repeats": 7
         },
         "afterOneSourceReplaced": {
-          "medianMs": 0.2,
+          "medianMs": 0.1,
           "minMs": 0.1,
-          "maxMs": 0.4,
+          "maxMs": 0.2,
           "repeats": 7,
           "staleSheets": 25,
           "staleFindings": 10,
@@ -564,87 +576,90 @@
         "findings": 2534,
         "activeFindings": 2534,
         "decisions": 1282,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 9121063,
-        "prettyBytes": 14116945,
-        "bytesPerSheet": 1824,
-        "jsonValues": 335099,
+        "compactBytes": 9176842,
+        "prettyBytes": 14198070,
+        "bytesPerSheet": 1835,
+        "jsonValues": 337634,
         "maxDepth": 7
       },
-      "buildMs": 111.5,
+      "buildMs": 113.7,
       "save": {
         "exportTotal": {
-          "medianMs": 95.5,
-          "minMs": 94.9,
-          "maxMs": 98.2,
+          "medianMs": 96.9,
+          "minMs": 94.3,
+          "maxMs": 97.7,
           "repeats": 5
         },
         "jsonStringifyOnly": {
-          "medianMs": 26.1,
-          "minMs": 25.3,
-          "maxMs": 26.9,
+          "medianMs": 28.6,
+          "minMs": 28.1,
+          "maxMs": 28.8,
           "repeats": 5
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 93.8,
-          "minMs": 88.5,
-          "maxMs": 96,
+          "medianMs": 91,
+          "minMs": 89.4,
+          "maxMs": 93.4,
           "repeats": 5
         },
         "stageMedians": {
-          "decodeMs": 16.8,
-          "scanMs": 33.3,
-          "parseMs": 9.8,
-          "schemaMs": 17.5,
-          "relationsMs": 15.7
+          "decodeMs": 15.2,
+          "scanMs": 32.3,
+          "parseMs": 9.9,
+          "schemaMs": 17.9,
+          "relationsMs": 14.4
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 27.6,
-          "minMs": 24.3,
-          "maxMs": 34.3,
+          "medianMs": 27.4,
+          "minMs": 24.9,
+          "maxMs": 33.2,
           "repeats": 5
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 29.8,
-          "minMs": 27.6,
-          "maxMs": 30.7,
+          "medianMs": 29.1,
+          "minMs": 26.2,
+          "maxMs": 29.6,
           "repeats": 5
         },
         "duplicateNumberDetectionOnly": {
           "medianMs": 0.2,
           "minMs": 0.2,
-          "maxMs": 0.4,
+          "maxMs": 0.3,
           "repeats": 5
         },
         "gapDetectionOnly": {
           "medianMs": 1,
           "minMs": 0.9,
-          "maxMs": 1.1,
+          "maxMs": 1.2,
           "repeats": 5
         },
         "comparisonKeyAll": {
           "medianMs": 0.4,
-          "minMs": 0.4,
-          "maxMs": 3.4,
+          "minMs": 0.3,
+          "maxMs": 0.5,
           "repeats": 5
         }
       },
       "list": {
         "buildRows": {
-          "medianMs": 0.7,
+          "medianMs": 0.8,
           "minMs": 0.7,
           "maxMs": 0.8,
           "repeats": 5
         },
         "sortByNumber": {
-          "medianMs": 5,
-          "minMs": 4.9,
+          "medianMs": 5.2,
+          "minMs": 5,
           "maxMs": 5.2,
           "repeats": 5
         },
@@ -655,7 +670,7 @@
           "repeats": 5
         },
         "filterNeedsAttention": {
-          "medianMs": 0.1,
+          "medianMs": 0,
           "minMs": 0,
           "maxMs": 0.1,
           "repeats": 5
@@ -663,21 +678,21 @@
       },
       "stale": {
         "currencyOfEverything": {
-          "medianMs": 0.5,
+          "medianMs": 0.6,
           "minMs": 0.5,
           "maxMs": 0.7,
           "repeats": 5
         },
         "finalReadiness": {
           "medianMs": 0.8,
-          "minMs": 0.7,
-          "maxMs": 2.3,
+          "minMs": 0.6,
+          "maxMs": 0.9,
           "repeats": 5
         },
         "afterOneSourceReplaced": {
-          "medianMs": 1.1,
-          "minMs": 1,
-          "maxMs": 1.8,
+          "medianMs": 1,
+          "minMs": 0.7,
+          "maxMs": 1.5,
           "repeats": 5,
           "staleSheets": 25,
           "staleFindings": 9,
@@ -694,68 +709,71 @@
         "findings": 2534,
         "activeFindings": 2534,
         "decisions": 1282,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 10895953,
-        "prettyBytes": 16611785,
-        "bytesPerSheet": 2179,
-        "jsonValues": 394712,
+        "compactBytes": 10951732,
+        "prettyBytes": 16692910,
+        "bytesPerSheet": 2190,
+        "jsonValues": 397247,
         "maxDepth": 7
       },
-      "buildMs": 404.9,
+      "buildMs": 411.5,
       "save": {
         "exportTotal": {
-          "medianMs": 121.1,
-          "minMs": 113.7,
-          "maxMs": 133.2,
+          "medianMs": 123.7,
+          "minMs": 112.8,
+          "maxMs": 133.9,
           "repeats": 5
         },
         "jsonStringifyOnly": {
-          "medianMs": 21.1,
-          "minMs": 19.7,
+          "medianMs": 20.5,
+          "minMs": 19.3,
           "maxMs": 23.2,
           "repeats": 5
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 136.8,
-          "minMs": 131.7,
-          "maxMs": 147.8,
+          "medianMs": 131.7,
+          "minMs": 119,
+          "maxMs": 151.4,
           "repeats": 5
         },
         "stageMedians": {
-          "decodeMs": 15.9,
-          "scanMs": 49.5,
-          "parseMs": 13.6,
-          "schemaMs": 29.8,
-          "relationsMs": 26.1
+          "decodeMs": 12.3,
+          "scanMs": 53.8,
+          "parseMs": 14.3,
+          "schemaMs": 27.8,
+          "relationsMs": 23.5
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 36.4,
-          "minMs": 27.5,
-          "maxMs": 38.4,
+          "medianMs": 33.3,
+          "minMs": 31.3,
+          "maxMs": 36.5,
           "repeats": 5
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 44.2,
-          "minMs": 39,
-          "maxMs": 45,
+          "medianMs": 42.5,
+          "minMs": 33.4,
+          "maxMs": 44.9,
           "repeats": 5
         },
         "duplicateNumberDetectionOnly": {
-          "medianMs": 0.2,
+          "medianMs": 0.3,
           "minMs": 0.2,
-          "maxMs": 0.3,
+          "maxMs": 2.9,
           "repeats": 5
         },
         "gapDetectionOnly": {
           "medianMs": 1.3,
-          "minMs": 1.3,
-          "maxMs": 1.4,
+          "minMs": 1.2,
+          "maxMs": 1.3,
           "repeats": 5
         },
         "comparisonKeyAll": {
@@ -767,21 +785,21 @@
       },
       "list": {
         "buildRows": {
-          "medianMs": 1.3,
-          "minMs": 1.1,
-          "maxMs": 1.7,
+          "medianMs": 0.9,
+          "minMs": 0.9,
+          "maxMs": 1.5,
           "repeats": 5
         },
         "sortByNumber": {
-          "medianMs": 7.4,
-          "minMs": 6.7,
-          "maxMs": 7.7,
+          "medianMs": 5.1,
+          "minMs": 4.9,
+          "maxMs": 6.4,
           "repeats": 5
         },
         "filterByText": {
-          "medianMs": 0.3,
-          "minMs": 0.2,
-          "maxMs": 0.5,
+          "medianMs": 0.2,
+          "minMs": 0,
+          "maxMs": 0.3,
           "repeats": 5
         },
         "filterNeedsAttention": {
@@ -793,21 +811,21 @@
       },
       "stale": {
         "currencyOfEverything": {
-          "medianMs": 0.8,
+          "medianMs": 1.3,
           "minMs": 0.8,
-          "maxMs": 0.9,
+          "maxMs": 2.9,
           "repeats": 5
         },
         "finalReadiness": {
-          "medianMs": 1.6,
-          "minMs": 1.2,
-          "maxMs": 2.1,
+          "medianMs": 1.2,
+          "minMs": 1.1,
+          "maxMs": 1.7,
           "repeats": 5
         },
         "afterOneSourceReplaced": {
-          "medianMs": 2.3,
-          "minMs": 2.1,
-          "maxMs": 2.8,
+          "medianMs": 1.8,
+          "minMs": 1.1,
+          "maxMs": 2.3,
           "repeats": 5,
           "staleSheets": 1,
           "staleFindings": 0,
@@ -824,88 +842,91 @@
         "findings": 5607,
         "activeFindings": 5607,
         "decisions": 0,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 9987133,
-        "prettyBytes": 15293250,
-        "bytesPerSheet": 1997,
-        "jsonValues": 364792,
+        "compactBytes": 10110518,
+        "prettyBytes": 15472711,
+        "bytesPerSheet": 2022,
+        "jsonValues": 370400,
         "maxDepth": 7
       },
-      "buildMs": 95.4,
+      "buildMs": 78.3,
       "save": {
         "exportTotal": {
-          "medianMs": 115.8,
-          "minMs": 111.5,
-          "maxMs": 129.2,
+          "medianMs": 101.8,
+          "minMs": 96.1,
+          "maxMs": 109.5,
           "repeats": 5
         },
         "jsonStringifyOnly": {
-          "medianMs": 19.5,
-          "minMs": 18.6,
-          "maxMs": 21.8,
+          "medianMs": 19.7,
+          "minMs": 18.9,
+          "maxMs": 21.3,
           "repeats": 5
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 125,
-          "minMs": 119.2,
-          "maxMs": 135.4,
+          "medianMs": 120.7,
+          "minMs": 107.7,
+          "maxMs": 123.8,
           "repeats": 5
         },
         "stageMedians": {
-          "decodeMs": 13.6,
-          "scanMs": 50.9,
-          "parseMs": 13.3,
-          "schemaMs": 28.9,
-          "relationsMs": 19.6
+          "decodeMs": 11.5,
+          "scanMs": 44.9,
+          "parseMs": 12.7,
+          "schemaMs": 29.6,
+          "relationsMs": 19
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 60.4,
-          "minMs": 56.4,
-          "maxMs": 62.6,
+          "medianMs": 59.6,
+          "minMs": 51.9,
+          "maxMs": 108.3,
           "repeats": 5
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 68.3,
-          "minMs": 63.9,
-          "maxMs": 71.3,
+          "medianMs": 61.3,
+          "minMs": 58.1,
+          "maxMs": 62.5,
           "repeats": 5
         },
         "duplicateNumberDetectionOnly": {
           "medianMs": 0.3,
           "minMs": 0.3,
-          "maxMs": 0.4,
+          "maxMs": 0.5,
           "repeats": 5
         },
         "gapDetectionOnly": {
-          "medianMs": 1.5,
-          "minMs": 1.2,
-          "maxMs": 1.6,
+          "medianMs": 1,
+          "minMs": 0.8,
+          "maxMs": 1.1,
           "repeats": 5
         },
         "comparisonKeyAll": {
           "medianMs": 0.4,
-          "minMs": 0.4,
-          "maxMs": 0.8,
+          "minMs": 0.3,
+          "maxMs": 0.5,
           "repeats": 5
         }
       },
       "list": {
         "buildRows": {
-          "medianMs": 1.4,
-          "minMs": 1.2,
-          "maxMs": 4,
+          "medianMs": 1.1,
+          "minMs": 0.7,
+          "maxMs": 3.9,
           "repeats": 5
         },
         "sortByNumber": {
-          "medianMs": 7.5,
-          "minMs": 7.1,
-          "maxMs": 7.6,
+          "medianMs": 7.7,
+          "minMs": 6.6,
+          "maxMs": 8.3,
           "repeats": 5
         },
         "filterByText": {
@@ -915,7 +936,7 @@
           "repeats": 5
         },
         "filterNeedsAttention": {
-          "medianMs": 0.1,
+          "medianMs": 0,
           "minMs": 0,
           "maxMs": 0.1,
           "repeats": 5
@@ -924,25 +945,158 @@
       "stale": {
         "currencyOfEverything": {
           "medianMs": 1.1,
-          "minMs": 0.9,
-          "maxMs": 1.2,
+          "minMs": 1,
+          "maxMs": 1.3,
           "repeats": 5
         },
         "finalReadiness": {
-          "medianMs": 1.3,
-          "minMs": 1,
-          "maxMs": 1.4,
+          "medianMs": 0.8,
+          "minMs": 0.7,
+          "maxMs": 0.8,
           "repeats": 5
         },
         "afterOneSourceReplaced": {
-          "medianMs": 2.3,
-          "minMs": 1.6,
-          "maxMs": 2.4,
+          "medianMs": 1.8,
+          "minMs": 1.4,
+          "maxMs": 3,
           "repeats": 5,
           "staleSheets": 25,
           "staleFindings": 25,
           "totalSheets": 5000,
           "totalFindings": 5607
+        }
+      }
+    },
+    {
+      "label": "5000 sheets, with a declared register",
+      "shape": {
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 2641,
+        "activeFindings": 2641,
+        "decisions": 1337,
+        "runs": 2,
+        "registerReferences": 5,
+        "registerEntries": 4898,
+        "qa09Findings": 107
+      },
+      "size": {
+        "compactBytes": 10168897,
+        "prettyBytes": 15888117,
+        "bytesPerSheet": 2034,
+        "jsonValues": 385041,
+        "maxDepth": 7
+      },
+      "buildMs": 147.8,
+      "save": {
+        "exportTotal": {
+          "medianMs": 116.5,
+          "minMs": 103.8,
+          "maxMs": 120.9,
+          "repeats": 5
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 20.8,
+          "minMs": 18,
+          "maxMs": 23.4,
+          "repeats": 5
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 120.2,
+          "minMs": 113.1,
+          "maxMs": 125.2,
+          "repeats": 5
+        },
+        "stageMedians": {
+          "decodeMs": 10.7,
+          "scanMs": 50.2,
+          "parseMs": 13.3,
+          "schemaMs": 24,
+          "relationsMs": 19.8
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 38.1,
+          "minMs": 36.7,
+          "maxMs": 75.7,
+          "repeats": 5
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 37.6,
+          "minMs": 34.1,
+          "maxMs": 41.3,
+          "repeats": 5
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.3,
+          "minMs": 0.3,
+          "maxMs": 0.5,
+          "repeats": 5
+        },
+        "gapDetectionOnly": {
+          "medianMs": 1.6,
+          "minMs": 1.5,
+          "maxMs": 3.4,
+          "repeats": 5
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.4,
+          "minMs": 0.3,
+          "maxMs": 0.6,
+          "repeats": 5
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 1.1,
+          "minMs": 1.1,
+          "maxMs": 1.2,
+          "repeats": 5
+        },
+        "sortByNumber": {
+          "medianMs": 5,
+          "minMs": 4.9,
+          "maxMs": 5.4,
+          "repeats": 5
+        },
+        "filterByText": {
+          "medianMs": 0.1,
+          "minMs": 0,
+          "maxMs": 0.4,
+          "repeats": 5
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0,
+          "minMs": 0,
+          "maxMs": 0.1,
+          "repeats": 5
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 1.1,
+          "minMs": 0.8,
+          "maxMs": 1.6,
+          "repeats": 5
+        },
+        "finalReadiness": {
+          "medianMs": 1.1,
+          "minMs": 1,
+          "maxMs": 1.2,
+          "repeats": 5
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 1.7,
+          "minMs": 1.3,
+          "maxMs": 2.8,
+          "repeats": 5,
+          "staleSheets": 25,
+          "staleFindings": 116,
+          "totalSheets": 5000,
+          "totalFindings": 2641
         }
       }
     },
@@ -954,120 +1108,123 @@
         "findings": 5253,
         "activeFindings": 5253,
         "decisions": 2566,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 18328747,
-        "prettyBytes": 28346221,
-        "bytesPerSheet": 1833,
-        "jsonValues": 672622,
+        "compactBytes": 18444344,
+        "prettyBytes": 28514354,
+        "bytesPerSheet": 1844,
+        "jsonValues": 677876,
         "maxDepth": 7
       },
-      "buildMs": 405.9,
+      "buildMs": 372.7,
       "save": {
         "exportTotal": {
-          "medianMs": 218.8,
-          "minMs": 202.9,
-          "maxMs": 219.8,
+          "medianMs": 201.1,
+          "minMs": 200.6,
+          "maxMs": 211.6,
           "repeats": 3
         },
         "jsonStringifyOnly": {
-          "medianMs": 44,
-          "minMs": 42.1,
-          "maxMs": 47,
+          "medianMs": 42.1,
+          "minMs": 41.8,
+          "maxMs": 43.6,
           "repeats": 3
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 229.3,
-          "minMs": 216.5,
-          "maxMs": 240.9,
+          "medianMs": 202.8,
+          "minMs": 200.6,
+          "maxMs": 214.5,
           "repeats": 3
         },
         "stageMedians": {
-          "decodeMs": 25,
-          "scanMs": 98.1,
-          "parseMs": 24.1,
-          "schemaMs": 40.7,
-          "relationsMs": 41.4
+          "decodeMs": 19.7,
+          "scanMs": 78.8,
+          "parseMs": 20.8,
+          "schemaMs": 45.7,
+          "relationsMs": 39.2
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 60,
-          "minMs": 59.6,
-          "maxMs": 63.3,
+          "medianMs": 58.5,
+          "minMs": 54.5,
+          "maxMs": 68.1,
           "repeats": 3
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 67.1,
-          "minMs": 66.9,
-          "maxMs": 73.8,
+          "medianMs": 63.9,
+          "minMs": 60.5,
+          "maxMs": 70.4,
           "repeats": 3
         },
         "duplicateNumberDetectionOnly": {
-          "medianMs": 0.9,
-          "minMs": 0.7,
-          "maxMs": 0.9,
+          "medianMs": 0.4,
+          "minMs": 0.2,
+          "maxMs": 0.4,
           "repeats": 3
         },
         "gapDetectionOnly": {
-          "medianMs": 2.8,
-          "minMs": 2.7,
-          "maxMs": 2.8,
+          "medianMs": 1.8,
+          "minMs": 1.7,
+          "maxMs": 2.1,
           "repeats": 3
         },
         "comparisonKeyAll": {
-          "medianMs": 1.5,
-          "minMs": 0.8,
-          "maxMs": 1.6,
+          "medianMs": 0.8,
+          "minMs": 0.7,
+          "maxMs": 1,
           "repeats": 3
         }
       },
       "list": {
         "buildRows": {
-          "medianMs": 2.4,
-          "minMs": 2.2,
-          "maxMs": 2.8,
+          "medianMs": 1.8,
+          "minMs": 1.6,
+          "maxMs": 1.8,
           "repeats": 3
         },
         "sortByNumber": {
-          "medianMs": 15.8,
-          "minMs": 11.7,
-          "maxMs": 19.2,
+          "medianMs": 15.7,
+          "minMs": 12.8,
+          "maxMs": 17.3,
           "repeats": 3
         },
         "filterByText": {
           "medianMs": 0.3,
           "minMs": 0.3,
-          "maxMs": 0.4,
+          "maxMs": 0.5,
           "repeats": 3
         },
         "filterNeedsAttention": {
           "medianMs": 0.1,
           "minMs": 0.1,
-          "maxMs": 0.2,
+          "maxMs": 0.1,
           "repeats": 3
         }
       },
       "stale": {
         "currencyOfEverything": {
           "medianMs": 1.8,
-          "minMs": 1.8,
-          "maxMs": 1.8,
+          "minMs": 1.7,
+          "maxMs": 1.9,
           "repeats": 3
         },
         "finalReadiness": {
           "medianMs": 2.4,
           "minMs": 2.2,
-          "maxMs": 3.2,
+          "maxMs": 2.5,
           "repeats": 3
         },
         "afterOneSourceReplaced": {
-          "medianMs": 3.8,
+          "medianMs": 3.6,
           "minMs": 3.5,
-          "maxMs": 6.2,
+          "maxMs": 4,
           "repeats": 3,
           "staleSheets": 25,
           "staleFindings": 12,
@@ -1084,94 +1241,97 @@
         "findings": 10412,
         "activeFindings": 10412,
         "decisions": 5249,
-        "runs": 2
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
       },
       "size": {
-        "compactBytes": 36654266,
-        "prettyBytes": 56680324,
-        "bytesPerSheet": 1833,
-        "jsonValues": 1344556,
+        "compactBytes": 36883361,
+        "prettyBytes": 57013545,
+        "bytesPerSheet": 1844,
+        "jsonValues": 1354969,
         "maxDepth": 7
       },
-      "buildMs": 922.8,
+      "buildMs": 906.2,
       "save": {
         "exportTotal": {
-          "medianMs": 473.7,
-          "minMs": 425.4,
-          "maxMs": 490.5,
+          "medianMs": 412.2,
+          "minMs": 364.2,
+          "maxMs": 417.3,
           "repeats": 3
         },
         "jsonStringifyOnly": {
-          "medianMs": 82.2,
-          "minMs": 80.5,
-          "maxMs": 119.9,
+          "medianMs": 88.5,
+          "minMs": 82.1,
+          "maxMs": 98.7,
           "repeats": 3
         }
       },
       "open": {
         "importTotal": {
-          "medianMs": 458,
-          "minMs": 450.4,
-          "maxMs": 463.9,
+          "medianMs": 453.6,
+          "minMs": 416.2,
+          "maxMs": 463.6,
           "repeats": 3
         },
         "stageMedians": {
-          "decodeMs": 43.2,
-          "scanMs": 178.3,
-          "parseMs": 52.2,
-          "schemaMs": 93.7,
-          "relationsMs": 84.1
+          "decodeMs": 51.1,
+          "scanMs": 163.2,
+          "parseMs": 49.7,
+          "schemaMs": 76.5,
+          "relationsMs": 76.4
         }
       },
       "qa": {
         "evaluateAllRules": {
-          "medianMs": 130.1,
-          "minMs": 121.3,
-          "maxMs": 136.2,
+          "medianMs": 118.4,
+          "minMs": 116.9,
+          "maxMs": 120.1,
           "repeats": 3
         },
         "evaluateAndReconcileNoChange": {
-          "medianMs": 137.3,
-          "minMs": 128.4,
-          "maxMs": 142.4,
+          "medianMs": 126.7,
+          "minMs": 125.1,
+          "maxMs": 130.4,
           "repeats": 3
         },
         "duplicateNumberDetectionOnly": {
-          "medianMs": 1.3,
-          "minMs": 1.3,
-          "maxMs": 1.4,
+          "medianMs": 1.4,
+          "minMs": 0.9,
+          "maxMs": 2.3,
           "repeats": 3
         },
         "gapDetectionOnly": {
-          "medianMs": 5.4,
-          "minMs": 5.3,
-          "maxMs": 5.9,
+          "medianMs": 5.2,
+          "minMs": 5.1,
+          "maxMs": 6.8,
           "repeats": 3
         },
         "comparisonKeyAll": {
-          "medianMs": 2.5,
-          "minMs": 1.5,
-          "maxMs": 3.7,
+          "medianMs": 2.7,
+          "minMs": 2.6,
+          "maxMs": 3.2,
           "repeats": 3
         }
       },
       "list": {
         "buildRows": {
-          "medianMs": 5,
-          "minMs": 4.8,
-          "maxMs": 6.2,
+          "medianMs": 4.6,
+          "minMs": 3.7,
+          "maxMs": 5.8,
           "repeats": 3
         },
         "sortByNumber": {
-          "medianMs": 39.3,
-          "minMs": 37.8,
-          "maxMs": 43,
+          "medianMs": 41.3,
+          "minMs": 41.1,
+          "maxMs": 45.2,
           "repeats": 3
         },
         "filterByText": {
-          "medianMs": 0.5,
-          "minMs": 0.4,
-          "maxMs": 0.7,
+          "medianMs": 0.8,
+          "minMs": 0.7,
+          "maxMs": 0.9,
           "repeats": 3
         },
         "filterNeedsAttention": {
@@ -1183,21 +1343,21 @@
       },
       "stale": {
         "currencyOfEverything": {
-          "medianMs": 3.6,
-          "minMs": 3.6,
-          "maxMs": 3.7,
+          "medianMs": 3.5,
+          "minMs": 3.5,
+          "maxMs": 4.1,
           "repeats": 3
         },
         "finalReadiness": {
-          "medianMs": 6.9,
-          "minMs": 5,
-          "maxMs": 7,
+          "medianMs": 3.7,
+          "minMs": 3.5,
+          "maxMs": 5,
           "repeats": 3
         },
         "afterOneSourceReplaced": {
-          "medianMs": 6.7,
-          "minMs": 6.2,
-          "maxMs": 6.8,
+          "medianMs": 6,
+          "minMs": 5.3,
+          "maxMs": 9,
           "repeats": 3,
           "staleSheets": 25,
           "staleFindings": 10,
