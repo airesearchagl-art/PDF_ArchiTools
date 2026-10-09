@@ -84,6 +84,13 @@ const ITEM_LABEL: Record<ItemState, string> = {
 /** How many per-file results to show; older ones are summarised as a count. */
 const VISIBLE_RESULTS = 200;
 
+/**
+ * One preview owner for the page, not one per visit to the workspace. Leaving
+ * the workspace still destroys its document; but a document PDF.js could not
+ * destroy outlives the workspace, and a fresh owner would open another beside it.
+ */
+const pageOwner = new PreviewDocumentOwner();
+
 export const DrawingSetWorkspace: React.FC = () => {
     const [sessionState, setSessionState] = useState<SessionState>(startSession);
     const [files, setFiles] = useState<ReadonlyMap<string, File>>(() => new Map());
@@ -93,7 +100,7 @@ export const DrawingSetWorkspace: React.FC = () => {
     const [confirm, setConfirm] = useState<Confirmation>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [showFullSha, setShowFullSha] = useState(false);
-    const [owner] = useState(() => new PreviewDocumentOwner());
+    const owner = pageOwner;
 
     // Runtime ownership. Read and written by handlers and the intake loop only.
     const sessionRef = useRef<DrawingSetSession | null>(sessionState.ok ? sessionState.session : null);

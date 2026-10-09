@@ -501,12 +501,27 @@ async function main() {
         check('removing another Source keeps the held document; removing its own destroys it',
             rel.otherRemoved.sourceId === 'A' && rel.otherRemoved.pdfLive === 1
             && rel.ownRemoved.sourceId === null && rel.ownRemoved.counts.live === 0 && rel.ownRemoved.pdfLive === 0);
-        check('a destruction PDF.js reports as failed is counted as failed, not done; the next document opens',
-            rel.afterFailure.destroyFailed === rel.beforeFailure.destroyFailed + 1 && rel.afterFailure.destroyed === rel.beforeFailure.destroyed
-            && rel.afterFailureOpen === 4 && rel.afterFailure.live === 2, JSON.stringify(rel.afterFailure));
-        check('PDF.js documents never overlapped (before the simulated failure); none left at the end',
-            rel.final.peakBeforeFailure === 1 && rel.final.pdfLive === 0,
-            `peak ${rel.final.peakBeforeFailure}, left ${rel.final.pdfLive}`);
+        // A destruction PDF.js reports as failed: its document is not known to
+        // be gone, so nothing is opened after it.
+        const [before, after, later] = [rel.beforeFailure, rel.afterFailure, rel.afterRefusals];
+        const opensNothing = (s) => s.counts.opened === before.counts.opened && s.getDocs === before.getDocs
+            && s.started === before.started && s.pdfLive === 1 && s.counts.live === 1;
+        const getDocLine = (s) => `opened ${s.counts.opened}, getDocument ${s.getDocs}, PDF.js workers started ${s.started}, live ${s.pdfLive}`;
+        check('getDocument() calls reaching PDF.js are counted, one per document the owner opened',
+            before.getDocs === before.counts.opened && before.started === before.counts.opened, getDocLine(before));
+        check('a destruction PDF.js reports as failed is counted as failed, not done; its document stays live',
+            after.counts.destroyFailed === before.counts.destroyFailed + 1 && after.counts.destroyed === before.counts.destroyed
+            && after.counts.destroyRequested === before.counts.destroyRequested + 1 && after.counts.live === 1 && after.pdfLive === 1,
+            JSON.stringify(after.counts));
+        check('after it the next document is not opened: refused, no getDocument(), no new PDF.js worker',
+            rel.refused === 'RELEASE_UNCONFIRMED' && opensNothing(after), `${rel.refused}; ${getDocLine(after)}`);
+        check('the refusal stands: later opens are refused too, even once PDF.js could destroy again',
+            rel.refusedLater.every((code) => code === 'RELEASE_UNCONFIRMED') && opensNothing(later),
+            `${JSON.stringify(rel.refusedLater)}; ${getDocLine(later)}`);
+        check('the viewer shows no page and tells the user to reload',
+            rel.viewerShown.state === 'error' && rel.viewerShown.alert.includes('再読み込み'), JSON.stringify(rel.viewerShown));
+        check('PDF.js documents never overlapped, failure included; none left once released by hand',
+            rel.final.peak === 1 && rel.final.pdfLive === 0, `peak ${rel.final.peak}, left ${rel.final.pdfLive}`);
         check('the fingerprint Workers of these reads are gone', rel.workers.live === 0);
 
         section('11. Viewer page and render cleanup (RF-35-02)');

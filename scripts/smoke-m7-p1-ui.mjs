@@ -457,6 +457,7 @@ async function main() {
         await waitIdle();
         await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 30_000 }).catch(() => { });
         const heldBeforeLeaving = await pdfDocumentsSettle(1);
+        const countsBeforeLeaving = await viewer();
         await clickNav('使い方');
         check('leaving 図面管理 destroys the preview document', heldBeforeLeaving === 1 && await pdfDocumentsSettle(0) === 0,
             `${heldBeforeLeaving} before, ${pdfDocuments()} after`);
@@ -479,6 +480,16 @@ async function main() {
         await clickNav('図面管理');
         await page.waitForSelector('[data-ds-empty]');
         check('coming back to 図面管理 starts empty (nothing was kept)', (await root()).sources === 0);
+        // The page keeps one preview owner across visits, so a document PDF.js
+        // could not destroy still stops previews after coming back.
+        await upload(fixture('p1-second-c'));
+        await waitIdle();
+        await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 30_000 }).catch(() => { });
+        const countsAfterReturn = await viewer();
+        check('coming back previews through the same owner: its counts go on, one PDF.js document held',
+            countsAfterReturn?.state === 'rendered' && Number(countsAfterReturn.opened) === Number(countsBeforeLeaving?.opened) + 1
+            && Number(countsAfterReturn.live) === 1 && await pdfDocumentsSettle(1) === 1,
+            `opened ${countsBeforeLeaving?.opened} before leaving, ${countsAfterReturn?.opened} after coming back; PDF.js documents ${pdfDocuments()}`);
 
         section('11. Privacy');
         check('no request left the machine', external.length === 0, external.join(', '));

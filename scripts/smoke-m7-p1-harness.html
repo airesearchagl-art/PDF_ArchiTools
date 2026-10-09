@@ -417,7 +417,8 @@
             },
 
             // RF-35-01: a document is opened only once the previous one is
-            // destroyed -- destroyed as PDF.js reports it, not as asked for.
+            // destroyed -- destroyed as PDF.js reports it, not as asked for --
+            // and never again after PDF.js could not destroy one.
             previewRelease: async () => {
                 const DESTROY_DELAY_MS = 500;
                 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -428,13 +429,20 @@
                 const ea = await expect(a);
                 const eb = await expect(b);
                 const ec = await expect(c);
+                // For the viewer in 5: a Source and its Sheets, taken in before
+                // PDF.js documents are counted (intake opens its own).
+                const intakeSession = createSession();
+                const intake = await intakeSource(a, { signal: new AbortController().signal, current: () => intakeSession.drawingSet });
+                if (intake.kind !== 'candidate') throw new Error(`intake: ${intake.kind}`);
 
                 // PDF.js starts a Worker for each document it opens and
                 // terminates it once the document is destroyed. Counting those
-                // measures what is really held, apart from the owner's tally.
+                // measures what is really held, apart from the owner's tally;
+                // a GetDocRequest posted to one is a getDocument() reaching PDF.js.
                 const events = [];
                 let pdfLive = 0;
                 let pdfPeak = 0;
+                let getDocs = 0;
                 const NativeWorker = window.Worker;
                 window.Worker = class extends NativeWorker {
                     constructor(url, options) {
@@ -445,6 +453,10 @@
                             pdfPeak = Math.max(pdfPeak, pdfLive);
                             events.push('document-start');
                         }
+                    }
+                    postMessage(...args) {
+                        if (this.pdfDocument && args[0]?.action === 'GetDocRequest') getDocs += 1;
+                        return super.postMessage(...args);
                     }
                     terminate() {
                         if (this.pdfDocument && !this.ended) {
@@ -508,29 +520,52 @@
                     const otherRemoved = { sourceId: owner.sourceId, pdfLive };
                     await owner.closeIfSource('A');
                     const ownRemoved = { sourceId: owner.sourceId, counts: owner.counts(), pdfLive };
-                    const peakBeforeFailure = pdfPeak;
 
-                    // 5. A destruction PDF.js reports as failed is counted as
-                    //    such, not as done; the next document still opens, and
-                    //    `live` keeps showing the one not known to be gone.
+                    // 5. A destruction PDF.js reports as failed leaves the
+                    //    document not known to be gone (PDF.js keeps its
+                    //    worker). No document is opened after it -- not by the
+                    //    next open, not later, not for the viewer -- and the
+                    //    viewer says how to recover.
+                    const held = () => ({ counts: owner.counts(), pdfLive, started: started(), getDocs });
                     const docF = await owner.open('C', c, ec);
-                    const beforeFailure = owner.counts();
+                    const beforeFailure = held();
                     transportProto.destroy = () => Promise.reject(new Error('simulated destroy failure'));
-                    const afterFailureOpen = await owner.open('A', a, ea).then((d) => d.numPages, (e) => e.code);
-                    const afterFailure = owner.counts();
+                    const refused = await owner.open('A', a, ea).then((d) => d.numPages, (e) => e.code);
+                    const afterFailure = held();
+                    // PDF.js would now destroy normally; the refusal still stands.
                     transportProto.destroy = realDestroy;
+                    const refusedLater = [];
+                    for (const [id, file, e] of [['B', b, eb], ['A', a, ea], ['C', c, ec]]) {
+                        refusedLater.push(await owner.open(id, file, e).then((d) => d.numPages, (error) => error.code));
+                    }
+                    await owner.closeIfSource('C');
+                    await owner.close();
+                    const host = document.createElement('div');
+                    host.style.width = '640px';
+                    document.body.appendChild(host);
+                    const root = createRoot(host);
+                    const { source, sheets } = intake.candidate;
+                    root.render(createElement(StrictMode, null,
+                        createElement(ReadOnlySheetViewer, { owner, source, file: a, sheet: sheets[0], pageTotal: sheets.length })));
+                    const viewerState = () => host.querySelector('[data-ds-viewer]')?.dataset.dsRenderState ?? '';
+                    const t0 = performance.now();
+                    while (!['rendered', 'error'].includes(viewerState()) && performance.now() - t0 < 15_000) await sleep(20);
+                    const viewerShown = { state: viewerState(), alert: host.querySelector('[role="alert"]')?.textContent ?? '' };
+                    root.unmount();
+                    host.remove();
+                    await owner.close();
+                    const afterRefusals = held();
                     // Release by hand what the failed destruction left behind.
                     await docF.loadingTask._transport?.destroy();
                     docF.loadingTask._worker?.destroy();
 
-                    await owner.close();
-                    const final = { counts: owner.counts(), pdfLive, peakBeforeFailure };
+                    const final = { counts: owner.counts(), pdfLive, peak: pdfPeak, getDocs };
                     return {
                         atRequest, midway, afterC, switchEvents, docCPages: docC.numPages,
                         closeAsked, closeDone, afterSecondClose,
                         rapidOutcomes, afterRapid,
                         otherRemoved, ownRemoved,
-                        beforeFailure, afterFailure, afterFailureOpen,
+                        beforeFailure, refused, afterFailure, refusedLater, viewerShown, afterRefusals,
                         final, workers: fingerprintWorkerCounts(),
                     };
                 } finally {

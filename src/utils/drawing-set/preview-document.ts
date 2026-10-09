@@ -19,6 +19,13 @@
  * stopped reading and PDF.js has finished destroying it -- so two full-size
  * preview reads, or two preview documents, never overlap. The counts tell a
  * destruction asked for apart from one PDF.js has finished.
+ *
+ * A destruction PDF.js reports as failed leaves its document running (PDF.js
+ * keeps that document's worker), so nothing says it is gone. From then on the
+ * owner opens no document at all: every preview is refused with how to
+ * recover -- reload the page, which ends every worker. The workspace keeps one
+ * owner for the whole page, so leaving it and coming back does not get round
+ * this.
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
@@ -26,7 +33,7 @@ import { configurePdfWorker } from '../pdf-worker-source';
 import { fingerprintIntoBuffer } from './fingerprint-client';
 import { IntakeStop, READ_CHUNK_BYTES } from './intake-policy';
 
-export type PreviewErrorCode = 'READ_FAILED' | 'SOURCE_CHANGED' | 'OPEN_FAILED' | 'CLOSED';
+export type PreviewErrorCode = 'READ_FAILED' | 'SOURCE_CHANGED' | 'OPEN_FAILED' | 'CLOSED' | 'RELEASE_UNCONFIRMED';
 
 export class PreviewError extends Error {
     readonly code: PreviewErrorCode;
@@ -78,14 +85,21 @@ interface Entry {
 const closedError = (): PreviewError => new PreviewError('CLOSED', 'closed');
 const changedError = (): PreviewError => new PreviewError('SOURCE_CHANGED', '読み込んだ後にファイルの内容が変わったため、表示できません。');
 const readError = (): PreviewError => new PreviewError('READ_FAILED', 'ファイルを読み込めませんでした。ファイルが移動・変更されていないか確認してください。');
+const unconfirmedError = (): PreviewError => new PreviewError(
+    'RELEASE_UNCONFIRMED',
+    '前に表示していたPDFを閉じられたか確認できないため、プレビューを表示できません。ページを再読み込みしてください。図面一式は保存されていないため、再読み込みの後でファイルを追加し直してください。',
+);
 
 export class PreviewDocumentOwner {
     private entry: Entry | null = null;
     /**
      * Settles once every entry closed so far has stopped reading and its
-     * document, if it had one, has been destroyed. Never rejects.
+     * document, if it had one, has been destroyed -- or PDF.js has reported
+     * that it could not be, which `releaseUnconfirmed` records. Never rejects.
      */
     private released: Promise<void> = Promise.resolve();
+    /** Set for good once PDF.js could not destroy a document: none is opened after it. */
+    private releaseUnconfirmed = false;
     private readonly chunkBytes: number;
     private readonly tally = {
         opened: 0, destroyRequested: 0, destroyed: 0, destroyFailed: 0, readsStopped: 0,
@@ -119,9 +133,11 @@ export class PreviewDocumentOwner {
         const load = async (): Promise<PDFDocumentLoadingTask> => {
             try {
                 // Nothing is read, and no document opened, while an earlier
-                // one is still reading or still being destroyed.
+                // one is still reading or still being destroyed -- nor at all
+                // once one could not be destroyed.
                 await waitFor;
                 if (entry.closed) throw closedError();
+                if (this.releaseUnconfirmed) throw unconfirmedError();
                 if (file.size !== expected.byteLength) throw changedError();
                 let bytes: Uint8Array | null;
                 try {
@@ -175,7 +191,8 @@ export class PreviewDocumentOwner {
     /**
      * Destroy the held document, or stop the read in progress. Idempotent.
      * Resolves once everything closed so far has stopped reading and been
-     * destroyed by PDF.js (or PDF.js has reported the destruction failed).
+     * destroyed by PDF.js, or PDF.js has reported a destruction failed -- after
+     * which no document is opened again.
      */
     close(): Promise<void> {
         const entry = this.entry;
@@ -208,12 +225,18 @@ export class PreviewDocumentOwner {
         return { ...this.tally, live: this.tally.opened - this.tally.destroyed };
     }
 
-    /** Counted as destroyed only when PDF.js says it is. */
+    /**
+     * Counted as destroyed only when PDF.js says it is. A failure stops every
+     * later open, and is recorded before any waiting open goes on.
+     */
     private destroy(task: PDFDocumentLoadingTask): Promise<void> {
         this.tally.destroyRequested += 1;
         return task.destroy().then(
             () => { this.tally.destroyed += 1; },
-            () => { this.tally.destroyFailed += 1; },
+            () => {
+                this.tally.destroyFailed += 1;
+                this.releaseUnconfirmed = true;
+            },
         );
     }
 }
