@@ -144,8 +144,12 @@ async function main() {
                 renderedSheet: canvas?.dataset.dsRenderedSheet ?? '',
                 live: v.dataset.dsPreviewLive,
                 opened: v.dataset.dsPreviewOpened,
+                destroyRequested: v.dataset.dsPreviewDestroyRequested,
                 destroyed: v.dataset.dsPreviewDestroyed,
+                started: v.dataset.dsRenderStarted,
+                completed: v.dataset.dsRenderCompleted,
                 cancelled: v.dataset.dsRenderCancelled,
+                failed: v.dataset.dsRenderFailed,
                 cssWidth: canvas ? parseFloat(canvas.style.width) : 0,
                 zoom: v.querySelector('[data-ds-zoom-value]')?.textContent ?? '',
                 label: v.querySelector('.ds-viewer-label')?.textContent ?? '',
@@ -172,6 +176,23 @@ async function main() {
             return false;
         });
         const fingerprintWorkers = () => page.workers().filter((w) => w.url().includes('drawing-set-fingerprint')).length;
+        // PDF.js starts one Worker per open document and terminates it when
+        // the document is destroyed: what is really held, apart from the
+        // app's own counts. The peak is reset before a window worth watching.
+        const isPdfWorker = (w) => /pdf\.worker/.test(w.url());
+        const pdfDocuments = () => page.workers().filter(isPdfWorker).length;
+        const pdfSeen = { live: 0, peak: 0 };
+        page.on('workercreated', (w) => {
+            if (!isPdfWorker(w)) return;
+            pdfSeen.live += 1;
+            pdfSeen.peak = Math.max(pdfSeen.peak, pdfSeen.live);
+        });
+        page.on('workerdestroyed', (w) => { if (isPdfWorker(w)) pdfSeen.live -= 1; });
+        const pdfDocumentsSettle = async (expected, timeout = 10_000) => {
+            const t0 = Date.now();
+            while (pdfDocuments() !== expected && Date.now() - t0 < timeout) await settle(50);
+            return pdfDocuments();
+        };
 
         // ------------------------------------------------------------------
         section('1. Navigation and empty state');
@@ -280,6 +301,31 @@ async function main() {
         await waitRendered(bId);
         check('an image-only page renders', await canvasHasInk());
 
+        // Rapid Source switching while the preview reads are slowed: reads in
+        // progress stop, and a document opens only once the previous one is
+        // destroyed. No intake runs here, so every PDF.js document is the
+        // preview's.
+        const aIndex = list.find((r) => r.text.includes('p1-native-a.pdf')).index;
+        const aId = list[aIndex].id;
+        check('before rapid switching, the preview holds one PDF.js document', await pdfDocumentsSettle(1) === 1);
+        pdfSeen.peak = pdfSeen.live;
+        await page.evaluate(() => { window.__dsDelayMs = 120; });
+        for (const i of [cIndex, aIndex, cIndex, bIndex, aIndex]) {
+            await clickRow(i);
+            await settle(40);
+        }
+        await page.evaluate(() => { window.__dsDelayMs = 0; });
+        await waitRendered(aId);
+        await settle(300);
+        const rapid = await viewer();
+        check('rapid Source switching with slowed reads ends on the last choice, rendered', rapid.renderedSheet === aId && rapid.label.includes('p1-native-a.pdf'));
+        check('rapid Source switching: PDF.js documents never overlapped; one held after',
+            pdfSeen.peak <= 1 && await pdfDocumentsSettle(1) === 1, `peak ${pdfSeen.peak}, held ${pdfDocuments()}`);
+        check('the preview counts agree: every other document destroyed (not just asked), every render ended once',
+            Number(rapid.live) === 1 && Number(rapid.opened) - Number(rapid.destroyed) === 1 && rapid.destroyRequested === rapid.destroyed
+            && Number(rapid.started) === Number(rapid.completed) + Number(rapid.cancelled) + Number(rapid.failed) && rapid.failed === '0',
+            `opened ${rapid.opened}, destroy asked ${rapid.destroyRequested} / done ${rapid.destroyed}; renders ${rapid.started} = ${rapid.completed} + ${rapid.cancelled} + ${rapid.failed}`);
+
         const controls = await page.evaluate(() => {
             const el = document.querySelector('[data-ds-root]');
             const buttons = [...el.querySelectorAll('button')].map((b) => `${b.textContent} ${b.title} ${b.getAttribute('aria-label') ?? ''}`);
@@ -321,7 +367,8 @@ async function main() {
         check('its Sheets leave the list; the other files are untouched', removed.sheets === 6 && (await rows()).every((r) => !r.text.includes('p1-second-c.pdf')));
         await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 30_000 }).catch(() => { });
         const afterRemoval = await viewer();
-        check('the viewer still holds at most one document', afterRemoval && Number(afterRemoval.live) <= 1, afterRemoval?.live);
+        check('the viewer still holds at most one document', afterRemoval && Number(afterRemoval.live) <= 1 && await pdfDocumentsSettle(1) === 1,
+            `${afterRemoval?.live}; PDF.js documents ${pdfDocuments()}`);
 
         section('7. Total Sheet limit and 5000 rows');
         await upload(fixture('p1-5000-pages'));
@@ -386,11 +433,14 @@ async function main() {
         check('the old run publishes nothing: no Source, no Sheet, no result, no error',
             stale.sources === 0 && stale.sheets === 0 && stale.results.length === 0 && stale.empty, JSON.stringify(stale.results));
         check('its fingerprint Worker is gone', fingerprintWorkers() === 0, `${busyWorkers} while reading`);
+        check('no PDF.js document is left behind', await pdfDocumentsSettle(0) === 0, String(pdfDocuments()));
         await upload(fixture('p1-second-c'));
         await waitIdle();
         check('the new Drawing Set works', (await root()).sources === 1);
 
         section('9. Reset');
+        await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 30_000 }).catch(() => { });
+        const heldBeforeReset = await pdfDocumentsSettle(1);
         await page.click('[data-ds-reset]');
         await page.waitForSelector('[data-ds-confirm="reset"]');
         const resetText = await page.evaluate(() => document.querySelector('[data-ds-confirm]').textContent);
@@ -399,8 +449,17 @@ async function main() {
         await page.waitForSelector('[data-ds-empty]');
         const cleared = await root();
         check('reset clears the session', cleared.sources === 0 && cleared.sheets === 0 && cleared.results.length === 0);
+        check('reset destroys the preview document', heldBeforeReset === 1 && await pdfDocumentsSettle(0) === 0,
+            `${heldBeforeReset} before, ${pdfDocuments()} after`);
 
         section('10. The other tools');
+        await upload(fixture('p1-second-c'));
+        await waitIdle();
+        await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 30_000 }).catch(() => { });
+        const heldBeforeLeaving = await pdfDocumentsSettle(1);
+        await clickNav('使い方');
+        check('leaving 図面管理 destroys the preview document', heldBeforeLeaving === 1 && await pdfDocumentsSettle(0) === 0,
+            `${heldBeforeLeaving} before, ${pdfDocuments()} after`);
         for (const label of ['使い方', 'PDF加筆', 'PDF比較', 'PDF加工', 'PDF抽出・統合', 'PDFテキスト化']) {
             const found = await clickNav(label);
             await settle(400);
