@@ -12,8 +12,13 @@
  * Reading for the preview goes through the same chunked, cancellable path as
  * intake, and the bytes are fingerprinted again on the way: a File that no
  * longer holds the fingerprinted bytes is not shown as if it were the Source.
- * A read that is no longer wanted stops at the next chunk, and the next one
- * does not start until it has, so two full-size preview reads never overlap.
+ * A read that is no longer wanted stops at the next chunk.
+ *
+ * PDF.js destroys a document asynchronously. Nothing is read for the next
+ * document, and no document is opened, until every one closed before it has
+ * stopped reading and PDF.js has finished destroying it -- so two full-size
+ * preview reads, or two preview documents, never overlap. The counts tell a
+ * destruction asked for apart from one PDF.js has finished.
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
@@ -36,15 +41,22 @@ export class PreviewError extends Error {
 export interface PreviewCounts {
     /** Documents handed to PDF.js. */
     opened: number;
-    /** Documents destroyed again. */
+    /** Documents whose destruction has been asked for. */
+    destroyRequested: number;
+    /** Documents PDF.js has finished destroying. */
     destroyed: number;
-    /** opened - destroyed: never more than 1. */
+    /** Destructions PDF.js reported as failed. */
+    destroyFailed: number;
+    /** opened - destroyed: documents not known to be gone. */
     live: number;
     /** Reads stopped part-way because the document was no longer wanted. */
     readsStopped: number;
+    /** Renders begun; each then ends as exactly one of the next three. */
     renderStarted: number;
     renderCompleted: number;
+    /** Renders stopped part-way. */
     renderCancelled: number;
+    renderFailed: number;
 }
 
 /** What the viewer knows about the Source it wants shown. */
@@ -59,6 +71,8 @@ interface Entry {
     task: PDFDocumentLoadingTask | null;
     closed: boolean;
     controller: AbortController;
+    /** Settles once the read has stopped, however it ended. */
+    readStopped: Promise<void>;
 }
 
 const closedError = (): PreviewError => new PreviewError('CLOSED', 'closed');
@@ -67,10 +81,16 @@ const readError = (): PreviewError => new PreviewError('READ_FAILED', 'ファイ
 
 export class PreviewDocumentOwner {
     private entry: Entry | null = null;
-    /** Settles once the previous entry has stopped reading. */
-    private previousRead: Promise<void> = Promise.resolve();
+    /**
+     * Settles once every entry closed so far has stopped reading and its
+     * document, if it had one, has been destroyed. Never rejects.
+     */
+    private released: Promise<void> = Promise.resolve();
     private readonly chunkBytes: number;
-    private readonly tally = { opened: 0, destroyed: 0, readsStopped: 0, renderStarted: 0, renderCompleted: 0, renderCancelled: 0 };
+    private readonly tally = {
+        opened: 0, destroyRequested: 0, destroyed: 0, destroyFailed: 0, readsStopped: 0,
+        renderStarted: 0, renderCompleted: 0, renderCancelled: 0, renderFailed: 0,
+    };
 
     constructor(options: { chunkBytes?: number } = {}) {
         this.chunkBytes = options.chunkBytes ?? READ_CHUNK_BYTES;
@@ -84,20 +104,22 @@ export class PreviewDocumentOwner {
     /** The document of `sourceId`, opening it from `file` if it is not the one already held. */
     open(sourceId: string, file: Blob, expected: ExpectedContent): Promise<PDFDocumentProxy> {
         if (this.entry && this.entry.sourceId === sourceId) return this.entry.promise;
-        this.close();
-        const waitFor = this.previousRead;
+        void this.close();
+        const waitFor = this.released;
         let readDone: () => void = () => { };
-        this.previousRead = new Promise<void>((resolve) => { readDone = resolve; });
         const entry: Entry = {
             sourceId,
             promise: Promise.resolve(null as unknown as PDFDocumentProxy),
             task: null,
             closed: false,
             controller: new AbortController(),
+            readStopped: new Promise<void>((resolve) => { readDone = resolve; }),
         };
 
         const load = async (): Promise<PDFDocumentLoadingTask> => {
             try {
+                // Nothing is read, and no document opened, while an earlier
+                // one is still reading or still being destroyed.
                 await waitFor;
                 if (entry.closed) throw closedError();
                 if (file.size !== expected.byteLength) throw changedError();
@@ -144,37 +166,54 @@ export class PreviewDocumentOwner {
         // the Source again tries again.
         entry.promise.catch((error: unknown) => {
             if (error instanceof PreviewError && error.code === 'CLOSED') return;
-            if (this.entry === entry) this.close();
+            if (this.entry === entry) void this.close();
         });
         this.entry = entry;
         return entry.promise;
     }
 
-    /** Destroy the held document, or stop the read in progress. Idempotent. */
-    close(): void {
+    /**
+     * Destroy the held document, or stop the read in progress. Idempotent.
+     * Resolves once everything closed so far has stopped reading and been
+     * destroyed by PDF.js (or PDF.js has reported the destruction failed).
+     */
+    close(): Promise<void> {
         const entry = this.entry;
-        if (!entry) return;
-        this.entry = null;
-        entry.closed = true;
-        entry.controller.abort();
-        if (entry.task) {
-            this.tally.destroyed += 1;
-            entry.task.destroy().catch(() => { });
+        if (entry) {
+            this.entry = null;
+            entry.closed = true;
+            entry.controller.abort();
+            // A read checks `closed` after every wait and opens its document
+            // in the same step, so once closed, the entry either has its
+            // document already or never will.
+            const destroyed = entry.task ? this.destroy(entry.task) : Promise.resolve();
+            this.released = Promise.all([this.released, entry.readStopped, destroyed]).then(() => undefined);
         }
+        return this.released;
     }
 
     /** Close only if the held document belongs to `sourceId`. */
-    closeIfSource(sourceId: string): void {
-        if (this.entry?.sourceId === sourceId) this.close();
+    closeIfSource(sourceId: string): Promise<void> {
+        return this.entry?.sourceId === sourceId ? this.close() : this.released;
     }
 
-    noteRender(event: 'started' | 'completed' | 'cancelled'): void {
+    noteRender(event: 'started' | 'completed' | 'cancelled' | 'failed'): void {
         if (event === 'started') this.tally.renderStarted += 1;
         else if (event === 'completed') this.tally.renderCompleted += 1;
-        else this.tally.renderCancelled += 1;
+        else if (event === 'cancelled') this.tally.renderCancelled += 1;
+        else this.tally.renderFailed += 1;
     }
 
     counts(): PreviewCounts {
         return { ...this.tally, live: this.tally.opened - this.tally.destroyed };
+    }
+
+    /** Counted as destroyed only when PDF.js says it is. */
+    private destroy(task: PDFDocumentLoadingTask): Promise<void> {
+        this.tally.destroyRequested += 1;
+        return task.destroy().then(
+            () => { this.tally.destroyed += 1; },
+            () => { this.tally.destroyFailed += 1; },
+        );
     }
 }

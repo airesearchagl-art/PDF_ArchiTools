@@ -472,7 +472,44 @@ async function main() {
         check('a cancelled render ends as cancelled', owner.cancelled === 'RenderingCancelledException', owner.cancelled);
         check('close destroys the held document', owner.cDestroyedAfterClose && owner.afterClose.live === 0);
 
-        section('10. Privacy');
+        section('10. Preview document release (RF-35-01)');
+        const rel = await call('previewRelease');
+        // The next document starts only after the held one has ended.
+        const startsAfterEnd = (events) => {
+            const end = events.indexOf('document-end');
+            return end >= 0 && events.indexOf('document-start') > end;
+        };
+        check('asking to destroy is not counted as destroyed',
+            rel.atRequest.destroyRequested === 1 && rel.atRequest.destroyed === 0 && rel.atRequest.live === 1,
+            JSON.stringify(rel.atRequest));
+        check('while the previous document is still being destroyed, no new document is opened',
+            rel.midway.counts.opened === 1 && rel.midway.started === 1 && rel.midway.pdfLive === 1 && rel.midway.counts.destroyed === 0,
+            `opened ${rel.midway.counts.opened}, PDF.js documents started ${rel.midway.started}, live ${rel.midway.pdfLive}`);
+        check('the new document starts only after PDF.js has destroyed the previous one',
+            rel.switchEvents[0] === 'document-start' && startsAfterEnd(rel.switchEvents.slice(1)) && rel.docCPages === 3, rel.switchEvents.join(' > '));
+        check('after the switch: one document opened, one destroyed, one live',
+            rel.afterC.opened === 2 && rel.afterC.destroyed === 1 && rel.afterC.live === 1);
+        check('close() twice asks once, and resolves once PDF.js has finished',
+            rel.closeAsked.destroyRequested === rel.afterC.destroyRequested + 1 && rel.closeAsked.destroyed === rel.afterC.destroyed
+            && rel.closeDone.counts.destroyed === rel.closeDone.counts.destroyRequested && rel.closeDone.counts.live === 0 && rel.closeDone.pdfLive === 0
+            && rel.afterSecondClose.destroyRequested === rel.closeAsked.destroyRequested,
+            `asked ${rel.closeAsked.destroyRequested}/${rel.closeAsked.destroyed}, done ${rel.closeDone.counts.destroyed}, PDF.js live ${rel.closeDone.pdfLive}`);
+        check('rapid switching: only the last choice opens, after the held document is gone',
+            JSON.stringify(rel.rapidOutcomes) === JSON.stringify(['CLOSED', 'CLOSED', 4]) && rel.afterRapid.startedDuring === 1
+            && startsAfterEnd(rel.afterRapid.events) && rel.afterRapid.counts.live === 1 && rel.afterRapid.pdfLive === 1,
+            `${JSON.stringify(rel.rapidOutcomes)}; ${rel.afterRapid.events.join(' > ')}`);
+        check('removing another Source keeps the held document; removing its own destroys it',
+            rel.otherRemoved.sourceId === 'A' && rel.otherRemoved.pdfLive === 1
+            && rel.ownRemoved.sourceId === null && rel.ownRemoved.counts.live === 0 && rel.ownRemoved.pdfLive === 0);
+        check('a destruction PDF.js reports as failed is counted as failed, not done; the next document opens',
+            rel.afterFailure.destroyFailed === rel.beforeFailure.destroyFailed + 1 && rel.afterFailure.destroyed === rel.beforeFailure.destroyed
+            && rel.afterFailureOpen === 4 && rel.afterFailure.live === 2, JSON.stringify(rel.afterFailure));
+        check('PDF.js documents never overlapped (before the simulated failure); none left at the end',
+            rel.final.peakBeforeFailure === 1 && rel.final.pdfLive === 0,
+            `peak ${rel.final.peakBeforeFailure}, left ${rel.final.pdfLive}`);
+        check('the fingerprint Workers of these reads are gone', rel.workers.live === 0);
+
+        section('11. Privacy');
         const workers = await call('workers');
         check('no fingerprint Worker left running', workers.live === 0, `started ${workers.started}`);
         check('no request left the machine', external.length === 0, external.join(', '));
