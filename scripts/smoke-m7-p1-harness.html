@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>M7-P1 foundation harness</title>
+</head>
+<body>
+    <p id="state">loading</p>
+    <!--
+        Drives the Production M7-P1 modules (src/utils/drawing-set/*) in a real
+        browser, through the Vite dev server, for scripts/smoke-m7-p1.mjs. Every
+        function returns plain data; the Node side decides what passes.
+        Synthetic fixtures only (scripts/make-m7-p1-fixtures.mjs).
+    -->
+    <script type="module">
+        import { IncrementalSha256, sha256Hex } from '/src/utils/drawing-set/incremental-sha256.ts';
+        import {
+            FILE_NAME_FORBIDDEN, P1_INTAKE_LIMITS, READ_CHUNK_BYTES, checkFileName, checkPageCount, preflight,
+        } from '/src/utils/drawing-set/intake-policy.ts';
+        import {
+            TIMESTAMP_PATTERN, UUID_PATTERN, buildSourceCandidate, commitSourceCandidate, createSession, heldCounts, liveSheets, liveSources, retireSource,
+        } from '/src/utils/drawing-set/model.ts';
+        import { fingerprintIntoBuffer, fingerprintWorkerCounts, startFingerprintRun } from '/src/utils/drawing-set/fingerprint-client.ts';
+        import { intakeSource } from '/src/utils/drawing-set/source-intake.ts';
+        import { PreviewDocumentOwner } from '/src/utils/drawing-set/preview-document.ts';
+        import { computeVirtualWindow, maxWindowRows, scrollTopToReveal } from '/src/utils/drawing-set/virtual-window.ts';
+        import { hasMeaningfulText, pageBoxFacts } from '/src/utils/drawing-set/page-facts.ts';
+
+        const FIXTURES = '/test-fixtures/m7-p1';
+        const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+        const ch = (code) => String.fromCodePoint(code);
+
+        async function fixtureBytes(name) {
+            const response = await fetch(`${FIXTURES}/${name}.pdf`);
+            const type = response.headers.get('content-type') || '';
+            if (!response.ok || type.includes('text/html')) {
+                throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+            }
+            return new Uint8Array(await response.arrayBuffer());
+        }
+        // file.type is deliberately left empty: it must not matter.
+        const fixtureFile = async (name, displayName) => new File([await fixtureBytes(name)], displayName ?? `${name}.pdf`, { type: '' });
+
+        /** The same xorshift32 stream as the Node side, so both hash the same bytes. */
+        function payload(length, seed) {
+            const out = new Uint8Array(length);
+            let x = (seed >>> 0) || 1;
+            for (let i = 0; i < length; i++) {
+                x ^= x << 13; x >>>= 0;
+                x ^= x >>> 17; x >>>= 0;
+                x ^= x << 5; x >>>= 0;
+                out[i] = x & 0xff;
+            }
+            return out;
+        }
+
+        const summarize = (outcome) => {
+            switch (outcome.kind) {
+                case 'candidate':
+                    return {
+                        kind: 'candidate',
+                        source: outcome.candidate.source,
+                        sheets: outcome.candidate.sheets,
+                    };
+                case 'duplicate':
+                    return { kind: 'duplicate', sha256: outcome.sha256, existingName: outcome.existing.displayName, existingId: outcome.existing.id };
+                case 'refused':
+                    return { kind: 'refused', code: outcome.refusal.code, message: outcome.refusal.message };
+                default:
+                    return { kind: outcome.kind };
+            }
+        };
+
+        const sessions = new Map();
+        const sessionOf = (key) => {
+            if (!sessions.has(key)) sessions.set(key, createSession());
+            return sessions.get(key);
+        };
+
+        /** Intake one file into session `key` and commit it if it produced a candidate. */
+        async function intakeInto(key, file, options = {}) {
+            const session = sessionOf(key);
+            const before = session.drawingSet;
+            const phases = [];
+            let allocations = 0;
+            const controller = new AbortController();
+            const outcome = await intakeSource(file, {
+                signal: controller.signal,
+                current: () => sessionOf(key).drawingSet,
+                chunkBytes: options.chunkBytes,
+                allocate: (size) => { allocations += 1; return new Uint8Array(size); },
+                onProgress: (progress) => {
+                    phases.push(progress.phase === 'inventory' ? `inventory:${progress.pagesDone}` : progress.phase);
+                    if (options.abortAt && options.abortAt(progress)) controller.abort();
+                },
+            });
+            let commit = null;
+            if (outcome.kind === 'candidate') {
+                const result = commitSourceCandidate(session.drawingSet, outcome.candidate);
+                commit = result.kind;
+                if (result.kind === 'committed') session.drawingSet = result.drawingSet;
+            }
+            return {
+                outcome: summarize(outcome),
+                commit,
+                allocations,
+                phases: [...new Set(phases.map((p) => p.replace(/:\d+$/, '')))],
+                maxInventoryPage: Math.max(0, ...phases.filter((p) => p.startsWith('inventory:')).map((p) => Number(p.split(':')[1]))),
+                unchanged: session.drawingSet === before,
+                held: heldCounts(session.drawingSet),
+                live: { sources: liveSources(session.drawingSet).length, sheets: liveSheets(session.drawingSet).length },
+                workers: fingerprintWorkerCounts(),
+            };
+        }
+
+        window.__m7p1 = {
+            constants: () => plainly({
+                limits: P1_INTAKE_LIMITS,
+                readChunkBytes: READ_CHUNK_BYTES,
+                patterns: { fileNameForbidden: FILE_NAME_FORBIDDEN.source, uuid: UUID_PATTERN.source, timestamp: TIMESTAMP_PATTERN.source },
+            }),
+
+            shaKnown: () => {
+                const enc = (s) => new TextEncoder().encode(s);
+                const million = new Uint8Array(1_000_000).fill(0x61);
+                return {
+                    empty: sha256Hex(new Uint8Array(0)),
+                    abc: sha256Hex(enc('abc')),
+                    bits448: sha256Hex(enc('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq')),
+                    bits896: sha256Hex(enc('abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu')),
+                    millionA: sha256Hex(million),
+                };
+            },
+
+            /** Digest of payload(length, seed) fed in pieces of each size in `splits`. */
+            shaSplits: ({ lengths, splits, seed }) => {
+                const out = {};
+                for (const length of lengths) {
+                    const data = payload(length, seed + length);
+                    out[length] = {};
+                    for (const split of splits) {
+                        const hash = new IncrementalSha256();
+                        for (let offset = 0; offset < length; offset += split) hash.update(data.subarray(offset, offset + split));
+                        out[length][split] = hash.digestHex();
+                    }
+                }
+                return out;
+            },
+
+            shaFinalization: () => {
+                const hash = new IncrementalSha256().update(new Uint8Array([1, 2, 3]));
+                const first = hash.digestHex();
+                const threw = (fn) => { try { fn(); return false; } catch { return true; } };
+                const updateAfter = threw(() => hash.update(new Uint8Array([4])));
+                const digestTwice = threw(() => hash.digestHex());
+                const again = hash.reset().update(new Uint8Array([1, 2, 3])).digestHex();
+                return { first, updateAfter, digestTwice, resetSame: again === first };
+            },
+
+            /** Test evidence only: the app never uses Web Crypto to fingerprint. */
+            webCrypto: async ({ lengths, seed }) => {
+                const rows = [];
+                for (const length of lengths) {
+                    const data = payload(length, seed + length);
+                    const reference = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))]
+                        .map((b) => b.toString(16).padStart(2, '0')).join('');
+                    rows.push({ length, same: sha256Hex(data) === reference });
+                }
+                return rows;
+            },
+
+            /** The Production read + Worker path over a synthetic Blob. */
+            workerFingerprint: async ({ length, seed, chunkBytes }) => {
+                const data = payload(length, seed);
+                const blob = new Blob([data]);
+                const target = new Uint8Array(length);
+                const start = performance.now();
+                const sha256 = await fingerprintIntoBuffer(blob, target, { signal: new AbortController().signal, chunkBytes });
+                const ms = performance.now() - start;
+                let copied = target.length === data.length;
+                for (let i = 0; copied && i < data.length; i++) if (target[i] !== data[i]) copied = false;
+                return { sha256, ms, copied, workers: fingerprintWorkerCounts() };
+            },
+
+            workerCancel: async () => {
+                const data = payload(64 * 1024 * 1024, 7);
+                const blob = new Blob([data]);
+                const target = new Uint8Array(data.length);
+                const controller = new AbortController();
+                let progressCalls = 0;
+                let result;
+                try {
+                    const sha = await fingerprintIntoBuffer(blob, target, {
+                        signal: controller.signal,
+                        chunkBytes: 1024 * 1024,
+                        onProgress: () => { progressCalls += 1; if (progressCalls === 3) controller.abort(); },
+                    });
+                    result = { kind: 'digest', sha };
+                } catch (error) {
+                    result = { kind: error?.name, refusal: error?.refusal ?? null };
+                }
+                return { result, progressCalls, workers: fingerprintWorkerCounts() };
+            },
+
+            workerProtocol: async () => {
+                const out = {};
+                const run = startFingerprintRun();
+                const first = run.push(new Uint8Array([1, 2, 3]).buffer);
+                out.secondWhilePending = await run.push(new Uint8Array([4]).buffer).then(() => 'ok', (e) => e.code);
+                await first;
+                out.wrongCount = await run.finish(99).then(() => 'ok', (e) => e.code);
+                out.afterFailure = await run.push(new Uint8Array([1]).buffer).then(() => 'ok', (e) => e.code);
+                const run2 = startFingerprintRun();
+                run2.cancel();
+                out.pushAfterCancel = await run2.push(new Uint8Array([1]).buffer).then(() => 'ok', (e) => e.code);
+                const run3 = startFingerprintRun();
+                await run3.push(new Uint8Array([97, 98, 99]).buffer);
+                out.abc = await run3.finish(3).then((r) => r.sha256, (e) => e.code);
+                out.workers = fingerprintWorkerCounts();
+                return out;
+            },
+
+            policy: () => {
+                const held = { sources: 0, sheets: 0 };
+                const name = (n) => checkFileName(n)?.code ?? 'OK';
+                return {
+                    atBound: preflight({ name: 'a.pdf', size: 268435456 }, held)?.code ?? 'OK',
+                    pastBound: preflight({ name: 'a.pdf', size: 268435457 }, held)?.code ?? 'OK',
+                    zero: preflight({ name: 'a.pdf', size: 0 }, held)?.code ?? 'OK',
+                    sourcesFull: preflight({ name: 'a.pdf', size: 10 }, { sources: 5000, sheets: 0 })?.code ?? 'OK',
+                    sheetsFull: preflight({ name: 'a.pdf', size: 10 }, { sources: 1, sheets: 5000 })?.code ?? 'OK',
+                    pages5000: checkPageCount(5000, held)?.code ?? 'OK',
+                    pages5001: checkPageCount(5001, held)?.code ?? 'OK',
+                    pagesZero: checkPageCount(0, held)?.code ?? 'OK',
+                    aggregateAt: checkPageCount(4, { sources: 1, sheets: 4996 })?.code ?? 'OK',
+                    aggregatePast: checkPageCount(5, { sources: 1, sheets: 4996 })?.code ?? 'OK',
+                    names: {
+                        japanese: name('図面一覧 A-101.pdf'),
+                        len255: name('a'.repeat(251) + '.pdf'),
+                        len256: name('a'.repeat(252) + '.pdf'),
+                        astral255: name('a'.repeat(250) + ch(0x1f600) + '.pdf'),
+                        slash: name('dir/a.pdf'),
+                        backslash: name('dir' + ch(92) + 'a.pdf'),
+                        colon: name('C:a.pdf'),
+                        rlo: name('a' + ch(0x202e) + 'fdp.exe'),
+                        isolate: name('a' + ch(0x2066) + '.pdf'),
+                        lineSep: name('a' + ch(0x2028) + '.pdf'),
+                        control: name('a' + ch(10) + '.pdf'),
+                        dot: name('.'),
+                        dotdot: name('..'),
+                        blank: name('   '),
+                        empty: name(''),
+                        loneSurrogate: name('a' + String.fromCharCode(0xd800) + '.pdf'),
+                    },
+                };
+            },
+
+            pageFacts: () => {
+                const v = (view, rotate = 0, userUnit = 1) => {
+                    const r = pageBoxFacts({ view, rotate, userUnit, pageNumber: 1 });
+                    return r.ok ? `${r.uprightWidthPt}x${r.uprightHeightPt}@${r.rotate}` : r.refusal.code;
+                };
+                return {
+                    a4: v([0, 0, 595.28, 841.89]),
+                    offset: v([100, 100, 600, 500], 180),
+                    rot270: v([0, 0, 595.28, 841.89], 270),
+                    rot45: v([0, 0, 100, 100], 45),
+                    rot360: v([0, 0, 100, 100], 360),
+                    userUnit: v([0, 0, 100, 100], 0, 2),
+                    zero: v([0, 0, 0, 100]),
+                    negative: v([0, 0, -10, 100]),
+                    nan: v([0, 0, NaN, 100]),
+                    atBound: v([0, 0, 14400, 14400]),
+                    pastBound: v([0, 0, 14401, 100]),
+                    noise: v([0.1, 0.2, 595.38, 842.09]),
+                    text: {
+                        letter: hasMeaningfulText('A'),
+                        kanji: hasMeaningfulText('図'),
+                        spaces: hasMeaningfulText('  ' + ch(9) + ch(10)),
+                        ideographicSpace: hasMeaningfulText(ch(0x3000)),
+                        softHyphen: hasMeaningfulText(ch(0xad)),
+                        zeroWidth: hasMeaningfulText(ch(0x200b) + ch(0xfeff)),
+                        replacement: hasMeaningfulText(ch(0xfffd)),
+                    },
+                };
+            },
+
+            intakeFixture: async (key, name, displayName, options = {}) => {
+                const file = await fixtureFile(name, displayName);
+                return intakeInto(key, file, options);
+            },
+
+            /** A file-like object past the ceiling: it must be refused before any read or allocation. */
+            oversize: async () => {
+                let reads = 0;
+                const fake = {
+                    name: 'oversize.pdf',
+                    size: 268435457,
+                    type: '',
+                    slice() { reads += 1; throw new Error('read attempted'); },
+                    arrayBuffer() { reads += 1; throw new Error('read attempted'); },
+                };
+                const result = await intakeInto('oversize', fake);
+                return { ...result, reads };
+            },
+
+            /** Every invalid name is refused before anything is read or allocated. */
+            invalidNames: async () => {
+                const bytes = await fixtureBytes('p1-native-a');
+                const names = {
+                    slashBecomesColon: 'dir/a.pdf',
+                    rlo: 'a' + ch(0x202e) + 'fdp.pdf',
+                    dotdot: '..',
+                    blank: '   ',
+                    tooLong: 'a'.repeat(300) + '.pdf',
+                    control: 'a' + ch(10) + '.pdf',
+                };
+                const out = {};
+                for (const [label, n] of Object.entries(names)) {
+                    const result = await intakeInto('names', new File([bytes], n, { type: '' }));
+                    out[label] = { code: result.outcome.code ?? result.outcome.kind, allocations: result.allocations, storedName: new File([], n).name.length };
+                }
+                return out;
+            },
+
+            /** A Drawing Set already holding `count` synthetic Sheets (no PDF behind them). */
+            seedSheets: (key, count) => {
+                const session = sessionOf(key);
+                const pages = Array.from({ length: count }, () => ({ uprightWidthPt: 100, uprightHeightPt: 100, rotate: 0, kind: 'scanned' }));
+                const sha = 'f'.repeat(64);
+                const candidate = buildSourceCandidate({ displayName: 'seed.pdf', sha256: sha, byteLength: 1, recordedAt: new Date().toISOString(), pages });
+                const result = commitSourceCandidate(session.drawingSet, candidate);
+                if (result.kind === 'committed') session.drawingSet = result.drawingSet;
+                return { commit: result.kind, held: heldCounts(session.drawingSet) };
+            },
+
+            retire: (key, index) => {
+                const session = sessionOf(key);
+                const source = liveSources(session.drawingSet)[index];
+                const before = session.drawingSet;
+                session.drawingSet = retireSource(session.drawingSet, source.id);
+                const others = before.sources.filter((s) => s.id !== source.id);
+                const othersSame = others.every((s) => session.drawingSet.sources.find((t) => t.id === s.id) === s);
+                return {
+                    retiredName: source.displayName,
+                    held: heldCounts(session.drawingSet),
+                    live: { sources: liveSources(session.drawingSet).length, sheets: liveSheets(session.drawingSet).length },
+                    retiredSheetsLive: session.drawingSet.sheets.filter((s) => s.sourceId === source.id && s.retiredAt === null).length,
+                    othersSame,
+                };
+            },
+
+            session: (key) => plainly(sessionOf(key)),
+
+            previewOwner: async () => {
+                const owner = new PreviewDocumentOwner();
+                const a = await fixtureFile('p1-native-a');
+                const c = await fixtureFile('p1-second-c');
+                const expect = async (file) => ({ sha256: sha256Hex(new Uint8Array(await file.arrayBuffer())), byteLength: file.size });
+                const ea = await expect(a);
+                const ec = await expect(c);
+                const docA = await owner.open('A', a, ea);
+                const afterA = owner.counts();
+                const docA2 = await owner.open('A', a, ea);
+                const afterSame = owner.counts();
+                const docC = await owner.open('C', c, ec);
+                const afterC = owner.counts();
+                const aDestroyed = docA.loadingTask.destroyed;
+                const sizeMismatch = await owner.open('X', a, { ...ea, byteLength: a.size + 1 }).then(() => 'opened', (e) => e.code);
+                const shaMismatch = await owner.open('Y', a, { ...ea, sha256: 'a'.repeat(64) }).then(() => 'opened', (e) => e.code);
+                const afterMismatch = owner.counts();
+                // A failed open is not kept: the same Source can be tried again.
+                const retried = await owner.open('Y', a, ea).then((d) => (d.numPages === 4 ? 'opened' : 'wrong'), (e) => e.code);
+                const docC2 = await owner.open('C', c, ec);
+                const page = await docC2.getPage(1);
+                const canvas = document.createElement('canvas');
+                const viewport = page.getViewport({ scale: 3 });
+                canvas.width = viewport.width; canvas.height = viewport.height;
+                const task = page.render({ canvas, viewport });
+                task.cancel();
+                const cancelled = await task.promise.then(() => 'completed', (e) => e?.name);
+                owner.close();
+                const afterClose = owner.counts();
+
+                // A read no longer wanted stops part-way, and the next waits for it.
+                const slow = new PreviewDocumentOwner({ chunkBytes: 64 * 1024 });
+                const big = await fixtureFile('p1-5000-pages');
+                const eb = await expect(big);
+                // Each 64 KiB read takes at least 5 ms, so the switch below
+                // lands while the read is in progress, not before it starts.
+                const slowBig = {
+                    size: big.size,
+                    slice: (from, to) => ({
+                        arrayBuffer: async () => {
+                            await new Promise((r) => setTimeout(r, 5));
+                            return big.slice(from, to).arrayBuffer();
+                        },
+                    }),
+                };
+                const abandoned = slow.open('BIG', slowBig, eb).then(() => 'opened', (e) => e.code);
+                await new Promise((r) => setTimeout(r, 40));
+                const replacement = await slow.open('A', a, ea).then((d) => d.numPages, (e) => e.code);
+                const slowCounts = slow.counts();
+                slow.close();
+                return {
+                    sameDocReused: docA === docA2, afterA, afterSame, afterC, aDestroyed, sizeMismatch, shaMismatch, afterMismatch, retried,
+                    cDestroyedAfterClose: docC.loadingTask.destroyed, cancelled, afterClose,
+                    abandoned: await abandoned, replacement, slowCounts, workers: fingerprintWorkerCounts(),
+                };
+            },
+
+            virtual: () => {
+                const rowHeight = 48, overscan = 6, viewportHeight = 600, rowCount = 5000;
+                const bound = maxWindowRows(viewportHeight, rowHeight, overscan);
+                const at = (scrollTop) => computeVirtualWindow({ rowCount, rowHeight, scrollTop, viewportHeight, overscan });
+                const start = at(0), middle = at(2500 * rowHeight), end = at(rowCount * rowHeight), beyond = at(10_000_000), negative = at(-500);
+                const reveal = {
+                    middle: scrollTopToReveal(2500, rowHeight, 0, viewportHeight),
+                    last: scrollTopToReveal(4999, rowHeight, 0, viewportHeight),
+                    first: scrollTopToReveal(0, rowHeight, 2500 * rowHeight, viewportHeight),
+                    visible: scrollTopToReveal(3, rowHeight, 0, viewportHeight),
+                };
+                return { bound, start, middle, end, beyond, negative, reveal, empty: computeVirtualWindow({ rowCount: 0, rowHeight, scrollTop: 0, viewportHeight, overscan }) };
+            },
+
+            workers: () => fingerprintWorkerCounts(),
+        };
+
+        document.getElementById('state').textContent = 'ready';
+        window.__m7p1Ready = true;
+    </script>
+</body>
+</html>

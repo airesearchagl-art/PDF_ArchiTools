@@ -10,7 +10,8 @@
  * depended on evaluation order.
  *
  * Every production PDF.js entry point is covered here: the annotator, the
- * comparator, split/merge's extract, and the processor's monochrome.
+ * comparator, split/merge's extract, the processor's monochrome, and
+ * 図面管理's intake and read-only preview.
  *
  * split/merge's **merge** was a fifth until M6. It now reads page counts
  * through pdf-lib during intake, inside a disposable Worker, so it opens no
@@ -406,6 +407,23 @@ try {
         }
     }
 
+    // ---- 図面管理: intake and the read-only preview ------------------------
+    //
+    // M7-P1 opens every PDF through PDF.js at intake, to count and measure its
+    // pages, and again, one Source at a time, for the preview. Both must fetch
+    // the local worker.
+    console.log('\n=== 図面管理: intake and preview ===');
+    check('the tool opens', await openTool('図面管理'));
+    before = localWorkerCount();
+    await (await page.$('[data-ds-file-input]')).uploadFile(threePager, twoPager);
+    await page.waitForFunction(() => document.querySelector('[data-ds-root]')?.dataset.dsSources === '2'
+        && document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 60000 }).catch(() => { });
+    check('図面管理: both files taken in and a page rendered', await page.evaluate(() =>
+        document.querySelector('[data-ds-root]')?.dataset.dsSources === '2'
+        && document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered'));
+    check('図面管理: fetched the local worker', localWorkerCount() > before,
+        `${localWorkerCount() - before} request(s) to ${WORKER}`);
+
     // ---- where every request went ----------------------------------------
     console.log('\n=== every request the session made ===');
     const isExternal = (u) => {
@@ -416,8 +434,8 @@ try {
         } catch { return false; }
     };
     const external = requests.filter(isExternal);
-    check('every worker request was same-origin', localWorkerCount() >= 3,
-        `${localWorkerCount()} request(s) to ${WORKER} across three PDF.js paths`);
+    check('every worker request was same-origin', localWorkerCount() >= 4,
+        `${localWorkerCount()} request(s) to ${WORKER} across four PDF.js paths`);
     probe('not one went to unpkg', unpkgCount() === 0,
         unpkgCount() === 0 ? '0 requests' : `${unpkgCount()} requests`);
     probe('nor anywhere else off-origin', external.length === 0,
@@ -445,6 +463,9 @@ try {
         // The Processor's PDF.js use moved here when the orchestration was
         // split out; `pdf-processor.ts` is now a facade that renders nothing.
         ['src/utils/processor/runners.ts', 1],
+        // 図面管理: intake opens each Source once; the preview opens one at a time.
+        ['src/utils/drawing-set/source-intake.ts', 1],
+        ['src/utils/drawing-set/preview-document.ts', 1],
     ]) {
         const code = strip(sourceOf(file));
         const configured = (code.match(/configurePdfWorker\(\)/g) ?? []).length;

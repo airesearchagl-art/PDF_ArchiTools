@@ -122,6 +122,7 @@ jobs:
           node scripts/make-m6-round11-fixtures.mjs
           node scripts/make-m6-round12-fixtures.mjs
           node scripts/make-m6-round12b-fixtures.mjs
+          node scripts/make-m7-p1-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a
       # failure names itself in the job view instead of being buried in a log.
@@ -244,3 +245,23 @@ jobs:
       # evaluation order, so it is driven through the real UI of dist/.
       - name: PDF.js worker local-only
         run: node scripts/smoke-pdfjs-worker-local-only.mjs
+
+      # 図面管理 (M7-P1), the module half: the intake constants against the
+      # canonical contract (contracts/m7), the owned incremental SHA-256 against
+      # node:crypto at chunk splits around the block boundary, the fingerprint
+      # Worker and its cancellation, every intake refusal by name, atomic
+      # commit, duplicate bytes, page facts against what the generator built,
+      # and the in-memory model checked against the canonical schema and
+      # semantic contract. The 250 MiB fingerprint benchmark is local evidence,
+      # not CI.
+      - name: M7 P1 foundation
+        run: node scripts/smoke-m7-p1.mjs
+
+      # And the wiring, in the built app: the sixth navigation entry, files
+      # taken in one at a time with progress, duplicates bound once, refusals
+      # that leave accepted files alone, 5000 Sheets in a virtualized list, the
+      # read-only viewer with at most one open document, a new Drawing Set
+      # started while a file is still being read, and no request leaving the
+      # machine.
+      - name: M7 P1 UI
+        run: node scripts/smoke-m7-p1-ui.mjs
