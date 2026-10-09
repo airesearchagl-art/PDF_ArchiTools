@@ -1,0 +1,56 @@
+{
+  "contract": "pdf-architools/m7/portable-project",
+  "publication": "M7-CAN-01",
+  "status": "CANONICAL_PRE_RELEASE",
+  "architectureVersion": 1,
+  "architectureAdoptedAt": "2026-10-09",
+  "publicationAuthorizedAt": "2026-10-09",
+  "dataModelClass": "A",
+  "schemaVersion": 1,
+  "schemaId": "urn:pdf-architools:m7:portable-project:schema:1",
+  "appBaseSha": "1b5f9eda59a583a6b8fe7e07013ba38fc3053d1f",
+  "architectureRecord": {
+    "repository": "airesearchagl-art/obsidian-vault",
+    "path": "01_Projects/PDF-ArchiTools/12_M7_Architecture_v1.md",
+    "adoptionCommit": "5e69c8cd1e9ab2412ae5d536138dae8fe7981e14"
+  },
+  "researchEvidence": {
+    "repository": "airesearchagl-art/PDF_ArchiTools",
+    "pullRequest": 33,
+    "reviewedHead": "e541d1d43db3a73acceb3f8241ef914d59dc77d7",
+    "repairSourceHead": "ade59261b26c180ea2930e6a23cd64e141dfc892",
+    "role": "evidence only: read with git show; not merged, not cherry-picked, not an implementation base"
+  },
+  "schema": "portable-project.schema.json",
+  "semanticContract": "portable-project.semantic.mjs",
+  "humanContract": "semantic-contract.md",
+  "digestBasis": "SHA-256 (hex) of the committed bytes, LF line endings",
+  "files": {
+    "portable-project.schema.json": {
+      "sha256": "ccaa6530bb8260d147c2d8d8deefff8f35ebc37e648da373dfeccd87de6a16ce",
+      "source": "research/m7-drawing-set-manager/portable-project.schema.proposed.json",
+      "sourceGitBlob": "fa2748348a41b60cc535fa55a2eba1c4c252eb99",
+      "sourceSha256": "7d0d970b7a0961d4f1ea07b44fcdf7af9c72040356ff70fe6f2e3261db18e964",
+      "publicationChange": "root $id, title and description only",
+      "structuralDigest": "2fb0b3fa58d4e514afa976f3765bebb22431def7f21214be6572a90dcd1955df",
+      "structuralDigestMethod": "SHA-256 (hex) of JSON.stringify of the parsed schema with the root $id, title and description deleted, key order preserved; identical for source and publication"
+    },
+    "portable-project.semantic.mjs": {
+      "sha256": "50e054041b71aa0e63d1b917e51ff125d2a4f0534d930091bede63a43adce355",
+      "source": "research/m7-drawing-set-manager/prototype/semantic.mjs",
+      "sourceGitBlob": "151aa511b1e31e4df8d934f5efb326777ada7665",
+      "sourceSha256": "20ff9d64ba58431a047aaf585f060e81e5e000e384f26c573abdb9aa30e15e98",
+      "publicationChange": "leading header comment only",
+      "bodySha256": "8775a3211f624a53850b4f551284bc06e519c13bc24f99ac6a67192fa2e7cf33",
+      "bodyDigestMethod": "SHA-256 (hex) of the UTF-8 text, LF line endings, after the first '*/' (the end of the leading header comment); identical for source and publication"
+    }
+  },
+  "resourceLimitsStatus": "CANDIDATE_PRE_RELEASE",
+  "resourceLimitsFreezeGate": "M7-P4",
+  "separatelyAdoptedBounds": {
+    "maxFieldRawTextLength": 1000
+  },
+  "userWritableFormatReleased": false,
+  "productionRuntimeIntegration": false,
+  "productionImplementationAuthorized": false
+}
