@@ -3,6 +3,10 @@
 <head>
     <meta charset="utf-8" />
     <title>M7-P1 foundation harness</title>
+    <style>
+        /* The viewer sizes its page to its pane; the app's stylesheet is not loaded here. */
+        .ds-viewer-pane { position: relative; height: 420px; }
+    </style>
 </head>
 <body>
     <p id="state">loading</p>
@@ -25,6 +29,9 @@
         import { PreviewDocumentOwner } from '/src/utils/drawing-set/preview-document.ts';
         import { computeVirtualWindow, maxWindowRows, scrollTopToReveal } from '/src/utils/drawing-set/virtual-window.ts';
         import { hasMeaningfulText, pageBoxFacts } from '/src/utils/drawing-set/page-facts.ts';
+        import { StrictMode, createElement } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { ReadOnlySheetViewer } from '/src/components/drawing-set/ReadOnlySheetViewer.tsx';
 
         const FIXTURES = '/test-fixtures/m7-p1';
         const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
@@ -529,6 +536,161 @@
                 } finally {
                     if (transportProto && realDestroy) transportProto.destroy = realDestroy;
                     window.Worker = NativeWorker;
+                    await owner.close();
+                }
+            },
+
+            // RF-35-02: the Production viewer, mounted as the app mounts it
+            // (StrictMode), releases every page it fetched -- after the render
+            // on it has ended -- and counts a render as cancelled only when one
+            // that had started is stopped.
+            viewerLifecycle: async () => {
+                const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+                const until = async (predicate, what, timeout = 15_000) => {
+                    const t0 = performance.now();
+                    while (!predicate()) {
+                        if (performance.now() - t0 > timeout) throw new Error(`timed out waiting for ${what}`);
+                        await sleep(10);
+                    }
+                };
+                const file = await fixtureFile('p1-native-a');
+                const intakeSession = createSession();
+                const outcome = await intakeSource(file, { signal: new AbortController().signal, current: () => intakeSession.drawingSet });
+                if (outcome.kind !== 'candidate') throw new Error(`intake: ${outcome.kind}`);
+                const { source, sheets } = outcome.candidate;
+
+                // What the viewer does with each page, seen from outside:
+                // page:N when getPage(N) returns, render:N when a render
+                // starts, cleanup:N:R when cleanup() is called while R renders
+                // of that page are still running.
+                const log = [];
+                const renders = [];
+                const config = { getPageDelay: new Map(), slowRenderMs: 0, onGetPage: null, onRender: null };
+                const wrappedPages = new WeakSet();
+                const wrapPage = (page, n) => {
+                    if (wrappedPages.has(page)) return;
+                    wrappedPages.add(page);
+                    const realCleanup = page.cleanup.bind(page);
+                    page.cleanup = (...args) => {
+                        log.push(`cleanup:${n}:${renders.filter((r) => r.n === n && !r.settled).length}`);
+                        return realCleanup(...args);
+                    };
+                    const realRender = page.render.bind(page);
+                    page.render = (params) => {
+                        const task = realRender(params);
+                        const record = { n, settled: false, outcome: '' };
+                        renders.push(record);
+                        log.push(`render:${n}`);
+                        // A slow render, through PDF.js's own pause hook.
+                        if (config.slowRenderMs) {
+                            const ms = config.slowRenderMs;
+                            task.onContinue = (next) => setTimeout(next, ms);
+                        }
+                        task.promise.then(
+                            () => { record.settled = true; record.outcome = 'completed'; },
+                            (e) => { record.settled = true; record.outcome = e?.name ?? 'error'; },
+                        );
+                        config.onRender?.(n);
+                        return task;
+                    };
+                };
+                const owner = new PreviewDocumentOwner();
+                const realOpen = owner.open.bind(owner);
+                const instrumented = new WeakSet();
+                owner.open = (...args) => realOpen(...args).then((doc) => {
+                    if (!instrumented.has(doc)) {
+                        instrumented.add(doc);
+                        const realGetPage = doc.getPage.bind(doc);
+                        doc.getPage = async (n) => {
+                            config.onGetPage?.(n);
+                            const delay = config.getPageDelay.get(n) ?? 0;
+                            if (delay) await sleep(delay);
+                            const page = await realGetPage(n);
+                            wrapPage(page, n);
+                            log.push(`page:${n}`);
+                            return page;
+                        };
+                    }
+                    return doc;
+                });
+
+                const host = document.createElement('div');
+                host.style.width = '640px';
+                document.body.appendChild(host);
+                // Every Sheet the viewer ever published as rendered.
+                const shown = [];
+                const observer = new MutationObserver(() => {
+                    const value = host.querySelector('canvas')?.dataset.dsRenderedSheet;
+                    if (value && shown[shown.length - 1] !== value) shown.push(value);
+                });
+                observer.observe(host, { subtree: true, attributes: true, attributeFilter: ['data-ds-rendered-sheet'] });
+                const root = createRoot(host);
+                let mounted = true;
+                const show = (sheet) => root.render(createElement(StrictMode, null,
+                    createElement(ReadOnlySheetViewer, { owner, source, file, sheet, pageTotal: sheets.length })));
+                const renderedSheet = () => host.querySelector('canvas')?.dataset.dsRenderedSheet ?? '';
+                const rendersEnded = (n) => renders.filter((r) => r.n === n).every((r) => r.settled);
+                const asked = (key, n) => new Promise((resolve) => { config[key] = (m) => { if (m === n) resolve(); }; });
+                try {
+                    // 1. getPage() still in flight when another Sheet is chosen.
+                    config.getPageDelay.set(1, 400);
+                    const page1Asked = asked('onGetPage', 1);
+                    show(sheets[0]);
+                    await page1Asked;
+                    config.onGetPage = null;
+                    show(sheets[1]);
+                    await until(() => renderedSheet() === sheets[1].id, 'page 2 rendered');
+                    await until(() => log.includes('page:1'), 'the late page 1');
+                    await sleep(100);
+                    config.getPageDelay.clear();
+                    const late = { log: log.slice(), rendersOfLatePage: renders.filter((r) => r.n === 1).length };
+
+                    // 2. Another Sheet chosen after the render completed.
+                    const beforeDone = owner.counts();
+                    show(sheets[2]);
+                    await until(() => renderedSheet() === sheets[2].id, 'page 3 rendered');
+                    await sleep(100);
+                    const afterDone = owner.counts();
+
+                    // 3. Another Sheet chosen while a render is running.
+                    config.slowRenderMs = 250;
+                    const page4Rendering = asked('onRender', 4);
+                    const beforeRunning = owner.counts();
+                    show(sheets[3]);
+                    await page4Rendering;
+                    config.onRender = null;
+                    config.slowRenderMs = 0;
+                    show(sheets[0]);
+                    await until(() => renderedSheet() === sheets[0].id, 'page 1 rendered');
+                    await until(() => rendersEnded(4), 'the page 4 render to end');
+                    await sleep(100);
+                    const afterRunning = owner.counts();
+                    const page4Outcomes = renders.filter((r) => r.n === 4).map((r) => r.outcome);
+
+                    // 4. The viewer going away while a render is running.
+                    config.slowRenderMs = 250;
+                    const page2Rendering = asked('onRender', 2);
+                    show(sheets[1]);
+                    await page2Rendering;
+                    config.onRender = null;
+                    config.slowRenderMs = 0;
+                    const beforeUnmount = owner.counts();
+                    root.unmount();
+                    mounted = false;
+                    await until(() => rendersEnded(2), 'the page 2 render to end');
+                    await sleep(100);
+                    const afterUnmount = owner.counts();
+                    await owner.close();
+                    return {
+                        sheetIds: sheets.map((s) => s.id),
+                        late, beforeDone, afterDone, beforeRunning, afterRunning, page4Outcomes,
+                        beforeUnmount, afterUnmount, final: owner.counts(),
+                        log: log.slice(), shown: shown.slice(), workers: fingerprintWorkerCounts(),
+                    };
+                } finally {
+                    if (mounted) root.unmount();
+                    observer.disconnect();
+                    host.remove();
                     await owner.close();
                 }
             },

@@ -14,6 +14,10 @@ import { PreviewError } from '../../utils/drawing-set/preview-document';
  * the pane changed, or the viewer went away -- is cancelled, and a cancelled
  * render publishes nothing. The workspace mounts one viewer per Source (keyed
  * by its id), so nothing a viewer holds can outlive the Source it was for.
+ *
+ * Each render owns the page it fetched and cleans it up once the render has
+ * ended, however it ended -- including a page that arrives only after the
+ * viewer has moved on, which is never drawn.
  */
 
 interface Props {
@@ -89,9 +93,10 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
         const canvas = canvasRef.current;
         if (!doc || !canvas || pane.width <= 0 || pane.height <= 0) return;
         let cancelled = false;
-        let task: RenderTask | null = null;
-        let page: PDFPageProxy | null = null;
+        // The render in progress: set when it starts, cleared when it ends.
+        let running: RenderTask | null = null;
         (async () => {
+            let page: PDFPageProxy | null = null;
             try {
                 page = await doc.getPage(pageNumber);
                 if (cancelled) return;
@@ -111,24 +116,37 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
                 canvas.height = Math.max(1, Math.floor(viewport.height));
                 canvas.style.width = `${Math.round(whole.width * cssScale)}px`;
                 canvas.style.height = `${Math.round(whole.height * cssScale)}px`;
+                const task = page.render({ canvas, viewport });
+                running = task;
                 owner.noteRender('started');
-                task = page.render({ canvas, viewport });
-                await task.promise;
-                if (cancelled) return;
+                try {
+                    await task.promise;
+                } catch (error) {
+                    if ((error as { name?: string })?.name === 'RenderingCancelledException') {
+                        owner.noteRender('cancelled');
+                        return;
+                    }
+                    owner.noteRender('failed');
+                    throw error;
+                } finally {
+                    running = null;
+                }
                 owner.noteRender('completed');
+                if (cancelled) return;
                 setRender({ key: renderKey, status: 'rendered', counts: owner.counts() });
-            } catch (error) {
-                if (cancelled || (error as { name?: string })?.name === 'RenderingCancelledException') return;
+            } catch {
+                if (cancelled) return;
                 setRender({ key: renderKey, status: 'error', message: 'このページを表示できませんでした。', counts: owner.counts() });
+            } finally {
+                // After the render has ended, on every path.
+                page?.cleanup();
             }
         })();
         return () => {
             cancelled = true;
-            if (task) {
-                task.cancel();
-                owner.noteRender('cancelled');
-            }
-            page?.cleanup();
+            // Only a render still running is cancelled; it is counted, and its
+            // page cleaned up, where it ends.
+            running?.cancel();
         };
     }, [doc, owner, pageNumber, zoom, pane.width, pane.height, renderKey]);
 
@@ -147,8 +165,12 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             data-ds-render-state={status}
             data-ds-preview-live={counts?.live ?? ''}
             data-ds-preview-opened={counts?.opened ?? ''}
+            data-ds-preview-destroy-requested={counts?.destroyRequested ?? ''}
             data-ds-preview-destroyed={counts?.destroyed ?? ''}
+            data-ds-render-started={counts?.renderStarted ?? ''}
+            data-ds-render-completed={counts?.renderCompleted ?? ''}
             data-ds-render-cancelled={counts?.renderCancelled ?? ''}
+            data-ds-render-failed={counts?.renderFailed ?? ''}
         >
             <div className="ds-viewer-toolbar">
                 <span className="ds-viewer-label" title={source.displayName}>

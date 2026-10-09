@@ -509,7 +509,40 @@ async function main() {
             `peak ${rel.final.peakBeforeFailure}, left ${rel.final.pdfLive}`);
         check('the fingerprint Workers of these reads are gone', rel.workers.live === 0);
 
-        section('11. Privacy');
+        section('11. Viewer page and render cleanup (RF-35-02)');
+        const vw = await call('viewerLifecycle');
+        const [p1, p2, p3] = vw.sheetIds;
+        const cleanups = vw.log.filter((e) => e.startsWith('cleanup:'));
+        const fetchesOf = (n) => vw.log.filter((e) => e === `page:${n}`).length;
+        const cleanupsOf = (n) => cleanups.filter((e) => e.startsWith(`cleanup:${n}:`)).length;
+        const lateAt = vw.late.log.indexOf('page:1');
+        check('a page that arrives after another Sheet was chosen is cleaned up',
+            lateAt >= 0 && vw.late.log.slice(lateAt + 1).includes('cleanup:1:0'), vw.late.log.join(' '));
+        check('nothing is drawn from that late page', vw.late.rendersOfLatePage === 0);
+        check('switching after a render completed counts no cancellation',
+            vw.afterDone.renderCancelled === vw.beforeDone.renderCancelled
+            && vw.afterDone.renderStarted === vw.beforeDone.renderStarted + 1 && vw.afterDone.renderCompleted === vw.beforeDone.renderCompleted + 1,
+            `cancelled ${vw.beforeDone.renderCancelled} -> ${vw.afterDone.renderCancelled}`);
+        check('switching during a render cancels it and counts it once',
+            vw.afterRunning.renderCancelled === vw.beforeRunning.renderCancelled + 1
+            && JSON.stringify(vw.page4Outcomes) === JSON.stringify(['RenderingCancelledException'])
+            && vw.afterRunning.renderStarted === vw.beforeRunning.renderStarted + 2 && vw.afterRunning.renderCompleted === vw.beforeRunning.renderCompleted + 1,
+            `cancelled ${vw.beforeRunning.renderCancelled} -> ${vw.afterRunning.renderCancelled}; page 4 ${vw.page4Outcomes.join(',')}`);
+        check('the viewer going away during a render cancels it and counts it once',
+            vw.afterUnmount.renderCancelled === vw.beforeUnmount.renderCancelled + 1);
+        check('no page is cleaned up while a render of it is still running',
+            cleanups.length > 0 && cleanups.every((e) => e.endsWith(':0')), cleanups.join(' '));
+        check('every page fetched is cleaned up, once per fetch',
+            [1, 2, 3, 4].every((n) => fetchesOf(n) > 0 && cleanupsOf(n) === fetchesOf(n)),
+            [1, 2, 3, 4].map((n) => `p${n} ${fetchesOf(n)}/${cleanupsOf(n)}`).join(', '));
+        check('only the Sheet chosen last was ever shown as rendered',
+            JSON.stringify(vw.shown) === JSON.stringify([p2, p3, p1]), vw.shown.map((id) => `p${vw.sheetIds.indexOf(id) + 1}`).join(' > '));
+        check('every render that started ended exactly once: completed, cancelled or failed',
+            vw.final.renderStarted === vw.final.renderCompleted + vw.final.renderCancelled + vw.final.renderFailed && vw.final.renderFailed === 0,
+            `started ${vw.final.renderStarted}, completed ${vw.final.renderCompleted}, cancelled ${vw.final.renderCancelled}, failed ${vw.final.renderFailed}`);
+        check('the viewer\'s document is destroyed with its owner; no fingerprint Worker left', vw.final.live === 0 && vw.workers.live === 0);
+
+        section('12. Privacy');
         const workers = await call('workers');
         check('no fingerprint Worker left running', workers.live === 0, `started ${workers.started}`);
         check('no request left the machine', external.length === 0, external.join(', '));
