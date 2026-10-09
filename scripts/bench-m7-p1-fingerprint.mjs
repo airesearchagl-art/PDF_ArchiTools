@@ -217,6 +217,13 @@ async function main() {
             }, { polling: 50 });
             const wallMs = Date.now() - t0;
             const timing = await stopMonitor();
+            // The first Sheet is then shown: the preview reads the file again,
+            // fingerprints it again and opens it. Workers are counted after that.
+            const t1 = Date.now();
+            await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered',
+                { polling: 50, timeout: 300_000 }).catch(() => { });
+            const previewMs = Date.now() - t1;
+            const workersAfter = page.workers().filter((w) => w.url().includes('drawing-set-fingerprint')).length;
             const state = await page.evaluate(() => ({
                 sources: Number(document.querySelector('[data-ds-root]').dataset.dsSources),
                 result: document.querySelector('[data-ds-result]')?.dataset.dsResult,
@@ -225,7 +232,7 @@ async function main() {
             const row = {
                 sizeMiB,
                 bytes,
-                status: state.sources === 1 && state.sha === reference ? 'PASS' : 'FAIL',
+                status: state.sources === 1 && state.sha === reference && workersAfter === 0 ? 'PASS' : 'FAIL',
                 wallMs,
                 readAndFingerprintMs: Math.round(timing.measures['drawing-set:read-and-fingerprint'] ?? NaN),
                 pdfOpenMs: Math.round(timing.measures['drawing-set:pdf-open'] ?? NaN),
@@ -236,12 +243,14 @@ async function main() {
                 reference,
                 mainThreadMaxGapMs: Math.round(timing.maxGapMs),
                 mainThreadP95GapMs: Math.round(timing.p95GapMs),
-                fingerprintWorkersLeft: page.workers().filter((w) => w.url().includes('drawing-set-fingerprint')).length,
+                previewReadyMs: previewMs,
+                fingerprintWorkersAfterPreview: workersAfter,
             };
             results.sizes.push(row);
             console.log(`\n${sizeMiB} MiB: ${row.status}  wall ${wallMs} ms; read+fingerprint ${row.readAndFingerprintMs} ms (${row.mibPerSecond} MiB/s); open ${row.pdfOpenMs} ms`);
             console.log(`  digest ${row.digestMatchesNodeCrypto ? '=' : '!='} node:crypto  ${state.sha}`);
-            console.log(`  main thread: longest gap ${row.mainThreadMaxGapMs} ms, p95 ${row.mainThreadP95GapMs} ms over ${timing.ticks} ticks; fingerprint Workers left ${row.fingerprintWorkersLeft}`);
+            console.log(`  main thread: longest gap ${row.mainThreadMaxGapMs} ms, p95 ${row.mainThreadP95GapMs} ms over ${timing.ticks} ticks`);
+            console.log(`  preview (re-read, re-fingerprint, open, render) ${previewMs} ms; fingerprint Workers afterwards ${row.fingerprintWorkersAfterPreview}`);
             fs.rmSync(file, { force: true });
         }
 
