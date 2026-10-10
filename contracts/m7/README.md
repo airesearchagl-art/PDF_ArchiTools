@@ -11,8 +11,12 @@
 >   APP_VERSION 1.2.0). Its in-memory model uses this contract's adopted
 >   shape, but Portable Project import/export and machine-file integration
 >   are not shipped until later gates.
-> - M7-CAN-02 clarifies the human-readable derived (D) rules before P2-A;
->   it does **not** authorize P2-A/P2-B or Production runtime changes.
+> - **M7-CAN-02 Human Adoption (2026-10-10):** new normative D decisions
+>   HDR-36-01 (`editedFields`) and HDR-36-02 (terminal EXTRACTION partial
+>   evidence and coverage) are separately Human adopted. `manifestDigest`
+>   byte serialization is an existing-rule clarification, not a new decision.
+>   The adoption authorizes RF-36-01 provenance repair only: **no Ready,
+>   merge, Production, or M7-P2-A/B authorization**.
 > - Schema and resource bounds are **pre-release**: every numeric bound marked as a candidate is not a
 >   Production constant.
 
@@ -41,12 +45,19 @@ snapshot, **not** the current M7-P1 state or approval of M7-P2.
 - Vault Architecture projection:
   `obsidian-vault/01_Projects/PDF-ArchiTools/12_M7_Architecture_v1.md` (adopted in obsidian-vault
   `5e69c8cd1e9ab2412ae5d536138dae8fe7981e14`).
+- **CAN-02 new adoption (separate from CAN-01):** explicit Human decision
+  on 2026-10-10 after Independent FULL Review of PR #36
+  (`faf9d08b5d37041a90c40403f72ebb18c99997d9`):
+  HDR-36-01 and HDR-36-02 are **new normative D writer/runtime policy**,
+  not rules inherited from Architecture v1 or PR #33. See PR #36's
+  Human Adoption Gate record; the repair remains subject to independent
+  Focused Contract Re-review and separate Ready/merge authority.
 
 | Published | Reviewed source at `e541d1d` (git blob) | Publication change |
 |---|---|---|
 | `portable-project.schema.json` | `research/m7-drawing-set-manager/portable-project.schema.proposed.json` (`fa274834…`) | root `$id`, `title` and `description` only |
 | `portable-project.semantic.mjs` | `research/m7-drawing-set-manager/prototype/semantic.mjs` (`151aa511…`) | the leading header comment only |
-| `semantic-contract.md` | derived from Architecture v1, its Human decision values, and the reviewed `data-model.proposed.md`, `architecture-research.md`, `qa-rule-matrix.md`, `rebinding-state-machine.md` | written for this publication |
+| `semantic-contract.md` (CAN-01) | derived from Architecture v1, its Human decision values, and the reviewed `data-model.proposed.md`, `architecture-research.md`, `qa-rule-matrix.md`, `rebinding-state-machine.md` | original CAN-01 publication only; HDR-36-01/02 were adopted separately in CAN-02 |
 
 ### Parity with the reviewed source
 
@@ -110,14 +121,20 @@ are frozen by M7-P4 (and M7-P1 for the PDF intake gate).
 
 This CAN-01 publication did not itself authorize an implementation. P1 was separately authorized and released; CAN-02 does not authorize P2/P3/P4.
 
-## CAN-02 clarification record
+## CAN-02 Human adoption and byte-level clarification
 
-M7-CAN-02 identifies the added D-rule clarifications for `editedFields`,
-`manifestDigest` exact bytes/reference vectors, and terminal extraction-run
-observations and coverage. The machine schema and executable validator do
-not change. The manifest records the full **LF UTF-8 human-contract digest**
-as `files["semantic-contract.md"].sha256`, in addition to its unchanged
-CAN-01 machine-file digests. Verify all recorded file hashes:
+M7-CAN-02 records the **new Human-adopted D policies** HDR-36-01
+(`editedFields` writer meaning) and HDR-36-02 (terminal EXTRACTION run
+partial evidence and coverage), both adopted **2026-10-10**. These policies
+are not claimed to be previously adopted under CAN-01. The exact
+`manifestDigest` bytes/reference vectors document an existing rule.
+All additions are human-readable D rules only; machine schema and
+executable S/R/W validator remain unchanged. The manifest records the
+adoption decisions separately from CAN-01 publication provenance and
+binds the whole revised LF UTF-8 `semantic-contract.md` in
+`files["semantic-contract.md"].sha256`, alongside the original machine
+file digests. The Human decision does not authorize Ready, merge, Production,
+or P2-A/B implementation. Verify all recorded file hashes:
 
 ```sh
 node --input-type=module -e '
@@ -138,11 +155,13 @@ for (const [file, record] of Object.entries(m.files)) {
   so reviewed changes can precede the first writable format. A change to
   machine structural (S) or relation/warning (R/W) rules requires synchronized
   affected machine file(s), human contract and manifest digests. A
-  **D-only human-readable clarification** with verified zero machine delta
-  updates the human contract and its manifest digest, but cannot claim to
-  have changed the schema or executable semantics. Either way independent
-  review is required **before** dependent implementation. If a proposed
-  change alters an existing adopted decision, STOP for a new Human Gate.
+  **new Human-adopted D policy or a D-only clarification** with verified
+  zero machine delta updates the human contract and its manifest digest,
+  but cannot claim to have changed the schema or executable semantics.
+  New normative D meaning requires its own explicit Human adoption.
+  Either way independent review is required **before** dependent
+  implementation. If a proposed change alters an existing adopted
+  decision, STOP for a new Human Gate.
 - **At and after M7-P4.** `schemaVersion` 1 is frozen; a change of shape is a new version with a migration,
   and every released schema version's schema file is kept.
 - The first Production M7 implementation PR declares `data_model_impact: NEW`.

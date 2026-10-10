@@ -4,17 +4,38 @@
 M7-CAN-01 (authorized 2026-10-09). `schemaVersion` 1. No user-writable format is released until M7-P4.
 
 This is the human-readable statement of the relation and lifecycle contract of the M7 Portable Project JSON.
-It is **not a new design**: every rule here comes from M7 Architecture v1 and its Human decision values, and
-from the artifacts reviewed at PR #33 exact head `e541d1d43db3a73acceb3f8241ef914d59dc77d7` (see
-[Sources](#sources)). Nothing in this directory is wired into the Production app yet.
+The CAN-01 rules derive from Human-adopted M7 Architecture v1 (2026-10-09) and the evidence
+reviewed at PR #33 exact head `e541d1d43db3a73acceb3f8241ef914d59dc77d7`
+(see [Sources](#sources)). **Exception:** the normative D writer/runtime rules HDR-36-01
+(`editedFields`) and HDR-36-02 (terminal EXTRACTION runs) were separately **HUMAN ADOPTED
+on 2026-10-10** as new CAN-02 decisions, not retroactively sourced from Architecture v1
+or PR #33. The `manifestDigest` byte format clarifies the existing CAN-01 rule.
+None of these changes modifies M7-P1 Production or implements Portable Project I/O.
 
-## M7-CAN-02 — documentation-only derived-rule clarification
+## M7-CAN-02 — Human-adopted D rules and existing-rule byte clarification
 
-The `editedFields`, manifest-digest bytes, and terminal extraction-run explanations below
-make previously underspecified **D** (runtime/writer) rules explicit before M7-P2.
-This clarification does not change the executable S/R/W validator, JSON Schema,
-`schemaVersion`, the pre-release safety limits, or authorize M7-P2 implementation.
-Independent Contract Review and a separate Human merge gate remain required.
+**New normative Human decisions, explicitly adopted 2026-10-10:**
+- **HDR-36-01:** the `editedFields` writer rule defined in §C, including
+  `source: none`, `profile: null`, matching observation basis, canonical order,
+  exact comparison, and historical non-recomputation.
+- **HDR-36-02:** the terminal EXTRACTION run lifecycle in §F: fully processed
+  Source observations may remain for `CANCELLED` / `FAILED` runs; uncompleted
+  Source results do not publish; coverage is scoped to targeted Sheets.
+  AnalysisRun is append-only in memory, with the already adopted P4
+  save-time pruning exception.
+
+**Byte-level clarification of an existing rule (not a new Meaning Delta):**
+the exact sorted JSON / UTF-8 / SHA-256 serialization and test vectors for
+`manifestDigest` in §F.
+
+**Human Adoption evidence:** explicit Human authorization in the PDF ArchiTools
+M7-CAN-02 review Human Gate on 2026-10-10, following Independent FULL Review
+of PR #36 at `faf9d08b5d37041a90c40403f72ebb18c99997d9`.
+This adoption authorizes only RF-36-01 provenance repair, not Ready, merge,
+Production changes, or M7-P2-A/B implementation. The JSON Schema,
+executable S/R/W validator, `schemaVersion` and pre-release safety bounds
+remain unchanged. Independent **Focused Contract Re-review** of the repair
+head and a separate Human Ready/merge gate are still required.
 
 ## How to read it — where each rule lives
 
@@ -539,3 +560,9 @@ and change only through the same review.
   `architecture-research.md` (§4, §5, §12), `qa-rule-matrix.md`, `rebinding-state-machine.md` — read with
   `git show`; evidence only.
 - The M7-CAN-01 work packet (Human authorization 2026-10-09).
+- **M7-CAN-02 Human Adoption Gate — 2026-10-10:** new normative D decisions
+  HDR-36-01 and HDR-36-02 adopted explicitly after PR #36 Independent FULL
+  Review at `faf9d08b5d37041a90c40403f72ebb18c99997d9`. This is a
+  new decision source, **not** part of the 2026-10-09 Architecture adoption or
+  PR #33 research evidence. The `manifestDigest` bytes are a clarification
+  of an already adopted rule. Adoption does not authorize merge or P2.
