@@ -43,6 +43,13 @@
       "publicationChange": "leading header comment only",
       "bodySha256": "8775a3211f624a53850b4f551284bc06e519c13bc24f99ac6a67192fa2e7cf33",
       "bodyDigestMethod": "SHA-256 (hex) of the UTF-8 text, LF line endings, after the first '*/' (the end of the leading header comment); identical for source and publication"
+    },
+    "semantic-contract.md": {
+      "sha256": "287676119eeeb7c1ec84359332f521ddced6223499028335fdda5cb013bb96b1",
+      "source": "CAN-01 Architecture v1 plus independently Human-adopted CAN-02 D policies (2026-10-10)",
+      "clarification": "M7-CAN-02",
+      "digestMethod": "SHA-256 (hex) of the full committed UTF-8 file with LF line endings",
+      "machineValidationDelta": false
     }
   },
   "resourceLimitsStatus": "CANDIDATE_PRE_RELEASE",
@@ -52,5 +59,45 @@
   },
   "userWritableFormatReleased": false,
   "productionRuntimeIntegration": false,
-  "productionImplementationAuthorized": false
+  "productionImplementationAuthorized": false,
+  "clarifications": [
+    {
+      "id": "M7-CAN-02",
+      "scope": [
+        "editedFields at confirmation time",
+        "manifestDigest byte serialization and vectors",
+        "terminal AnalysisRun evidence and P4 save pruning boundary"
+      ],
+      "humanReadableOnly": true,
+      "schemaChanged": false,
+      "executableSemanticChanged": false,
+      "schemaVersionChanged": false,
+      "productionCodeChanged": false,
+      "implementationAuthorizationGranted": false,
+      "humanAdoptedAt": "2026-10-10",
+      "adoptionKind": "NEW_NORMATIVE_D_WRITER_RUNTIME_DECISIONS",
+      "decisions": [
+        {
+          "id": "HDR-36-01",
+          "humanAdoptedAt": "2026-10-10",
+          "scope": "editedFields writer semantics; basis matching, source none, manual profile null, ordered field names, historical non-recomputation"
+        },
+        {
+          "id": "HDR-36-02",
+          "humanAdoptedAt": "2026-10-10",
+          "scope": "terminal CANCELLED/FAILED EXTRACTION partial Source evidence; targeted-Sheet coverage; in-memory append-only with P4 save pruning"
+        }
+      ],
+      "existingRuleClarification": {
+        "scope": "manifestDigest sorted pairs, JSON.stringify, UTF-8, SHA-256 and two reference vectors",
+        "meaningDelta": false
+      },
+      "humanDecisionEvidence": {
+        "source": "Explicit Human authorization in ChatGPT PDF ArchiTools M7-CAN-02 Human Gate on 2026-10-10",
+        "reviewPR": 36,
+        "precedingIndependentFullReviewHead": "faf9d08b5d37041a90c40403f72ebb18c99997d9",
+        "independentRepairReviewRequired": true
+      }
+    }
+  ]
 }
