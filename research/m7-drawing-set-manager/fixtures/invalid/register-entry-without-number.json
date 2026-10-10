@@ -1,0 +1,915 @@
+{
+  "format": "pdf-architools/drawing-set-project",
+  "schemaVersion": 1,
+  "projectFileId": "0035a1ad-340b-4e0d-a89e-7be85b862b39",
+  "lineage": {
+    "saveSequence": 1,
+    "previousProjectFileId": null,
+    "migratedFrom": null
+  },
+  "savedAt": "2026-10-05T00:00:09.080Z",
+  "writer": {
+    "app": "PDF_ArchiTools",
+    "toolVersion": "0.0.0-research"
+  },
+  "project": {
+    "id": "bab987c9-c25c-4fc9-a113-167bf85ac535",
+    "name": "Synthetic Project 13",
+    "createdAt": "2026-10-05T00:00:01.000Z"
+  },
+  "drawingSet": {
+    "id": "bf7a9c2b-730e-40d4-8996-be9ed6eb463c",
+    "name": "Synthetic Drawing Set",
+    "createdAt": "2026-10-05T00:00:01.000Z",
+    "sources": [
+      {
+        "id": "cbc517b1-4f53-4628-9158-8b834531b977",
+        "displayName": "synthetic-set-0001.pdf",
+        "addedAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "fingerprint": {
+          "algorithm": "SHA-256",
+          "sha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "byteLength": 1000004,
+          "pageCount": 4,
+          "recordedAt": "2026-10-05T00:00:03.000Z"
+        },
+        "fingerprintHistory": []
+      },
+      {
+        "id": "3c2e3fd5-8148-45df-ab92-ebe6ab2c02b1",
+        "displayName": "synthetic-set-0002.pdf",
+        "addedAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "fingerprint": {
+          "algorithm": "SHA-256",
+          "sha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "byteLength": 1004100,
+          "pageCount": 4,
+          "recordedAt": "2026-10-05T00:00:04.000Z"
+        },
+        "fingerprintHistory": []
+      }
+    ],
+    "titleBlockProfiles": [
+      {
+        "id": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+        "name": "A1 title block",
+        "revision": 1,
+        "transferModel": "corner-anchored",
+        "referencePage": {
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78
+        },
+        "fields": {
+          "drawingNumber": {
+            "left": 2150,
+            "top": 1600,
+            "right": 2360,
+            "bottom": 1640
+          },
+          "drawingTitle": {
+            "left": 1850,
+            "top": 1600,
+            "right": 2140,
+            "bottom": 1640
+          },
+          "revision": {
+            "left": 2150,
+            "top": 1645,
+            "right": 2250,
+            "bottom": 1675
+          },
+          "issueDate": {
+            "left": 2255,
+            "top": 1645,
+            "right": 2360,
+            "bottom": 1675
+          }
+        },
+        "createdAt": "2026-10-05T00:00:02.000Z",
+        "updatedAt": "2026-10-05T00:00:02.000Z",
+        "retiredAt": null
+      }
+    ],
+    "sheets": [
+      {
+        "id": "31f36f78-df94-4fb6-9e32-5667cb2d1f18",
+        "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+        "pageNumber": 1,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "A-101",
+              "rawText": "図面番号\nA-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "3階天井伏図",
+              "rawText": "図面名称\n3階天井伏図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.01.10",
+              "rawText": "日付\n2026.01.10",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.010Z",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "A-101",
+            "drawingTitle": "3階天井伏図",
+            "revision": "A",
+            "issueDate": "2026.01.10"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "710b449f-2a8d-4233-87ba-27966a542072",
+        "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+        "pageNumber": 2,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "A-102",
+              "rawText": "図面番号\nA-102",
+              "source": "ocr",
+              "ocrScore": 73
+            },
+            "drawingTitle": {
+              "value": "その2展開図",
+              "rawText": "図面名称\nその2展開図",
+              "source": "ocr",
+              "ocrScore": 87
+            },
+            "revision": {
+              "value": "B",
+              "rawText": "版\nB",
+              "source": "ocr",
+              "ocrScore": 72
+            },
+            "issueDate": {
+              "value": "2026.03.28",
+              "rawText": "日付\n2026.03.28",
+              "source": "ocr",
+              "ocrScore": 82
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.020Z",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "A-102",
+            "drawingTitle": "その2展開図",
+            "revision": "B",
+            "issueDate": "2026.03.28"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "2518fcbf-6b6f-4ef8-9abf-6ca01249f195",
+        "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+        "pageNumber": 3,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "S-101",
+              "rawText": "図面番号\nS-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "南展開図",
+              "rawText": "図面名称\n南展開図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.05.25",
+              "rawText": "日付\n2026.05.25",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.030Z",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "S-101",
+            "drawingTitle": "南展開図",
+            "revision": "A",
+            "issueDate": "2026.05.25"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "a313b2a8-7d9d-496b-90ab-9c53071875a3",
+        "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+        "pageNumber": 4,
+        "createdAt": "2026-10-05T00:00:03.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "S-102",
+              "rawText": "図面番号\nS-102",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "2階立面図",
+              "rawText": "図面名称\n2階立面図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.07.17",
+              "rawText": "日付\n2026.07.17",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.040Z",
+          "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "S-102",
+            "drawingTitle": "2階立面図",
+            "revision": "A",
+            "issueDate": "2026.07.17"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "443cd68c-034a-46ba-b031-89f420ee2713",
+        "sourceId": "3c2e3fd5-8148-45df-ab92-ebe6ab2c02b1",
+        "pageNumber": 1,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "M-101",
+              "rawText": "図面番号\nM-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "その2立面図",
+              "rawText": "図面名称\nその2立面図",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.09.08",
+              "rawText": "日付\n2026.09.08",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.050Z",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "M-101",
+            "drawingTitle": "その2立面図",
+            "revision": "A",
+            "issueDate": "2026.09.08"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "658a97b5-d8f9-4d6b-87c3-c3e1c8407bfe",
+        "sourceId": "3c2e3fd5-8148-45df-ab92-ebe6ab2c02b1",
+        "pageNumber": 2,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "M-102",
+              "rawText": "図面番号\nM-102",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "2階建具表",
+              "rawText": "図面名称\n2階建具表",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "C",
+              "rawText": "版\nC",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.06.14",
+              "rawText": "日付\n2026.06.14",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.060Z",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "M-102",
+            "drawingTitle": "2階建具表",
+            "revision": "C",
+            "issueDate": "2026.06.14"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "20c4d441-f3d9-4587-ae49-82535e760712",
+        "sourceId": "3c2e3fd5-8148-45df-ab92-ebe6ab2c02b1",
+        "pageNumber": 3,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "text-native"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "E-101",
+              "rawText": "図面番号\nE-101",
+              "source": "native",
+              "ocrScore": null
+            },
+            "drawingTitle": {
+              "value": "北建具表",
+              "rawText": "図面名称\n北建具表",
+              "source": "native",
+              "ocrScore": null
+            },
+            "revision": {
+              "value": "A",
+              "rawText": "版\nA",
+              "source": "native",
+              "ocrScore": null
+            },
+            "issueDate": {
+              "value": "2026.09.05",
+              "rawText": "日付\n2026.09.05",
+              "source": "native",
+              "ocrScore": null
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.070Z",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "E-101",
+            "drawingTitle": "北建具表",
+            "revision": "A",
+            "issueDate": "2026.09.05"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      },
+      {
+        "id": "4c150358-63b0-4987-a880-bd279ba83415",
+        "sourceId": "3c2e3fd5-8148-45df-ab92-ebe6ab2c02b1",
+        "pageNumber": 4,
+        "createdAt": "2026-10-05T00:00:04.000Z",
+        "retiredAt": null,
+        "pageFacts": {
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "uprightWidthPt": 2383.94,
+          "uprightHeightPt": 1683.78,
+          "rotate": 0,
+          "kind": "scanned"
+        },
+        "profileAssignment": {
+          "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+          "confirmedAt": "2026-10-05T00:00:05.000Z"
+        },
+        "observation": {
+          "runId": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "status": "READ",
+          "fields": {
+            "drawingNumber": {
+              "value": "E-102",
+              "rawText": "図面番号\nE-102",
+              "source": "ocr",
+              "ocrScore": 64
+            },
+            "drawingTitle": {
+              "value": "3階平面図",
+              "rawText": "図面名称\n3階平面図",
+              "source": "ocr",
+              "ocrScore": 85
+            },
+            "revision": {
+              "value": "B",
+              "rawText": "版\nB",
+              "source": "ocr",
+              "ocrScore": 82
+            },
+            "issueDate": {
+              "value": "2026.06.10",
+              "rawText": "日付\n2026.06.10",
+              "source": "ocr",
+              "ocrScore": 98
+            }
+          }
+        },
+        "confirmation": {
+          "confirmedAt": "2026-10-05T00:00:06.080Z",
+          "sourceSha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780",
+          "profile": {
+            "profileId": "7bbfbc6a-0a65-4413-a81e-0260e21cbf69",
+            "profileRevision": 1
+          },
+          "values": {
+            "drawingNumber": "E-102",
+            "drawingTitle": "3階平面図",
+            "revision": "B",
+            "issueDate": "2026.06.10"
+          },
+          "editedFields": []
+        },
+        "confirmationHistory": []
+      }
+    ],
+    "drawingRegisterReferences": [
+      {
+        "id": "4412caed-b4a3-4d0a-a95b-f8eb5e9caac8",
+        "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+        "pageNumber": 1,
+        "region": {
+          "left": 100,
+          "top": 101,
+          "right": 1400,
+          "bottom": 1500
+        },
+        "sourceSha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813",
+        "method": "TABLE_NATIVE",
+        "declaredAt": "2026-10-05T00:00:07.080Z",
+        "updatedAt": "2026-10-05T00:00:07.080Z",
+        "retiredAt": null,
+        "entries": [
+          {
+            "id": "20432f66-f056-4b91-9bac-c46327303b93",
+            "row": 1,
+            "drawingNumber": "   ",
+            "drawingTitle": "3階天井伏図",
+            "revision": "A",
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "280b3df2-b91e-4f28-a59f-68f5d8b43a15",
+            "row": 2,
+            "drawingNumber": "A-102",
+            "drawingTitle": "その2展開図",
+            "revision": "B",
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "a120082e-a496-4fbc-9b45-a58cd1727cb6",
+            "row": 3,
+            "drawingNumber": "S-101",
+            "drawingTitle": "南展開図",
+            "revision": "A",
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "427a8b44-7152-4b6d-bdc3-28320069ee50",
+            "row": 4,
+            "drawingNumber": "X-903",
+            "drawingTitle": "未収録図",
+            "revision": null,
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "89dde0a1-8cf2-42e5-8b65-ebf27565ef1f",
+            "row": 5,
+            "drawingNumber": "M-101",
+            "drawingTitle": "その2立面図",
+            "revision": "A",
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "d84b00dc-b24b-4274-9ab0-41b6c25fd655",
+            "row": 6,
+            "drawingNumber": "M-102",
+            "drawingTitle": "2階建具表",
+            "revision": "C",
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "2a3829ff-cffc-41fc-b5b5-54bdbb79beac",
+            "row": 7,
+            "drawingNumber": "X-906",
+            "drawingTitle": "未収録図",
+            "revision": null,
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          },
+          {
+            "id": "192367ba-cf57-4750-8e08-da4ebd630d2e",
+            "row": 8,
+            "drawingNumber": "E-101",
+            "drawingTitle": "北建具表",
+            "revision": "A",
+            "issueDate": null,
+            "origin": "EXTRACTED",
+            "retiredAt": null
+          }
+        ]
+      }
+    ],
+    "analysisRuns": [
+      {
+        "id": "38718a80-2d10-4c10-b6d9-95790aa81f02",
+        "kind": "EXTRACTION",
+        "startedAt": "2026-10-05T00:00:06.000Z",
+        "completedAt": "2026-10-05T00:00:06.000Z",
+        "outcome": "COMPLETED",
+        "engine": {
+          "name": "register-extraction",
+          "version": "0.1.0-research"
+        },
+        "manifestDigest": "2ac8d7cb82b3e7ef4b24fd0630f55ef1df2db3253307dd6ad70aeccc461f3abf",
+        "coverage": {
+          "sheetsEvaluated": 8,
+          "sheetsExcluded": 0
+        }
+      },
+      {
+        "id": "b37c2a6a-f01f-4f32-a4db-4b0ebaeb37b3",
+        "kind": "QA",
+        "startedAt": "2026-10-05T00:00:08.080Z",
+        "completedAt": "2026-10-05T00:00:08.080Z",
+        "outcome": "COMPLETED",
+        "engine": {
+          "name": "drawing-set-qa",
+          "version": "0.1.0-research"
+        },
+        "manifestDigest": "2ac8d7cb82b3e7ef4b24fd0630f55ef1df2db3253307dd6ad70aeccc461f3abf",
+        "coverage": {
+          "sheetsEvaluated": 8,
+          "sheetsExcluded": 0
+        }
+      }
+    ],
+    "findings": [
+      {
+        "id": "5fba0e1d-d14d-4501-9c5f-2b179e8f66a9",
+        "runId": "b37c2a6a-f01f-4f32-a4db-4b0ebaeb37b3",
+        "ruleId": "QA09_REGISTER_SHEET_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "REGISTER_ENTRY",
+        "sheetIds": [],
+        "sourceIds": [],
+        "registerEntryIds": [
+          "427a8b44-7152-4b6d-bdc3-28320069ee50"
+        ],
+        "findingKey": "1907280b353d6115fb71b07548eecab1e4e579b523f7d19608a5896e1f9feca5",
+        "evidenceDigest": "006a03d39a5bb5cbe188967aafc6b43146bb89b8668a76571410dca3a1a74513",
+        "basis": [
+          {
+            "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+            "sha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813"
+          }
+        ],
+        "params": {
+          "reason": "LISTED_BUT_MISSING",
+          "number": "X-903"
+        },
+        "createdAt": "2026-10-05T00:00:08.080Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "39158f04-965c-44be-8bb6-56bbad4fb76b",
+        "runId": "b37c2a6a-f01f-4f32-a4db-4b0ebaeb37b3",
+        "ruleId": "QA09_REGISTER_SHEET_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "REGISTER_ENTRY",
+        "sheetIds": [],
+        "sourceIds": [],
+        "registerEntryIds": [
+          "2a3829ff-cffc-41fc-b5b5-54bdbb79beac"
+        ],
+        "findingKey": "15ce4cb0a05dbe7378431d20e7e77dc2dec48bd644d514f09d1d27840b1b087c",
+        "evidenceDigest": "1e1933d10e302bcb7507b5177b6c20fd029b45e31c0d7b51d5568dde9f11f6b1",
+        "basis": [
+          {
+            "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+            "sha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813"
+          }
+        ],
+        "params": {
+          "reason": "LISTED_BUT_MISSING",
+          "number": "X-906"
+        },
+        "createdAt": "2026-10-05T00:00:08.080Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "2ffdadfa-d216-4bbb-a95a-f86b3cab8b40",
+        "runId": "b37c2a6a-f01f-4f32-a4db-4b0ebaeb37b3",
+        "ruleId": "QA09_REGISTER_SHEET_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "a313b2a8-7d9d-496b-90ab-9c53071875a3"
+        ],
+        "sourceIds": [],
+        "registerEntryIds": [],
+        "findingKey": "889fdc178e97c192139a3472d9ae41beec37b79eaf75e150cf1af7ac03b56a9a",
+        "evidenceDigest": "93d57328d3baacbc43238cfe64bd271141dad560882cebff7adaefc6dc032fa1",
+        "basis": [
+          {
+            "sourceId": "cbc517b1-4f53-4628-9158-8b834531b977",
+            "sha256": "8e77e2a3bddb42473dcfd494eaf15c46476ddc5004ec620c85353a441bc20813"
+          }
+        ],
+        "params": {
+          "reason": "ACTUAL_NOT_LISTED",
+          "number": "S-102"
+        },
+        "createdAt": "2026-10-05T00:00:08.080Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      },
+      {
+        "id": "f5b61981-e642-4a82-8b5f-af6ba8ecf672",
+        "runId": "b37c2a6a-f01f-4f32-a4db-4b0ebaeb37b3",
+        "ruleId": "QA09_REGISTER_SHEET_MISMATCH",
+        "ruleVersion": 1,
+        "determinism": "DETERMINISTIC",
+        "scope": "SHEET",
+        "sheetIds": [
+          "4c150358-63b0-4987-a880-bd279ba83415"
+        ],
+        "sourceIds": [],
+        "registerEntryIds": [],
+        "findingKey": "26cc0b61d7fd87360a9faae51847805665b7b85f38f377e6eab5d9a33c72dd76",
+        "evidenceDigest": "6ada9187a5741a56590f5f9ef7cd73302e477adda03cfd90d5a5401c7fd335e3",
+        "basis": [
+          {
+            "sourceId": "3c2e3fd5-8148-45df-ab92-ebe6ab2c02b1",
+            "sha256": "40dce4a68f0d5ed5577674fa179a42795921981e61765fe468180a4d9135c780"
+          }
+        ],
+        "params": {
+          "reason": "ACTUAL_NOT_LISTED",
+          "number": "E-102"
+        },
+        "createdAt": "2026-10-05T00:00:08.080Z",
+        "lifecycle": {
+          "state": "ACTIVE",
+          "supersededByFindingId": null,
+          "closedByRunId": null,
+          "closedAt": null
+        }
+      }
+    ],
+    "decisions": []
+  }
+}

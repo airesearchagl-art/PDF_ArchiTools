@@ -1,0 +1,1350 @@
+{
+  "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Synthetic data. NODE evidence -- not a browser measurement.",
+  "runtime": "node",
+  "environment": {
+    "node": "v24.15.0",
+    "v8": "13.6.233.17-node.48",
+    "platform": "win32 10.0.26200",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+    "logicalCpus": 24,
+    "totalMemoryGiB": 63.4
+  },
+  "units": "milliseconds; each figure is the median of `repeats` runs after one discarded warm-up",
+  "candidateLimits": {
+    "maxSheets": 5000,
+    "maxProjectBytes": 67108864
+  },
+  "rows": [
+    {
+      "label": "50 sheets",
+      "shape": {
+        "sheets": 50,
+        "sources": 2,
+        "findings": 23,
+        "activeFindings": 23,
+        "decisions": 15,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 92693,
+        "prettyBytes": 143363,
+        "bytesPerSheet": 1854,
+        "jsonValues": 3423,
+        "maxDepth": 7
+      },
+      "buildMs": 5.86,
+      "save": {
+        "exportTotal": {
+          "medianMs": 1.22,
+          "minMs": 0.98,
+          "maxMs": 1.77,
+          "repeats": 9
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 0.21,
+          "minMs": 0.14,
+          "maxMs": 0.47,
+          "repeats": 9
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 1.13,
+          "minMs": 0.98,
+          "maxMs": 1.53,
+          "repeats": 9
+        },
+        "stageMedians": {
+          "decodeMs": 0.12,
+          "scanMs": 0.39,
+          "parseMs": 0.16,
+          "schemaMs": 0.18,
+          "relationsMs": 0.18
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 0.46,
+          "minMs": 0.29,
+          "maxMs": 0.67,
+          "repeats": 9
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 0.3,
+          "minMs": 0.25,
+          "maxMs": 0.54,
+          "repeats": 9
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0,
+          "minMs": 0,
+          "maxMs": 0.01,
+          "repeats": 9
+        },
+        "gapDetectionOnly": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.03,
+          "repeats": 9
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.01,
+          "minMs": 0,
+          "maxMs": 0.03,
+          "repeats": 9
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.02,
+          "repeats": 9
+        },
+        "sortByNumber": {
+          "medianMs": 0.02,
+          "minMs": 0.02,
+          "maxMs": 0.04,
+          "repeats": 9
+        },
+        "filterByText": {
+          "medianMs": 0,
+          "minMs": 0,
+          "maxMs": 0,
+          "repeats": 9
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0,
+          "minMs": 0,
+          "maxMs": 0,
+          "repeats": 9
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.14,
+          "repeats": 9
+        },
+        "finalReadiness": {
+          "medianMs": 0.02,
+          "minMs": 0.02,
+          "maxMs": 0.04,
+          "repeats": 9
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 0.02,
+          "minMs": 0.02,
+          "maxMs": 0.06,
+          "repeats": 9,
+          "staleSheets": 25,
+          "staleFindings": 7,
+          "totalSheets": 50,
+          "totalFindings": 23
+        }
+      }
+    },
+    {
+      "label": "200 sheets",
+      "shape": {
+        "sheets": 200,
+        "sources": 8,
+        "findings": 96,
+        "activeFindings": 96,
+        "decisions": 43,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 364094,
+        "prettyBytes": 564376,
+        "bytesPerSheet": 1820,
+        "jsonValues": 13444,
+        "maxDepth": 7
+      },
+      "buildMs": 3.9,
+      "save": {
+        "exportTotal": {
+          "medianMs": 3.3,
+          "minMs": 2.93,
+          "maxMs": 4.01,
+          "repeats": 9
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 0.89,
+          "minMs": 0.86,
+          "maxMs": 1.89,
+          "repeats": 9
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 3.69,
+          "minMs": 3.49,
+          "maxMs": 4.38,
+          "repeats": 9
+        },
+        "stageMedians": {
+          "decodeMs": 0.4,
+          "scanMs": 1.37,
+          "parseMs": 0.54,
+          "schemaMs": 0.68,
+          "relationsMs": 0.6
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 1.1,
+          "minMs": 0.9,
+          "maxMs": 1.34,
+          "repeats": 9
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 0.98,
+          "minMs": 0.89,
+          "maxMs": 1.26,
+          "repeats": 9
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.04,
+          "repeats": 9
+        },
+        "gapDetectionOnly": {
+          "medianMs": 0.06,
+          "minMs": 0.05,
+          "maxMs": 0.16,
+          "repeats": 9
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.02,
+          "minMs": 0.02,
+          "maxMs": 0.11,
+          "repeats": 9
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 0.06,
+          "minMs": 0.05,
+          "maxMs": 0.09,
+          "repeats": 9
+        },
+        "sortByNumber": {
+          "medianMs": 0.12,
+          "minMs": 0.1,
+          "maxMs": 0.44,
+          "repeats": 9
+        },
+        "filterByText": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.01,
+          "repeats": 9
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0,
+          "minMs": 0,
+          "maxMs": 0,
+          "repeats": 9
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 0.05,
+          "minMs": 0.04,
+          "maxMs": 0.07,
+          "repeats": 9
+        },
+        "finalReadiness": {
+          "medianMs": 0.08,
+          "minMs": 0.06,
+          "maxMs": 0.33,
+          "repeats": 9
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 0.04,
+          "minMs": 0.04,
+          "maxMs": 0.08,
+          "repeats": 9,
+          "staleSheets": 25,
+          "staleFindings": 8,
+          "totalSheets": 200,
+          "totalFindings": 96
+        }
+      }
+    },
+    {
+      "label": "500 sheets",
+      "shape": {
+        "sheets": 500,
+        "sources": 20,
+        "findings": 280,
+        "activeFindings": 280,
+        "decisions": 155,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 938133,
+        "prettyBytes": 1447167,
+        "bytesPerSheet": 1876,
+        "jsonValues": 34421,
+        "maxDepth": 7
+      },
+      "buildMs": 7.4,
+      "save": {
+        "exportTotal": {
+          "medianMs": 8.42,
+          "minMs": 7.71,
+          "maxMs": 10.33,
+          "repeats": 7
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 1.99,
+          "minMs": 1.83,
+          "maxMs": 3.07,
+          "repeats": 7
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 9.4,
+          "minMs": 8.35,
+          "maxMs": 10.65,
+          "repeats": 7
+        },
+        "stageMedians": {
+          "decodeMs": 1.03,
+          "scanMs": 2.96,
+          "parseMs": 1.37,
+          "schemaMs": 1.77,
+          "relationsMs": 1.63
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 3,
+          "minMs": 2.44,
+          "maxMs": 3.57,
+          "repeats": 7
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 2.85,
+          "minMs": 2.51,
+          "maxMs": 3.58,
+          "repeats": 7
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.03,
+          "minMs": 0.03,
+          "maxMs": 0.04,
+          "repeats": 7
+        },
+        "gapDetectionOnly": {
+          "medianMs": 0.12,
+          "minMs": 0.12,
+          "maxMs": 0.12,
+          "repeats": 7
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.05,
+          "minMs": 0.05,
+          "maxMs": 0.05,
+          "repeats": 7
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 0.1,
+          "minMs": 0.1,
+          "maxMs": 0.11,
+          "repeats": 7
+        },
+        "sortByNumber": {
+          "medianMs": 0.32,
+          "minMs": 0.3,
+          "maxMs": 0.36,
+          "repeats": 7
+        },
+        "filterByText": {
+          "medianMs": 0.02,
+          "minMs": 0.02,
+          "maxMs": 0.02,
+          "repeats": 7
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.01,
+          "repeats": 7
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 0.1,
+          "minMs": 0.08,
+          "maxMs": 0.13,
+          "repeats": 7
+        },
+        "finalReadiness": {
+          "medianMs": 0.12,
+          "minMs": 0.12,
+          "maxMs": 0.13,
+          "repeats": 7
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 0.15,
+          "minMs": 0.13,
+          "maxMs": 0.39,
+          "repeats": 7,
+          "staleSheets": 25,
+          "staleFindings": 8,
+          "totalSheets": 500,
+          "totalFindings": 280
+        }
+      }
+    },
+    {
+      "label": "1000 sheets",
+      "shape": {
+        "sheets": 1000,
+        "sources": 40,
+        "findings": 519,
+        "activeFindings": 519,
+        "decisions": 282,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 1850745,
+        "prettyBytes": 2860360,
+        "bytesPerSheet": 1851,
+        "jsonValues": 68013,
+        "maxDepth": 7
+      },
+      "buildMs": 16.63,
+      "save": {
+        "exportTotal": {
+          "medianMs": 15.21,
+          "minMs": 14.86,
+          "maxMs": 21.21,
+          "repeats": 7
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 4.05,
+          "minMs": 3.85,
+          "maxMs": 5.49,
+          "repeats": 7
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 17.28,
+          "minMs": 16.11,
+          "maxMs": 18.05,
+          "repeats": 7
+        },
+        "stageMedians": {
+          "decodeMs": 0.95,
+          "scanMs": 6.84,
+          "parseMs": 2.7,
+          "schemaMs": 3.44,
+          "relationsMs": 3.36
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 5.38,
+          "minMs": 4.52,
+          "maxMs": 7.34,
+          "repeats": 7
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 5.23,
+          "minMs": 4.84,
+          "maxMs": 5.59,
+          "repeats": 7
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.06,
+          "minMs": 0.06,
+          "maxMs": 0.09,
+          "repeats": 7
+        },
+        "gapDetectionOnly": {
+          "medianMs": 0.25,
+          "minMs": 0.24,
+          "maxMs": 0.89,
+          "repeats": 7
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.09,
+          "minMs": 0.09,
+          "maxMs": 0.11,
+          "repeats": 7
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 0.17,
+          "minMs": 0.17,
+          "maxMs": 0.18,
+          "repeats": 7
+        },
+        "sortByNumber": {
+          "medianMs": 0.74,
+          "minMs": 0.7,
+          "maxMs": 1.15,
+          "repeats": 7
+        },
+        "filterByText": {
+          "medianMs": 0.04,
+          "minMs": 0.04,
+          "maxMs": 0.06,
+          "repeats": 7
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.01,
+          "minMs": 0.01,
+          "maxMs": 0.02,
+          "repeats": 7
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 0.15,
+          "minMs": 0.14,
+          "maxMs": 0.15,
+          "repeats": 7
+        },
+        "finalReadiness": {
+          "medianMs": 0.19,
+          "minMs": 0.19,
+          "maxMs": 0.22,
+          "repeats": 7
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 0.23,
+          "minMs": 0.2,
+          "maxMs": 0.58,
+          "repeats": 7,
+          "staleSheets": 25,
+          "staleFindings": 10,
+          "totalSheets": 1000,
+          "totalFindings": 519
+        }
+      }
+    },
+    {
+      "label": "5000 sheets",
+      "shape": {
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 2534,
+        "activeFindings": 2534,
+        "decisions": 1282,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 9176842,
+        "prettyBytes": 14198070,
+        "bytesPerSheet": 1835,
+        "jsonValues": 337634,
+        "maxDepth": 7
+      },
+      "buildMs": 187.16,
+      "save": {
+        "exportTotal": {
+          "medianMs": 85.69,
+          "minMs": 82.43,
+          "maxMs": 86.88,
+          "repeats": 5
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 26.78,
+          "minMs": 25.81,
+          "maxMs": 28.57,
+          "repeats": 5
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 91.4,
+          "minMs": 87.54,
+          "maxMs": 101.85,
+          "repeats": 5
+        },
+        "stageMedians": {
+          "decodeMs": 5.15,
+          "scanMs": 30.9,
+          "parseMs": 14.38,
+          "schemaMs": 18.13,
+          "relationsMs": 18.96
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 26.54,
+          "minMs": 24.46,
+          "maxMs": 26.97,
+          "repeats": 5
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 29.45,
+          "minMs": 27.89,
+          "maxMs": 32.03,
+          "repeats": 5
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.41,
+          "minMs": 0.38,
+          "maxMs": 0.64,
+          "repeats": 5
+        },
+        "gapDetectionOnly": {
+          "medianMs": 1.05,
+          "minMs": 0.98,
+          "maxMs": 1.5,
+          "repeats": 5
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.48,
+          "minMs": 0.38,
+          "maxMs": 0.51,
+          "repeats": 5
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 1.64,
+          "minMs": 1.38,
+          "maxMs": 2.14,
+          "repeats": 5
+        },
+        "sortByNumber": {
+          "medianMs": 4.88,
+          "minMs": 4.56,
+          "maxMs": 5.49,
+          "repeats": 5
+        },
+        "filterByText": {
+          "medianMs": 0.15,
+          "minMs": 0.13,
+          "maxMs": 0.24,
+          "repeats": 5
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.06,
+          "minMs": 0.05,
+          "maxMs": 0.07,
+          "repeats": 5
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 1.05,
+          "minMs": 1.03,
+          "maxMs": 2.03,
+          "repeats": 5
+        },
+        "finalReadiness": {
+          "medianMs": 1.46,
+          "minMs": 1.45,
+          "maxMs": 1.73,
+          "repeats": 5
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 1.85,
+          "minMs": 1.51,
+          "maxMs": 2.09,
+          "repeats": 5,
+          "staleSheets": 25,
+          "staleFindings": 9,
+          "totalSheets": 5000,
+          "totalFindings": 2534
+        }
+      }
+    },
+    {
+      "label": "5000 sheets, one PDF per sheet",
+      "shape": {
+        "sheets": 5000,
+        "sources": 5000,
+        "findings": 2534,
+        "activeFindings": 2534,
+        "decisions": 1282,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 10951732,
+        "prettyBytes": 16692910,
+        "bytesPerSheet": 2190,
+        "jsonValues": 397247,
+        "maxDepth": 7
+      },
+      "buildMs": 490.78,
+      "save": {
+        "exportTotal": {
+          "medianMs": 115.39,
+          "minMs": 110.77,
+          "maxMs": 122.5,
+          "repeats": 5
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 26.13,
+          "minMs": 22.28,
+          "maxMs": 30.05,
+          "repeats": 5
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 124.25,
+          "minMs": 116.25,
+          "maxMs": 148.03,
+          "repeats": 5
+        },
+        "stageMedians": {
+          "decodeMs": 5.76,
+          "scanMs": 47.29,
+          "parseMs": 16.53,
+          "schemaMs": 24.7,
+          "relationsMs": 30.85
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 29.92,
+          "minMs": 24.8,
+          "maxMs": 34,
+          "repeats": 5
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 35.85,
+          "minMs": 33.91,
+          "maxMs": 37.54,
+          "repeats": 5
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.38,
+          "minMs": 0.26,
+          "maxMs": 0.47,
+          "repeats": 5
+        },
+        "gapDetectionOnly": {
+          "medianMs": 1.2,
+          "minMs": 0.96,
+          "maxMs": 1.23,
+          "repeats": 5
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.52,
+          "minMs": 0.44,
+          "maxMs": 0.58,
+          "repeats": 5
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 1.69,
+          "minMs": 1.6,
+          "maxMs": 1.82,
+          "repeats": 5
+        },
+        "sortByNumber": {
+          "medianMs": 4.76,
+          "minMs": 4.62,
+          "maxMs": 4.91,
+          "repeats": 5
+        },
+        "filterByText": {
+          "medianMs": 0.19,
+          "minMs": 0.12,
+          "maxMs": 0.25,
+          "repeats": 5
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.07,
+          "minMs": 0.06,
+          "maxMs": 0.08,
+          "repeats": 5
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 1.64,
+          "minMs": 1.55,
+          "maxMs": 2.69,
+          "repeats": 5
+        },
+        "finalReadiness": {
+          "medianMs": 2.49,
+          "minMs": 1.97,
+          "maxMs": 2.71,
+          "repeats": 5
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 3.05,
+          "minMs": 2.87,
+          "maxMs": 3.38,
+          "repeats": 5,
+          "staleSheets": 1,
+          "staleFindings": 0,
+          "totalSheets": 5000,
+          "totalFindings": 2534
+        }
+      }
+    },
+    {
+      "label": "5000 sheets, nothing confirmed or decided",
+      "shape": {
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 5607,
+        "activeFindings": 5607,
+        "decisions": 0,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 10110518,
+        "prettyBytes": 15472711,
+        "bytesPerSheet": 2022,
+        "jsonValues": 370400,
+        "maxDepth": 7
+      },
+      "buildMs": 73.23,
+      "save": {
+        "exportTotal": {
+          "medianMs": 94.7,
+          "minMs": 89.14,
+          "maxMs": 98.78,
+          "repeats": 5
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 24.99,
+          "minMs": 21.36,
+          "maxMs": 27.36,
+          "repeats": 5
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 104.07,
+          "minMs": 100.43,
+          "maxMs": 129.96,
+          "repeats": 5
+        },
+        "stageMedians": {
+          "decodeMs": 5.39,
+          "scanMs": 40.59,
+          "parseMs": 18.79,
+          "schemaMs": 22.06,
+          "relationsMs": 21.62
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 50.04,
+          "minMs": 43.11,
+          "maxMs": 60.28,
+          "repeats": 5
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 54.1,
+          "minMs": 46.7,
+          "maxMs": 58.34,
+          "repeats": 5
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.39,
+          "minMs": 0.27,
+          "maxMs": 0.41,
+          "repeats": 5
+        },
+        "gapDetectionOnly": {
+          "medianMs": 1.12,
+          "minMs": 1.02,
+          "maxMs": 1.87,
+          "repeats": 5
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.46,
+          "minMs": 0.45,
+          "maxMs": 0.58,
+          "repeats": 5
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 1.7,
+          "minMs": 1.61,
+          "maxMs": 1.91,
+          "repeats": 5
+        },
+        "sortByNumber": {
+          "medianMs": 4.56,
+          "minMs": 4.53,
+          "maxMs": 5.2,
+          "repeats": 5
+        },
+        "filterByText": {
+          "medianMs": 0.12,
+          "minMs": 0.11,
+          "maxMs": 0.28,
+          "repeats": 5
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.04,
+          "minMs": 0.04,
+          "maxMs": 0.04,
+          "repeats": 5
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 1.21,
+          "minMs": 1.16,
+          "maxMs": 3.26,
+          "repeats": 5
+        },
+        "finalReadiness": {
+          "medianMs": 1.49,
+          "minMs": 1.29,
+          "maxMs": 1.7,
+          "repeats": 5
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 2.21,
+          "minMs": 1.65,
+          "maxMs": 3.11,
+          "repeats": 5,
+          "staleSheets": 25,
+          "staleFindings": 25,
+          "totalSheets": 5000,
+          "totalFindings": 5607
+        }
+      }
+    },
+    {
+      "label": "5000 sheets, with a declared register",
+      "shape": {
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 2641,
+        "activeFindings": 2641,
+        "decisions": 1337,
+        "runs": 2,
+        "registerReferences": 5,
+        "registerEntries": 4898,
+        "qa09Findings": 107
+      },
+      "size": {
+        "compactBytes": 10168897,
+        "prettyBytes": 15888117,
+        "bytesPerSheet": 2034,
+        "jsonValues": 385041,
+        "maxDepth": 7
+      },
+      "buildMs": 200.02,
+      "save": {
+        "exportTotal": {
+          "medianMs": 95.58,
+          "minMs": 90.58,
+          "maxMs": 102.44,
+          "repeats": 5
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 25.09,
+          "minMs": 24.33,
+          "maxMs": 30.19,
+          "repeats": 5
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 105.58,
+          "minMs": 96.24,
+          "maxMs": 116.7,
+          "repeats": 5
+        },
+        "stageMedians": {
+          "decodeMs": 4.99,
+          "scanMs": 40.4,
+          "parseMs": 15.8,
+          "schemaMs": 19.88,
+          "relationsMs": 22.06
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 34.34,
+          "minMs": 27,
+          "maxMs": 36.67,
+          "repeats": 5
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 33.09,
+          "minMs": 30.99,
+          "maxMs": 34.07,
+          "repeats": 5
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.37,
+          "minMs": 0.27,
+          "maxMs": 0.4,
+          "repeats": 5
+        },
+        "gapDetectionOnly": {
+          "medianMs": 1.22,
+          "minMs": 0.95,
+          "maxMs": 2.14,
+          "repeats": 5
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.54,
+          "minMs": 0.51,
+          "maxMs": 0.65,
+          "repeats": 5
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 1.81,
+          "minMs": 1.75,
+          "maxMs": 2.12,
+          "repeats": 5
+        },
+        "sortByNumber": {
+          "medianMs": 4.91,
+          "minMs": 4.61,
+          "maxMs": 5.38,
+          "repeats": 5
+        },
+        "filterByText": {
+          "medianMs": 0.16,
+          "minMs": 0.11,
+          "maxMs": 0.26,
+          "repeats": 5
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.07,
+          "minMs": 0.05,
+          "maxMs": 0.08,
+          "repeats": 5
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 1.53,
+          "minMs": 1.5,
+          "maxMs": 1.97,
+          "repeats": 5
+        },
+        "finalReadiness": {
+          "medianMs": 1.77,
+          "minMs": 1.69,
+          "maxMs": 2.74,
+          "repeats": 5
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 4.15,
+          "minMs": 2.93,
+          "maxMs": 6.3,
+          "repeats": 5,
+          "staleSheets": 25,
+          "staleFindings": 116,
+          "totalSheets": 5000,
+          "totalFindings": 2641
+        }
+      }
+    },
+    {
+      "label": "10000 sheets (beyond candidate limit)",
+      "shape": {
+        "sheets": 10000,
+        "sources": 400,
+        "findings": 5253,
+        "activeFindings": 5253,
+        "decisions": 2566,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 18444344,
+        "prettyBytes": 28514354,
+        "bytesPerSheet": 1844,
+        "jsonValues": 677876,
+        "maxDepth": 7
+      },
+      "buildMs": 481.57,
+      "save": {
+        "exportTotal": {
+          "medianMs": 179.29,
+          "minMs": 171.86,
+          "maxMs": 189.14,
+          "repeats": 3
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 47.16,
+          "minMs": 41.67,
+          "maxMs": 48.92,
+          "repeats": 3
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 212.15,
+          "minMs": 200.75,
+          "maxMs": 215.94,
+          "repeats": 3
+        },
+        "stageMedians": {
+          "decodeMs": 10.26,
+          "scanMs": 87.48,
+          "parseMs": 30.65,
+          "schemaMs": 37,
+          "relationsMs": 46.67
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 54.98,
+          "minMs": 54.3,
+          "maxMs": 55.7,
+          "repeats": 3
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 70.69,
+          "minMs": 58.44,
+          "maxMs": 70.73,
+          "repeats": 3
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 0.85,
+          "minMs": 0.74,
+          "maxMs": 1.1,
+          "repeats": 3
+        },
+        "gapDetectionOnly": {
+          "medianMs": 3.07,
+          "minMs": 2.68,
+          "maxMs": 4,
+          "repeats": 3
+        },
+        "comparisonKeyAll": {
+          "medianMs": 0.76,
+          "minMs": 0.73,
+          "maxMs": 0.79,
+          "repeats": 3
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 4.2,
+          "minMs": 4.17,
+          "maxMs": 4.39,
+          "repeats": 3
+        },
+        "sortByNumber": {
+          "medianMs": 13.44,
+          "minMs": 12.77,
+          "maxMs": 13.84,
+          "repeats": 3
+        },
+        "filterByText": {
+          "medianMs": 0.41,
+          "minMs": 0.39,
+          "maxMs": 0.45,
+          "repeats": 3
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.12,
+          "minMs": 0.11,
+          "maxMs": 0.18,
+          "repeats": 3
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 3.27,
+          "minMs": 3.21,
+          "maxMs": 3.37,
+          "repeats": 3
+        },
+        "finalReadiness": {
+          "medianMs": 4.41,
+          "minMs": 4.33,
+          "maxMs": 5.07,
+          "repeats": 3
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 5.66,
+          "minMs": 5.12,
+          "maxMs": 6.28,
+          "repeats": 3,
+          "staleSheets": 25,
+          "staleFindings": 12,
+          "totalSheets": 10000,
+          "totalFindings": 5253
+        }
+      }
+    },
+    {
+      "label": "20000 sheets (beyond candidate limit)",
+      "shape": {
+        "sheets": 20000,
+        "sources": 800,
+        "findings": 10412,
+        "activeFindings": 10412,
+        "decisions": 5249,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0
+      },
+      "size": {
+        "compactBytes": 36883361,
+        "prettyBytes": 57013545,
+        "bytesPerSheet": 1844,
+        "jsonValues": 1354969,
+        "maxDepth": 7
+      },
+      "buildMs": 1850.56,
+      "save": {
+        "exportTotal": {
+          "medianMs": 371.68,
+          "minMs": 359.89,
+          "maxMs": 386.61,
+          "repeats": 3
+        },
+        "jsonStringifyOnly": {
+          "medianMs": 97.98,
+          "minMs": 92.85,
+          "maxMs": 98.39,
+          "repeats": 3
+        }
+      },
+      "open": {
+        "importTotal": {
+          "medianMs": 425.17,
+          "minMs": 423.2,
+          "maxMs": 425.79,
+          "repeats": 3
+        },
+        "stageMedians": {
+          "decodeMs": 20.02,
+          "scanMs": 163.45,
+          "parseMs": 60.07,
+          "schemaMs": 85.17,
+          "relationsMs": 93.33
+        }
+      },
+      "qa": {
+        "evaluateAllRules": {
+          "medianMs": 116.51,
+          "minMs": 108.29,
+          "maxMs": 120.11,
+          "repeats": 3
+        },
+        "evaluateAndReconcileNoChange": {
+          "medianMs": 123.87,
+          "minMs": 119.71,
+          "maxMs": 145.36,
+          "repeats": 3
+        },
+        "duplicateNumberDetectionOnly": {
+          "medianMs": 1.44,
+          "minMs": 1.43,
+          "maxMs": 1.66,
+          "repeats": 3
+        },
+        "gapDetectionOnly": {
+          "medianMs": 6.55,
+          "minMs": 4.29,
+          "maxMs": 6.87,
+          "repeats": 3
+        },
+        "comparisonKeyAll": {
+          "medianMs": 1.55,
+          "minMs": 1.32,
+          "maxMs": 1.96,
+          "repeats": 3
+        }
+      },
+      "list": {
+        "buildRows": {
+          "medianMs": 7.47,
+          "minMs": 6.96,
+          "maxMs": 7.9,
+          "repeats": 3
+        },
+        "sortByNumber": {
+          "medianMs": 35.58,
+          "minMs": 26.66,
+          "maxMs": 36.24,
+          "repeats": 3
+        },
+        "filterByText": {
+          "medianMs": 0.48,
+          "minMs": 0.48,
+          "maxMs": 0.49,
+          "repeats": 3
+        },
+        "filterNeedsAttention": {
+          "medianMs": 0.16,
+          "minMs": 0.16,
+          "maxMs": 0.18,
+          "repeats": 3
+        }
+      },
+      "stale": {
+        "currencyOfEverything": {
+          "medianMs": 5.75,
+          "minMs": 5.61,
+          "maxMs": 6.33,
+          "repeats": 3
+        },
+        "finalReadiness": {
+          "medianMs": 7.66,
+          "minMs": 7.42,
+          "maxMs": 11.66,
+          "repeats": 3
+        },
+        "afterOneSourceReplaced": {
+          "medianMs": 10.56,
+          "minMs": 8.66,
+          "maxMs": 16.1,
+          "repeats": 3,
+          "staleSheets": 25,
+          "staleFindings": 10,
+          "totalSheets": 20000,
+          "totalFindings": 10412
+        }
+      }
+    }
+  ]
+}

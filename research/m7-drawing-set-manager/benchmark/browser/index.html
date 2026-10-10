@@ -1,0 +1,27 @@
+<!doctype html>
+<!--
+  RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL
+
+  A bare page for the M7 browser measurements. It is not part of the app, is not
+  linked from it, and is not built by Vite: benchmark/bench-browser.mjs serves
+  this directory with its own static server and drives it with Puppeteer.
+  It loads nothing from src/ and nothing from the network.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M7 research harness (not production)</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; }
+  table { border-collapse: collapse; }
+  td { border-bottom: 1px solid #ddd; padding: 4px 8px; white-space: nowrap; }
+  .dense td { padding: 2px 8px; }
+</style>
+</head>
+<body>
+<p>RESEARCH ONLY / NOT PRODUCTION. Synthetic files only.</p>
+<input type="file" id="files" multiple>
+<div id="list"></div>
+<script type="module" src="./harness.mjs"></script>
+</body>
+</html>
