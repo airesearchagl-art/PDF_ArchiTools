@@ -3,7 +3,7 @@ import {
     PenTool, Ruler, ZoomIn, Download, Blend, FileText, UploadCloud, Combine,
     ArrowUp, ArrowDown, ScanText, Settings, History, Play, Stamp, ChevronDown,
     Layers, Eye, MousePointer2, Scissors,
-    FileSpreadsheet,
+    FileSpreadsheet, FolderOpen,
 } from 'lucide-react';
 import { TOOL_VERSIONS } from '../config/versions';
 import { USAGE_SCREENSHOTS } from './usageScreenshotBadges';
@@ -24,6 +24,19 @@ interface ReleaseNote {
 }
 
 const releaseHistory: ReleaseNote[] = [
+    {
+        date: '2026/10/10',
+        tool: '図面管理',
+        version: '0.1.0',
+        changes: [
+            '新しいツール「図面管理」を追加しました。図面一式のPDFをまとめて読み込み、どのファイルに何ページあり、各ページがどの用紙サイズ・向きかを一覧で確認できます。',
+            '複数のPDFを選ぶと、1ファイルずつ順に読み込みます。ファイルごとに内容の識別情報（SHA-256）を計算し、名前が違っても中身が同じファイルは重ねて追加しません。',
+            'ページ一覧には、用紙サイズ・向き・回転と、PDF内にテキスト情報があるかどうかを表示します。ページ数が多くても一覧は軽く動きます。',
+            '一覧で選んだページを、読み取り専用のプレビューで拡大・縮小しながら確認できます。PDFファイル自体は変更しません。',
+            '処理はすべてブラウザ内で行い、PDFをサーバーへ送信しません。読み込んだ内容は保存されず、ページを閉じると消えます。',
+            '表題欄の読み取り、図面一式のチェック、作業内容の保存・再開には、まだ対応していません。',
+        ],
+    },
     {
         date: '2026/10/03',
         tool: 'PDF加工',
@@ -219,8 +232,8 @@ const VersionBadge = ({ version }: { version: string }) => (
     </span>
 );
 
-/** The five tools, in the order the top navigation shows them. */
-const TOOL_IDS = ['annotator', 'comparator', 'processor', 'split-merge', 'textifier'] as const;
+/** The six tools, in the order the top navigation shows them. */
+const TOOL_IDS = ['annotator', 'comparator', 'processor', 'split-merge', 'textifier', 'drawing-set'] as const;
 type ToolId = typeof TOOL_IDS[number];
 
 /** The tool a URL hash points at, or null when it points elsewhere. */
@@ -244,7 +257,7 @@ function scrollToHash(): void {
 }
 
 export function HowToUse() {
-    // Everything starts closed, so opening the guide shows the five tools
+    // Everything starts closed, so opening the guide shows the six tools
     // rather than the first tool's manual. A link straight to one tool is the
     // exception, and it is read here rather than in an effect so the very
     // first render already has the right section open.
@@ -271,7 +284,7 @@ export function HowToUse() {
                     建築設計お役立ちPDFツール集へようこそ
                 </h2>
                 <p style={{ color: '#ccc', margin: '0 0 8px' }}>
-                    5つのツールの使い方ガイドです。読みたいツールを選ぶと説明が開きます。
+                    6つのツールの使い方ガイドです。読みたいツールを選ぶと説明が開きます。
                 </p>
                 <p style={{ margin: '0 0 8px', fontSize: '0.85em', color: '#ffecb3', lineHeight: 1.6 }}>
                     ※ 読み込んだPDFファイルは、お使いのブラウザ内で処理されます。
@@ -279,7 +292,7 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: 0, fontSize: '0.85em', color: '#9fd3ff' }}>
                     <History size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>PDF最適化 v2</b>（PDF加工 v1.4.0）
+                    最近の更新: <b>図面管理</b>を追加（新しいツール v0.1.0）
                     — <a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>
                 </p>
             </div>
@@ -808,6 +821,74 @@ export function HowToUse() {
                         <b>データの取り扱い:</b> 文字認識・OCR前処理・TXT／Word／Excelの書き出しは、
                         いずれもお使いのブラウザ内で実行されます。
                         PDFを外部のAI・OCR・表認識サービスへ送信することはありません。
+                    </p>
+                </ToolSection>
+
+                {/* 6. DRAWING SET */}
+                <ToolSection
+                    id="drawing-set"
+                    number={6}
+                    accent="#d4a017"
+                    icon={<Layers size={22} />}
+                    titleJa="図面管理"
+                    titleEn="Drawing Set"
+                    summary="図面一式を読み込み、ページ構成を確認"
+                    version={TOOL_VERSIONS.drawingSet.version}
+                    open={openId === 'drawing-set'}
+                    onToggle={toggle}
+                >
+                    <p style={{ marginTop: 0 }}>
+                        図面一式のPDFをまとめて読み込み、<b>どのファイルに何ページあり、各ページがどの用紙サイズ・向きか</b>を
+                        一覧で確認するツールです。選んだページは読み取り専用のプレビューで確認できます。
+                    </p>
+
+                    <div style={gridStyle}>
+                        <BadgeCard n={1} icon={<FolderOpen size={18} />} title="PDFを選んで読み込む">
+                            <ul style={listStyle}>
+                                <li>「PDFを選択」（読み込んだ後は「PDFを追加」）から、複数のPDFをまとめて選べます。</li>
+                                <li>1ファイルずつ順に読み込みます。進み具合と、ファイルごとの結果（追加・重複・読み込めない理由）が表示されます。</li>
+                                <li>読み込めないファイルがあっても、すでに読み込んだファイルはそのまま残ります。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={2} icon={<FileText size={18} />} title="同じ内容のファイルを見分ける">
+                            <ul style={listStyle}>
+                                <li>ファイルごとに内容の識別情報（SHA-256）を計算します。ファイル名ではなく中身で見分けるので、名前が違っても中身が同じファイルは追加されません。</li>
+                                <li>SHA-256は同じ内容かどうかを確かめるための値です。署名や改ざん防止の証明ではありません。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={3} icon={<Layers size={18} />} title="ページ一覧">
+                            <ul style={listStyle}>
+                                <li>全ページを1行ずつ並べ、ファイル名・ページ番号・用紙サイズ・向きを表示します。ページ数が多くても軽く動きます。</li>
+                                <li>「テキストあり／なし」は、PDF内に読み取れるテキスト情報があるかどうかです。文字認識（OCR）は行っていません。</li>
+                                <li>キーボードの ↑ ↓・Home・End でも選べます。左上のファイル一覧からファイルを外すこともできます。</li>
+                            </ul>
+                        </BadgeCard>
+
+                        <BadgeCard n={4} icon={<Eye size={18} />} title="読み取り専用のプレビュー">
+                            <ul style={listStyle}>
+                                <li>選んだページを1ページずつ表示します。拡大・縮小と、ページ全体の表示ができます。</li>
+                                <li>右側に、ページの用紙・向き・回転と、ファイルの大きさ・ページ数を表示します。</li>
+                                <li>注釈・編集・保存はできません。PDFファイル自体は変更しません。</li>
+                            </ul>
+                        </BadgeCard>
+                    </div>
+
+                    <div style={{ ...cardStyle, borderLeft: '6px solid #b0b0b0', marginTop: '20px' }}>
+                        <h4 style={cardHeadStyle}><Settings size={18} /> まだ対応していないこと</h4>
+                        <ul style={listStyle}>
+                            <li><b>表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません。</b></li>
+                            <li><b>図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません。</b></li>
+                            <li><b>作業内容の保存・再開には、まだ対応していません。</b>読み込んだ内容は保存されず、ページを閉じたり、ほかのツールに切り替えたり、「新しい図面一式」を押したりすると消えます。</li>
+                            <li>読み込めるのは、いまのところ1ファイル256 MiBまで、図面一式で合計5000ページまでです（今後変わることがあります）。一覧から外したファイルのページも合計に数えるため、上限に達したら「新しい図面一式」で始め直してください。パスワード付きのPDFは読み込めません。</li>
+                        </ul>
+                    </div>
+
+                    <p style={calloutStyle}>
+                        <b>データの取り扱い:</b> 読み込み・識別情報の計算・ページ情報の確認・プレビューは、
+                        すべてお使いのブラウザ内で実行されます。PDFをサーバーや外部のサービスへ送信することはありません。
+                        ファイル名や図面の内容は機密情報であることがあるため、共有のパソコンでは使い終わったらページを閉じてください。
                     </p>
                 </ToolSection>
             </div>

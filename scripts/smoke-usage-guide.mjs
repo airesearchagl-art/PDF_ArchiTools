@@ -2,7 +2,7 @@
  * Gate for the 使い方 (usage guide) page against the PRODUCTION build.
  *
  * Two things can rot here. The navigation: the guide is a set of collapsible
- * tools now, and "all five visible at a glance, one open at a time, reachable
+ * tools now, and "all six visible at a glance, one open at a time, reachable
  * by keyboard and by link" is behaviour, not decoration. And the content: a
  * tool that shipped but was never written up, or a claim that outlived the code
  * it described. Both are checked, and the content is checked inside the panel
@@ -20,7 +20,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5182;
 const ORIGIN = `http://localhost:${PORT}`;
 
-const TOOLS = ['annotator', 'comparator', 'processor', 'split-merge', 'textifier'];
+const TOOLS = ['annotator', 'comparator', 'processor', 'split-merge', 'textifier', 'drawing-set'];
+// 図面管理 (v0.1.0) is written up in text only; it has no screenshot yet, so the
+// screenshot checks cover the five tools that do.
+const SCREENSHOT_TOOLS = TOOLS.filter((t) => t !== 'drawing-set');
 
 if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
     console.error('No dist/ found. Run: npm run build');
@@ -50,7 +53,7 @@ const openGuide = async () => {
         const b = [...document.querySelectorAll('nav button')].find((x) => (x.textContent || '').trim() === '使い方');
         if (b) b.click();
     });
-    await page.waitForFunction(() => document.querySelectorAll('.usage-header').length === 5);
+    await page.waitForFunction(() => document.querySelectorAll('.usage-header').length === 6);
 };
 
 const headerState = () => page.evaluate(() => [...document.querySelectorAll('.usage-header')].map((h) => ({
@@ -80,15 +83,15 @@ try {
     await openGuide();
     check('使い方 page opens', true);
 
-    // ---- the five tools, at a glance ---------------------------------------
+    // ---- the six tools, at a glance ---------------------------------------
     console.log('\n=== accordion ===');
     const initial = await headerState();
     console.log(`  headers  : ${JSON.stringify(initial.map((h) => h.tool))}`);
     console.log(`  last bottom ${initial[initial.length - 1].bottom}px of 900px viewport`);
-    check('there are five tool headers', initial.length === 5, String(initial.length));
+    check('there are six tool headers', initial.length === 6, String(initial.length));
     check('they are in the order the top navigation uses',
         initial.map((h) => h.tool).join(',') === TOOLS.join(','), initial.map((h) => h.tool).join(','));
-    for (const [i, label] of ['1. PDF加筆', '2. PDF比較', '3. PDF加工', '4. PDF抽出・統合', '5. PDFテキスト化'].entries()) {
+    for (const [i, label] of ['1. PDF加筆', '2. PDF比較', '3. PDF加工', '4. PDF抽出・統合', '5. PDFテキスト化', '6. 図面管理'].entries()) {
         check(`header ${i + 1} reads ${label}`, initial[i].text.includes(label), initial[i].text.slice(0, 40));
     }
     check('every header carries a one-line summary',
@@ -96,7 +99,7 @@ try {
         JSON.stringify(initial.map((h) => h.text.slice(-24))));
     check('nothing is open to begin with',
         initial.every((h) => h.expanded === 'false'), JSON.stringify(initial.map((h) => h.expanded)));
-    check('all five headers are visible without scrolling at 1280x900',
+    check('all six headers are visible without scrolling at 1280x900',
         initial.every((h) => h.bottom <= 900),
         `last bottom ${initial[initial.length - 1].bottom}`);
     check('a closed guide does not scroll the page',
@@ -195,6 +198,7 @@ try {
     console.log(`  ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.4.0', versions.processor === '1.4.0', JSON.stringify(versions));
     check('PDFテキスト化 shows v1.7.0', versions.textifier === '1.7.0', JSON.stringify(versions));
+    check('図面管理 shows v0.1.0', versions['drawing-set'] === '0.1.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
     // ---- content, read from the panel it belongs to ---------------------------
@@ -343,6 +347,27 @@ try {
     check('textifier: nothing claims Word keeps the layout',
         !t.includes('レイアウトを保持') && !t.includes('レイアウトを再現します'), 'no layout claim');
 
+    // 図面管理 -- only what M7-P1 does, and plainly what it does not do yet.
+    const d = text['drawing-set'];
+    check('drawing-set: says what it is for',
+        d.includes('図面一式のPDFをまとめて読み込み') && d.includes('読み取り専用のプレビュー'), 'purpose');
+    check('drawing-set: one file at a time, with per-file results, and accepted files survive a refusal',
+        d.includes('1ファイルずつ順に読み込みます') && d.includes('すでに読み込んだファイルはそのまま残ります'), 'intake');
+    check('drawing-set: SHA-256 is content identification, not a signature',
+        d.includes('SHA-256') && d.includes('署名や改ざん防止の証明ではありません'), 'sha');
+    check('drawing-set: text yes/no is not OCR',
+        d.includes('文字認識（OCR）は行っていません'), 'no ocr');
+    check('drawing-set: title block, checking and save/resume are stated as not yet available',
+        d.includes('表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません')
+        && d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
+        && d.includes('作業内容の保存・再開には、まだ対応していません'), 'not yet');
+    check('drawing-set: the bounds are stated as current, not permanent',
+        d.includes('256 MiB') && d.includes('5000ページ') && d.includes('今後変わることがあります'), 'bounds');
+    check('drawing-set: processing stays in the browser, and file names may be confidential',
+        d.includes('ブラウザ内で実行されます') && d.includes('送信することはありません') && d.includes('機密情報であることがある'), 'privacy');
+    check('drawing-set: no claim of saving, editing, OCR or QA it does not have',
+        !/保存できます|再開できます|編集できます|注釈を追加|OCRを行います|自動でチェック/.test(d), 'no overclaim');
+
     // ---- privacy copy stays within what the code proves ----------------------
     console.log('\n=== privacy copy ===');
     const intro = await page.evaluate(() => document.body.innerText);
@@ -369,24 +394,29 @@ try {
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
     check('and the newest entries are the ones just added',
-        historyDates[0] === '20261003',
+        historyDates[0] === '20261010' && historyDates[1] === '20261003',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
     // The banner above the guide is written by hand, so it can fall behind the
-    // history. Tie it, the newest entry and the PDF加工 header to one release.
+    // history. Tie it, the newest entry and the 図面管理 header to one release.
     const releaseHeads = await page.evaluate(() => [...document.querySelectorAll('#release-history h4')]
         .map((h) => (h.innerText || '').replace(/\s+/g, ' ').trim()));
     const processor140 = releaseHeads.filter((h) => h.includes('PDF加工') && h.includes('1.4.0'));
     check('exactly one PDF加工 1.4.0 entry, dated 2026/10/03',
         processor140.length === 1 && processor140[0].startsWith('2026/10/03'), JSON.stringify(processor140));
-    check('and it is the newest entry', releaseHeads[0] === processor140[0], releaseHeads[0]);
+    const drawingSet010 = releaseHeads.filter((h) => h.includes('図面管理') && h.includes('0.1.0'));
+    check('exactly one 図面管理 0.1.0 entry, dated 2026/10/10, and it is the newest',
+        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[0] === drawingSet010[0], releaseHeads[0]);
+    check('and PDF加工 1.4.0 comes right after it', releaseHeads[1] === processor140[0], releaseHeads[1]);
     const banners = await page.evaluate(() => [...document.querySelectorAll('p')]
         .map((p) => (p.textContent || '').replace(/\s+/g, ' ').trim())
         .filter((s) => s.includes('最近の更新')));
     const banner = banners[0] ?? '';
     console.log(`  banner: ${banner}`);
     check('there is one 最近の更新 banner', banners.length === 1, `${banners.length}`);
-    check('the banner names PDF最適化 and PDF加工 v1.4.0',
-        banner.includes('PDF最適化') && banner.includes('PDF加工 v1.4.0'), banner);
+    check('the banner names 図面管理 v0.1.0',
+        banner.includes('図面管理') && banner.includes('v0.1.0'), banner);
+    check('the 図面管理 0.1.0 entry says what is not available yet',
+        historyText.includes('表題欄の読み取り、図面一式のチェック、作業内容の保存・再開には、まだ対応していません'));
     check('the banner no longer names Word / PDFテキスト化 v1.5.0 as the latest update',
         !banner.includes('Word') && !banner.includes('PDFテキスト化') && !banner.includes('v1.5.0'), banner);
     check('the banner stays out of implementation detail',
@@ -414,7 +444,7 @@ try {
     // ---- screenshots really load ---------------------------------------------
     console.log('\n=== screenshots ===');
     const images = [];
-    for (const tool of TOOLS) {
+    for (const tool of SCREENSHOT_TOOLS) {
         await page.goto(ORIGIN, { waitUntil: 'networkidle0' });
         await openGuide();
         await clickTool(tool);

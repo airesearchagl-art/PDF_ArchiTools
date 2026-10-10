@@ -6,14 +6,17 @@ import { PdfTools } from './components/tools/PdfTools';
 import { PdfTextifier } from './components/PdfTextifier';
 import { PdfSplitMerge } from './components/PdfSplitMerge';
 import { HowToUse } from './components/HowToUse';
+import { DrawingSetWorkspace } from './components/drawing-set/DrawingSetWorkspace';
 
 function App() {
-  const [mode, setMode] = useState<'annotate' | 'compare' | 'tools' | 'textify' | 'split-merge' | 'usage'>('usage');
+  const [mode, setMode] = useState<'annotate' | 'compare' | 'tools' | 'textify' | 'split-merge' | 'drawing-set' | 'usage'>('usage');
 
   return (
     <div className="app-container">
       <header style={{
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: '8px 16px',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '10px 20px',
@@ -21,7 +24,7 @@ function App() {
         color: 'white'
       }}>
         <h1 style={{ fontSize: '1.6em', margin: 0 }}>建築設計お役立ちPDFツール集</h1>
-        <nav style={{ display: 'flex', gap: '10px' }}>
+        <nav style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
           <button
             onClick={() => setMode('usage')}
             style={{
@@ -100,6 +103,19 @@ function App() {
           >
             PDFテキスト化
           </button>
+          <button
+            onClick={() => setMode('drawing-set')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '4px',
+              border: 'none',
+              backgroundColor: mode === 'drawing-set' ? '#4a90e2' : '#555',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            図面管理
+          </button>
         </nav>
       </header>
 
@@ -109,6 +125,7 @@ function App() {
         {mode === 'tools' && <PdfTools />}
         {mode === 'textify' && <PdfTextifier />}
         {mode === 'split-merge' && <PdfSplitMerge />}
+        {mode === 'drawing-set' && <DrawingSetWorkspace />}
         {mode === 'usage' && <HowToUse />}
       </main>
     </div>

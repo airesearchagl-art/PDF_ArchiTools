@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface VersionFooterProps {
-    toolName: 'annotator' | 'comparator' | 'tools' | 'textifier' | 'splitMerge';
+    toolName: 'annotator' | 'comparator' | 'tools' | 'textifier' | 'splitMerge' | 'drawingSet';
     version: string;
     lastUpdate: string;
 }
