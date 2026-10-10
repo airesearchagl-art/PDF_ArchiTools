@@ -8,6 +8,14 @@ It is **not a new design**: every rule here comes from M7 Architecture v1 and it
 from the artifacts reviewed at PR #33 exact head `e541d1d43db3a73acceb3f8241ef914d59dc77d7` (see
 [Sources](#sources)). Nothing in this directory is wired into the Production app yet.
 
+## M7-CAN-02 — documentation-only derived-rule clarification
+
+The `editedFields`, manifest-digest bytes, and terminal extraction-run explanations below
+make previously underspecified **D** (runtime/writer) rules explicit before M7-P2.
+This clarification does not change the executable S/R/W validator, JSON Schema,
+`schemaVersion`, the pre-release safety limits, or authorize M7-P2 implementation.
+Independent Contract Review and a separate Human merge gate remain required.
+
 ## How to read it — where each rule lives
 
 | Mark | Enforced by | When | On violation |
@@ -128,6 +136,17 @@ save (D).
   - `confirmation` — what a person stands behind: `confirmedAt`, `sourceSha256`, `profile` (or `null` when
     typed with no profile involved), the four `values` (a blank a person confirmed is a value) and
     `editedFields`;
+  - **`editedFields` at confirmation time (D):** an ordered subset of the four canonical field keys,
+    `drawingNumber`, `drawingTitle`, `revision`, `issueDate`, never duplicated. For a manually
+    entered confirmation with `profile: null`, include all four. Otherwise compare each
+    confirmation value against the machine observation available at confirmation time
+    with the same Source fingerprint and profile basis. Include a key when the matching
+    observation is missing, the observed field has `source: none` (even if both values
+    are the empty string), or the confirmed value is not exactly equal to the observed
+    `value`. Do not include keys with the same value and an observed `source: native`
+    or `ocr`. This is a historical account of fields supplied by a person, not proof
+    they checked all unchanged fields. Do not recompute it using a subsequently
+    overwritten observation. It is a D writer rule, not a new S/R/W validator.
   - a correction never overwrites the machine's reading, and **a score never confirms anything** — `ocrScore`
     is a sort key read by nothing that decides (D);
   - the values a QA rule reads are the confirmation if it stands, else the observation if it stands, else
@@ -202,12 +221,46 @@ save (D).
   `completedAt` before `startedAt` is a warning (W).
 - **Manifest basis.** `manifestDigest` is the SHA-256 of the sorted `(sourceId, sha256)` pairs of every live
   Source at the time: the run is bound to the exact set of bytes it saw, in constant space (S, D).
+- **Exact `manifestDigest` bytes (D).** At run start select every live Source (`retiredAt: null`),
+  even if no Sheet of that Source is selected for this run. Form the pair
+  `[source.id, source.fingerprint.sha256]` for each, sort by lower-case UUID ID
+  in ascending ASCII code-point order, and serialize the outer array of pairs
+  using `JSON.stringify` with no additional whitespace. Hash the resulting
+  UTF-8 bytes with SHA-256 and store the lower-case 64-character hex. The
+  hash does not include filenames, PDF bytes, selection or run outcome.
+  Deterministic reference vectors using full RFC 9562 version-4-shaped UUIDs:
+  - Empty live manifest: UTF-8 `[]` →
+    `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+  - Two Sources in either input order: ID `00000000-0000-4000-8000-000000000001`
+    with a 64-character hex fingerprint of only `a`, and ID
+    `00000000-0000-4000-8000-000000000002` with a 64-character hex
+    fingerprint of only `b`. Serialize the two pairs in that ascending ID
+    order with no whitespace →
+    `8fdeea72a821499e08e043456eff0e02008b83fce8bad8905a34535e4727fed0`.
 - **Coverage** `{ sheetsEvaluated, sheetsExcluded }`: a run that left sheets out cannot close a finding about
   them (D).
 - **Derived evidence provenance.** Each observation names the run and the `sourceSha256` it read; each finding
   names its run and the `basis` of every Source it cites. Observations come only from `EXTRACTION` runs;
   findings, and their closing, only from `QA` runs (R `REL_RUN_KIND`).
 - Append-only.
+- **Terminal EXTRACTION runs (D).** Work in progress remains outside the canonical
+  model. When an operation completes, is cancelled, or fails, append the run once
+  with its terminal `outcome`, the start-time `manifestDigest`, its actual
+  `coverage`, and `completedAt` where known. Valid observations from completely
+  processed Sources can reference a `CANCELLED` or `FAILED` run. The run's
+  terminal outcome does not itself invalidate their evidence. Unfinished
+  Source results do not become partial Sheet observations.
+- **EXTRACTION coverage (D).** `sheetsEvaluated` counts targeted Sheets with
+  committed valid observations (including `OCR_FAILED`), while `sheetsExcluded`
+  counts the other targeted Sheets, including skipped, interrupted, or refused
+  ones. The sum describes that run's scope, not every Sheet in the Drawing Set;
+  `COMPLETED` can still have excluded Sheets. QA-run coverage is separate.
+- **Append-only versus P4 save pruning (D).** Once appended, an in-memory run is
+  not rewritten or deleted merely because it has no current references.
+  §A's exception applies only at M7-P4 save: an unreferenced run may be
+  excluded from the saved file if no observation, finding, or finding-closing
+  `runId` refers to it. A zero-observation terminal run may remain in a
+  browser-local P2 session, and the P2 runtime never uses save-time pruning.
 
 ## G. QA Finding
 

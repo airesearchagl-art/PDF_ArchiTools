@@ -43,6 +43,13 @@
       "publicationChange": "leading header comment only",
       "bodySha256": "8775a3211f624a53850b4f551284bc06e519c13bc24f99ac6a67192fa2e7cf33",
       "bodyDigestMethod": "SHA-256 (hex) of the UTF-8 text, LF line endings, after the first '*/' (the end of the leading header comment); identical for source and publication"
+    },
+    "semantic-contract.md": {
+      "sha256": "1a3c0e92d042bb397a26958abc532b7bc88f77e4e8f3394105ca3571100bd128",
+      "source": "M7 Architecture v1, human-readable D contract",
+      "clarification": "M7-CAN-02",
+      "digestMethod": "SHA-256 (hex) of the full committed UTF-8 file with LF line endings",
+      "machineValidationDelta": false
     }
   },
   "resourceLimitsStatus": "CANDIDATE_PRE_RELEASE",
@@ -52,5 +59,21 @@
   },
   "userWritableFormatReleased": false,
   "productionRuntimeIntegration": false,
-  "productionImplementationAuthorized": false
+  "productionImplementationAuthorized": false,
+  "clarifications": [
+    {
+      "id": "M7-CAN-02",
+      "scope": [
+        "editedFields at confirmation time",
+        "manifestDigest byte serialization and vectors",
+        "terminal AnalysisRun evidence and P4 save pruning boundary"
+      ],
+      "humanReadableOnly": true,
+      "schemaChanged": false,
+      "executableSemanticChanged": false,
+      "schemaVersionChanged": false,
+      "productionCodeChanged": false,
+      "implementationAuthorizationGranted": false
+    }
+  ]
 }
