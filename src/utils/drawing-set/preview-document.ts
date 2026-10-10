@@ -26,14 +26,21 @@
  * recover -- reload the page, which ends every worker. The workspace keeps one
  * owner for the whole page, so leaving it and coming back does not get round
  * this.
+ *
+ * Given a PdfDocumentGate (M7-P2), the owner also yields to title-block
+ * extraction: the gate closes it before extraction opens its own document, no
+ * preview opens while extraction runs, and a destruction that failed anywhere
+ * -- here or in extraction -- stops every later open on both sides. Without a
+ * gate the owner behaves exactly as above.
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { configurePdfWorker } from '../pdf-worker-source';
 import { fingerprintIntoBuffer } from './fingerprint-client';
 import { IntakeStop, READ_CHUNK_BYTES } from './intake-policy';
+import type { PdfDocumentGate } from './pdf-document-gate';
 
-export type PreviewErrorCode = 'READ_FAILED' | 'SOURCE_CHANGED' | 'OPEN_FAILED' | 'CLOSED' | 'RELEASE_UNCONFIRMED';
+export type PreviewErrorCode = 'READ_FAILED' | 'SOURCE_CHANGED' | 'OPEN_FAILED' | 'CLOSED' | 'RELEASE_UNCONFIRMED' | 'EXTRACTION_ACTIVE';
 
 export class PreviewError extends Error {
     readonly code: PreviewErrorCode;
@@ -89,6 +96,10 @@ const unconfirmedError = (): PreviewError => new PreviewError(
     'RELEASE_UNCONFIRMED',
     '前に表示していたPDFを閉じられたか確認できないため、プレビューを表示できません。ページを再読み込みしてください。図面一式は保存されていないため、再読み込みの後でファイルを追加し直してください。',
 );
+const extractionActiveError = (): PreviewError => new PreviewError(
+    'EXTRACTION_ACTIVE',
+    '表題欄の読み取り中はプレビューを表示しません。読み取りが終わると表示できます。',
+);
 
 export class PreviewDocumentOwner {
     private entry: Entry | null = null;
@@ -101,13 +112,21 @@ export class PreviewDocumentOwner {
     /** Set for good once PDF.js could not destroy a document: none is opened after it. */
     private releaseUnconfirmed = false;
     private readonly chunkBytes: number;
+    private readonly gate: PdfDocumentGate | null;
     private readonly tally = {
         opened: 0, destroyRequested: 0, destroyed: 0, destroyFailed: 0, readsStopped: 0,
         renderStarted: 0, renderCompleted: 0, renderCancelled: 0, renderFailed: 0,
     };
 
-    constructor(options: { chunkBytes?: number } = {}) {
+    constructor(options: { chunkBytes?: number; gate?: PdfDocumentGate } = {}) {
         this.chunkBytes = options.chunkBytes ?? READ_CHUNK_BYTES;
+        this.gate = options.gate ?? null;
+        this.gate?.registerPreview(this);
+    }
+
+    /** A document anywhere could not be destroyed: this owner's own, or one the gate knows of. */
+    private get refusesAll(): boolean {
+        return this.releaseUnconfirmed || this.gate?.releaseUnconfirmed === true;
     }
 
     /** The Source whose document is open or opening, if any. */
@@ -117,6 +136,7 @@ export class PreviewDocumentOwner {
 
     /** The document of `sourceId`, opening it from `file` if it is not the one already held. */
     open(sourceId: string, file: Blob, expected: ExpectedContent): Promise<PDFDocumentProxy> {
+        if (this.gate?.extractionActive) return Promise.reject(extractionActiveError());
         if (this.entry && this.entry.sourceId === sourceId) return this.entry.promise;
         void this.close();
         const waitFor = this.released;
@@ -137,7 +157,8 @@ export class PreviewDocumentOwner {
                 // once one could not be destroyed.
                 await waitFor;
                 if (entry.closed) throw closedError();
-                if (this.releaseUnconfirmed) throw unconfirmedError();
+                if (this.refusesAll) throw unconfirmedError();
+                if (this.gate?.extractionActive) throw extractionActiveError();
                 if (file.size !== expected.byteLength) throw changedError();
                 let bytes: Uint8Array | null;
                 try {
@@ -236,6 +257,7 @@ export class PreviewDocumentOwner {
             () => {
                 this.tally.destroyFailed += 1;
                 this.releaseUnconfirmed = true;
+                this.gate?.noteReleaseUnconfirmed();
             },
         );
     }
