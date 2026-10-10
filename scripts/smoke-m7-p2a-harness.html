@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>M7-P2-A foundation harness</title>
+</head>
+<body>
+    <p id="state">loading</p>
+    <!--
+        Drives the Production M7-P2-A modules (src/utils/drawing-set/*) and the
+        unchanged Drawing Register engine in a real browser, through the Vite
+        dev server, for scripts/smoke-m7-p1.mjs. Every function returns plain
+        data; the Node side decides what passes. Synthetic fixtures only
+        (scripts/make-m7-p2a-fixtures.mjs).
+    -->
+    <script>
+        // Before any module runs: count every Worker by what it is (a PDF.js
+        // document, a tesseract recogniser, anything else), every getDocument()
+        // that reaches PDF.js, and every storage write from this page.
+        (() => {
+            const counts = { pdf: { started: 0, ended: 0, live: 0, peak: 0 }, ocr: { started: 0, ended: 0, live: 0, peak: 0 }, other: { started: 0, ended: 0, live: 0, peak: 0 }, getDocs: 0, events: [] };
+            const kindOf = (url) => (/pdf\.worker/.test(url) ? 'pdf' : /\/ocr\//.test(url) ? 'ocr' : 'other');
+            const NativeWorker = window.Worker;
+            window.Worker = class extends NativeWorker {
+                constructor(url, options) {
+                    super(url, options);
+                    this.__kind = kindOf(String(url));
+                    const c = counts[this.__kind];
+                    c.started += 1;
+                    c.live += 1;
+                    c.peak = Math.max(c.peak, c.live);
+                    counts.events.push(`${this.__kind}-start`);
+                }
+                postMessage(...args) {
+                    if (this.__kind === 'pdf' && args[0]?.action === 'GetDocRequest') counts.getDocs += 1;
+                    return super.postMessage(...args);
+                }
+                terminate() {
+                    if (!this.__ended) {
+                        this.__ended = true;
+                        const c = counts[this.__kind];
+                        c.ended += 1;
+                        c.live -= 1;
+                        counts.events.push(`${this.__kind}-end`);
+                    }
+                    super.terminate();
+                }
+            };
+            window.__workers = counts;
+            const storage = { writes: 0, calls: [] };
+            for (const name of ['setItem', 'removeItem', 'clear']) {
+                const original = Storage.prototype[name];
+                Storage.prototype[name] = function (...args) {
+                    storage.writes += 1;
+                    storage.calls.push(`Storage.${name}`);
+                    return original.apply(this, args);
+                };
+            }
+            for (const name of ['open', 'deleteDatabase']) {
+                const original = indexedDB[name].bind(indexedDB);
+                indexedDB[name] = (...args) => {
+                    storage.writes += 1;
+                    storage.calls.push(`indexedDB.${name}`);
+                    return original(...args);
+                };
+            }
+            if (window.caches) {
+                const original = caches.open.bind(caches);
+                caches.open = (...args) => {
+                    storage.writes += 1;
+                    storage.calls.push('caches.open');
+                    return original(...args);
+                };
+            }
+            window.__storage = storage;
+        })();
+    </script>
+    <script type="module">
+        import * as pdfjsLib from 'pdfjs-dist';
+        import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+        import { FIELD_NAMES, commitSourceCandidate, createSession, mintUuid, nowTimestamp, retireSource } from '/src/utils/drawing-set/model.ts';
+        import { intakeSource } from '/src/utils/drawing-set/source-intake.ts';
+        import { hasMeaningfulText } from '/src/utils/drawing-set/page-facts.ts';
+        import { PreviewDocumentOwner } from '/src/utils/drawing-set/preview-document.ts';
+        import { PdfDocumentGate } from '/src/utils/drawing-set/pdf-document-gate.ts';
+        import { m7PdfDocumentAssets } from '/src/utils/drawing-set/pdf-document-assets.ts';
+        import {
+            MAX_PROFILE_REVISION, P2_METADATA_LIMITS, RAW_TEXT_FORBIDDEN_CLASS, SINGLE_LINE_FORBIDDEN_CLASS,
+            checkFieldRawText, checkFieldValue, checkName, normaliseLineEndings,
+        } from '/src/utils/drawing-set/field-bounds.ts';
+        import {
+            RECT_EPSILON_PT, TRANSFER_MODELS, assignProfile, createProfile, renameProfile, retireProfile, reviseProfile, unassignProfile,
+        } from '/src/utils/drawing-set/title-block-profiles.ts';
+        import { REGISTER_EXTRACTION_ENGINE, manifestDigest } from '/src/utils/drawing-set/analysis-run.ts';
+        import { confirmationCurrency, currencyLabel, mergeBinding, observationCurrency } from '/src/utils/drawing-set/currency.ts';
+        import { confirmSheet, editedFieldsFor, withdrawConfirmation } from '/src/utils/drawing-set/metadata-confirmation.ts';
+        import { ENGINE_FIELD, assignmentsFor, observationFromRow, toTemplateProfile } from '/src/utils/drawing-set/register-adapter.ts';
+        import { GuardedRegisterOcr, extractTitleBlocks } from '/src/utils/drawing-set/register-extraction.ts';
+        import { buildRow } from '/src/utils/pdf-textifier/drawing-register.ts';
+        import { extractRegister } from '/src/utils/pdf-textifier/drawing-register-extract.ts';
+        import { toUprightRect } from '/src/utils/pdf-textifier/table-geometry.ts';
+
+        const FIXTURES = '/test-fixtures/m7-p2a';
+        const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+        const ch = (code) => String.fromCodePoint(code);
+        const lone = (code) => String.fromCharCode(code);
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const workers = () => plainly(window.__workers);
+
+        async function fixtureBytes(name) {
+            const response = await fetch(`${FIXTURES}/${name}.pdf`);
+            const type = response.headers.get('content-type') || '';
+            if (!response.ok || type.includes('text/html')) throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+            return new Uint8Array(await response.arrayBuffer());
+        }
+        const fixtureFile = async (name) => new File([await fixtureBytes(name)], `${name}.pdf`, { type: '' });
+
+        /** Deep-freeze, so any later write to these objects throws (modules run in strict mode). */
+        function deepFreeze(value) {
+            if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+                Object.freeze(value);
+                for (const child of Object.values(value)) deepFreeze(child);
+            }
+            return value;
+        }
+
+        // ------------------------------------------------------------------
+        // A working session built through the Production intake, as the
+        // workspace would hold it: the model, the Files, the runtime bindings.
+        // ------------------------------------------------------------------
+        async function world(names, { gate = null } = {}) {
+            const session = createSession();
+            const w = {
+                project: session.project,
+                set: session.drawingSet,
+                files: new Map(),
+                bindings: new Map(),
+                sources: {},
+                applyCalls: 0,
+            };
+            for (const name of names) {
+                const file = await fixtureFile(name);
+                const lease = gate ? gate.beginIntake() : { ok: true, end() { } };
+                if (!lease.ok) throw new Error(`intake refused: ${lease.code}`);
+                try {
+                    const outcome = await intakeSource(file, { signal: new AbortController().signal, current: () => w.set });
+                    if (outcome.kind !== 'candidate') throw new Error(`intake ${name}: ${outcome.kind}`);
+                    const committed = commitSourceCandidate(w.set, outcome.candidate);
+                    if (committed.kind !== 'committed') throw new Error(`commit ${name}: ${committed.kind}`);
+                    w.set = committed.drawingSet;
+                    const id = outcome.candidate.source.id;
+                    w.files.set(id, file);
+                    w.bindings.set(id, 'MATCHED');
+                    w.sources[name] = id;
+                } finally {
+                    lease.end();
+                }
+            }
+            return w;
+        }
+        const sheetsOf = (w, name) => w.set.sheets.filter((s) => s.sourceId === w.sources[name]).sort((a, b) => a.pageNumber - b.pageNumber);
+        const sheetById = (w, id) => w.set.sheets.find((s) => s.id === id);
+        const session = (w) => plainly({ project: w.project, drawingSet: w.set });
+
+        function makeProfile(w, { name, transferModel, reference, rects }) {
+            const r = createProfile(w.set, { name, transferModel, referencePage: reference, fields: rects });
+            if (!r.ok) throw new Error(`profile: ${r.refusal.code}`);
+            w.set = r.drawingSet;
+            return r.profile;
+        }
+        function assign(w, sheetIds, profileId, replace = false) {
+            const r = assignProfile(w.set, sheetIds, profileId, { replace });
+            if (!r.ok) throw new Error(`assign: ${r.refusal.code}`);
+            w.set = r.drawingSet;
+            return r;
+        }
+
+        /** Run the Production extraction over this world. */
+        async function extract(w, sheetIds, { gate, signal, createOcr, onProgress, fileFor } = {}) {
+            const report = await extractTitleBlocks({ sheetIds }, {
+                current: () => w.set,
+                apply: (next) => { w.applyCalls += 1; w.set = next; },
+                fileFor: fileFor ?? ((id) => w.files.get(id) ?? null),
+                gate,
+                signal,
+                createOcr,
+                onProgress,
+            });
+            if (report.kind === 'finished') {
+                for (const [id, binding] of report.bindings) w.bindings.set(id, mergeBinding(w.bindings.get(id), binding));
+            }
+            return report;
+        }
+        const reportSummary = (report) => (report.kind === 'refused'
+            ? { kind: 'refused', code: report.refusal.code }
+            : plainly({ ...report, bindings: Object.fromEntries(report.bindings) }));
+
+        /** An OCR engine whose recogniser can be held, released or made to fail -- for timing, not results. */
+        class TestOcr extends GuardedRegisterOcr {
+            constructor({ hold = false, fail = false } = {}) {
+                super();
+                this.hold = hold;
+                this.fail = fail;
+                this.entered = 0;
+                this.release = null;
+                this.enteredSignal = new Promise((resolve) => { this.onEnter = resolve; });
+            }
+            async recogniseFields(page, rects, options) {
+                this.entered += 1;
+                if (this.fail) throw new Error('simulated recognition failure');
+                if (this.hold) {
+                    await this.start();
+                    this.onEnter();
+                    await new Promise((resolve) => { this.release = resolve; });
+                }
+                return super.recogniseFields(page, rects, options);
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Rendering, to see what a page looks like
+        // ------------------------------------------------------------------
+        async function openDoc(bytes, params) {
+            configurePdfWorker();
+            // PDF.js takes the buffer it is given; each document gets its own copy.
+            const task = pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, ...params });
+            return { task, doc: await task.promise };
+        }
+        /** Dark pixels inside each upright rectangle (shrunk by 2 pt, so cell borders do not count), rendered at `scale`. */
+        async function darkPixels(doc, pageNumber, rects, scale = 2) {
+            const page = await doc.getPage(pageNumber);
+            try {
+                const viewport = page.getViewport({ scale, rotation: 0 });
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.ceil(viewport.width);
+                canvas.height = Math.ceil(viewport.height);
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                await page.render({ canvas, viewport }).promise;
+                const out = {};
+                for (const [name, r] of Object.entries(rects)) {
+                    const x0 = Math.floor((r.left + 2) * scale);
+                    const y0 = Math.floor((r.top + 2) * scale);
+                    const w = Math.max(1, Math.floor((r.right - r.left - 4) * scale));
+                    const h = Math.max(1, Math.floor((r.bottom - r.top - 4) * scale));
+                    const data = ctx.getImageData(x0, y0, w, h).data;
+                    let dark = 0;
+                    for (let i = 0; i < data.length; i += 4) if (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2] < 128) dark += 1;
+                    out[name] = dark;
+                }
+                canvas.width = 0;
+                canvas.height = 0;
+                return out;
+            } finally {
+                page.cleanup();
+            }
+        }
+        /** What P1's intake would call each page (native text or not), opened with these parameters. */
+        async function pageKinds(bytes, params) {
+            const { task, doc } = await openDoc(bytes, { disableFontFace: true, ...params });
+            try {
+                const kinds = [];
+                for (let n = 1; n <= doc.numPages; n++) {
+                    const page = await doc.getPage(n);
+                    const content = await page.getTextContent({ includeMarkedContent: false, disableNormalization: true });
+                    kinds.push(content.items.some((item) => typeof item.str === 'string' && hasMeaningfulText(item.str)) ? 'text-native' : 'scanned');
+                    page.cleanup();
+                }
+                return kinds;
+            } finally {
+                await task.destroy();
+            }
+        }
+        /** The engine run directly on a document opened with `params`, as values per page -- the "before" side. */
+        async function engineValues(bytes, params, profile, pages) {
+            const { task, doc } = await openDoc(bytes, params);
+            const ocr = new GuardedRegisterOcr();
+            try {
+                const result = await extractRegister({
+                    doc,
+                    profiles: new Map([[profile.id, toTemplateProfile(profile)]]),
+                    assignments: assignmentsFor(pages.map((pageNumber) => ({ pageNumber, profileId: profile.id }))),
+                    ocr,
+                });
+                return pages.map((n) => {
+                    const row = result.rows.find((r) => r.pageNumber === n);
+                    return Object.fromEntries(FIELD_NAMES.map((f) => [f, { value: row.fields[ENGINE_FIELD[f]].value, source: row.fields[ENGINE_FIELD[f]].source }]));
+                });
+            } finally {
+                await ocr.close();
+                await task.destroy();
+            }
+        }
+
+        window.__m7p2a = {
+            constants: () => plainly({
+                limits: P2_METADATA_LIMITS,
+                maxProfileRevision: MAX_PROFILE_REVISION,
+                singleLineClass: SINGLE_LINE_FORBIDDEN_CLASS,
+                rawTextClass: RAW_TEXT_FORBIDDEN_CLASS,
+                fieldNames: FIELD_NAMES,
+                engine: REGISTER_EXTRACTION_ENGINE,
+                transferModels: TRANSFER_MODELS,
+                rectEpsilon: RECT_EPSILON_PT,
+                engineField: ENGINE_FIELD,
+                assets: m7PdfDocumentAssets(),
+            }),
+
+            /** The text rules, and the adapter on rows built by the engine's own buildRow. */
+            bounds() {
+                const both = (s) => ({ value: checkFieldValue(s), raw: checkFieldRawText(s) });
+                const astral = ch(0x20bb7);
+                const texts = {
+                    value300: both('x'.repeat(300)), value301: both('x'.repeat(301)),
+                    astral300: both(astral.repeat(300)), astral301: both(astral.repeat(301)),
+                    raw1000: both('x'.repeat(1000)), raw1001: both('x'.repeat(1001)),
+                    rawAstral1000: both(astral.repeat(1000)), rawAstral1001: both(astral.repeat(1001)),
+                    lineFeed: both(`a${ch(0x0a)}b`), tab: both(`a${ch(0x09)}b`), nul: both(`a${ch(0)}b`), cr: both(`a${ch(0x0d)}b`),
+                    del: both(`a${ch(0x7f)}b`), c1: both(`a${ch(0x85)}b`),
+                    lineSeparator: both(`a${ch(0x2028)}b`), paragraphSeparator: both(`a${ch(0x2029)}b`),
+                    rlo: both(`a${ch(0x202e)}b`), lre: both(`a${ch(0x202a)}b`), lri: both(`a${ch(0x2066)}b`), pdi: both(`a${ch(0x2069)}b`),
+                    loneHigh: both(`a${lone(0xd800)}b`), loneLow: both(`a${lone(0xdc00)}b`), reversedPair: both(`${lone(0xdc00)}${lone(0xd800)}`),
+                    zeroWidthJoiner: both(`a${ch(0x200d)}b`), replacement: both(`a${ch(0xfffd)}b`), fullWidth: both('Ａ－１０１'), empty: both(''),
+                };
+                const names = {
+                    empty: checkName(''), blank: checkName('   '), len200: checkName('x'.repeat(200)), len201: checkName('x'.repeat(201)),
+                    bidi: checkName(`a${ch(0x202e)}b`), lineFeed: checkName(`a${ch(0x0a)}b`), japanese: checkName('表題欄A'),
+                };
+                const lineEndings = normaliseLineEndings(`a${ch(0x0d)}${ch(0x0a)}b${ch(0x0d)}c${ch(0x0a)}`) === `a${ch(0x0a)}b${ch(0x0a)}c${ch(0x0a)}`;
+
+                const PID = mintUuid();
+                const basis = { runId: mintUuid(), sourceSha256: 'a'.repeat(64), profile: { profileId: PID, profileRevision: 3 } };
+                const native = (rawText) => ({ rawText, source: 'native' });
+                const row = (fields, extra = {}) => buildRow({
+                    pageNumber: 1, profileId: PID,
+                    fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [ENGINE_FIELD[k], v])),
+                    ...extra,
+                });
+                const base = { drawingNumber: native('図面番号\nA-101'), drawingTitle: native('1階平面図'), revision: native('B'), issueDate: native('2026.09.01') };
+                const convert = (fields, extra) => {
+                    const r = observationFromRow(row({ ...base, ...fields }, extra), basis);
+                    return r.ok
+                        ? { ok: true, status: r.observation.status, runId: r.observation.runId === basis.runId, profile: r.observation.profile, sha: r.observation.sourceSha256 === basis.sourceSha256,
+                            fields: Object.fromEntries(FIELD_NAMES.map((f) => [f, { value: r.observation.fields[f].value, rawLength: [...r.observation.fields[f].rawText].length, source: r.observation.fields[f].source, ocrScore: r.observation.fields[f].ocrScore }])),
+                            rawText: Object.fromEntries(FIELD_NAMES.map((f) => [f, [...r.observation.fields[f].rawText].length <= 40 ? r.observation.fields[f].rawText : null])) }
+                        : { ok: false, problems: r.problems };
+                };
+                const lines = (n, len) => Array.from({ length: n }, () => 'x'.repeat(len)).join('\n');
+                const adapter = {
+                    normal: convert({}),
+                    crlf: convert({ drawingNumber: native(`LBL${ch(0x0d)}${ch(0x0a)}A-1${ch(0x0d)}B-2`) }),
+                    raw1000: convert({ drawingTitle: native(lines(7, 142)) }),
+                    raw1001: convert({ drawingTitle: native(`${lines(6, 142)}\n${'x'.repeat(143)}`) }),
+                    // Each astral character is two UTF-16 units and one character.
+                    rawAstral1000: convert({ drawingTitle: native(Array.from({ length: 7 }, () => astral.repeat(142)).join(ch(0x0a))) }),
+                    rawAstral1001: convert({ drawingTitle: native([...Array.from({ length: 6 }, () => astral.repeat(142)), astral.repeat(143)].join(ch(0x0a))) }),
+                    value300: convert({ drawingNumber: native('9'.repeat(300)) }),
+                    value301: convert({ drawingNumber: native('9'.repeat(301)) }),
+                    tabInRaw: convert({ drawingTitle: native(`label${ch(0x09)}\nvalue`) }),
+                    bidiInValue: convert({ revision: native(`B${ch(0x202e)}`) }),
+                    loneSurrogate: convert({ issueDate: native(`2026${lone(0xd800)}`) }),
+                    lineSeparator: convert({ drawingTitle: native(`a${ch(0x2028)}b`) }),
+                    score100: convert({ drawingTitle: { rawText: 'X', source: 'ocr', ocrScore: 100 } }),
+                    score0: convert({ drawingTitle: { rawText: 'X', source: 'ocr', ocrScore: 0 } }),
+                    score101: convert({ drawingTitle: { rawText: 'X', source: 'ocr', ocrScore: 101 } }),
+                    scoreFraction: convert({ drawingTitle: { rawText: 'X', source: 'ocr', ocrScore: 55.5 } }),
+                    ocrEmpty: convert({ revision: { rawText: '', source: 'ocr', ocrScore: null } }),
+                    ocrFailed: convert({ drawingTitle: { rawText: '', source: 'none' }, revision: { rawText: '', source: 'none' } }, { ocrFailed: true }),
+                };
+                return plainly({ texts, names, lineEndings, adapter });
+            },
+
+            /** Profiles and assignment, through the Production operations, on a real intake. */
+            async profileOps() {
+                const w = await world(['p2a-geometry', 'p2a-transfer']);
+                const sheets = sheetsOf(w, 'p2a-geometry');
+                const ids = sheets.map((s) => s.id);
+                const reference = { uprightWidthPt: 800, uprightHeightPt: 580 };
+                const rects = {
+                    drawingNumber: { left: 560, top: 440, right: 780, bottom: 480 },
+                    drawingTitle: { left: 560, top: 480, right: 780, bottom: 520 },
+                    revision: { left: 560, top: 520, right: 660, bottom: 560 },
+                    issueDate: { left: 660, top: 520, right: 780, bottom: 560 },
+                };
+                const out = {};
+                const tryCreate = (input) => {
+                    const before = w.set;
+                    const r = createProfile(w.set, { name: 'P', transferModel: 'normalised', referencePage: reference, fields: rects, ...input });
+                    if (r.ok) w.set = r.drawingSet;
+                    return r.ok ? { ok: true, revision: r.profile.revision } : { ok: false, code: r.refusal.code, field: r.refusal.field ?? null, untouched: w.set === before };
+                };
+                const withRect = (field, rect) => ({ fields: { ...rects, [field]: rect } });
+                out.noModel = tryCreate({ transferModel: undefined });
+                out.guessedModel = tryCreate({ transferModel: 'auto' });
+                out.emptyName = tryCreate({ name: '' });
+                out.blankName = tryCreate({ name: '   ' });
+                out.longName = tryCreate({ name: 'x'.repeat(201) });
+                out.bidiName = tryCreate({ name: `a${ch(0x202e)}b` });
+                out.outsidePage = tryCreate(withRect('drawingNumber', { ...rects.drawingNumber, right: 800.02 }));
+                out.inverted = tryCreate(withRect('revision', { left: 660, top: 520, right: 560, bottom: 560 }));
+                out.empty = tryCreate(withRect('issueDate', { left: 660, top: 520, right: 660, bottom: 560 }));
+                out.notANumber = tryCreate(withRect('drawingTitle', { ...rects.drawingTitle, top: Number.NaN }));
+                out.missing = tryCreate({ fields: { drawingNumber: rects.drawingNumber, drawingTitle: rects.drawingTitle, revision: rects.revision } });
+                out.hugePage = tryCreate({ referencePage: { uprightWidthPt: 14401, uprightHeightPt: 580 } });
+                out.zeroPage = tryCreate({ referencePage: { uprightWidthPt: 0, uprightHeightPt: 580 } });
+                out.profilesAfterRefusals = w.set.titleBlockProfiles.length;
+                out.atTolerance = tryCreate({ name: 'edge', ...withRect('drawingNumber', { ...rects.drawingNumber, right: 800.01 }) });
+                out.name200 = tryCreate({ name: 'x'.repeat(200) });
+
+                const p1 = makeProfile(w, { name: 'P1', transferModel: 'normalised', reference, rects });
+                const created = { ...p1 };
+                let r = renameProfile(w.set, p1.id, 'P1 改');
+                w.set = r.drawingSet;
+                const renamed = w.set.titleBlockProfiles.find((p) => p.id === p1.id);
+                out.rename = { changed: r.changed, revision: renamed.revision, name: renamed.name, updatedMoved: renamed.updatedAt >= created.updatedAt };
+                out.renameSame = renameProfile(w.set, p1.id, 'P1 改').changed;
+                out.reviseSame = reviseProfile(w.set, p1.id, { fields: rects, transferModel: 'normalised', referencePage: reference });
+                out.reviseSame = { changed: out.reviseSame.changed, revision: out.reviseSame.revision };
+                r = reviseProfile(w.set, p1.id, { fields: { ...rects, drawingNumber: { ...rects.drawingNumber, left: 561 } } });
+                w.set = r.drawingSet;
+                out.reviseGeometry = { changed: r.changed, revision: r.revision };
+                r = reviseProfile(w.set, p1.id, { transferModel: 'corner-anchored' });
+                w.set = r.drawingSet;
+                out.reviseModel = { changed: r.changed, revision: r.revision };
+                r = reviseProfile(w.set, p1.id, { referencePage: { uprightWidthPt: 801, uprightHeightPt: 580 } });
+                w.set = r.drawingSet;
+                out.reviseReference = { changed: r.changed, revision: r.revision };
+                const badRect = reviseProfile(w.set, p1.id, withRect('revision', { left: 0, top: 0, right: 900, bottom: 10 }));
+                out.reviseBadRect = badRect.ok ? 'ok' : badRect.refusal.code;
+
+                const a1 = assign(w, ids.slice(0, 4), p1.id);
+                out.assign = { assigned: a1.assigned.length, replaced: a1.replaced.length, unchanged: a1.unchanged.length };
+                out.othersUnassigned = w.set.sheets.filter((s) => !ids.slice(0, 4).includes(s.id)).every((s) => s.profileAssignment === null);
+                const p2 = makeProfile(w, { name: 'P2', transferModel: 'corner-anchored', reference, rects });
+                const before = w.set;
+                const conflict = assignProfile(w.set, ids.slice(2, 6), p2.id);
+                out.conflict = { ok: conflict.ok, code: conflict.refusal?.code, conflicting: (conflict.refusal?.sheetIds ?? []).map((id) => ids.indexOf(id) + 1), untouched: w.set === before };
+                const replaced = assign(w, ids.slice(2, 6), p2.id, true);
+                out.replace = { assigned: replaced.assigned.map((id) => ids.indexOf(id) + 1), replaced: replaced.replaced.map((id) => ids.indexOf(id) + 1) };
+                const stamp = sheetById(w, ids[4]).profileAssignment.confirmedAt;
+                await sleep(5);
+                const again = assign(w, [ids[4]], p2.id);
+                out.reassignSame = { unchanged: again.unchanged.length, keptMoment: sheetById(w, ids[4]).profileAssignment.confirmedAt === stamp };
+                const cleared = unassignProfile(w.set, [ids[5]]);
+                w.set = cleared.drawingSet;
+                out.unassign = { cleared: cleared.cleared.length, now: sheetById(w, ids[5]).profileAssignment };
+                out.unknownSheet = assignProfile(w.set, [mintUuid()], p2.id).refusal?.code;
+                w.set = retireSource(w.set, w.sources['p2a-transfer']);
+                out.retiredSheet = assignProfile(w.set, [sheetsOf(w, 'p2a-transfer')[0].id], p2.id).refusal?.code;
+
+                const retired = retireProfile(w.set, p1.id);
+                w.set = retired.drawingSet;
+                out.retire = {
+                    unassigned: retired.unassignedSheetIds.map((id) => ids.indexOf(id) + 1),
+                    retiredAt: w.set.titleBlockProfiles.find((p) => p.id === p1.id).retiredAt !== null,
+                    stillListed: w.set.titleBlockProfiles.some((p) => p.id === p1.id),
+                    assignAfter: assignProfile(w.set, [ids[0]], p1.id).refusal?.code,
+                    reviseAfter: reviseProfile(w.set, p1.id, { transferModel: 'normalised' }).refusal?.code,
+                    renameAfter: renameProfile(w.set, p1.id, 'again').refusal?.code,
+                    retireAgain: retireProfile(w.set, p1.id).refusal?.code,
+                };
+                out.sessionMid = session(w);
+
+                // The limit counts retired profiles too.
+                while (w.set.titleBlockProfiles.length < P2_METADATA_LIMITS.maxProfiles.value) makeProfile(w, { name: `fill ${w.set.titleBlockProfiles.length}`, transferModel: 'normalised', reference, rects });
+                out.atLimit = w.set.titleBlockProfiles.length;
+                out.overLimit = tryCreate({ name: 'one too many' });
+                // A revision at its format bound cannot move again.
+                const last = w.set.titleBlockProfiles[w.set.titleBlockProfiles.length - 1];
+                const maxed = { ...w.set, titleBlockProfiles: w.set.titleBlockProfiles.map((p) => (p.id === last.id ? { ...p, revision: MAX_PROFILE_REVISION } : p)) };
+                out.revisionLimit = reviseProfile(maxed, last.id, { transferModel: 'corner-anchored' }).refusal?.code;
+                out.session = session(w);
+                return plainly(out);
+            },
+
+            /** Every field of every rotation and CropBox offset, through the Production extraction. */
+            async geometry(truth) {
+                const w = await world(['p2a-geometry']);
+                const sheets = sheetsOf(w, 'p2a-geometry');
+                const results = {};
+                for (const model of ['normalised', 'corner-anchored']) {
+                    const profile = makeProfile(w, { name: `G ${model}`, transferModel: model, reference: truth.reference, rects: truth.pages[0].uprightRects });
+                    assign(w, sheets.map((s) => s.id), profile.id, true);
+                    const gate = new PdfDocumentGate();
+                    const report = await extract(w, sheets.map((s) => s.id), { gate });
+                    results[model] = {
+                        report: reportSummary(report),
+                        observations: sheets.map((s) => plainly(sheetById(w, s.id).observation)),
+                        gate: gate.counts(),
+                    };
+                }
+                // Viewer space -> upright: the Production map, and PDF.js's own inverse, against the generator's rectangles.
+                const bytes = await fixtureBytes('p2a-geometry');
+                const { task, doc } = await openDoc(bytes, m7PdfDocumentAssets());
+                const conversions = [];
+                try {
+                    for (const p of truth.pages) {
+                        const page = await doc.getPage(p.page);
+                        const viewport = page.getViewport({ scale: 1 });
+                        const [vx0, , , vy1] = page.view;
+                        let productionError = 0;
+                        let pdfjsError = 0;
+                        for (const field of Object.keys(p.uprightRects)) {
+                            const want = p.uprightRects[field];
+                            const got = toUprightRect(p.displayRects[field], page.rotate, viewport.width, viewport.height);
+                            for (const k of ['left', 'top', 'right', 'bottom']) productionError = Math.max(productionError, Math.abs(got[k] - want[k]));
+                            const d = p.displayRects[field];
+                            const corners = [viewport.convertToPdfPoint(d.left, d.top), viewport.convertToPdfPoint(d.right, d.bottom)]
+                                .map(([x, y]) => ({ u: x - vx0, v: vy1 - y }));
+                            const fromPdfjs = {
+                                left: Math.min(corners[0].u, corners[1].u), right: Math.max(corners[0].u, corners[1].u),
+                                top: Math.min(corners[0].v, corners[1].v), bottom: Math.max(corners[0].v, corners[1].v),
+                            };
+                            for (const k of ['left', 'top', 'right', 'bottom']) pdfjsError = Math.max(pdfjsError, Math.abs(fromPdfjs[k] - want[k]));
+                        }
+                        conversions.push({ page: p.page, rotate: page.rotate, viewport: [viewport.width, viewport.height], view: page.view, productionError, pdfjsError });
+                        page.cleanup();
+                    }
+                } finally {
+                    await task.destroy();
+                }
+                return plainly({ results, conversions, session: session(w) });
+            },
+
+            /** A reference page and two larger ones, normalised and corner-anchored; then the models swapped. */
+            async transfer(truth) {
+                const run = async (models) => {
+                    const w = await world(['p2a-transfer']);
+                    const sheets = sheetsOf(w, 'p2a-transfer');
+                    const profiles = {};
+                    for (const model of ['normalised', 'corner-anchored']) {
+                        profiles[model] = makeProfile(w, { name: model, transferModel: model, reference: truth.reference, rects: truth.pages[0].cells });
+                    }
+                    for (const [i, model] of models.entries()) assign(w, [sheets[i].id], profiles[model].id);
+                    const report = await extract(w, sheets.map((s) => s.id), { gate: new PdfDocumentGate() });
+                    return { report: reportSummary(report), observations: sheets.map((s) => plainly(sheetById(w, s.id).observation)) };
+                };
+                return plainly({
+                    right: await run(['normalised', 'normalised', 'corner-anchored']),
+                    swapped: await run(['normalised', 'corner-anchored', 'normalised']),
+                });
+            },
+
+            /** Japanese title blocks: native, OCR, mixed, blank, and the bounds; then confirmations. */
+            async register(truth) {
+                const w = await world(['p2a-register']);
+                const sheets = sheetsOf(w, 'p2a-register');
+                const profile = makeProfile(w, { name: '表題欄', transferModel: 'normalised', reference: truth.reference, rects: truth.cells });
+                assign(w, sheets.map((s) => s.id), profile.id);
+                const gate = new PdfDocumentGate();
+                window.__workers.pdf.peak = window.__workers.pdf.live;
+                window.__workers.ocr.peak = window.__workers.ocr.live;
+                const before = { set: w.set, runs: w.set.analysisRuns.length };
+                let unchangedDuringRun = true;
+                const report = await extract(w, sheets.map((s) => s.id), {
+                    gate,
+                    onProgress: () => { if (w.set !== before.set) unchangedDuringRun = false; },
+                });
+                const after = workers();
+                const out = {
+                    report: reportSummary(report),
+                    observations: sheets.map((s) => plainly(sheetById(w, s.id).observation)),
+                    confirmations: sheets.map((s) => sheetById(w, s.id).confirmation),
+                    applyCalls: w.applyCalls,
+                    unchangedDuringRun,
+                    runsAdded: w.set.analysisRuns.length - before.runs,
+                    profile: { id: profile.id, revision: profile.revision },
+                    gate: gate.counts(),
+                    pdfPeakDuringRun: after.pdf.peak,
+                    pdfLiveAfter: after.pdf.live,
+                    ocrLiveAfter: after.ocr.live,
+                    ocrStarted: after.ocr.started,
+                    digestNow: manifestDigest(w.set),
+                };
+                const s = (n) => sheets[n - 1].id;
+                const obs = (n) => sheetById(w, s(n)).observation;
+                const confirm = (n, values, basis = 'observation') => {
+                    const r = confirmSheet(w.set, { sheetId: s(n), values, basis }, w.bindings);
+                    if (r.ok) w.set = r.drawingSet;
+                    return r.ok ? plainly(r.confirmation) : { refused: r.refusal.code, problems: plainly(r.refusal.problems ?? null) };
+                };
+                const observed = (n) => Object.fromEntries(Object.entries(obs(n).fields).map(([k, f]) => [k, f.value]));
+
+                // Confirming is a person's act on one Sheet; nothing above confirmed anything.
+                const c = {};
+                c.asRead = confirm(1, observed(1));
+                c.reconfirmEdited = confirm(1, { ...observed(1), drawingTitle: '1階平面図（改）' });
+                c.historyAfterReconfirm = plainly(sheetById(w, s(1)).confirmationHistory);
+                const withdrawn = withdrawConfirmation(w.set, s(1));
+                w.set = withdrawn.drawingSet;
+                c.afterWithdraw = { confirmation: sheetById(w, s(1)).confirmation, history: plainly(sheetById(w, s(1)).confirmationHistory.map((h) => h.reason)) };
+                c.withdrawNothing = withdrawConfirmation(w.set, s(1)).refusal?.code;
+                c.blankRead = confirm(4, observed(4));
+                c.twoEdited = confirm(5, { ...observed(5), drawingTitle: 'T', drawingNumber: 'N' });
+                c.trailingSpace = confirm(3, { ...observed(3), drawingNumber: `${observed(3).drawingNumber} ` });
+                c.manual = confirm(6, { drawingNumber: 'A-106', drawingTitle: '手入力', revision: 'E', issueDate: '2026.09.06' }, 'manual');
+                c.noObservation = confirm(7, { drawingNumber: 'x', drawingTitle: 'x', revision: 'x', issueDate: 'x' });
+                const unchangedSet = w.set;
+                c.tooLong = confirm(2, { ...observed(2), drawingTitle: 'x'.repeat(301) });
+                c.lineFeed = confirm(2, { ...observed(2), revision: `a${ch(0x0a)}b` });
+                c.bidi = confirm(2, { ...observed(2), revision: `a${ch(0x202e)}` });
+                c.notString = confirm(2, { ...observed(2), issueDate: 20260902 });
+                c.invalidLeftSetAlone = w.set === unchangedSet;
+                const sid = w.sources['p2a-register'];
+                w.bindings.set(sid, 'CHANGED');
+                c.changedObservation = confirm(2, observed(2));
+                c.changedManual = confirm(2, observed(2), 'manual');
+                w.bindings.delete(sid);
+                c.unboundManual = confirm(2, observed(2), 'manual');
+                w.bindings.set(sid, 'MISSING');
+                c.missingObservation = confirm(2, observed(2));
+                w.bindings.set(sid, 'MATCHED');
+                c.ocrScoreNotPromoting = sheets.map((sh) => sheetById(w, sh.id).observation?.fields.drawingTitle.ocrScore ?? null);
+
+                // An observation whose recognition failed: its fields were not read (source none).
+                const failing = await extract(w, [s(2)], { gate: new PdfDocumentGate(), createOcr: () => new TestOcr({ fail: true }) });
+                c.failedRun = reportSummary(failing);
+                c.failedObservation = plainly(obs(2));
+                c.blankOfFailed = confirm(2, { drawingNumber: '', drawingTitle: '', revision: '', issueDate: '' });
+                c.typedOfFailed = confirm(2, { drawingNumber: 'A-102', drawingTitle: '2階平面図', revision: 'C', issueDate: '2026.09.02' });
+
+                // editedFields is written once and never recomputed: read page 3 again
+                // under a moved profile, and its confirmation stays as it was.
+                const kept = plainly(sheetById(w, s(3)).confirmation);
+                const revised = reviseProfile(w.set, profile.id, { fields: { ...truth.cells, drawingTitle: { ...truth.cells.drawingTitle, left: truth.cells.drawingTitle.left + 1 } } });
+                w.set = revised.drawingSet;
+                c.staleObservation = confirm(5, observed(5));
+                c.staleManualAllowed = confirm(5, observed(5), 'manual');
+                const reread = await extract(w, [s(3)], { gate: new PdfDocumentGate() });
+                c.reread = { outcome: reread.outcome, newRevision: obs(3).profile.profileRevision };
+                c.keptConfirmation = JSON.stringify(plainly(sheetById(w, s(3)).confirmation)) === JSON.stringify(kept);
+                c.keptEdited = sheetById(w, s(3)).confirmation.editedFields;
+
+                // History: 31 retired + 1 standing; one more reconfirmation fits, the next does not.
+                const h = sheetById(w, s(6));
+                const filler = { confirmation: h.confirmation, retiredAt: h.confirmation.confirmedAt, reason: 'RECONFIRMED' };
+                w.set = { ...w.set, sheets: w.set.sheets.map((sh) => (sh.id === h.id ? { ...sh, confirmationHistory: Array.from({ length: 31 }, () => filler) } : sh)) };
+                c.history32 = confirm(6, { drawingNumber: 'A-106', drawingTitle: '手入力2', revision: 'E', issueDate: '2026.09.06' }, 'manual');
+                c.historyLength = sheetById(w, s(6)).confirmationHistory.length;
+                const full = w.set;
+                c.history33 = confirm(6, { drawingNumber: 'A-106', drawingTitle: '手入力3', revision: 'E', issueDate: '2026.09.06' }, 'manual');
+                c.withdrawAtLimit = withdrawConfirmation(w.set, s(6)).refusal?.code;
+                c.fullLeftAlone = w.set === full;
+                out.confirm = plainly(c);
+
+                // Currency, on the live set and on states built for it.
+                const cur = (set, n, bindings = w.bindings) => {
+                    const sheet = set.sheets.find((sh) => sh.id === s(n));
+                    return { observation: currencyLabel(observationCurrency(set, sheet, bindings)), confirmation: currencyLabel(confirmationCurrency(set, sheet, bindings)) };
+                };
+                const m = {};
+                m.p3 = cur(w.set, 3);
+                m.p5 = cur(w.set, 5);
+                m.p7 = cur(w.set, 7);
+                m.p6 = cur(w.set, 6);
+                m.p6Changed = cur(w.set, 6, new Map([[sid, 'CHANGED']]));
+                m.p3Missing = cur(w.set, 3, new Map([[sid, 'MISSING']]));
+                m.p3Unbound = cur(w.set, 3, new Map());
+                const newBytes = { ...w.set, sources: w.set.sources.map((src) => (src.id === sid ? { ...src, fingerprint: { ...src.fingerprint, sha256: 'f'.repeat(64) } } : src)) };
+                m.p3NewBytes = cur(newBytes, 3);
+                m.p6NewBytes = cur(newBytes, 6);
+                m.p3NewBytesChanged = cur(newBytes, 3, new Map([[sid, 'CHANGED']]));
+                const movedAgain = reviseProfile(newBytes, profile.id, { transferModel: 'corner-anchored' }).drawingSet;
+                m.p3Both = cur(movedAgain, 3);
+                const other = createProfile(w.set, { name: 'other', transferModel: 'normalised', referencePage: truth.reference, fields: truth.cells });
+                const reassigned = assignProfile(other.drawingSet, [s(3)], other.profile.id, { replace: true }).drawingSet;
+                m.p3Reassigned = cur(reassigned, 3);
+                m.p3Unassigned = cur(unassignProfile(w.set, [s(3)]).drawingSet, 3);
+                const retiredSet = retireProfile(w.set, profile.id);
+                m.p3ProfileRetired = cur(retiredSet.drawingSet, 3);
+                m.p6ProfileRetired = cur(retiredSet.drawingSet, 6);
+                m.retiredKeeps = {
+                    observation: retiredSet.drawingSet.sheets.find((sh) => sh.id === s(3)).observation !== null,
+                    confirmation: retiredSet.drawingSet.sheets.find((sh) => sh.id === s(3)).confirmation !== null,
+                };
+                m.merge = ['MATCHED', 'CHANGED', 'MISSING'].flatMap((a) => ['MATCHED', 'CHANGED', 'MISSING', undefined].map((b) => `${a}+${b}=${mergeBinding(b, a)}`));
+                out.currency = m;
+                out.retiredSession = plainly({ project: w.project, drawingSet: retiredSet.drawingSet });
+                out.session = session(w);
+                return plainly(out);
+            },
+
+            /** HDR-36-01 on its own, every branch. */
+            editedFields() {
+                const field = (value, source) => ({ value, rawText: value, source, ocrScore: null });
+                const observation = (fields) => ({ runId: mintUuid(), sourceSha256: 'a'.repeat(64), profile: { profileId: mintUuid(), profileRevision: 1 }, status: 'READ', fields });
+                const all = (source) => observation({ drawingNumber: field('A-1', source), drawingTitle: field('T', source), revision: field('B', source), issueDate: field('D', source) });
+                const values = { drawingNumber: 'A-1', drawingTitle: 'T', revision: 'B', issueDate: 'D' };
+                return plainly({
+                    manual: editedFieldsFor(values, null),
+                    sameNative: editedFieldsFor(values, all('native')),
+                    sameOcr: editedFieldsFor(values, all('ocr')),
+                    sourceNoneEmpty: editedFieldsFor({ ...values, revision: '' }, observation({ ...all('native').fields, revision: field('', 'none') })),
+                    sourceNoneAll: editedFieldsFor({ drawingNumber: '', drawingTitle: '', revision: '', issueDate: '' }, all('none')),
+                    reverseOrder: editedFieldsFor({ issueDate: 'X', revision: 'X', drawingTitle: 'T', drawingNumber: 'X' }, all('native')),
+                    exactWhitespace: editedFieldsFor({ ...values, drawingNumber: 'A-1 ' }, all('native')),
+                    exactWidth: editedFieldsFor({ ...values, drawingNumber: 'Ａ-1' }, all('ocr')),
+                    emptyAgainstOcrEmpty: editedFieldsFor({ ...values, revision: '' }, observation({ ...all('ocr').fields, revision: field('', 'ocr') })),
+                });
+            },
+
+            /** The CAN-02 reference vectors, and what counts as live. */
+            digest() {
+                const src = (id, sha, retiredAt = null) => ({ id, displayName: 'x.pdf', addedAt: nowTimestamp(), retiredAt, fingerprint: { algorithm: 'SHA-256', sha256: sha, byteLength: 1, pageCount: 1, recordedAt: nowTimestamp() }, fingerprintHistory: [] });
+                const set = (sources) => ({ ...createSession().drawingSet, sources });
+                const a = src('00000000-0000-4000-8000-000000000001', 'a'.repeat(64));
+                const b = src('00000000-0000-4000-8000-000000000002', 'b'.repeat(64));
+                const retired = src('00000000-0000-4000-8000-000000000003', 'c'.repeat(64), nowTimestamp());
+                return {
+                    empty: manifestDigest(set([])),
+                    ab: manifestDigest(set([a, b])),
+                    ba: manifestDigest(set([b, a])),
+                    withRetired: manifestDigest(set([retired, b, a])),
+                    onlyRetired: manifestDigest(set([retired])),
+                };
+            },
+
+            /** The run's lifecycle: cancel, fail, refuse, append-only, atomic. Real files, real PDF.js, real OCR. */
+            async lifecycle(truth) {
+                const out = {};
+                const setup = async (gate) => {
+                    const w = await world(['p2a-geometry', 'p2a-register'], { gate });
+                    const g = makeProfile(w, { name: 'G', transferModel: 'normalised', reference: truth.geometry.reference, rects: truth.geometry.pages[0].uprightRects });
+                    const r = makeProfile(w, { name: 'R', transferModel: 'normalised', reference: truth.register.reference, rects: truth.register.cells });
+                    const s1 = sheetsOf(w, 'p2a-geometry').map((s) => s.id);
+                    const s2 = sheetsOf(w, 'p2a-register').slice(0, 4).map((s) => s.id);
+                    assign(w, s1, g.id);
+                    assign(w, s2, r.id);
+                    return { w, s1, s2, all: [...s1, ...s2] };
+                };
+                const observed = (w, ids) => ids.filter((id) => sheetById(w, id).observation !== null).length;
+
+                // a. Cancelled while the recogniser is busy on the second Source.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s1, s2, all } = await setup(gate);
+                    const ocr = new TestOcr({ hold: true });
+                    const controller = new AbortController();
+                    const runsBefore = w.set.analysisRuns.length;
+                    const pending = extract(w, all, { gate, signal: controller.signal, createOcr: () => ocr });
+                    await ocr.enteredSignal;
+                    const duringOcr = { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live, runs: w.set.analysisRuns.length, observed: observed(w, all) };
+                    const t0 = performance.now();
+                    controller.abort();
+                    const report = await pending;
+                    const cancelMs = performance.now() - t0;
+                    const afterCancel = { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live };
+                    // Let the abandoned recognition go on: it must not start a worker again.
+                    ocr.release?.();
+                    await sleep(1500);
+                    out.cancelDuringOcr = {
+                        report: reportSummary(report), cancelMs, duringOcr, afterCancel,
+                        afterRelease: { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live, ocrCounts: ocr.counts() },
+                        runsAdded: w.set.analysisRuns.length - runsBefore,
+                        firstSourceObserved: observed(w, s1), secondSourceObserved: observed(w, s2),
+                        applyCalls: w.applyCalls, gate: gate.counts(), session: session(w),
+                    };
+                }
+                // b. Cancelled before anything was read: a run with nothing evaluated is still written once.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, all } = await setup(gate);
+                    const controller = new AbortController();
+                    const report = await extract(w, all, {
+                        gate, signal: controller.signal,
+                        onProgress: (e) => { if (e.phase === 'source' && e.sourceIndex === 0) controller.abort(); },
+                    });
+                    out.cancelBeforeRead = { report: reportSummary(report), observed: observed(w, all), runs: w.set.analysisRuns.length, gate: gate.counts() };
+                    // Append-only: freeze everything already there, read again, and nothing old moves or goes.
+                    const frozenRuns = deepFreeze(structuredClone(w.set.analysisRuns));
+                    deepFreeze(w.set);
+                    const again = await extract(w, all.slice(0, 2), { gate });
+                    const third = await extract(w, all.slice(0, 2), { gate });
+                    out.appendOnly = {
+                        again: again.outcome, third: third.outcome,
+                        runs: w.set.analysisRuns.length,
+                        oldRunsSame: JSON.stringify(w.set.analysisRuns.slice(0, frozenRuns.length)) === JSON.stringify(frozenRuns),
+                        unreferencedKept: w.set.analysisRuns.filter((run) => !w.set.sheets.some((s) => s.observation?.runId === run.id)).length,
+                        session: session(w),
+                    };
+                }
+                // c. Failed: PDF.js could not destroy the first Source's document. That Source was read to the end and is kept; nothing else opens.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s1, s2, all } = await setup(gate);
+                    const probe = await openDoc(await fixtureBytes('p2a-transfer'), {});
+                    const proto = Object.getPrototypeOf(probe.doc.loadingTask._transport);
+                    await probe.task.destroy();
+                    const realDestroy = proto.destroy;
+                    let leaked = null;
+                    proto.destroy = function failOnce() {
+                        proto.destroy = realDestroy;
+                        leaked = this;
+                        return Promise.reject(new Error('simulated destroy failure'));
+                    };
+                    const getDocsBefore = window.__workers.getDocs;
+                    let report;
+                    try {
+                        report = await extract(w, all, { gate });
+                    } finally {
+                        proto.destroy = realDestroy;
+                    }
+                    const getDocsAfter = window.__workers.getDocs;
+                    const owner = new PreviewDocumentOwner({ gate });
+                    const src = w.set.sources.find((x) => x.id === w.sources['p2a-geometry']);
+                    const preview = await owner.open(src.id, w.files.get(src.id), { sha256: src.fingerprint.sha256, byteLength: src.fingerprint.byteLength }).then(() => 'opened', (e) => e.code);
+                    const second = await extract(w, s1.slice(0, 1), { gate });
+                    out.destroyFailed = {
+                        report: reportSummary(report),
+                        firstKept: observed(w, s1), secondNone: observed(w, s2),
+                        gate: gate.counts(), releaseUnconfirmed: gate.releaseUnconfirmed,
+                        getDocs: getDocsAfter - getDocsBefore,
+                        preview, secondExtraction: reportSummary(second), intake: gate.beginIntake().code ?? 'granted',
+                        getDocsAfterRefusals: window.__workers.getDocs - getDocsAfter,
+                        session: session(w),
+                    };
+                    // Release by hand what the failed destruction left behind.
+                    if (leaked) {
+                        await realDestroy.call(leaked).catch(() => { });
+                        leaked.loadingTask?._worker?.destroy();
+                    }
+                    out.destroyFailed.leakReleased = window.__workers.pdf.live;
+                }
+                // d. Failed for a reason of its own: the Source's File could not even be looked up.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s1, s2, all } = await setup(gate);
+                    const report = await extract(w, all, {
+                        gate,
+                        fileFor: (id) => { if (id === w.sources['p2a-register']) throw new Error('lookup failed'); return w.files.get(id) ?? null; },
+                    });
+                    out.unexpected = { report: reportSummary(report), firstKept: observed(w, s1), secondNone: observed(w, s2), gate: gate.counts(), next: (await extract(w, s1.slice(0, 1), { gate })).outcome };
+                }
+                // e. The File changed after intake: same size and one byte different, then another size. Nothing of it is opened.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s2 } = await setup(gate);
+                    const first = await extract(w, s2.slice(0, 1), { gate });
+                    const sid = w.sources['p2a-register'];
+                    const bytes = await fixtureBytes('p2a-register');
+                    bytes[bytes.length - 10] ^= 0xff;
+                    w.files.set(sid, new File([bytes], 'p2a-register.pdf'));
+                    const getDocsBefore = window.__workers.getDocs;
+                    const kept = plainly(sheetById(w, s2[0]).observation);
+                    const changed = await extract(w, s2.slice(0, 1), { gate });
+                    const getDocsAfter = window.__workers.getDocs;
+                    w.files.set(sid, new File([bytes.slice(0, bytes.length - 1)], 'p2a-register.pdf'));
+                    const resized = await extract(w, s2.slice(0, 1), { gate });
+                    const sheet = sheetById(w, s2[0]);
+                    out.sourceChanged = {
+                        first: first.outcome, changed: reportSummary(changed), resized: reportSummary(resized),
+                        opened: getDocsAfter - getDocsBefore,
+                        observationKept: JSON.stringify(plainly(sheet.observation)) === JSON.stringify(kept),
+                        binding: w.bindings.get(sid),
+                        currency: currencyLabel(observationCurrency(w.set, sheet, w.bindings)),
+                    };
+                }
+                // f. No File for the Source in this session.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s2 } = await setup(gate);
+                    w.files.delete(w.sources['p2a-register']);
+                    const report = await extract(w, s2, { gate });
+                    out.sourceMissing = { report: reportSummary(report), binding: w.bindings.get(w.sources['p2a-register']) };
+                }
+                // g. The run limit is checked before anything is started.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s1 } = await setup(gate);
+                    const filler = { id: '', kind: 'EXTRACTION', startedAt: nowTimestamp(), completedAt: nowTimestamp(), outcome: 'COMPLETED', engine: { ...REGISTER_EXTRACTION_ENGINE }, manifestDigest: 'a'.repeat(64), coverage: { sheetsEvaluated: 0, sheetsExcluded: 1 } };
+                    w.set = { ...w.set, analysisRuns: Array.from({ length: P2_METADATA_LIMITS.maxAnalysisRuns.value }, () => ({ ...filler, id: mintUuid() })) };
+                    const report = await extract(w, s1, { gate });
+                    out.runLimit = { report: reportSummary(report), gate: gate.counts(), runs: w.set.analysisRuns.length };
+                }
+                // h. The session was replaced (reset) while the run was going: nothing lands in the new one.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, all } = await setup(gate);
+                    const fresh = createSession().drawingSet;
+                    const report = await extract(w, all, {
+                        gate,
+                        onProgress: (e) => { if (e.phase === 'source-done' && e.sourceIndex === 0) w.set = fresh; },
+                    });
+                    out.sessionReplaced = { report: reportSummary(report), freshRuns: w.set.analysisRuns.length, freshUntouched: w.set === fresh, applyCalls: w.applyCalls };
+                }
+                // i. A Source removed while the run was going: its finished results are not written.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s1, s2, all } = await setup(gate);
+                    const report = await extract(w, all, {
+                        gate,
+                        onProgress: (e) => { if (e.phase === 'source-done' && e.sourceIndex === 0) w.set = retireSource(w.set, w.sources['p2a-geometry']); },
+                    });
+                    out.sourceRemovedMidRun = { report: reportSummary(report), firstObserved: observed(w, s1), secondObserved: observed(w, s2), session: session(w) };
+                }
+                // j. Exclusivity: the preview yields, waits are real, nothing overlaps.
+                {
+                    const gate = new PdfDocumentGate();
+                    const { w, s1 } = await setup(gate);
+                    const owner = new PreviewDocumentOwner({ gate });
+                    const src = w.set.sources.find((x) => x.id === w.sources['p2a-geometry']);
+                    const expected = { sha256: src.fingerprint.sha256, byteLength: src.fingerprint.byteLength };
+                    const shown = await owner.open(src.id, w.files.get(src.id), expected);
+                    const proto = Object.getPrototypeOf(shown.loadingTask._transport);
+                    const realDestroy = proto.destroy;
+                    proto.destroy = async function slowDestroy() {
+                        window.__workers.events.push('destroy-asked');
+                        const result = await realDestroy.call(this);
+                        await sleep(400);
+                        return result;
+                    };
+                    const eventsFrom = window.__workers.events.length;
+                    window.__workers.pdf.peak = window.__workers.pdf.live;
+                    const lease = gate.beginIntake();
+                    const whileIntake = await extract(w, s1, { gate });
+                    lease.end();
+                    let during = null;
+                    try {
+                        const report = await extract(w, s1, {
+                            gate,
+                            onProgress: async (e) => {
+                                if (e.phase !== 'source' || during) return;
+                                during = 'pending';
+                                const [previewOpen, intake, nested] = await Promise.all([
+                                    owner.open(src.id, w.files.get(src.id), expected).then(() => 'opened', (err) => err.code),
+                                    Promise.resolve(gate.beginIntake()).then((r) => (r.ok ? (r.end(), 'granted') : r.code)),
+                                    extract(w, s1, { gate }).then((r) => (r.kind === 'refused' ? r.refusal.code : r.outcome)),
+                                ]);
+                                during = { previewOpen, intake, nested };
+                            },
+                        });
+                        const t0 = performance.now();
+                        while ((during === null || during === 'pending') && performance.now() - t0 < 10_000) await sleep(20);
+                        out.exclusive = {
+                            whileIntake: reportSummary(whileIntake),
+                            report: reportSummary(report),
+                            during,
+                            events: window.__workers.events.slice(eventsFrom),
+                            peak: window.__workers.pdf.peak,
+                            gate: gate.counts(),
+                            previewAfter: await owner.open(src.id, w.files.get(src.id), expected).then(() => 'opened', (err) => err.code),
+                            previewCounts: owner.counts(),
+                        };
+                    } finally {
+                        proto.destroy = realDestroy;
+                        await owner.close();
+                    }
+                }
+                out.workersAfter = workers();
+                return plainly(out);
+            },
+
+            /** CMap / standard fonts: the same pages without and with the M7 data files. */
+            async cmap(truth) {
+                const bytes = await fixtureBytes('p2a-cmap');
+                const before = {};
+                const after = {};
+                // P1's own intake, as Production runs it today.
+                const p1 = await world(['p2a-cmap']);
+                before.p1IntakeKinds = sheetsOf(p1, 'p2a-cmap').map((s) => s.pageFacts.kind);
+                before.kinds = await pageKinds(bytes, {});
+                after.kinds = await pageKinds(bytes, m7PdfDocumentAssets());
+                const base = await openDoc(bytes, {});
+                const m7 = await openDoc(bytes, m7PdfDocumentAssets());
+                try {
+                    before.pixels = [];
+                    after.pixels = [];
+                    for (const p of truth.pages) {
+                        before.pixels.push(await darkPixels(base.doc, p.page, truth.cells));
+                        after.pixels.push(await darkPixels(m7.doc, p.page, truth.cells));
+                    }
+                } finally {
+                    await base.task.destroy();
+                    await m7.task.destroy();
+                }
+                const w = await world(['p2a-cmap']);
+                const sheets = sheetsOf(w, 'p2a-cmap');
+                const profile = makeProfile(w, { name: 'C', transferModel: 'normalised', reference: truth.reference, rects: truth.cells });
+                assign(w, sheets.map((s) => s.id), profile.id);
+                before.values = await engineValues(bytes, {}, profile, truth.pages.map((p) => p.page));
+                const report = await extract(w, sheets.map((s) => s.id), { gate: new PdfDocumentGate() });
+                after.report = reportSummary(report);
+                after.values = sheets.map((s) => {
+                    const o = sheetById(w, s.id).observation;
+                    return o && Object.fromEntries(FIELD_NAMES.map((f) => [f, { value: o.fields[f].value, source: o.fields[f].source }]));
+                });
+                return plainly({ before, after, session: session(w) });
+            },
+
+            /** JPX: a JPEG 2000 scan and its PNG twin, without and with the decoders. */
+            async jpx(truth) {
+                const bytes = await fixtureBytes('p2a-jpx');
+                const cells = truth.cells;
+                const base = await openDoc(bytes, {});
+                const m7 = await openDoc(bytes, m7PdfDocumentAssets());
+                const pixels = { before: [], after: [] };
+                try {
+                    for (const n of [1, 2]) {
+                        pixels.before.push(await darkPixels(base.doc, n, cells));
+                        pixels.after.push(await darkPixels(m7.doc, n, cells));
+                    }
+                } finally {
+                    await base.task.destroy();
+                    await m7.task.destroy();
+                }
+                const w = await world(['p2a-jpx']);
+                const sheets = sheetsOf(w, 'p2a-jpx');
+                const profile = makeProfile(w, { name: 'J', transferModel: 'normalised', reference: truth.reference, rects: cells });
+                assign(w, sheets.map((s) => s.id), profile.id);
+                const beforeValues = await engineValues(bytes, {}, profile, [1, 2]);
+                const report = await extract(w, sheets.map((s) => s.id), { gate: new PdfDocumentGate() });
+                const afterValues = sheets.map((s) => {
+                    const o = sheetById(w, s.id).observation;
+                    return o && Object.fromEntries(FIELD_NAMES.map((f) => [f, { value: o.fields[f].value, source: o.fields[f].source }]));
+                });
+                return plainly({ pixels, beforeValues, afterValues, report: reportSummary(report), session: session(w) });
+            },
+
+            /** What this page wrote to browser storage, and what storage now holds. */
+            async storage() {
+                const writes = plainly(window.__storage);
+                const databases = indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : [];
+                // What is in a database this page did not create: its stores and
+                // keys only (read after the counts above were taken).
+                const contents = {};
+                for (const name of databases) {
+                    contents[name] = await new Promise((resolve) => {
+                        const request = indexedDB.open(name);
+                        request.onerror = () => resolve({ error: String(request.error) });
+                        request.onsuccess = () => {
+                            const db = request.result;
+                            const stores = [...db.objectStoreNames];
+                            const out = {};
+                            if (stores.length === 0) { db.close(); resolve(out); return; }
+                            const tx = db.transaction(stores, 'readonly');
+                            for (const store of stores) {
+                                const keys = tx.objectStore(store).getAllKeys();
+                                keys.onsuccess = () => { out[store] = keys.result.map(String); };
+                            }
+                            tx.oncomplete = () => { db.close(); resolve(out); };
+                        };
+                    });
+                }
+                return { writes, local: localStorage.length, session: sessionStorage.length, databases, contents, bodyText: document.body.innerText };
+            },
+            workers,
+        };
+        document.getElementById('state').textContent = 'ready';
+        window.__m7p2aReady = true;
+    </script>
+</body>
+</html>

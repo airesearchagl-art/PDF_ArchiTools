@@ -253,8 +253,13 @@ jobs:
       # commit, duplicate bytes, page facts against what the generator built,
       # and the in-memory model checked against the canonical schema and
       # semantic contract. The 250 MiB fingerprint benchmark is local evidence,
-      # not CI.
-      - name: M7 P1 foundation
+      # not CI. The same run then holds M7-P2-A to its gates
+      # (scripts/smoke-m7-p2a-checks.mjs): title-block profiles, the register
+      # adapter over the unchanged Drawing Register engine with real PDF.js and
+      # OCR, every rotation and CropBox offset, the field bounds, the terminal
+      # EXTRACTION run, confirmations, currency, one PDF.js document while
+      # extracting, and the PDF.js data files under public/pdfjs/ byte for byte.
+      - name: M7 foundation (P1 + P2-A)
         run: node scripts/smoke-m7-p1.mjs
 
       # And the wiring, in the built app: the sixth navigation entry, files
