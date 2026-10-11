@@ -4,3 +4,7 @@
 public/ocr/tesseract/*.js  -text
 public/ocr/tessdata/*      binary
 public/ocr/fonts/*.ttf     binary
+
+# The PDF.js data files 図面管理 (M7) serves are copies of the installed
+# pdfjs-dist, checked byte for byte against it (scripts/setup-pdfjs-assets.mjs).
+public/pdfjs/**            -text
