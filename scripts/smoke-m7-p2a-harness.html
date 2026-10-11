@@ -113,7 +113,7 @@
             RECT_EPSILON_PT, TRANSFER_MODELS, assignProfile, createProfile, renameProfile, retireProfile, reviseProfile, unassignProfile,
         } from '/src/utils/drawing-set/title-block-profiles.ts';
         import { REGISTER_EXTRACTION_ENGINE, manifestDigest } from '/src/utils/drawing-set/analysis-run.ts';
-        import { confirmationCurrency, currencyLabel, mergeBinding, observationCurrency } from '/src/utils/drawing-set/currency.ts';
+        import { RuntimeBindingLedger, confirmationCurrency, currencyLabel, observationCurrency } from '/src/utils/drawing-set/currency.ts';
         import { confirmSheet, editedFieldsFor, withdrawConfirmation } from '/src/utils/drawing-set/metadata-confirmation.ts';
         import { ENGINE_FIELD, assignmentsFor, observationFromRow, toTemplateProfile } from '/src/utils/drawing-set/register-adapter.ts';
         import { GuardedRegisterOcr, extractTitleBlocks } from '/src/utils/drawing-set/register-extraction.ts';
@@ -149,15 +149,28 @@
 
         // ------------------------------------------------------------------
         // A working session built through the Production intake, as the
-        // workspace would hold it: the model, the Files, the runtime bindings.
+        // workspace would hold it: the model, and the runtime binding ledger
+        // holding each Source's File and what the latest check of it found.
         // ------------------------------------------------------------------
+        /**
+         * After intake: hold the File, and take the intake's own SHA-256 of
+         * exactly this File -- the Source's fingerprint -- as its first check.
+         */
+        function holdAfterIntake(w, id, file, sha256) {
+            if (w.ledger.present(w.set, id, file) !== 'APPLIED') throw new Error('present refused');
+            const check = w.ledger.beginCheck();
+            check.fileFor(id);
+            const settled = w.ledger.settle(w.set, check, new Map([[id, { file, sha256, binding: 'MATCHED' }]]));
+            if (settled.get(id) !== 'APPLIED') throw new Error(`intake binding: ${settled.get(id)}`);
+        }
         async function world(names, { gate = null } = {}) {
             const session = createSession();
             const w = {
                 project: session.project,
                 set: session.drawingSet,
-                files: new Map(),
-                bindings: new Map(),
+                ledger: new RuntimeBindingLedger(session.drawingSet.id),
+                /** What this session vouches for now, as currency and confirmation take it. */
+                get bindings() { return this.ledger.bindings(this.set); },
                 sources: {},
                 applyCalls: 0,
             };
@@ -172,8 +185,7 @@
                     if (committed.kind !== 'committed') throw new Error(`commit ${name}: ${committed.kind}`);
                     w.set = committed.drawingSet;
                     const id = outcome.candidate.source.id;
-                    w.files.set(id, file);
-                    w.bindings.set(id, 'MATCHED');
+                    holdAfterIntake(w, id, file, outcome.candidate.source.fingerprint.sha256);
                     w.sources[name] = id;
                 } finally {
                     lease.end();
@@ -198,25 +210,30 @@
             return r;
         }
 
-        /** Run the Production extraction over this world. */
-        async function extract(w, sheetIds, { gate, signal, createOcr, onProgress, fileFor } = {}) {
+        /**
+         * Run the Production extraction over this world, reading Files through
+         * a check of the session's ledger, and settle what it found into the
+         * ledger the session holds when the run ends -- unless `settle` is
+         * false, for a report that is to arrive late. `fileFor(id, held)` wraps
+         * the check's own.
+         */
+        async function extract(w, sheetIds, { gate, signal, createOcr, onProgress, fileFor, check = w.ledger.beginCheck(), settle = true } = {}) {
             const report = await extractTitleBlocks({ sheetIds }, {
                 current: () => w.set,
                 apply: (next) => { w.applyCalls += 1; w.set = next; },
-                fileFor: fileFor ?? ((id) => w.files.get(id) ?? null),
+                fileFor: fileFor ? (id) => fileFor(id, check.fileFor) : check.fileFor,
                 gate,
                 signal,
                 createOcr,
                 onProgress,
             });
-            if (report.kind === 'finished') {
-                for (const [id, binding] of report.bindings) w.bindings.set(id, mergeBinding(w.bindings.get(id), binding));
-            }
+            if (report.kind === 'finished') report.settled = settle ? w.ledger.settle(w.set, check, report.fileChecks) : null;
             return report;
         }
+        const fileCheckSummary = (fileChecks) => Object.fromEntries([...fileChecks].map(([id, c]) => [id, { binding: c.binding, sha256: c.sha256, file: c.file ? c.file.name ?? 'blob' : null }]));
         const reportSummary = (report) => (report.kind === 'refused'
             ? { kind: 'refused', code: report.refusal.code }
-            : plainly({ ...report, bindings: Object.fromEntries(report.bindings) }));
+            : plainly({ ...report, fileChecks: fileCheckSummary(report.fileChecks), settled: report.settled ? Object.fromEntries(report.settled) : null }));
 
         /** An OCR engine whose recogniser can be held, released or made to fail -- for timing, not results. */
         class TestOcr extends GuardedRegisterOcr {
@@ -237,6 +254,18 @@
                     await new Promise((resolve) => { this.release = resolve; });
                 }
                 return super.recogniseFields(page, rects, options);
+            }
+        }
+
+        /** A File whose bytes stop being readable, as one deleted or moved on disk does (Chrome: NotReadableError). */
+        class VanishingFile extends File {
+            constructor(bytes, name) {
+                super([bytes], name);
+                this.gone = false;
+            }
+            slice(...args) {
+                if (!this.gone) return super.slice(...args);
+                return { arrayBuffer: () => Promise.reject(new DOMException('The requested file could not be read.', 'NotReadableError')) };
             }
         }
 
@@ -644,8 +673,8 @@
                 };
                 const s = (n) => sheets[n - 1].id;
                 const obs = (n) => sheetById(w, s(n)).observation;
-                const confirm = (n, values, basis = 'observation') => {
-                    const r = confirmSheet(w.set, { sheetId: s(n), values, basis }, w.bindings);
+                const confirm = (n, values, basis = 'observation', bindings = w.bindings) => {
+                    const r = confirmSheet(w.set, { sheetId: s(n), values, basis }, bindings);
                     if (r.ok) w.set = r.drawingSet;
                     return r.ok ? plainly(r.confirmation) : { refused: r.refusal.code, problems: plainly(r.refusal.problems ?? null) };
                 };
@@ -671,15 +700,12 @@
                 c.bidi = confirm(2, { ...observed(2), revision: `a${ch(0x202e)}` });
                 c.notString = confirm(2, { ...observed(2), issueDate: 20260902 });
                 c.invalidLeftSetAlone = w.set === unchangedSet;
+                // The gate on its own, with each binding handed in (section 22b gets them from real checks).
                 const sid = w.sources['p2a-register'];
-                w.bindings.set(sid, 'CHANGED');
-                c.changedObservation = confirm(2, observed(2));
-                c.changedManual = confirm(2, observed(2), 'manual');
-                w.bindings.delete(sid);
-                c.unboundManual = confirm(2, observed(2), 'manual');
-                w.bindings.set(sid, 'MISSING');
-                c.missingObservation = confirm(2, observed(2));
-                w.bindings.set(sid, 'MATCHED');
+                c.changedObservation = confirm(2, observed(2), 'observation', new Map([[sid, 'CHANGED']]));
+                c.changedManual = confirm(2, observed(2), 'manual', new Map([[sid, 'CHANGED']]));
+                c.unboundManual = confirm(2, observed(2), 'manual', new Map());
+                c.missingObservation = confirm(2, observed(2), 'observation', new Map([[sid, 'MISSING']]));
                 c.ocrScoreNotPromoting = sheets.map((sh) => sheetById(w, sh.id).observation?.fields.drawingTitle.ocrScore ?? null);
 
                 // An observation whose recognition failed: its fields were not read (source none).
@@ -743,7 +769,20 @@
                     observation: retiredSet.drawingSet.sheets.find((sh) => sh.id === s(3)).observation !== null,
                     confirmation: retiredSet.drawingSet.sheets.find((sh) => sh.id === s(3)).confirmation !== null,
                 };
-                m.merge = ['MATCHED', 'CHANGED', 'MISSING'].flatMap((a) => ['MATCHED', 'CHANGED', 'MISSING', undefined].map((b) => `${a}+${b}=${mergeBinding(b, a)}`));
+                // The ledger's rule on its own: each check of the File held, taken in turn
+                // (section 22b runs the same transitions with real files and real SHA-256).
+                {
+                    const ledger = new RuntimeBindingLedger(w.set.id);
+                    const file = w.ledger.heldFile(sid);
+                    const fingerprint = w.set.sources.find((src) => src.id === sid).fingerprint.sha256;
+                    const now = () => ledger.bindings(w.set).get(sid) ?? 'UNBOUND';
+                    m.transitions = [`present:${ledger.present(w.set, sid, file)}=${now()}`];
+                    for (const binding of ['MATCHED', 'CHANGED', 'MATCHED', 'MISSING', 'MATCHED']) {
+                        const check = ledger.beginCheck();
+                        check.fileFor(sid);
+                        m.transitions.push(`${binding}:${ledger.settle(w.set, check, new Map([[sid, { file, sha256: fingerprint, binding }]])).get(sid)}=${now()}`);
+                    }
+                }
                 out.currency = m;
                 out.retiredSession = plainly({ project: w.project, drawingSet: retiredSet.drawingSet });
                 out.session = session(w);
@@ -873,7 +912,7 @@
                     const getDocsAfter = window.__workers.getDocs;
                     const owner = new PreviewDocumentOwner({ gate });
                     const src = w.set.sources.find((x) => x.id === w.sources['p2a-geometry']);
-                    const preview = await owner.open(src.id, w.files.get(src.id), { sha256: src.fingerprint.sha256, byteLength: src.fingerprint.byteLength }).then(() => 'opened', (e) => e.code);
+                    const preview = await owner.open(src.id, w.ledger.heldFile(src.id), { sha256: src.fingerprint.sha256, byteLength: src.fingerprint.byteLength }).then(() => 'opened', (e) => e.code);
                     const second = await extract(w, s1.slice(0, 1), { gate });
                     out.destroyFailed = {
                         report: reportSummary(report),
@@ -897,7 +936,7 @@
                     const { w, s1, s2, all } = await setup(gate);
                     const report = await extract(w, all, {
                         gate,
-                        fileFor: (id) => { if (id === w.sources['p2a-register']) throw new Error('lookup failed'); return w.files.get(id) ?? null; },
+                        fileFor: (id, held) => { if (id === w.sources['p2a-register']) throw new Error('lookup failed'); return held(id); },
                     });
                     out.unexpected = { report: reportSummary(report), firstKept: observed(w, s1), secondNone: observed(w, s2), gate: gate.counts(), next: (await extract(w, s1.slice(0, 1), { gate })).outcome };
                 }
@@ -909,12 +948,12 @@
                     const sid = w.sources['p2a-register'];
                     const bytes = await fixtureBytes('p2a-register');
                     bytes[bytes.length - 10] ^= 0xff;
-                    w.files.set(sid, new File([bytes], 'p2a-register.pdf'));
+                    w.ledger.present(w.set, sid, new File([bytes], 'p2a-register.pdf'));
                     const getDocsBefore = window.__workers.getDocs;
                     const kept = plainly(sheetById(w, s2[0]).observation);
                     const changed = await extract(w, s2.slice(0, 1), { gate });
                     const getDocsAfter = window.__workers.getDocs;
-                    w.files.set(sid, new File([bytes.slice(0, bytes.length - 1)], 'p2a-register.pdf'));
+                    w.ledger.present(w.set, sid, new File([bytes.slice(0, bytes.length - 1)], 'p2a-register.pdf'));
                     const resized = await extract(w, s2.slice(0, 1), { gate });
                     const sheet = sheetById(w, s2[0]);
                     out.sourceChanged = {
@@ -929,7 +968,7 @@
                 {
                     const gate = new PdfDocumentGate();
                     const { w, s2 } = await setup(gate);
-                    w.files.delete(w.sources['p2a-register']);
+                    w.ledger.present(w.set, w.sources['p2a-register'], null);
                     const report = await extract(w, s2, { gate });
                     out.sourceMissing = { report: reportSummary(report), binding: w.bindings.get(w.sources['p2a-register']) };
                 }
@@ -970,7 +1009,7 @@
                     const owner = new PreviewDocumentOwner({ gate });
                     const src = w.set.sources.find((x) => x.id === w.sources['p2a-geometry']);
                     const expected = { sha256: src.fingerprint.sha256, byteLength: src.fingerprint.byteLength };
-                    const shown = await owner.open(src.id, w.files.get(src.id), expected);
+                    const shown = await owner.open(src.id, w.ledger.heldFile(src.id), expected);
                     const proto = Object.getPrototypeOf(shown.loadingTask._transport);
                     const realDestroy = proto.destroy;
                     proto.destroy = async function slowDestroy() {
@@ -992,7 +1031,7 @@
                                 if (e.phase !== 'source' || during) return;
                                 during = 'pending';
                                 const [previewOpen, intake, nested] = await Promise.all([
-                                    owner.open(src.id, w.files.get(src.id), expected).then(() => 'opened', (err) => err.code),
+                                    owner.open(src.id, w.ledger.heldFile(src.id), expected).then(() => 'opened', (err) => err.code),
                                     Promise.resolve(gate.beginIntake()).then((r) => (r.ok ? (r.end(), 'granted') : r.code)),
                                     extract(w, s1, { gate }).then((r) => (r.kind === 'refused' ? r.refusal.code : r.outcome)),
                                 ]);
@@ -1008,7 +1047,7 @@
                             events: window.__workers.events.slice(eventsFrom),
                             peak: window.__workers.pdf.peak,
                             gate: gate.counts(),
-                            previewAfter: await owner.open(src.id, w.files.get(src.id), expected).then(() => 'opened', (err) => err.code),
+                            previewAfter: await owner.open(src.id, w.ledger.heldFile(src.id), expected).then(() => 'opened', (err) => err.code),
                             previewCounts: owner.counts(),
                         };
                     } finally {
@@ -1018,6 +1057,205 @@
                 }
                 out.workersAfter = workers();
                 return plainly(out);
+            },
+
+            /**
+             * Runtime binding (semantic contract §B) with real files and real
+             * SHA-256, through the Production extraction: lost and regained on
+             * the same Source, Source by Source, and late reports refused.
+             * Register page 1 is native text, page 2 a scan: the checks after the
+             * first run read page 1 only, so page 2 keeps the observation the
+             * first run made, and whether it can be confirmed follows the binding.
+             */
+            async binding(truth) {
+                const gate = new PdfDocumentGate();
+                const w = await world(['p2a-geometry', 'p2a-register'], { gate });
+                const gp = makeProfile(w, { name: 'G', transferModel: 'normalised', reference: truth.geometry.reference, rects: truth.geometry.pages[0].uprightRects });
+                const rp = makeProfile(w, { name: 'R', transferModel: 'normalised', reference: truth.register.reference, rects: truth.register.cells });
+                const gs = sheetsOf(w, 'p2a-geometry')[0].id;
+                const [r1, r2] = sheetsOf(w, 'p2a-register').slice(0, 2).map((s) => s.id);
+                assign(w, [gs], gp.id);
+                assign(w, [r1, r2], rp.id);
+                const G = w.sources['p2a-geometry'];
+                const R = w.sources['p2a-register'];
+                const fingerprint = (set, id) => set.sources.find((s) => s.id === id).fingerprint.sha256;
+                const original = await fixtureBytes('p2a-register');
+                const oneByte = original.slice();
+                oneByte[oneByte.length - 10] ^= 0xff;
+                const otherPdf = await fixtureBytes('p2a-geometry');
+                // Every File presented carries the Source's own name.
+                const named = (bytes) => new File([bytes], 'p2a-register.pdf');
+                const sourceIds = () => w.set.sources.map((s) => s.id).join(',');
+                const sourcesBefore = sourceIds();
+                const labelled = (settled) => (settled ? Object.fromEntries([...settled].map(([id, s]) => [id === R ? 'R' : id === G ? 'G' : id, s])) : null);
+                const values = (id) => Object.fromEntries(Object.entries(sheetById(w, id).observation.fields).map(([k, f]) => [k, f.value]));
+                // A confirmation asked for and not kept: what the answer would be now.
+                const wouldConfirm = (id, basis = 'observation') => {
+                    const res = confirmSheet(w.set, { sheetId: id, values: values(id), basis }, w.bindings);
+                    return res.ok ? 'CONFIRMED' : res.refusal.code;
+                };
+                const steps = [];
+                const snap = (label, settled, kind) => {
+                    const b = w.bindings;
+                    steps.push({
+                        label,
+                        kind,
+                        settled,
+                        R: b.get(R) ?? 'UNBOUND',
+                        G: b.get(G) ?? 'UNBOUND',
+                        r2: currencyLabel(observationCurrency(w.set, sheetById(w, r2), b)),
+                        g: currencyLabel(observationCurrency(w.set, sheetById(w, gs), b)),
+                        confirmR2: wouldConfirm(r2),
+                        confirmG: wouldConfirm(gs),
+                    });
+                };
+                const present = (label, file) => snap(label, { R: w.ledger.present(w.set, R, file) }, 'present');
+                const run = async (label, sheetIds, options = {}) => {
+                    const report = await extract(w, sheetIds, { gate, ...options });
+                    if (options.settle !== false) snap(label, labelled(report.settled), 'check');
+                    return report;
+                };
+                const once = (fn) => {
+                    let done = false;
+                    return (e) => { if (e.phase === 'page' && !done) { done = true; fn(); } };
+                };
+                const r2Read = {};
+
+                await run('first read: G page 1, R pages 1-2', [gs, r1, r2]);
+                r2Read.first = JSON.stringify(sheetById(w, r2).observation);
+                // 1. MATCHED -> MISSING -> MATCHED: no File, then the right one again.
+                present('R withdrawn', null);
+                await run('check, no File held', [r1]);
+                present('R re-presented: the right PDF, not yet checked', named(original));
+                await run('check, SHA-256 equal', [r1]);
+                // 2. MATCHED -> CHANGED -> MATCHED: same name and size, one byte; another PDF; then the right one.
+                present('same name and size, one byte different, not yet checked', named(oneByte));
+                await run('check, SHA-256 differs', [r1]);
+                present('another PDF under the same name, not yet checked', named(otherPdf));
+                await run('check, another PDF', [r1]);
+                present('the right PDF again, not yet checked', named(original));
+                await run('check, SHA-256 equal again', [r1]);
+                // 3. MATCHED -> MISSING when the File held can no longer be read; a late MATCHED about it is superseded.
+                const vanishing = new VanishingFile(original, 'p2a-register.pdf');
+                present('a File that will vanish', vanishing);
+                await run('check, readable', [r1]);
+                const earlier = w.ledger.beginCheck();
+                const earlierReport = await run('a check whose report is held back', [r1], { check: earlier, settle: false });
+                vanishing.gone = true;
+                await run('check, the File held can no longer be read', [r1]);
+                snap('the held-back report about the same File arrives late', labelled(w.ledger.settle(w.set, earlier, earlierReport.fileChecks)), 'late');
+                present('the right PDF re-presented', named(original));
+                await run('check, SHA-256 equal', [r1]);
+                // 4. Another File presented while a check is reading the one it took: its report is about that one.
+                const readingThen = (bytes, then) => {
+                    const file = named(bytes);
+                    const slice = file.slice.bind(file);
+                    let done = false;
+                    file.slice = (...args) => {
+                        if (!done) { done = true; then(); }
+                        return slice(...args);
+                    };
+                    return file;
+                };
+                present('the right PDF presented', readingThen(original, () => w.ledger.present(w.set, R, named(oneByte))));
+                await run('its check, while it reads, one byte different is presented', [r1]);
+                await run('check, the one presented', [r1]);
+                present('one byte different presented', readingThen(oneByte, () => w.ledger.present(w.set, R, named(original))));
+                await run('its check, while it reads, the right PDF is presented', [r1]);
+                await run('check, the one presented', [r1]);
+                present('one byte different', named(oneByte));
+                const lateChanged = w.ledger.beginCheck();
+                const lateChangedReport = await run('a check of it whose report is held back', [r1], { check: lateChanged, settle: false });
+                present('the right PDF', named(original));
+                await run('check, SHA-256 equal', [r1]);
+                snap('the held-back CHANGED arrives after the newer MATCHED', labelled(w.ledger.settle(w.set, lateChanged, lateChangedReport.fileChecks)), 'late');
+                // 5. Source by Source: R changes in the same run in which G is checked.
+                present('one byte different, for R only', named(oneByte));
+                await run('one run over G and R', [gs, r1]);
+                present('the right PDF for R', named(original));
+                const lastCheck = w.ledger.beginCheck();
+                const lastReport = await run('check, SHA-256 equal', [r1], { check: lastCheck });
+
+                // 6. Nothing but a check of the File held, against the Source's fingerprint, makes MATCHED.
+                const forged = {};
+                const rightBytes = named(original);
+                present('the right PDF presented again, not yet checked', rightBytes);
+                const take = (check, result) => w.ledger.settle(w.set, check, new Map([[R, result]])).get(R);
+                forged.neverHandedOut = take(w.ledger.beginCheck(), { file: rightBytes, sha256: fingerprint(w.set, R), binding: 'MATCHED' });
+                const handed = w.ledger.beginCheck();
+                handed.fileFor(R);
+                forged.anotherFileSameBytes = take(handed, { file: named(original), sha256: fingerprint(w.set, R), binding: 'MATCHED' });
+                const handed2 = w.ledger.beginCheck();
+                handed2.fileFor(R);
+                forged.anotherSourcesFingerprint = take(handed2, { file: rightBytes, sha256: fingerprint(w.set, G), binding: 'MATCHED' });
+                forged.earlierMatchReplayed = labelled(w.ledger.settle(w.set, lastCheck, lastReport.fileChecks)).R;
+                forged.after = w.bindings.get(R) ?? 'UNBOUND';
+                forged.confirmAfter = wouldConfirm(r2);
+                forged.confirmManualAfter = wouldConfirm(r2, 'manual');
+                // A Source no File was ever presented for: a check finds nothing, MISSING -- never MATCHED.
+                const unbound = new RuntimeBindingLedger(w.set.id);
+                forged.neverPresented = unbound.bindings(w.set).size;
+                const unboundCheck = unbound.beginCheck();
+                const unboundReport = await extract(w, [r1], { gate, check: unboundCheck, settle: false });
+                forged.neverPresentedCheck = labelled(unbound.settle(w.set, unboundCheck, unboundReport.fileChecks));
+                forged.neverPresentedAfter = unbound.bindings(w.set).get(R) ?? 'UNBOUND';
+                const nothingHanded = unbound.beginCheck();
+                nothingHanded.fileFor(R);
+                forged.neverPresentedForged = unbound.settle(w.set, nothingHanded, new Map([[R, { file: null, sha256: fingerprint(w.set, R), binding: 'MATCHED' }]])).get(R);
+                await run('check, SHA-256 equal', [r1]);
+
+                // 7. Stale is the model's: a binding regained does not make a stale reading current.
+                const stale = {};
+                w.set = reviseProfile(w.set, rp.id, { fields: { ...truth.register.cells, drawingTitle: { ...truth.register.cells.drawingTitle, left: truth.register.cells.drawingTitle.left + 1 } } }).drawingSet;
+                snap('R\'s profile revised', null, 'model');
+                present('R withdrawn', null);
+                await run('check, no File held', [r1]);
+                present('the right PDF re-presented', named(original));
+                await run('check, SHA-256 equal (page 1 read under the new revision)', [r1]);
+                stale.manualR2 = wouldConfirm(r2, 'manual');
+                const moved = { ...w.set, sources: w.set.sources.map((s) => (s.id === R ? { ...s, fingerprint: { ...s.fingerprint, sha256: 'f'.repeat(64) } } : s)) };
+                const movedCheck = w.ledger.beginCheck();
+                const movedReport = await extract(w, [r1], { gate, check: movedCheck, settle: false });
+                stale.movedSettled = labelled(w.ledger.settle(moved, movedCheck, movedReport.fileChecks)).R;
+                stale.movedBinding = w.ledger.bindings(moved).get(R) ?? 'UNBOUND';
+                stale.liveBinding = w.bindings.get(R) ?? 'UNBOUND';
+                stale.movedCurrency = currencyLabel(observationCurrency(moved, sheetById(w, r1), w.ledger.bindings(moved)));
+                stale.movedCurrencyForced = currencyLabel(observationCurrency(moved, sheetById(w, r1), new Map([[R, 'MATCHED']])));
+                r2Read.last = JSON.stringify(sheetById(w, r2).observation);
+
+                // 8. A report from a replaced session, and one about a retired Source, change nothing.
+                const sessionReplaced = {};
+                {
+                    const kept = { set: w.set, ledger: w.ledger };
+                    const fresh = createSession().drawingSet;
+                    const freshLedger = new RuntimeBindingLedger(fresh.id);
+                    const check = kept.ledger.beginCheck();
+                    const report = await extract(w, [r1], { gate, check, onProgress: once(() => { w.set = fresh; w.ledger = freshLedger; }) });
+                    sessionReplaced.notApplied = report.notApplied;
+                    sessionReplaced.settled = labelled(report.settled).R;
+                    sessionReplaced.intoOldLedger = labelled(kept.ledger.settle(fresh, check, report.fileChecks)).R;
+                    sessionReplaced.freshBindings = freshLedger.bindings(fresh).size;
+                    sessionReplaced.oldLedgerOnFreshSet = kept.ledger.bindings(fresh).size;
+                    w.set = kept.set;
+                    w.ledger = kept.ledger;
+                }
+                const sourcesSame = sourceIds() === sourcesBefore;
+                const retired = {};
+                {
+                    retired.before = { R: w.bindings.get(R) ?? 'UNBOUND', G: w.bindings.get(G) ?? 'UNBOUND' };
+                    const check = w.ledger.beginCheck();
+                    const report = await extract(w, [gs, r1], { gate, check, settle: false });
+                    retired.reportSaid = Object.fromEntries([...report.fileChecks].map(([id, c]) => [id === R ? 'R' : 'G', c.binding]));
+                    w.set = retireSource(w.set, R);
+                    retired.settled = labelled(w.ledger.settle(w.set, check, report.fileChecks));
+                    retired.presentAfter = w.ledger.present(w.set, R, named(original));
+                    retired.after = { R: w.bindings.get(R) ?? 'UNBOUND', G: w.bindings.get(G) ?? 'UNBOUND' };
+                }
+                return plainly({
+                    steps, forged, stale, sessionReplaced, retired,
+                    sourcesSame, sourceCount: w.set.sources.length, r2KeptFirstRead: r2Read.first === r2Read.last,
+                    gate: gate.counts(), workersAfter: workers(), session: session(w),
+                });
             },
 
             /** CMap / standard fonts: the same pages without and with the M7 data files. */

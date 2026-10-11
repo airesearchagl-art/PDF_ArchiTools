@@ -301,8 +301,9 @@ export async function runP2aChecks(ctx) {
     check('another profile, no profile, a retired profile: STALE_PROFILE', ['p3Reassigned', 'p3Unassigned', 'p3ProfileRetired'].every((k) => m[k].observation === 'STALE_PROFILE'));
     check('retiring the profile keeps the observation and the confirmation; a typed confirmation stays CURRENT',
         m.retiredKeeps.observation && m.retiredKeeps.confirmation && m.p6ProfileRetired.confirmation === 'CURRENT');
-    check('a binding only gets worse: CHANGED and MISSING stick', m.merge.includes('MATCHED+CHANGED=CHANGED') && m.merge.includes('MATCHED+MISSING=MISSING')
-        && m.merge.includes('MISSING+CHANGED=CHANGED') && m.merge.includes('MATCHED+undefined=MATCHED') && m.merge.includes('CHANGED+MATCHED=CHANGED'));
+    check('a binding is what the latest check of the File held found: presenting binds nothing, and none of MATCHED, CHANGED, MISSING sticks (semantic contract §B)',
+        JSON.stringify(m.transitions) === JSON.stringify(['present:APPLIED=UNBOUND', 'MATCHED:APPLIED=MATCHED', 'CHANGED:APPLIED=CHANGED', 'MATCHED:APPLIED=MATCHED', 'MISSING:APPLIED=MISSING', 'MATCHED:APPLIED=MATCHED']),
+        JSON.stringify(m.transitions));
     session('register, profile retired', r.retiredSession);
 
     // ------------------------------------------------------------------
@@ -350,6 +351,67 @@ export async function runP2aChecks(ctx) {
         lc.sourceRemovedMidRun.firstObserved === 0 && lc.sourceRemovedMidRun.secondObserved === 4 && lc.sourceRemovedMidRun.report.run.coverage.sheetsEvaluated === 4
         && countBy(lc.sourceRemovedMidRun.report.excluded, 'code').CHANGED_DURING_RUN === 8);
     for (const [label, value] of [['cancelled run', a1.session], ['append-only', ao.session], ['failed run', c1.session], ['source removed mid-run', lc.sourceRemovedMidRun.session]]) session(label, value);
+
+    section('22b. Runtime binding (semantic contract §B): checked again, Source by Source, late reports refused');
+    const bd = await call('binding', { geometry: geo, register: reg });
+    const step = (label, nth = 0) => bd.steps.filter((s) => s.label === label)[nth] ?? {};
+    const modelMoved = bd.steps.findIndex((s) => s.kind === 'model');
+    const beforeMove = bd.steps.slice(0, modelMoved);
+    const afterMove = bd.steps.slice(modelMoved);
+    const trace = bd.steps.map((s) => s.R).join(' ');
+    check('R\'s binding, step by step, is what the latest check of the File held found -- no state sticks',
+        trace === ['MATCHED', 'UNBOUND', 'MISSING', 'UNBOUND', 'MATCHED', 'UNBOUND', 'CHANGED', 'UNBOUND', 'CHANGED', 'UNBOUND', 'MATCHED',
+            'UNBOUND', 'MATCHED', 'MISSING', 'MISSING', 'UNBOUND', 'MATCHED', 'UNBOUND', 'UNBOUND', 'CHANGED', 'UNBOUND', 'UNBOUND', 'MATCHED',
+            'UNBOUND', 'UNBOUND', 'MATCHED', 'MATCHED', 'UNBOUND', 'CHANGED', 'UNBOUND', 'MATCHED', 'UNBOUND', 'MATCHED',
+            'MATCHED', 'UNBOUND', 'MISSING', 'UNBOUND', 'MATCHED'].join(' '), trace);
+    check('MISSING -> MATCHED: with no File held a check finds MISSING; the right PDF presented again is MATCHED once its SHA-256 is checked',
+        step('R withdrawn').R === 'UNBOUND' && step('check, no File held').R === 'MISSING'
+        && step('R re-presented: the right PDF, not yet checked').R === 'UNBOUND' && step('check, SHA-256 equal').R === 'MATCHED');
+    check('CHANGED -> MATCHED: the same name and size with one byte different, and another PDF under the same name, are CHANGED; the original again is MATCHED',
+        step('check, SHA-256 differs').R === 'CHANGED' && step('check, another PDF').R === 'CHANGED' && step('check, SHA-256 equal again').R === 'MATCHED');
+    check('MATCHED -> MISSING when the very File held can no longer be read; MATCHED -> CHANGED when the File presented holds other bytes',
+        step('check, readable').R === 'MATCHED' && step('check, the File held can no longer be read').R === 'MISSING'
+        && bd.steps.indexOf(step('check, the File held can no longer be read')) === bd.steps.indexOf(step('check, readable')) + 1
+        && step('check, SHA-256 equal').R === 'MATCHED' && step('check, SHA-256 differs').R === 'CHANGED'
+        && step('the held-back CHANGED arrives after the newer MATCHED').R === 'MATCHED' && step('one run over G and R').R === 'CHANGED');
+    check('presenting binds nothing: every File not yet checked -- the right PDF, the same name and size, another PDF -- leaves R UNBOUND and its reading unconfirmable',
+        bd.steps.filter((s) => s.kind === 'present').length === 16
+        && bd.steps.filter((s) => s.kind === 'present').every((s) => s.settled.R === 'APPLIED' && s.R === 'UNBOUND' && s.confirmR2 === 'SOURCE_NOT_MATCHED'));
+    const f = bd.forged;
+    check('only a check of the File handed out, against the Source\'s fingerprint, makes MATCHED: a File never handed out, another File with the same bytes, another Source\'s fingerprint, an earlier MATCHED replayed -- refused; R stays UNBOUND, no confirmation of either kind',
+        f.neverHandedOut === 'NOT_HANDED_OUT' && f.anotherFileSameBytes === 'NOT_HANDED_OUT' && f.anotherSourcesFingerprint === 'FINGERPRINT_DIFFERS'
+        && f.earlierMatchReplayed === 'FILE_REPLACED' && f.after === 'UNBOUND' && f.confirmAfter === 'SOURCE_NOT_MATCHED' && f.confirmManualAfter === 'SOURCE_NOT_MATCHED', JSON.stringify(f));
+    check('UNBOUND does not become MATCHED by itself: a Source no File was presented for is checked MISSING, and a MATCHED with no File read is refused',
+        f.neverPresented === 0 && f.neverPresentedCheck?.R === 'APPLIED' && f.neverPresentedAfter === 'MISSING' && f.neverPresentedForged === 'NOT_HANDED_OUT');
+    check('regained on the same Source: no Source added or replaced, the same ID throughout; page 2 keeps its first reading', bd.sourcesSame && bd.sourceCount === 2 && bd.r2KeptFirstRead);
+    check('Source by Source: G stays MATCHED, its reading CURRENT and confirmable, through every step R goes through; one run settles G and R each on its own',
+        bd.steps.every((s) => s.G === 'MATCHED' && s.g === 'CURRENT' && s.confirmG === 'CONFIRMED')
+        && step('one run over G and R').settled?.G === 'APPLIED' && step('one run over G and R').settled?.R === 'APPLIED');
+    check('late reports are refused, not merged: about a File replaced while it was read, or held back past a newer check -- FILE_REPLACED; an older check of the same File -- SUPERSEDED; the newer result stands',
+        step('its check, while it reads, one byte different is presented').settled?.R === 'FILE_REPLACED' && step('its check, while it reads, one byte different is presented').R === 'UNBOUND'
+        && step('its check, while it reads, the right PDF is presented').settled?.R === 'FILE_REPLACED' && step('its check, while it reads, the right PDF is presented').R === 'UNBOUND'
+        && step('the held-back report about the same File arrives late').settled?.R === 'SUPERSEDED' && step('the held-back report about the same File arrives late').R === 'MISSING'
+        && step('the held-back CHANGED arrives after the newer MATCHED').settled?.R === 'FILE_REPLACED' && step('the held-back CHANGED arrives after the newer MATCHED').R === 'MATCHED');
+    const sr = bd.sessionReplaced;
+    check('a report from a replaced session: refused by the new session\'s ledger, and by the old one against the new set; nothing bound in either',
+        sr.notApplied === 'SESSION_REPLACED' && sr.settled === 'SESSION_REPLACED' && sr.intoOldLedger === 'SESSION_REPLACED' && sr.freshBindings === 0 && sr.oldLedgerOnFreshSet === 0, JSON.stringify(sr));
+    const rt = bd.retired;
+    check('a retired Source: the late MATCHED about it is refused (SOURCE_NOT_LIVE), no File can be presented for it, it is bound no more; G\'s result from the same report is taken',
+        rt.before.R === 'MATCHED' && rt.reportSaid.R === 'MATCHED' && rt.settled.R === 'SOURCE_NOT_LIVE' && rt.settled.G === 'APPLIED'
+        && rt.presentAfter === 'SOURCE_NOT_LIVE' && rt.after.R === 'UNBOUND' && rt.after.G === 'MATCHED', JSON.stringify(rt));
+    check('a reading that is CURRENT again can be confirmed: page 2\'s first reading is CURRENT and confirmable at every MATCHED',
+        beforeMove.filter((s) => s.R === 'MATCHED').length === 10 && beforeMove.filter((s) => s.R === 'MATCHED').every((s) => s.r2 === 'CURRENT' && s.confirmR2 === 'CONFIRMED'));
+    check('a reading not backed by MATCHED cannot be confirmed: at every UNBOUND, CHANGED or MISSING step page 2 is UNVERIFIED and refused',
+        beforeMove.filter((s) => s.R !== 'MATCHED').length === 23 && beforeMove.filter((s) => s.R !== 'MATCHED').every((s) => s.r2 === 'UNVERIFIED' && s.confirmR2 === 'SOURCE_NOT_MATCHED'));
+    const sl = bd.stale;
+    check('stale stays stale: after R\'s profile moved, losing and regaining the File leaves page 2 STALE_PROFILE, not confirmable from its reading (typed without a profile, it is)',
+        modelMoved > 0 && afterMove.length === 5 && afterMove.every((s) => s.r2 === 'STALE_PROFILE') && afterMove.at(-1).R === 'MATCHED'
+        && afterMove.at(-1).confirmR2 === 'OBSERVATION_NOT_CURRENT' && sl.manualR2 === 'CONFIRMED');
+    check('...and a MATCHED found against a fingerprint the Source no longer has is refused and binds nothing; that reading is STALE_SOURCE either way',
+        sl.movedSettled === 'FINGERPRINT_DIFFERS' && sl.movedBinding === 'UNBOUND' && sl.liveBinding === 'MATCHED' && sl.movedCurrency === 'STALE_SOURCE' && sl.movedCurrencyForced === 'STALE_SOURCE', JSON.stringify(sl));
+    check('nothing of the bindings is in the model (runtime only), and nothing is left open: no PDF.js document, no recogniser',
+        !/"(UNBOUND|MATCHED|CHANGED|MISSING|AMBIGUOUS)"|binding/i.test(JSON.stringify(bd.session)) && bd.workersAfter.pdf.live === 0 && bd.workersAfter.ocr.live === 0);
+    session('runtime binding: lost, regained, Source retired', bd.session);
 
     section('23. PDF.js document ownership while extracting');
     const x = lc.exclusive;

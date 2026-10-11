@@ -34,7 +34,7 @@ import { extractRegister } from '../pdf-textifier/drawing-register-extract';
 import { RegisterOcrEngine } from '../pdf-textifier/drawing-register-ocr';
 import type { RegisterExtractionResult, TemplateProfile } from '../pdf-textifier/drawing-register-types';
 import { REGISTER_EXTRACTION_ENGINE, hasRoomForRun, manifestDigest } from './analysis-run';
-import type { SourceBinding } from './currency';
+import type { SourceBinding, SourceFileCheck } from './currency';
 import type { FieldProblem } from './field-bounds';
 import { MAX_ANALYSIS_RUNS } from './field-bounds';
 import { fingerprintIntoBuffer } from './fingerprint-client';
@@ -156,7 +156,10 @@ export interface ExtractionContext {
     current(): DrawingSet;
     /** Replace the Drawing Set. Called at most once per operation, synchronously after current(). */
     apply(next: DrawingSet): void;
-    /** The File this session holds for a Source, or null. */
+    /**
+     * The File this session holds for a Source, or null. Asked once per Source,
+     * just before its bytes are read: pass a RuntimeBindingLedger check's.
+     */
     fileFor(sourceId: Uuid): Blob | null;
     gate: PdfDocumentGate;
     signal?: AbortSignal;
@@ -187,8 +190,12 @@ export type ExtractionReport =
         run: AnalysisRun | null;
         committedSheetIds: Uuid[];
         excluded: SheetExclusion[];
-        /** What this operation learned about each Source's File. Runtime only. */
-        bindings: Map<Uuid, SourceBinding>;
+        /**
+         * What this operation found about each Source's File it checked: the
+         * File, the fingerprint compared with, the verdict. Runtime only; the
+         * caller settles it into the session's RuntimeBindingLedger.
+         */
+        fileChecks: Map<Uuid, SourceFileCheck>;
         stats: ExtractionStats;
         ocr: ReturnType<GuardedRegisterOcr['counts']>;
     };
@@ -463,7 +470,8 @@ export async function extractTitleBlocks(
     const ocr = (context.createOcr ?? (() => new GuardedRegisterOcr()))();
     const staged = new Map<Uuid, Observation>();
     const excluded: SheetExclusion[] = [];
-    const bindings = new Map<Uuid, SourceBinding>();
+    const fileChecks = new Map<Uuid, SourceFileCheck>();
+    const handedOut = new Map<Uuid, Blob | null>();
     const stats: ExtractionStats = { sourcesRead: 0, documentsOpened: 0, pagesAnalysed: 0, ocrCalls: 0, maxRegionPixels: 0 };
     const progress = (event: ExtractionProgress): void => { context.onProgress?.(event); };
     let cancelled = false;
@@ -471,7 +479,11 @@ export async function extractTitleBlocks(
     const env: SourceEnv = {
         runId, lease, ocr, signal: context.signal ?? new AbortController().signal,
         chunkBytes: context.chunkBytes ?? READ_CHUNK_BYTES,
-        fileFor: (sourceId) => context.fileFor(sourceId),
+        fileFor: (sourceId) => {
+            const file = context.fileFor(sourceId);
+            handedOut.set(sourceId, file);
+            return file;
+        },
         progress, stats,
     };
     try {
@@ -483,7 +495,7 @@ export async function extractTitleBlocks(
             }
             progress({ phase: 'source', sourceIndex: index, sourceTotal: plan.sources.length, targetSheets: source.targets.length });
             const { result, binding } = await readSource(source, env);
-            if (binding) bindings.set(source.sourceId, binding);
+            if (binding) fileChecks.set(source.sourceId, { file: handedOut.get(source.sourceId) ?? null, sha256: source.sha256, binding });
             switch (result.kind) {
                 case 'read':
                     stats.sourcesRead += 1;
@@ -551,7 +563,7 @@ export async function extractTitleBlocks(
         run: commit.applied ? commit.run : null,
         committedSheetIds: commit.applied ? commit.committedSheetIds : [],
         excluded,
-        bindings,
+        fileChecks,
         stats,
         ocr: ocr.counts(),
     };
