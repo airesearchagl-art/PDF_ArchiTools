@@ -17,8 +17,14 @@
         // Before any module runs: count every Worker by what it is (a PDF.js
         // document, a tesseract recogniser, anything else), every getDocument()
         // that reaches PDF.js, and every storage write from this page.
+        //
+        // A tesseract worker is also asked to load its languages with a
+        // `cacheMethod` (what it may read from and write to its IndexedDB
+        // cache); each one is recorded as the worker received it, `default`
+        // meaning none was given. Each job the page hands a tesseract worker is
+        // timed from the message to the worker's answer.
         (() => {
-            const counts = { pdf: { started: 0, ended: 0, live: 0, peak: 0 }, ocr: { started: 0, ended: 0, live: 0, peak: 0 }, other: { started: 0, ended: 0, live: 0, peak: 0 }, getDocs: 0, events: [] };
+            const counts = { pdf: { started: 0, ended: 0, live: 0, peak: 0 }, ocr: { started: 0, ended: 0, live: 0, peak: 0 }, other: { started: 0, ended: 0, live: 0, peak: 0 }, getDocs: 0, events: [], ocrCacheMethods: [], ocrJobs: [] };
             const kindOf = (url) => (/pdf\.worker/.test(url) ? 'pdf' : /\/ocr\//.test(url) ? 'ocr' : 'other');
             const NativeWorker = window.Worker;
             window.Worker = class extends NativeWorker {
@@ -30,9 +36,24 @@
                     c.live += 1;
                     c.peak = Math.max(c.peak, c.live);
                     counts.events.push(`${this.__kind}-start`);
+                    if (this.__kind === 'ocr') {
+                        this.__index = c.started;
+                        this.__jobs = new Map();
+                        this.addEventListener('message', ({ data }) => {
+                            if (data?.status !== 'resolve' && data?.status !== 'reject') return;
+                            const job = this.__jobs.get(data.jobId);
+                            if (!job) return;
+                            this.__jobs.delete(data.jobId);
+                            counts.ocrJobs.push({ worker: this.__index, action: job.action, status: data.status, ms: Math.round(performance.now() - job.t0) });
+                        });
+                    }
                 }
                 postMessage(...args) {
                     if (this.__kind === 'pdf' && args[0]?.action === 'GetDocRequest') counts.getDocs += 1;
+                    if (this.__kind === 'ocr' && args[0]?.jobId && args[0]?.action) {
+                        this.__jobs.set(args[0].jobId, { action: args[0].action, t0: performance.now() });
+                        if (args[0].action === 'loadLanguage') counts.ocrCacheMethods.push(args[0].payload?.options?.cacheMethod ?? 'default');
+                    }
                     return super.postMessage(...args);
                 }
                 terminate() {
@@ -97,6 +118,8 @@
         import { ENGINE_FIELD, assignmentsFor, observationFromRow, toTemplateProfile } from '/src/utils/drawing-set/register-adapter.ts';
         import { GuardedRegisterOcr, extractTitleBlocks } from '/src/utils/drawing-set/register-extraction.ts';
         import { buildRow } from '/src/utils/pdf-textifier/drawing-register.ts';
+        import { OcrEngine } from '/src/utils/pdf-textifier/ocr.ts';
+        import { RegisterOcrEngine } from '/src/utils/pdf-textifier/drawing-register-ocr.ts';
         import { extractRegister } from '/src/utils/pdf-textifier/drawing-register-extract.ts';
         import { toUprightRect } from '/src/utils/pdf-textifier/table-geometry.ts';
 
@@ -215,6 +238,52 @@
                 }
                 return super.recogniseFields(page, rects, options);
             }
+        }
+
+        /**
+         * The M7 engine with tesseract.js's default cache -- the engine before it
+         * said 'none' -- for the bench's before/after comparison only.
+         * `cacheMethod` is RegisterOcrEngine's own (TypeScript-private) field;
+         * clearing it before any worker starts is exactly what an engine
+         * constructed without the option holds.
+         */
+        class PreFixOcr extends GuardedRegisterOcr {
+            constructor() {
+                super();
+                this.cacheMethod = undefined;
+            }
+        }
+
+        /**
+         * What browser storage holds for this origin: IndexedDB databases with
+         * their stores and keys (never values), Cache API caches, and the
+         * number of localStorage / sessionStorage entries.
+         */
+        async function storageState() {
+            const databases = indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : [];
+            // What is in a database this page did not create: its stores and
+            // keys only. Only names that already exist are opened.
+            const contents = {};
+            for (const name of databases) {
+                contents[name] = await new Promise((resolve) => {
+                    const request = indexedDB.open(name);
+                    request.onerror = () => resolve({ error: String(request.error) });
+                    request.onsuccess = () => {
+                        const db = request.result;
+                        const stores = [...db.objectStoreNames];
+                        const out = {};
+                        if (stores.length === 0) { db.close(); resolve(out); return; }
+                        const tx = db.transaction(stores, 'readonly');
+                        for (const store of stores) {
+                            const keys = tx.objectStore(store).getAllKeys();
+                            keys.onsuccess = () => { out[store] = keys.result.map(String); };
+                        }
+                        tx.oncomplete = () => { db.close(); resolve(out); };
+                    };
+                });
+            }
+            const cacheNames = window.caches ? await caches.keys() : [];
+            return { databases, contents, cacheNames, local: localStorage.length, session: sessionStorage.length };
         }
 
         // ------------------------------------------------------------------
@@ -1017,32 +1086,113 @@
                 return plainly({ pixels, beforeValues, afterValues, report: reportSummary(report), session: session(w) });
             },
 
+            /**
+             * One recogniser of the given kind started and closed, and what
+             * browser storage held before and after. The smoke runs each kind
+             * in a fresh browser context of its own, so whatever is found
+             * there was written by that recogniser and nothing else. `m7`
+             * goes further and reads the JPX scans end to end through the
+             * extraction, recognition included; the others are the engines the
+             * existing tools construct, with their defaults.
+             */
+            async ocrCacheProbe(kind, truth) {
+                const before = await storageState();
+                const methodsFrom = window.__workers.ocrCacheMethods.length;
+                const startedFrom = window.__workers.ocr.started;
+                let extraction = null;
+                if (kind === 'm7') {
+                    const w = await world(['p2a-jpx']);
+                    const sheets = sheetsOf(w, 'p2a-jpx');
+                    const profile = makeProfile(w, { name: 'J', transferModel: 'normalised', reference: truth.reference, rects: truth.cells });
+                    assign(w, sheets.map((s) => s.id), profile.id);
+                    const report = await extract(w, sheets.map((s) => s.id), { gate: new PdfDocumentGate() });
+                    const observations = sheets.map((s) => sheetById(w, s.id).observation).filter(Boolean);
+                    extraction = {
+                        outcome: report.kind === 'finished' ? report.outcome : report.refusal.code,
+                        observed: observations.length,
+                        ocrValues: observations.reduce((n, o) => n + FIELD_NAMES.filter((f) => o.fields[f].source === 'ocr' && o.fields[f].value !== '').length, 0),
+                    };
+                } else {
+                    const engine = kind === 'register-default' ? new RegisterOcrEngine()
+                        : kind === 'register-langs' ? new RegisterOcrEngine('jpn+eng')
+                            : kind === 'pipeline-default' ? new OcrEngine('jpn+eng')
+                                : null;
+                    if (!engine) throw new Error(`unknown recogniser kind: ${kind}`);
+                    try {
+                        await engine.start();
+                    } finally {
+                        await engine.terminate();
+                    }
+                }
+                return plainly({
+                    kind,
+                    before,
+                    after: await storageState(),
+                    cacheMethods: window.__workers.ocrCacheMethods.slice(methodsFrom),
+                    workersStarted: window.__workers.ocr.started - startedFrom,
+                    workersLive: window.__workers.ocr.live,
+                    extraction,
+                });
+            },
+
+            /**
+             * One timed step for scripts/bench-m7-p2a-ocr-cache.mjs: a recogniser
+             * started and closed (`init`), or one extraction over the register
+             * and JPX fixtures, two Sources (`extract`). `m7` is the engine as
+             * shipped; `pre-fix` is the same engine with tesseract.js's default
+             * cache, as it was before the M7 engine said 'none'.
+             */
+            async ocrBenchStep({ mode, what, truths }) {
+                const make = mode === 'm7' ? () => new GuardedRegisterOcr()
+                    : mode === 'pre-fix' ? () => new PreFixOcr()
+                        : null;
+                if (!make) throw new Error(`unknown mode: ${mode}`);
+                const jobsFrom = window.__workers.ocrJobs.length;
+                const methodsFrom = window.__workers.ocrCacheMethods.length;
+                const ocrFrom = { ...window.__workers.ocr };
+                const out = { mode, what };
+                if (what === 'init') {
+                    const ocr = make();
+                    const t0 = performance.now();
+                    await ocr.start();
+                    out.initMs = Math.round(performance.now() - t0);
+                    const t1 = performance.now();
+                    await ocr.close();
+                    out.closeMs = Math.round(performance.now() - t1);
+                } else if (what === 'extract') {
+                    const names = ['p2a-register', 'p2a-jpx'];
+                    const w = await world(names);
+                    for (const name of names) {
+                        const profile = makeProfile(w, { name, transferModel: 'normalised', reference: truths[name].reference, rects: truths[name].cells });
+                        assign(w, sheetsOf(w, name).map((s) => s.id), profile.id);
+                    }
+                    const ids = w.set.sheets.map((s) => s.id);
+                    const t0 = performance.now();
+                    const report = await extract(w, ids, { gate: new PdfDocumentGate(), createOcr: make });
+                    out.totalMs = Math.round(performance.now() - t0);
+                    const observations = ids.map((id) => sheetById(w, id).observation).filter(Boolean);
+                    out.outcome = report.kind === 'finished' ? report.outcome : report.refusal.code;
+                    out.sources = names.length;
+                    out.sheets = ids.length;
+                    out.observed = observations.length;
+                    out.ocrCalls = report.kind === 'finished' ? report.stats.ocrCalls : null;
+                    out.ocrValues = observations.reduce((n, o) => n + FIELD_NAMES.filter((f) => o.fields[f].source === 'ocr' && o.fields[f].value !== '').length, 0);
+                } else {
+                    throw new Error(`unknown step: ${what}`);
+                }
+                out.cacheMethods = window.__workers.ocrCacheMethods.slice(methodsFrom);
+                out.jobs = window.__workers.ocrJobs.slice(jobsFrom);
+                out.workersStarted = window.__workers.ocr.started - ocrFrom.started;
+                out.workersEnded = window.__workers.ocr.ended - ocrFrom.ended;
+                out.workersLive = window.__workers.ocr.live;
+                out.storage = await storageState();
+                return plainly(out);
+            },
+
             /** What this page wrote to browser storage, and what storage now holds. */
             async storage() {
                 const writes = plainly(window.__storage);
-                const databases = indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : [];
-                // What is in a database this page did not create: its stores and
-                // keys only (read after the counts above were taken).
-                const contents = {};
-                for (const name of databases) {
-                    contents[name] = await new Promise((resolve) => {
-                        const request = indexedDB.open(name);
-                        request.onerror = () => resolve({ error: String(request.error) });
-                        request.onsuccess = () => {
-                            const db = request.result;
-                            const stores = [...db.objectStoreNames];
-                            const out = {};
-                            if (stores.length === 0) { db.close(); resolve(out); return; }
-                            const tx = db.transaction(stores, 'readonly');
-                            for (const store of stores) {
-                                const keys = tx.objectStore(store).getAllKeys();
-                                keys.onsuccess = () => { out[store] = keys.result.map(String); };
-                            }
-                            tx.oncomplete = () => { db.close(); resolve(out); };
-                        };
-                    });
-                }
-                return { writes, local: localStorage.length, session: sessionStorage.length, databases, contents, bodyText: document.body.innerText };
+                return { writes, ...(await storageState()), bodyText: document.body.innerText };
             },
             workers,
         };

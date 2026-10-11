@@ -34,6 +34,8 @@ export async function runP2aChecks(ctx) {
     await page.goto(`${ORIGIN}/scripts/smoke-m7-p2a-harness.html`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.__m7p2aReady === true, { timeout: 300000 });
     const call = async (fn, ...args) => keep(await page.evaluate((f, a) => window.__m7p2a[f](...a), fn, args));
+    // Browser storage before any P2-A work, the first recognition included.
+    const storageAtStart = await call('storage');
     const sessions = [];
     const session = (label, value) => sessions.push([label, value]);
 
@@ -432,9 +434,65 @@ export async function runP2aChecks(ctx) {
     check('no sentinel on the page', !storage.bodyText.includes(SENTINEL));
     check('no page text kept: every raw text in every live session is one field\'s, at most 1000 characters', sessions.every(([, s]) =>
         s.drawingSet.sheets.every((sh) => !sh.observation || FIELDS.every((f) => [...sh.observation.fields[f].rawText].length <= 1000))));
+    const emptyStorage = (s) => s.databases.length === 0 && s.cacheNames.length === 0 && s.local === 0 && s.session === 0;
+    const storageLine = (s) => JSON.stringify({ databases: s.contents, caches: s.cacheNames, local: s.local, session: s.session });
+    check('before the first P2-A recognition this origin held no IndexedDB database, no Cache API cache and no localStorage / sessionStorage entry',
+        emptyStorage(storageAtStart), storageLine(storageAtStart));
     check('the harness page wrote nothing to localStorage, sessionStorage, IndexedDB or the Cache API (instrumented)',
         storage.writes.writes === 0 && storage.local === 0 && storage.session === 0, JSON.stringify(storage.writes.calls));
     note('IndexedDB databases present, with their stores and keys', JSON.stringify(storage.contents));
     check('IndexedDB holds nothing (Gate: IndexedDB writes 0)', storage.databases.length === 0,
-        storage.databases.length ? `${storage.databases.join(',')} -- written inside the tesseract.js worker (the unchanged OCR engine caches its language data); see the PR` : '');
+        storage.databases.length ? `${storage.databases.join(',')}: ${JSON.stringify(storage.contents)}` : '');
+    check('the Cache API holds nothing', storage.cacheNames.length === 0, storage.cacheNames.join(','));
+    // The language data cache is written inside the tesseract worker, where
+    // nothing on this page can intercept it. What can be seen is what each
+    // worker was told: its cacheMethod, as the worker received it.
+    const ocrWorkers = await call('workers');
+    check('every tesseract worker M7 started was told cacheMethod \'none\' (neither read nor write its IndexedDB cache), and none is left running',
+        ocrWorkers.ocrCacheMethods.length > 0 && ocrWorkers.ocrCacheMethods.every((m) => m === 'none') && ocrWorkers.ocr.live === 0,
+        `${ocrWorkers.ocrCacheMethods.length} workers loaded languages: ${JSON.stringify(countBy(ocrWorkers.ocrCacheMethods.map((m) => ({ m })), 'm'))}; started ${ocrWorkers.ocr.started}, live ${ocrWorkers.ocr.live}`);
+
+    // Controls, each in a fresh browser context with storage of its own: the
+    // existing tools' engines, with their defaults, must still write the cache
+    // where the checks above would see it (so an empty IndexedDB above means
+    // nothing was written, not that nothing could be seen), and M7's engine,
+    // alone in a clean context, must leave nothing behind a real recognition.
+    const controlRequests = [];
+    const controlErrors = [];
+    const inFreshContext = async (kind) => {
+        const context = await page.browser().createBrowserContext();
+        try {
+            const control = await context.newPage();
+            control.setDefaultTimeout(0);
+            control.on('request', (r) => controlRequests.push(r.url()));
+            control.on('pageerror', (e) => controlErrors.push(e.message));
+            await control.goto(`${ORIGIN}/scripts/smoke-m7-p2a-harness.html`, { waitUntil: 'networkidle0' });
+            await control.waitForFunction(() => window.__m7p2aReady === true, { timeout: 300000 });
+            return await control.evaluate((k, t) => window.__m7p2a.ocrCacheProbe(k, t), kind, truth('p2a-jpx'));
+        } finally {
+            await context.close().catch(() => { });
+        }
+    };
+    const cachedLanguages = (s) => {
+        const keys = s.contents['keyval-store']?.keyval ?? [];
+        return keys.includes('./eng.traineddata') && keys.includes('./jpn.traineddata');
+    };
+    for (const [kind, label] of [
+        ['register-default', 'the Drawing Register tool\'s engine, new RegisterOcrEngine()'],
+        ['register-langs', 'new RegisterOcrEngine(\'jpn+eng\')'],
+        ['pipeline-default', 'the OCR / text-extraction pipelines\' engine, new OcrEngine(\'jpn+eng\')'],
+    ]) {
+        const r = await inFreshContext(kind);
+        check(`control, fresh context: ${label} keeps tesseract.js's default and still caches -- keyval-store holds ./eng.traineddata and ./jpn.traineddata after one start`,
+            emptyStorage(r.before) && r.cacheMethods.length === 1 && r.cacheMethods[0] === 'default' && cachedLanguages(r.after) && r.workersLive === 0,
+            `cacheMethod ${JSON.stringify(r.cacheMethods)}; before ${storageLine(r.before)}; after ${storageLine(r.after)}`);
+    }
+    const m7Control = await inFreshContext('m7');
+    check('control, fresh context: M7\'s extraction recognises the JPX scans and leaves this origin\'s storage exactly as empty as it found it',
+        emptyStorage(m7Control.before) && emptyStorage(m7Control.after) && m7Control.extraction.outcome === 'COMPLETED' && m7Control.extraction.ocrValues > 0
+        && m7Control.cacheMethods.length > 0 && m7Control.cacheMethods.every((m) => m === 'none') && m7Control.workersLive === 0,
+        `${JSON.stringify(m7Control.extraction)}; cacheMethod ${JSON.stringify(m7Control.cacheMethods)}; before ${storageLine(m7Control.before)}; after ${storageLine(m7Control.after)}`);
+    const controlExternal = controlRequests.filter((url) => !url.startsWith(ORIGIN) && /^https?:/.test(url));
+    check('the control contexts made no request off this origin and raised no page error',
+        controlExternal.length === 0 && controlErrors.length === 0, [...controlExternal, ...controlErrors].join(' | '));
 }

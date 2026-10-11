@@ -55,10 +55,22 @@ import { assignmentsFor, observationFromRow, toTemplateProfile } from './registe
  * and no longer waiting. Once closed, the engine refuses to start a new
  * worker -- including one whose start was already under way when it closed --
  * so a cancelled run cannot leave a worker behind.
+ *
+ * It also keeps nothing. M7 writes nothing to browser storage, and
+ * tesseract.js by default stores the language data it downloads in IndexedDB
+ * from inside its worker; `'none'` makes this engine's worker neither read nor
+ * write that cache, so each run fetches the language data from this origin
+ * again. The Drawing Register tool and the other pipelines construct their own
+ * engines and keep tesseract.js's default.
  */
 export class GuardedRegisterOcr extends RegisterOcrEngine {
     private closed = false;
     private readonly tally = { workersStarted: 0, closes: 0, refusedAfterClose: 0 };
+
+    constructor() {
+        // The languages stay the Drawing Register's own default.
+        super(undefined, { cacheMethod: 'none' });
+    }
 
     override async start(): Promise<void> {
         if (this.closed) {
