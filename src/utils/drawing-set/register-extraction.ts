@@ -470,9 +470,16 @@ export async function extractTitleBlocks(
         }
         throw error;
     }
-    const digest = manifestDigest(startSet);
-
-    const ocr = (context.createOcr ?? (() => new GuardedRegisterOcr()))();
+    let digest: Sha256Hex;
+    let ocr: GuardedRegisterOcr;
+    try {
+        digest = manifestDigest(startSet);
+        ocr = (context.createOcr ?? (() => new GuardedRegisterOcr()))();
+    } catch (error) {
+        // The gate is the page's: a lease left held would stop intake and the preview too.
+        lease.end();
+        throw error;
+    }
     const staged = new Map<Uuid, Observation>();
     const excluded: SheetExclusion[] = [];
     const fileChecks = new Map<Uuid, SourceFileCheck>();

@@ -203,6 +203,18 @@ export async function fingerprintIntoBuffer(
     target: Uint8Array | null,
     options: FingerprintIntoBufferOptions,
 ): Promise<string> {
+    return (await fingerprintBlob(file, target, options)).sha256;
+}
+
+/**
+ * fingerprintIntoBuffer, also giving the byte count the Worker confirmed --
+ * the size the digest is of, read from the File once, before the first byte.
+ */
+export async function fingerprintBlob(
+    file: Blob,
+    target: Uint8Array | null,
+    options: FingerprintIntoBufferOptions,
+): Promise<{ sha256: string; byteLength: number }> {
     const { signal } = options;
     const chunkBytes = Math.max(1, Math.floor(options.chunkBytes ?? READ_CHUNK_BYTES));
     const size = file.size;
@@ -252,7 +264,7 @@ export async function fingerprintIntoBuffer(
         if (byteLength !== size || !/^[0-9a-f]{64}$/.test(sha256)) {
             throw new IntakeStop(refusal('FINGERPRINT_FAILED', 'ファイルの識別情報（SHA-256）を計算できなかったため、読み込めません。'));
         }
-        return sha256;
+        return { sha256, byteLength };
     } catch (error) {
         throw stopFor(error);
     } finally {

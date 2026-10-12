@@ -115,6 +115,20 @@ export async function runP2b1Checks(ctx) {
         JSON.stringify(ex.workersAfter));
 
     // ------------------------------------------------------------------
+    section('31b. Ordering and queueing: a check is as new as its read; intakes take turns on the page gate');
+    const od = await call('ordering');
+    check('a preview read that waited for an earlier document is ordered by when it read: a check made meanwhile found MATCHED, the File then became unreadable, and the preview\'s later read is taken -- MISSING',
+        od.checkWhileWaiting === 'APPLIED' && od.bindingAfterThatCheck === 'MATCHED' && od.preview === 'READ_FAILED' && od.bindingAfterPreview === 'MISSING', JSON.stringify(od));
+    check('three intakes asked for at once on the store run one after another (no two reads overlap), all taken in',
+        od.concurrent.results.every((r) => r.kind === 'accepted') && od.concurrent.overlaps === false, JSON.stringify(od.concurrent));
+    check('a store mounted again on the same gate waits until the old store\'s abandoned intake has finished before it reads anything',
+        od.remountQueue.abandoned.kind === 'cancelled' && od.remountQueue.next.kind === 'accepted' && od.remountQueue.waited, JSON.stringify(od.remountQueue));
+    probe('a store that was left opens no preview, checked or not (CLOSED)', od.previewAfterLeave === 'CLOSED', od.previewAfterLeave);
+    check('the Source with the same bytes removed while a file is read: no live Source has them when they are known, so the file is a new Source (not a duplicate of one that is gone)',
+        od.duplicateRemoved.kind === 'accepted' && od.sourcesAfter === 1, JSON.stringify(od.duplicateRemoved));
+    check('nothing left open', od.workersAfter.pdf === 0 && od.workersAfter.fingerprint === 0, JSON.stringify(od.workersAfter));
+
+    // ------------------------------------------------------------------
     section('32. A destruction PDF.js reports as failed: nothing opens again, whatever is reset or mounted again');
     const df = await call('destroyFailure');
     check('the preview\'s document could not be destroyed: the page gate knows (RELEASE_UNCONFIRMED)', df.opened === 'opened:4' && df.unconfirmed === true);

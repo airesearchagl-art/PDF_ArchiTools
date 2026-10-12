@@ -315,10 +315,16 @@ export class RuntimeBindingLedger {
     }
 }
 
+const NOT_READ_REASONS: ReadonlyMap<unknown, NotReadReason> = new Map(
+    (Object.keys(NOT_READ_BINDING) as NotReadReason[]).map((reason) => [reason, reason]),
+);
+
 function take(state: LedgerState, set: DrawingSet, handedOut: Map<Uuid, HandedOut> | null, sourceId: Uuid, result: SourceFileCheck): BindingSettlement {
+    // Each field of the result is read once: what is checked is what is used.
+    const raw = result !== null && typeof result === 'object' ? (result as { kind?: unknown; digest?: unknown; file?: unknown; reason?: unknown }) : {};
+    const kind = raw.kind;
     // A digest is spent the first time it is offered, whatever the answer.
-    const isRead = result !== null && typeof result === 'object' && result.kind === 'READ';
-    const spent = isRead ? spendFileDigest((result as { digest?: unknown }).digest) : null;
+    const spent = kind === 'READ' ? spendFileDigest(raw.digest) : null;
     if (!handedOut || set.id !== state.sessionId) return 'SESSION_REPLACED';
     const source = liveSource(set, sourceId);
     if (!source) return 'SOURCE_NOT_LIVE';
@@ -326,16 +332,18 @@ function take(state: LedgerState, set: DrawingSet, handedOut: Map<Uuid, HandedOu
     if (!taken) return 'NOT_HANDED_OUT';
 
     let finding: Finding;
-    if (isRead) {
+    if (kind === 'READ') {
         if (!spent) return 'NOT_VERIFIED';
         if (spent.record.scope !== state.sessionId) return 'SESSION_REPLACED';
         if (taken.file === null || spent.record.file !== taken.file) return 'NOT_HANDED_OUT';
         finding = { kind: 'READ', sha256: spent.record.sha256, byteLength: spent.record.byteLength, against: source.fingerprint.sha256, checkedAt: taken.order };
-    } else if (result !== null && typeof result === 'object' && result.kind === 'NOT_READ' && Object.hasOwn(NOT_READ_BINDING, result.reason)) {
-        if (result.file !== taken.file || (result.reason === 'NO_FILE') !== (taken.file === null)) return 'NOT_HANDED_OUT';
+    } else if (kind === 'NOT_READ' && NOT_READ_REASONS.has(raw.reason)) {
+        const reason = NOT_READ_REASONS.get(raw.reason)!;
+        const file = raw.file;
+        if (file !== taken.file || (reason === 'NO_FILE') !== (taken.file === null)) return 'NOT_HANDED_OUT';
         // A size difference is a fact anyone can see; one that is not there is not taken.
-        if (result.reason === 'SIZE_DIFFERS' && taken.file !== null && taken.expected !== null && taken.file.size === taken.expected.byteLength) return 'NOT_VERIFIED';
-        finding = { kind: 'NOT_READ', binding: NOT_READ_BINDING[result.reason], against: source.fingerprint.sha256, checkedAt: taken.order };
+        if (reason === 'SIZE_DIFFERS' && taken.file !== null && taken.expected !== null && taken.file.size === taken.expected.byteLength) return 'NOT_VERIFIED';
+        finding = { kind: 'NOT_READ', binding: NOT_READ_BINDING[reason], against: source.fingerprint.sha256, checkedAt: taken.order };
     } else {
         return 'NOT_VERIFIED';
     }

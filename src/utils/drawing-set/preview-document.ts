@@ -94,6 +94,13 @@ export interface ExpectedContent {
 export interface OpenHooks {
     /** The session the read is made for (its Drawing Set id). */
     scope?: Uuid | null;
+    /**
+     * Called once, at the moment the read begins -- after every earlier
+     * document has been released, so it may be well after open() -- before a
+     * byte of the File is looked at. A check of the File is begun here, so it
+     * is ordered by when the File was really read.
+     */
+    beginRead?: () => void;
     /** What the read found about the File, once it is known. Not called for a read that was stopped. */
     onRead?: (check: SourceFileCheck) => void;
 }
@@ -171,6 +178,13 @@ export class PreviewDocumentOwner {
                 // What the caller does with a report never changes the preview.
             }
         };
+        const beginRead = (): void => {
+            try {
+                hooks.beginRead?.();
+            } catch {
+                // Nor what it does when the read begins.
+            }
+        };
         const entry: Entry = {
             sourceId,
             file,
@@ -190,6 +204,7 @@ export class PreviewDocumentOwner {
                 if (entry.closed) throw closedError();
                 if (this.refusesAll) throw unconfirmedError();
                 if (this.gate?.extractionActive) throw extractionActiveError();
+                beginRead();
                 if (file.size !== expected.byteLength) {
                     report({ kind: 'NOT_READ', file, reason: 'SIZE_DIFFERS' });
                     throw changedError();

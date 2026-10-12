@@ -30,12 +30,14 @@
  * only as long as the digest itself is held.
  *
  * What this does not defend against is code that already controls the page --
- * replacing Worker, Blob or PDF.js itself. That is outside what any module of
- * the page can enforce. It does make sure that no path through the app's own
- * modules turns a claim into evidence.
+ * replacing Worker, Blob or PDF.js itself -- nor a Blob that serves other
+ * bytes the next time it is read: a digest is of the bytes as read then, and
+ * every later use of the File (the preview, extraction) reads and checks them
+ * again. That is outside what any module of the page can enforce. It does make
+ * sure that no path through the app's own modules turns a claim into evidence.
  */
 import type { FingerprintIntoBufferOptions } from './fingerprint-client';
-import { fingerprintIntoBuffer } from './fingerprint-client';
+import { fingerprintBlob } from './fingerprint-client';
 import type { Sha256Hex, Uuid } from './model';
 
 declare const fileDigestBrand: unique symbol;
@@ -92,8 +94,8 @@ export interface ReadFileDigestOptions extends FingerprintIntoBufferOptions {
  */
 export async function readFileDigest(file: Blob, target: Uint8Array | null, options: ReadFileDigestOptions): Promise<FileDigest> {
     const readStartedAt = evidenceTick();
-    const sha256 = await fingerprintIntoBuffer(file, target, options);
-    const byteLength = file.size;
+    // The byte count the Worker confirmed, not the File's size asked again.
+    const { sha256, byteLength } = await fingerprintBlob(file, target, options);
     const digest = Object.freeze({ sha256, byteLength }) as unknown as FileDigest;
     issued.set(digest, { file, sha256, byteLength, scope: options.scope, readStartedAt, spent: false });
     return digest;

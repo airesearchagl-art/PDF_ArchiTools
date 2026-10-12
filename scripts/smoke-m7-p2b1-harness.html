@@ -92,7 +92,7 @@
         import { PreviewDocumentOwner } from '/src/utils/drawing-set/preview-document.ts';
         import { PdfDocumentGate } from '/src/utils/drawing-set/pdf-document-gate.ts';
         import { m7PdfDocumentAssets } from '/src/utils/drawing-set/pdf-document-assets.ts';
-        import { RuntimeBindingLedger, currencyLabel, observationCurrency, verifiedBinding } from '/src/utils/drawing-set/currency.ts';
+        import { RuntimeBindingLedger, currencyLabel, observationCurrency, verifiedBinding, verifyHeldFile } from '/src/utils/drawing-set/currency.ts';
         import { inspectFileDigest, readFileDigest } from '/src/utils/drawing-set/file-evidence.ts';
         import { fingerprintWorkerCounts } from '/src/utils/drawing-set/fingerprint-client.ts';
         import { confirmSheet } from '/src/utils/drawing-set/metadata-confirmation.ts';
@@ -136,7 +136,9 @@
                 const delay = this.delayMs;
                 return {
                     arrayBuffer: async () => {
+                        const start = performance.now();
                         if (delay) await sleep(delay);
+                        (this.reads ??= []).push({ start, end: performance.now() });
                         if (gone || this.gone) throw new DOMException('The requested file could not be read.', 'NotReadableError');
                         this.bytesRead += to - from;
                         return bytes.slice(from, to).buffer;
@@ -532,6 +534,95 @@
                 await sleep(300);
                 out.gate = gate.counts();
                 out.workersAfter = { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live, fingerprint: fingerprintWorkerCounts().live };
+                return plainly(out);
+            },
+
+            /** 31b. Ordering and queueing: a check is as new as its read, intakes take turns page-wide. */
+            async ordering() {
+                const out = {};
+                const sourceOf = (store, id) => store.currentSet().sources.find((s) => s.id === id);
+                // a. A preview read that had to wait for an earlier document to go is
+                //    ordered by when it read, not by when it was asked for.
+                {
+                    const gate = new PdfDocumentGate();
+                    const store = newStore(gate);
+                    const x = await store.intake(fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf'));
+                    const s = new MutableFile(await p1Bytes('p1-second-c'), 'p1-second-c.pdf');
+                    const sr = await store.intake(s);
+                    const X = x.source.id;
+                    const S = sr.source.id;
+                    await previewOutcome(store.openPreview(X, store.heldFile(X), expectedOf(sourceOf(store, X))));
+                    const proto = await transportPrototype();
+                    const realDestroy = proto.destroy;
+                    proto.destroy = async function slowDestroy() { const r = await realDestroy.call(this); await sleep(500); return r; };
+                    try {
+                        const pending = previewOutcome(store.openPreview(S, store.heldFile(S), expectedOf(sourceOf(store, S))));
+                        await sleep(100);
+                        // While the preview waits, another check reads S and finds it as it is.
+                        out.checkWhileWaiting = await verifyHeldFile(store.bindingLedger(), () => store.currentSet(), S);
+                        out.bindingAfterThatCheck = store.bindingOf(S);
+                        // Then S stops being readable, before the preview reads it.
+                        s.gone = true;
+                        out.preview = await pending;
+                    } finally {
+                        proto.destroy = realDestroy;
+                    }
+                    out.bindingAfterPreview = store.bindingOf(S);
+                    await store.owner.close();
+                }
+                // b. Several intakes asked for at once, straight on the store: one at a time.
+                {
+                    const store = newStore(new PdfDocumentGate());
+                    const files = [];
+                    for (const [name, bytes] of [['p1-native-a.pdf', await p1Bytes('p1-native-a')], ['p1-second-c.pdf', await p1Bytes('p1-second-c')], ['p2a-transfer.pdf', await p2aBytes('p2a-transfer')]]) {
+                        const f = new MutableFile(bytes, name);
+                        f.delayMs = 80;
+                        files.push(f);
+                    }
+                    const results = await Promise.all(files.map((f) => store.intake(f)));
+                    const spans = files.map((f) => ({ start: Math.min(...f.reads.map((r) => r.start)), end: Math.max(...f.reads.map((r) => r.end)) }));
+                    out.concurrent = {
+                        results: results.map(resultSummary),
+                        overlaps: spans.some((a, i) => spans.some((b, j) => i !== j && a.start < b.end && b.start < a.end)),
+                    };
+                }
+                // c. A store mounted again on the same gate waits for the old one's abandoned intake.
+                {
+                    const gate = new PdfDocumentGate();
+                    const first = newStore(gate);
+                    const slow = new MutableFile(await p2aBytes('p2a-register'), 'p2a-register.pdf');
+                    slow.delayMs = 300;
+                    const abandoned = first.intake(slow);
+                    await sleep(50);
+                    first.leave();
+                    const second = new DrawingSetStore({ gate, owner: first.owner });
+                    second.enter();
+                    const fast = new MutableFile(await p1Bytes('p1-native-a'), 'p1-native-a.pdf');
+                    const [a, b] = await Promise.all([abandoned, second.intake(fast)]);
+                    out.remountQueue = {
+                        abandoned: resultSummary(a), next: resultSummary(b),
+                        waited: Math.min(...fast.reads.map((r) => r.start)) >= Math.max(...slow.reads.map((r) => r.end)),
+                    };
+                    // d. A store that was left opens no preview at all.
+                    const src = sourcesOf(second)[0];
+                    second.leave();
+                    out.previewAfterLeave = await previewOutcome(second.openPreview(src.id, second.heldFile(src.id) ?? fast, expectedOf(src)));
+                }
+                // e. The Source with the same bytes removed while the file is read: by the time
+                //    its bytes are known no live Source has them, so it is a new Source.
+                {
+                    const store = newStore(new PdfDocumentGate());
+                    const a = await store.intake(fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf'));
+                    const copy = new MutableFile(await p1Bytes('p1-native-a'), 'copy.pdf');
+                    copy.delayMs = 200;
+                    const pending = store.intake(copy);
+                    await sleep(60);
+                    store.removeSource(a.source.id);
+                    out.duplicateRemoved = resultSummary(await pending);
+                    out.sourcesAfter = sourcesOf(store).length;
+                }
+                await sleep(200);
+                out.workersAfter = { pdf: window.__workers.pdf.live, fingerprint: fingerprintWorkerCounts().live };
                 return plainly(out);
             },
 

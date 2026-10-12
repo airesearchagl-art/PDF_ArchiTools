@@ -24,11 +24,11 @@
  * are runtime only and never enter the model.
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import type { BindingSettlement, RuntimeBindings } from './currency';
+import type { BindingCheck, BindingSettlement, RuntimeBindings, SourceFileCheck } from './currency';
 import { RuntimeBindingLedger, verifiedBinding } from './currency';
 import type { FileDigest } from './file-evidence';
 import type { IntakeRefusal } from './intake-policy';
-import { IntakeStop } from './intake-policy';
+import { IntakeStop, refusal } from './intake-policy';
 import type { DrawingSet, DrawingSetSession, Sheet, Source, Uuid } from './model';
 import { commitSourceCandidate, createSession, liveSourceWithContent, retireSource } from './model';
 import type { PdfDocumentGate } from './pdf-document-gate';
@@ -76,6 +76,14 @@ const NO_SESSION_SET: DrawingSet = Object.freeze({
     decisions: [],
 }) as DrawingSet;
 
+/**
+ * Per page gate, settles when the last intake begun on it has finished --
+ * including one abandoned by a stop, a reset or leaving the workspace and still
+ * letting go of its buffer and its document. Every store on the gate waits its
+ * turn here, a store made by a remount included, so two intakes never overlap.
+ */
+const intakeChains = new WeakMap<PdfDocumentGate, Promise<void>>();
+
 const startMessage = (error: unknown): string =>
     error instanceof IntakeStop && error.refusal ? error.refusal.message : '図面一式を開始できませんでした。';
 
@@ -96,12 +104,6 @@ export class DrawingSetStore {
     private snapshot: StoreSnapshot;
     private readonly listeners = new Set<() => void>();
     private readonly work = new Map<AbortController, WorkKind>();
-    /**
-     * Settles when the last intake started has finished, including one that
-     * was abandoned by a stop or a reset and is still letting go of its
-     * buffer: the next file waits for it, so two never overlap.
-     */
-    private lastIntake: Promise<void> = Promise.resolve();
 
     constructor(options: { gate: PdfDocumentGate; owner: PreviewDocumentOwner }) {
         this.gate = options.gate;
@@ -265,21 +267,24 @@ export class DrawingSetStore {
         const ticket = { session: this.sessionEpoch, intake: this.intakeEpoch };
         const current = (): boolean => !this.left && ticket.session === this.sessionEpoch && ticket.intake === this.intakeEpoch;
         const controller = this.track('intake');
+        // Take a place in the page's queue before waiting, so no later call can start first.
+        const previous = intakeChains.get(this.gate) ?? Promise.resolve();
+        let done: () => void = () => { };
+        intakeChains.set(this.gate, new Promise<void>((resolve) => { done = resolve; }));
         try {
-            await this.lastIntake;
+            await previous;
             if (!current() || controller.signal.aborted || !this.session) return { kind: 'cancelled' };
-            const run = intakeSource(file, {
+            const outcome = await intakeSource(file, {
                 signal: controller.signal,
                 current: () => this.currentSet(),
                 gate: this.gate,
                 onProgress: (progress) => { if (current()) options.onProgress?.(progress); },
             });
-            this.lastIntake = run.then(() => { }, () => { });
-            const outcome = await run;
             if (!current() || controller.signal.aborted) return { kind: 'cancelled' };
             return this.settleIntake(outcome);
         } finally {
             this.work.delete(controller);
+            done();
         }
     }
 
@@ -301,7 +306,12 @@ export class DrawingSetStore {
             }
             case 'duplicate': {
                 const existing = liveSourceWithContent(session.drawingSet, outcome.sha256);
-                return existing ? this.reconnect(existing, outcome.evidence) : { kind: 'duplicate', existing: outcome.existing };
+                if (existing) return this.reconnect(existing, outcome.evidence);
+                // The Source with these bytes was removed while this file was read.
+                return {
+                    kind: 'refused',
+                    refusal: refusal('DUPLICATE_REMOVED', `同じ内容のファイル「${outcome.existing.displayName}」が読み込み中に外されたため、追加しませんでした。もう一度選んでください。`),
+                };
             }
             case 'refused':
                 return { kind: 'refused', refusal: outcome.refusal };
@@ -333,25 +343,38 @@ export class DrawingSetStore {
      * Open the preview document of a Source from the File held for it, and
      * take the preview's read as a check of that File. Passed to the viewer.
      */
-    readonly openPreview = (sourceId: Uuid, file: Blob, expected: ExpectedContent): Promise<PDFDocumentProxy> => {
+    readonly openPreview = (sourceId: Uuid, _file: Blob, expected: ExpectedContent): Promise<PDFDocumentProxy> => {
         const ledger = this.ledger;
         const set = this.currentSet();
-        if (!ledger || set === NO_SESSION_SET) return this.owner.open(sourceId, file, expected);
+        // Left, or no session: nothing is opened that no session would check.
+        if (!ledger || set === NO_SESSION_SET) return Promise.reject(new PreviewError('CLOSED', 'closed'));
         const sessionEpoch = this.sessionEpoch;
-        const check = ledger.beginCheck(set);
-        const held = check.fileFor(sourceId);
-        const settle = (result: Parameters<RuntimeBindingLedger['settle']>[2]): void => {
-            if (sessionEpoch !== this.sessionEpoch || this.ledger !== ledger || this.left) return;
-            const settled = ledger.settle(this.currentSet(), check, result);
+        const current = (): boolean => sessionEpoch === this.sessionEpoch && this.ledger === ledger && !this.left;
+        const settle = (check: BindingCheck, result: SourceFileCheck): void => {
+            if (!current()) return;
+            const settled = ledger.settle(this.currentSet(), check, new Map([[sourceId, result]]));
             if (settled.get(sourceId) === 'APPLIED') this.publish();
         };
+        const held = ledger.heldFile(sourceId);
         if (!held) {
-            settle(new Map([[sourceId, { kind: 'NOT_READ', file: null, reason: 'NO_FILE' }]]));
+            const check = ledger.beginCheck(set);
+            check.fileFor(sourceId);
+            settle(check, { kind: 'NOT_READ', file: null, reason: 'NO_FILE' });
             return Promise.reject(new PreviewError('READ_FAILED', 'ファイルを読み込めませんでした。ファイルが移動・変更されていないか確認してください。'));
         }
+        // The check is begun when the read begins, not now: the owner may first
+        // wait for an earlier document to be released, and a check is ordered by
+        // when its File was handed out.
+        let check: BindingCheck | null = null;
         return this.owner.open(sourceId, held, expected, {
             scope: set.id,
-            onRead: (result) => settle(new Map([[sourceId, result]])),
+            beginRead: () => {
+                if (!current()) return;
+                const begun = ledger.beginCheck(this.currentSet());
+                // Another File presented meanwhile: this read is not a check of the File held.
+                check = begun.fileFor(sourceId) === held ? begun : null;
+            },
+            onRead: (result) => { if (check) settle(check, result); },
         });
     };
 
