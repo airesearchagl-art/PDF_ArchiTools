@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>M7-P2-B1 harness</title>
+</head>
+<body>
+    <p id="state">loading</p>
+    <!--
+        Drives the Production M7-P2-B1 modules -- the verified-evidence ledger,
+        the session store and its one PDF.js gate, P1 intake and preview with
+        M7's PDF.js data files -- in a real browser, through the Vite dev
+        server, for scripts/smoke-m7-p1.mjs (scripts/smoke-m7-p2b1-checks.mjs).
+        Every function returns plain data; the Node side decides what passes.
+        Synthetic fixtures only.
+    -->
+    <script>
+        // Before any module runs: count every Worker by what it is (a PDF.js
+        // document, a tesseract recogniser, a fingerprint Worker), every
+        // getDocument() that reaches PDF.js, and every storage write.
+        (() => {
+            const counts = { pdf: { started: 0, ended: 0, live: 0, peak: 0 }, ocr: { started: 0, ended: 0, live: 0, peak: 0 }, other: { started: 0, ended: 0, live: 0, peak: 0 }, getDocs: 0, events: [] };
+            const kindOf = (url) => (/pdf\.worker/.test(url) ? 'pdf' : /\/ocr\//.test(url) ? 'ocr' : 'other');
+            const NativeWorker = window.Worker;
+            window.Worker = class extends NativeWorker {
+                constructor(url, options) {
+                    super(url, options);
+                    this.__kind = kindOf(String(url));
+                    const c = counts[this.__kind];
+                    c.started += 1;
+                    c.live += 1;
+                    c.peak = Math.max(c.peak, c.live);
+                    counts.events.push(`${this.__kind}-start`);
+                }
+                postMessage(...args) {
+                    if (this.__kind === 'pdf' && args[0]?.action === 'GetDocRequest') counts.getDocs += 1;
+                    return super.postMessage(...args);
+                }
+                terminate() {
+                    if (!this.__ended) {
+                        this.__ended = true;
+                        const c = counts[this.__kind];
+                        c.ended += 1;
+                        c.live -= 1;
+                        counts.events.push(`${this.__kind}-end`);
+                    }
+                    super.terminate();
+                }
+            };
+            window.__workers = counts;
+            const storage = { writes: 0, calls: [] };
+            for (const name of ['setItem', 'removeItem', 'clear']) {
+                const original = Storage.prototype[name];
+                Storage.prototype[name] = function (...args) {
+                    storage.writes += 1;
+                    storage.calls.push(`Storage.${name}`);
+                    return original.apply(this, args);
+                };
+            }
+            for (const name of ['open', 'deleteDatabase']) {
+                const original = indexedDB[name].bind(indexedDB);
+                indexedDB[name] = (...args) => {
+                    storage.writes += 1;
+                    storage.calls.push(`indexedDB.${name}`);
+                    return original(...args);
+                };
+            }
+            if (window.caches) {
+                const original = caches.open.bind(caches);
+                caches.open = (...args) => {
+                    storage.writes += 1;
+                    storage.calls.push('caches.open');
+                    return original(...args);
+                };
+            }
+            window.__storage = storage;
+            // Object URLs made and not revoked by this page.
+            const urls = new Set();
+            const create = URL.createObjectURL.bind(URL);
+            const revoke = URL.revokeObjectURL.bind(URL);
+            URL.createObjectURL = (o) => { const u = create(o); urls.add(u); return u; };
+            URL.revokeObjectURL = (u) => { urls.delete(u); return revoke(u); };
+            window.__objectUrls = urls;
+        })();
+    </script>
+    <script type="module">
+        import * as pdfjsLib from 'pdfjs-dist';
+        import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+        import { commitSourceCandidate, createSession, retireSource } from '/src/utils/drawing-set/model.ts';
+        import { intakeSource } from '/src/utils/drawing-set/source-intake.ts';
+        import { hasMeaningfulText, pageBoxFacts } from '/src/utils/drawing-set/page-facts.ts';
+        import { PreviewDocumentOwner } from '/src/utils/drawing-set/preview-document.ts';
+        import { PdfDocumentGate } from '/src/utils/drawing-set/pdf-document-gate.ts';
+        import { m7PdfDocumentAssets } from '/src/utils/drawing-set/pdf-document-assets.ts';
+        import { RuntimeBindingLedger, currencyLabel, observationCurrency, verifiedBinding, verifyHeldFile } from '/src/utils/drawing-set/currency.ts';
+        import { inspectFileDigest, readFileDigest } from '/src/utils/drawing-set/file-evidence.ts';
+        import { fingerprintWorkerCounts } from '/src/utils/drawing-set/fingerprint-client.ts';
+        import { confirmSheet } from '/src/utils/drawing-set/metadata-confirmation.ts';
+        import { assignProfile, createProfile, renameProfile, retireProfile, reviseProfile, unassignProfile } from '/src/utils/drawing-set/title-block-profiles.ts';
+        import { GuardedRegisterOcr } from '/src/utils/drawing-set/register-extraction.ts';
+        import { DrawingSetStore } from '/src/utils/drawing-set/workspace-store.ts';
+
+        const P1 = '/test-fixtures/m7-p1';
+        const P2A = '/test-fixtures/m7-p2a';
+        const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const workers = () => plainly(window.__workers);
+        const signal = () => new AbortController().signal;
+
+        async function fixtureBytes(dir, name) {
+            const response = await fetch(`${dir}/${name}.pdf`);
+            const type = response.headers.get('content-type') || '';
+            if (!response.ok || type.includes('text/html')) throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+            return new Uint8Array(await response.arrayBuffer());
+        }
+        const p1Bytes = (name) => fixtureBytes(P1, name);
+        const p2aBytes = (name) => fixtureBytes(P2A, name);
+        const fileOf = (bytes, name) => new File([bytes], name, { type: '' });
+
+        /**
+         * A File whose bytes can be changed, slowed or made unreadable after it
+         * was chosen -- as a file on disk can be. Every read sees what it holds
+         * at that moment; `reads` counts the bytes read through it.
+         */
+        class MutableFile extends File {
+            constructor(bytes, name) {
+                super([bytes], name, { type: '' });
+                this.current = bytes;
+                this.gone = false;
+                this.delayMs = 0;
+                this.bytesRead = 0;
+            }
+            slice(from = 0, to = this.size) {
+                const bytes = this.current;
+                const gone = this.gone;
+                const delay = this.delayMs;
+                return {
+                    arrayBuffer: async () => {
+                        const start = performance.now();
+                        if (delay) await sleep(delay);
+                        (this.reads ??= []).push({ start, end: performance.now() });
+                        if (gone || this.gone) throw new DOMException('The requested file could not be read.', 'NotReadableError');
+                        this.bytesRead += to - from;
+                        return bytes.slice(from, to).buffer;
+                    },
+                };
+            }
+        }
+
+        /** An OCR engine whose first recognition is held until released -- for timing, not results. */
+        class HeldOcr extends GuardedRegisterOcr {
+            constructor() {
+                super();
+                this.holding = new Promise((resolve) => { this.release = resolve; });
+                this.entered = new Promise((resolve) => { this.onEnter = resolve; });
+                this.calls = 0;
+            }
+            async recogniseFields(page, rects, options) {
+                this.calls += 1;
+                if (this.calls === 1) {
+                    await this.start();
+                    this.onEnter();
+                    await this.holding;
+                }
+                return super.recogniseFields(page, rects, options);
+            }
+        }
+
+        const newStore = (gate = new PdfDocumentGate()) => {
+            const owner = new PreviewDocumentOwner({ gate });
+            return new DrawingSetStore({ gate, owner });
+        };
+        const sourcesOf = (store) => store.currentSet().sources.filter((s) => s.retiredAt === null);
+        const sheetsOfSource = (store, sourceId) => store.currentSet().sheets
+            .filter((s) => s.sourceId === sourceId && s.retiredAt === null).sort((a, b) => a.pageNumber - b.pageNumber);
+        const bindingsOf = (store) => {
+            const out = {};
+            for (const s of sourcesOf(store)) out[s.displayName] = store.getSnapshot().bindings.get(s.id) ?? 'UNBOUND';
+            return out;
+        };
+        const expectedOf = (source) => ({ sha256: source.fingerprint.sha256, byteLength: source.fingerprint.byteLength });
+        const previewOutcome = (promise) => promise.then((doc) => `opened:${doc.numPages}`, (error) => error?.code ?? 'error');
+        const resultSummary = (r) => (r.kind === 'accepted' ? { kind: r.kind, sourceId: r.source.id, sheets: r.sheets.length }
+            : r.kind === 'reconnected' || r.kind === 'duplicate' ? { kind: r.kind, existingId: r.existing.id, existingName: r.existing.displayName }
+                : r.kind === 'refused' ? { kind: r.kind, code: r.refusal.code } : { kind: r.kind });
+        const reportSummary = (r) => (r.kind === 'refused' ? { kind: 'refused', code: r.refusal.code }
+            : { kind: 'finished', applied: r.applied, notApplied: r.notApplied, outcome: r.outcome, failure: r.failure, coverage: r.run?.coverage ?? null,
+                committed: r.committedSheetIds.length, excluded: r.excluded.map((e) => e.code) });
+
+        async function openDoc(bytes, params) {
+            configurePdfWorker();
+            const task = pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, ...params });
+            return { task, doc: await task.promise };
+        }
+        /** Dark pixels inside each upright rectangle (shrunk by 2 pt), rendered at `scale`. */
+        async function darkPixels(doc, pageNumber, rects, scale = 2) {
+            const page = await doc.getPage(pageNumber);
+            try {
+                const viewport = page.getViewport({ scale, rotation: 0 });
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.ceil(viewport.width);
+                canvas.height = Math.ceil(viewport.height);
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                await page.render({ canvas, viewport }).promise;
+                const out = {};
+                for (const [name, r] of Object.entries(rects)) {
+                    const x0 = Math.floor((r.left + 2) * scale);
+                    const y0 = Math.floor((r.top + 2) * scale);
+                    const w = Math.max(1, Math.floor((r.right - r.left - 4) * scale));
+                    const h = Math.max(1, Math.floor((r.bottom - r.top - 4) * scale));
+                    const data = ctx.getImageData(x0, y0, w, h).data;
+                    let dark = 0;
+                    for (let i = 0; i < data.length; i += 4) if (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2] < 128) dark += 1;
+                    out[name] = dark;
+                }
+                canvas.width = 0;
+                canvas.height = 0;
+                return out;
+            } finally {
+                page.cleanup();
+            }
+        }
+        /** Page facts exactly as P1's intake computes them, from a document opened with `params`. */
+        async function factsWith(bytes, params) {
+            const { task, doc } = await openDoc(bytes, { disableFontFace: true, ...params });
+            try {
+                const out = [];
+                for (let n = 1; n <= doc.numPages; n++) {
+                    const page = await doc.getPage(n);
+                    const box = pageBoxFacts({ view: page.view, rotate: page.rotate, userUnit: page.userUnit, pageNumber: n });
+                    const content = await page.getTextContent({ includeMarkedContent: false, disableNormalization: true });
+                    const kind = content.items.some((item) => typeof item.str === 'string' && hasMeaningfulText(item.str)) ? 'text-native' : 'scanned';
+                    out.push(box.ok ? { uprightWidthPt: box.uprightWidthPt, uprightHeightPt: box.uprightHeightPt, rotate: box.rotate, kind } : { refused: box.refusal.code });
+                    page.cleanup();
+                }
+                return out;
+            } finally {
+                await task.destroy();
+            }
+        }
+        const factsOf = (sheet) => ({ uprightWidthPt: sheet.pageFacts.uprightWidthPt, uprightHeightPt: sheet.pageFacts.uprightHeightPt, rotate: sheet.pageFacts.rotate, kind: sheet.pageFacts.kind });
+        /** The transport prototype every PDF.js document shares: where a failed destruction is injected. */
+        async function transportPrototype() {
+            const probe = await openDoc(await p1Bytes('p1-native-a'), {});
+            const proto = Object.getPrototypeOf(probe.doc.loadingTask._transport);
+            await probe.task.destroy();
+            return proto;
+        }
+
+        window.__m7p2b1 = {
+            /** 29. Intake issues the evidence, and only a real read's evidence binds. */
+            async evidence() {
+                const out = {};
+                const a = fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf');
+                const cBytes = await p1Bytes('p1-second-c');
+                const c = fileOf(cBytes, 'p1-second-c.pdf');
+                const session = createSession();
+                let set = session.drawingSet;
+                const fpBefore = fingerprintWorkerCounts().started;
+                const outcome = await intakeSource(a, { signal: signal(), current: () => set });
+                const record = inspectFileDigest(outcome.evidence);
+                out.candidate = {
+                    kind: outcome.kind,
+                    sha256: record?.sha256, byteLength: record?.byteLength,
+                    fileIsTheOneRead: record?.file === a, scopeIsTheSession: record?.scope === set.id,
+                    candidateSha: outcome.candidate.source.fingerprint.sha256,
+                    fieldsMatchRecord: outcome.evidence.sha256 === record?.sha256 && Object.isFrozen(outcome.evidence),
+                };
+                set = commitSourceCandidate(set, outcome.candidate).drawingSet;
+                const id = outcome.candidate.source.id;
+                const ledger = new RuntimeBindingLedger(set.id);
+                out.adopted = ledger.presentVerified(set, id, outcome.evidence);
+                out.bindingAfterAdoption = verifiedBinding(ledger, set, id);
+                out.heldIsTheOneRead = ledger.heldFile(id) === a;
+                out.readsToBind = fingerprintWorkerCounts().started - fpBefore;
+                out.bytesReadOnce = true;
+                out.sameEvidenceAgain = ledger.presentVerified(set, id, outcome.evidence);
+                out.sameEvidenceOtherLedger = new RuntimeBindingLedger(set.id).presentVerified(set, id, outcome.evidence);
+
+                // The File withdrawn, then the same bytes chosen again: a duplicate, whose
+                // evidence re-presents the File chosen.
+                ledger.present(set, id, null);
+                out.withdrawn = verifiedBinding(ledger, set, id);
+                const aCopy = fileOf(new Uint8Array(await a.arrayBuffer()), 'renamed-copy.pdf');
+                const fpBeforeDup = fingerprintWorkerCounts().started;
+                const dup = await intakeSource(aCopy, { signal: signal(), current: () => set });
+                const dupRecord = inspectFileDigest(dup.evidence);
+                out.duplicate = { kind: dup.kind, existingIsTheSource: dup.existing?.id === id, fileIsTheCopy: dupRecord?.file === aCopy, sha256: dupRecord?.sha256, reads: fingerprintWorkerCounts().started - fpBeforeDup };
+                const setBefore = set;
+                out.represented = ledger.presentVerified(set, id, dup.evidence);
+                out.afterRepresent = { binding: verifiedBinding(ledger, set, id), heldIsTheCopy: ledger.heldFile(id) === aCopy, modelUntouched: set === setBefore, sources: set.sources.length, history: set.sources[0].fingerprintHistory.length };
+
+                // Other bytes for that Source: never taken, nothing presented.
+                const cDigest = await readFileDigest(c, null, { signal: signal(), scope: set.id });
+                out.otherBytes = ledger.presentVerified(set, id, cDigest);
+                out.afterOtherBytes = { binding: verifiedBinding(ledger, set, id), heldStill: ledger.heldFile(id) === aCopy };
+                // A different PDF under the same name is a new Source, as P1 always took it.
+                const sameName = await intakeSource(fileOf(cBytes, 'p1-native-a.pdf'), { signal: signal(), current: () => set });
+                out.sameNameOtherBytes = sameName.kind;
+                // Hand-made evidence.
+                out.handMade = ledger.presentVerified(set, id, { sha256: record.sha256, byteLength: record.byteLength });
+                out.frozenLookalike = ledger.presentVerified(set, id, Object.freeze({ sha256: record.sha256, byteLength: record.byteLength }));
+                // A newer presentation since the read began.
+                const early = await readFileDigest(fileOf(new Uint8Array(await a.arrayBuffer()), 'later.pdf'), null, { signal: signal(), scope: set.id });
+                ledger.present(set, id, aCopy);
+                out.olderThanPresentation = ledger.presentVerified(set, id, early);
+                // Another session's read, even of the same bytes, for a Source with the same fingerprint there.
+                const other = createSession();
+                const otherIntake = await intakeSource(fileOf(new Uint8Array(await a.arrayBuffer()), 'p1-native-a.pdf'), { signal: signal(), current: () => other.drawingSet });
+                const otherSet = commitSourceCandidate(other.drawingSet, otherIntake.candidate).drawingSet;
+                const otherLedger = new RuntimeBindingLedger(otherSet.id);
+                const fromHere = await intakeSource(fileOf(new Uint8Array(await a.arrayBuffer()), 'x.pdf'), { signal: signal(), current: () => set });
+                out.anotherSessionsRead = otherLedger.presentVerified(otherSet, otherIntake.candidate.source.id, fromHere.evidence);
+                out.intoAnotherSessionsSet = ledger.presentVerified(otherSet, otherIntake.candidate.source.id, otherIntake.evidence);
+                // A retired Source.
+                const retiredSet = retireSource(set, id);
+                const later = await intakeSource(fileOf(new Uint8Array(await a.arrayBuffer()), 'y.pdf'), { signal: signal(), current: () => set });
+                out.retired = ledger.presentVerified(retiredSet, id, later.evidence);
+                // Refused and cancelled intakes hand no evidence out.
+                const refused = await intakeSource(fileOf(await p1Bytes('p1-5001-pages'), 'p1-5001-pages.pdf'), { signal: signal(), current: () => set });
+                const controller = new AbortController();
+                const emptySet = createSession().drawingSet;
+                const cancelled = await intakeSource(fileOf(await p1Bytes('p1-5000-pages'), 'p1-5000-pages.pdf'), {
+                    signal: controller.signal, current: () => emptySet, onProgress: (p) => { if (p.phase === 'inventory' && p.pagesDone >= 3) controller.abort(); },
+                });
+                out.refused = { kind: refused.kind, code: refused.refusal?.code, evidence: 'evidence' in refused };
+                out.cancelled = { kind: cancelled.kind, code: cancelled.refusal?.code ?? null, evidence: 'evidence' in cancelled };
+                out.workers = fingerprintWorkerCounts();
+                return plainly(out);
+            },
+
+            /** 30. The session store: intake, re-presentation, preview checks, removal, reset and leaving. */
+            async store() {
+                const out = {};
+                const gate = new PdfDocumentGate();
+                const store = newStore(gate);
+                const versions = [];
+                store.subscribe(() => versions.push(store.getSnapshot().version));
+                window.__workers.pdf.peak = window.__workers.pdf.live;
+                const aBytes = await p1Bytes('p1-native-a');
+                const tBytes = await p2aBytes('p2a-transfer');
+                const gBytes = await p2aBytes('p2a-geometry');
+                const fpBefore = fingerprintWorkerCounts().started;
+                const ra = await store.intake(fileOf(aBytes, 'p1-native-a.pdf'));
+                const t = new MutableFile(tBytes, 'p2a-transfer.pdf');
+                const rt = await store.intake(t);
+                const g = new MutableFile(gBytes, 'p2a-geometry.pdf');
+                const rg = await store.intake(g);
+                out.accepted = [ra, rt, rg].map(resultSummary);
+                out.readsForThree = fingerprintWorkerCounts().started - fpBefore;
+                out.bindingsAfterIntake = bindingsOf(store);
+                out.gateAfterIntake = gate.counts();
+                out.modelHasNoBinding = !/"(UNBOUND|MATCHED|CHANGED|MISSING|AMBIGUOUS)"|binding|ledger/i.test(JSON.stringify(store.currentSet()));
+                const A = ra.source.id;
+                const T = rt.source.id;
+                const G = rg.source.id;
+                const source = (id) => store.currentSet().sources.find((s) => s.id === id);
+                const open = (id) => previewOutcome(store.openPreview(id, store.heldFile(id), expectedOf(source(id))));
+
+                // The preview's read is a check: MATCHED stays MATCHED; it reads nothing more when cached.
+                out.previewA = await open(A);
+                out.previewT = await open(T);
+                out.afterPreviews = bindingsOf(store);
+
+                // MISSING: T's File can no longer be read; its preview says so, and so does the binding.
+                out.previewA2 = await open(A);
+                t.gone = true;
+                out.previewTGone = await open(T);
+                out.afterGone = bindingsOf(store);
+                // The right bytes chosen again: the same Source, reconnected; nothing re-read for the binding.
+                const sheetsBefore = sheetsOfSource(store, T).map((s) => s.id).join(',');
+                const setBefore = store.currentSet();
+                const fpBeforeRe = fingerprintWorkerCounts().started;
+                const fresh = fileOf(tBytes, 'p2a-transfer.pdf');
+                const re = await store.intake(fresh);
+                out.reconnect = {
+                    result: resultSummary(re), sameSource: re.existing?.id === T,
+                    sheetsSame: sheetsOfSource(store, T).map((s) => s.id).join(',') === sheetsBefore,
+                    sources: sourcesOf(store).length, history: source(T).fingerprintHistory.length,
+                    fingerprintSame: source(T).fingerprint.sha256 === setBefore.sources.find((s) => s.id === T).fingerprint.sha256,
+                    modelUntouched: store.currentSet() === setBefore,
+                    held: store.heldFile(T) === fresh, reads: fingerprintWorkerCounts().started - fpBeforeRe,
+                    bindings: bindingsOf(store),
+                };
+                out.previewTAfter = await open(T);
+                // MATCHED already: the spare is reported, not added, and the File held stays.
+                const spare = fileOf(tBytes, 'spare-copy.pdf');
+                out.spare = { result: resultSummary(await store.intake(spare)), heldStill: store.heldFile(T) === fresh, sources: sourcesOf(store).length };
+
+                // CHANGED: G's File now holds other bytes of the same length.
+                out.previewG = await open(G);
+                out.previewA3 = await open(A);
+                const changed = gBytes.slice();
+                changed[changed.length - 10] ^= 0xff;
+                g.current = changed;
+                out.previewGChanged = await open(G);
+                out.afterChanged = bindingsOf(store);
+                out.reconnectG = resultSummary(await store.intake(fileOf(gBytes, 'p2a-geometry.pdf')));
+                out.afterReconnectG = bindingsOf(store);
+                // Other bytes under G's name: a new Source, G untouched.
+                const otherUnderName = await store.intake(fileOf(await p2aBytes('p2a-jpx'), 'p2a-geometry.pdf'));
+                out.otherBytesSameName = { result: resultSummary(otherUnderName), sources: sourcesOf(store).length, bindings: bindingsOf(store) };
+
+                // A read still running when its Source is removed reports nothing.
+                const slowA = await store.intake(new MutableFile(await p2aBytes('p2a-cmap'), 'slow.pdf'));
+                const S = slowA.source.id;
+                store.heldFile(S).delayMs = 600;
+                const versionBefore = store.getSnapshot().version;
+                const pending = open(S);
+                await sleep(250);
+                const removed = store.removeSource(S);
+                out.removedMidRead = { removed: removed.ok, preview: await pending, binding: store.getSnapshot().bindings.get(S) ?? 'ABSENT', heldAfter: store.heldFile(S) === null };
+                out.removedMidRead.versionsAfter = store.getSnapshot().version - versionBefore;
+
+                // Reset while a file is being read: nothing lands in the new session.
+                const slow = new MutableFile(await p2aBytes('p2a-register'), 'p2a-register.pdf');
+                slow.delayMs = 150;
+                const intakeRun = store.intake(slow);
+                await sleep(100);
+                const oldLedger = store.bindingLedger();
+                store.reset();
+                const resetResult = await intakeRun;
+                out.resetMidIntake = {
+                    result: resultSummary(resetResult), sources: sourcesOf(store).length, bindings: store.getSnapshot().bindings.size,
+                    newLedger: store.bindingLedger() !== oldLedger, heldOld: store.heldFile(T),
+                };
+                // Leaving while a file is being read; a store made afterwards (a remount) works.
+                const slow2 = new MutableFile(await p2aBytes('p2a-register'), 'p2a-register.pdf');
+                slow2.delayMs = 150;
+                const leftRun = store.intake(slow2);
+                await sleep(100);
+                store.leave();
+                const leftResult = await leftRun;
+                out.leftMidIntake = { result: resultSummary(leftResult), sources: sourcesOf(store).length };
+                const again = new DrawingSetStore({ gate, owner: store.owner });
+                again.enter();
+                out.remount = resultSummary(await again.intake(fileOf(aBytes, 'p1-native-a.pdf')));
+                out.remountBindings = bindingsOf(again);
+                await store.owner.close();
+                out.versions = versions.length;
+                out.gate = gate.counts();
+                out.pdfPeak = window.__workers.pdf.peak;
+                out.workersAfter = { pdf: window.__workers.pdf.live, fingerprint: fingerprintWorkerCounts().live };
+                return plainly(out);
+            },
+
+            /** 31. One gate for intake, preview and extraction: who waits for whom, and who is refused. */
+            async exclusive(truths) {
+                const out = {};
+                const gate = new PdfDocumentGate();
+                const store = newStore(gate);
+                const reg = await store.intake(fileOf(await p2aBytes('p2a-register'), 'p2a-register.pdf'));
+                const geo = await store.intake(fileOf(await p2aBytes('p2a-geometry'), 'p2a-geometry.pdf'));
+                const R = reg.source.id;
+                const G = geo.source.id;
+                const profile = (name, rects) => {
+                    let made = null;
+                    store.update((set) => {
+                        const r = createProfile(set, { name, transferModel: 'normalised', referencePage: truths.register.reference, fields: rects });
+                        made = r.ok ? r.profile : null;
+                        return r.ok ? r.drawingSet : null;
+                    });
+                    return made;
+                };
+                const assign = (ids, profileId) => store.update((set) => { const r = assignProfile(set, ids, profileId); return r.ok ? r.drawingSet : null; });
+                const pr = profile('R', truths.register.cells);
+                const pg = profile('G', truths.geometry.pages[0].uprightRects);
+                const rSheets = sheetsOfSource(store, R).slice(0, 3).map((s) => s.id);
+                const gSheets = sheetsOfSource(store, G).map((s) => s.id);
+                assign(rSheets, pr.id);
+                assign(gSheets, pg.id);
+
+                // Intake holds the gate from start to end: extraction waits its turn.
+                const slow = new MutableFile(await p2aBytes('p2a-cmap'), 'p2a-cmap.pdf');
+                slow.delayMs = 150;
+                const pdfLiveBefore = window.__workers.pdf.live;
+                const intakeRun = store.intake(slow);
+                await sleep(100);
+                out.duringIntake = { intakesStarted: gate.counts().intakesStarted, extract: reportSummary((await store.extract({ sheetIds: gSheets.slice(0, 1) })).report) };
+                out.intake = resultSummary(await intakeRun);
+                out.pdfLeftByIntake = window.__workers.pdf.live - pdfLiveBefore;
+                out.afterIntake = reportSummary((await store.extract({ sheetIds: gSheets.slice(0, 1) })).report);
+
+                // A preview open, then extraction: the preview's document is destroyed before extraction opens its own.
+                await previewOutcome(store.openPreview(G, store.heldFile(G), expectedOf(store.currentSet().sources.find((s) => s.id === G))));
+                const eventsFrom = window.__workers.events.length;
+                window.__workers.pdf.peak = window.__workers.pdf.live;
+                const ocr = new HeldOcr();
+                const controller = new AbortController();
+                const run = store.extract({ sheetIds: [...gSheets.slice(0, 2), ...rSheets] }, { createOcr: () => ocr, signal: controller.signal });
+                const first = await Promise.race([ocr.entered.then(() => 'entered'), run.then((r) => r)]);
+                if (first !== 'entered') throw new Error(`extraction did not reach the recogniser: ${JSON.stringify(reportSummary(first.report))}`);
+                const cmap = store.currentSet().sources.find((s) => s.displayName === 'p2a-cmap.pdf');
+                out.during = {
+                    intake: resultSummary(await store.intake(fileOf(await p1Bytes('p1-second-c'), 'p1-second-c.pdf'))),
+                    preview: await previewOutcome(store.openPreview(G, store.heldFile(G), expectedOf(store.currentSet().sources.find((s) => s.id === G)))),
+                    previewOther: await previewOutcome(store.openPreview(cmap.id, store.heldFile(cmap.id), expectedOf(cmap))),
+                    nested: reportSummary((await store.extract({ sheetIds: gSheets.slice(0, 1) })).report),
+                    pdfLive: window.__workers.pdf.live,
+                };
+                ocr.release();
+                const finished = await run;
+                out.run = { report: reportSummary(finished.report), settled: finished.settled ? Object.fromEntries([...finished.settled].map(([id, v]) => [id === R ? 'R' : 'G', v])) : null };
+                const events = window.__workers.events.slice(eventsFrom).filter((e) => e.startsWith('pdf'));
+                out.events = events;
+                out.extractionPeak = window.__workers.pdf.peak;
+                out.previewAfter = await previewOutcome(store.openPreview(G, store.heldFile(G), expectedOf(store.currentSet().sources.find((s) => s.id === G))));
+
+                // Reset, then leaving, while extraction waits on the recogniser: nothing is written anywhere.
+                for (const how of ['reset', 'leave']) {
+                    const s2 = newStore(new PdfDocumentGate());
+                    const r2 = await s2.intake(fileOf(await p2aBytes('p2a-register'), 'p2a-register.pdf'));
+                    let p2 = null;
+                    s2.update((set) => { const r = createProfile(set, { name: 'R', transferModel: 'normalised', referencePage: truths.register.reference, fields: truths.register.cells }); p2 = r.profile; return r.drawingSet; });
+                    const ids = sheetsOfSource(s2, r2.source.id).slice(1, 3).map((s) => s.id);
+                    s2.update((set) => assignProfile(set, ids, p2.id).drawingSet);
+                    const before = s2.currentSet();
+                    const held = new HeldOcr();
+                    const pending = s2.extract({ sheetIds: ids }, { createOcr: () => held });
+                    await held.entered;
+                    if (how === 'reset') s2.reset(); else s2.leave();
+                    held.release();
+                    const done = await pending;
+                    out[`${how}MidExtraction`] = {
+                        report: reportSummary(done.report), settled: done.settled === null,
+                        runsNow: how === 'reset' ? s2.currentSet().analysisRuns.length : null,
+                        sameSetAsBefore: how === 'leave' ? s2.getSnapshot().state.session.drawingSet === before : null,
+                        observed: how === 'leave' ? s2.getSnapshot().state.session.drawingSet.sheets.filter((s) => s.observation).length : null,
+                    };
+                }
+                await store.owner.close();
+                await sleep(300);
+                out.gate = gate.counts();
+                out.workersAfter = { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live, fingerprint: fingerprintWorkerCounts().live };
+                return plainly(out);
+            },
+
+            /** 31b. Ordering and queueing: a check is as new as its read, intakes take turns page-wide. */
+            async ordering() {
+                const out = {};
+                const sourceOf = (store, id) => store.currentSet().sources.find((s) => s.id === id);
+                // a. A preview read that had to wait for an earlier document to go is
+                //    ordered by when it read, not by when it was asked for.
+                {
+                    const gate = new PdfDocumentGate();
+                    const store = newStore(gate);
+                    const x = await store.intake(fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf'));
+                    const s = new MutableFile(await p1Bytes('p1-second-c'), 'p1-second-c.pdf');
+                    const sr = await store.intake(s);
+                    const X = x.source.id;
+                    const S = sr.source.id;
+                    await previewOutcome(store.openPreview(X, store.heldFile(X), expectedOf(sourceOf(store, X))));
+                    const proto = await transportPrototype();
+                    const realDestroy = proto.destroy;
+                    proto.destroy = async function slowDestroy() { const r = await realDestroy.call(this); await sleep(500); return r; };
+                    try {
+                        const pending = previewOutcome(store.openPreview(S, store.heldFile(S), expectedOf(sourceOf(store, S))));
+                        await sleep(100);
+                        // While the preview waits, another check reads S and finds it as it is.
+                        out.checkWhileWaiting = await verifyHeldFile(store.bindingLedger(), () => store.currentSet(), S);
+                        out.bindingAfterThatCheck = store.bindingOf(S);
+                        // Then S stops being readable, before the preview reads it.
+                        s.gone = true;
+                        out.preview = await pending;
+                    } finally {
+                        proto.destroy = realDestroy;
+                    }
+                    out.bindingAfterPreview = store.bindingOf(S);
+                    await store.owner.close();
+                }
+                // b. Several intakes asked for at once, straight on the store: one at a time.
+                {
+                    const store = newStore(new PdfDocumentGate());
+                    const files = [];
+                    for (const [name, bytes] of [['p1-native-a.pdf', await p1Bytes('p1-native-a')], ['p1-second-c.pdf', await p1Bytes('p1-second-c')], ['p2a-transfer.pdf', await p2aBytes('p2a-transfer')]]) {
+                        const f = new MutableFile(bytes, name);
+                        f.delayMs = 80;
+                        files.push(f);
+                    }
+                    const results = await Promise.all(files.map((f) => store.intake(f)));
+                    const spans = files.map((f) => ({ start: Math.min(...f.reads.map((r) => r.start)), end: Math.max(...f.reads.map((r) => r.end)) }));
+                    out.concurrent = {
+                        results: results.map(resultSummary),
+                        overlaps: spans.some((a, i) => spans.some((b, j) => i !== j && a.start < b.end && b.start < a.end)),
+                    };
+                }
+                // c. A store mounted again on the same gate waits for the old one's abandoned intake.
+                {
+                    const gate = new PdfDocumentGate();
+                    const first = newStore(gate);
+                    const slow = new MutableFile(await p2aBytes('p2a-register'), 'p2a-register.pdf');
+                    slow.delayMs = 300;
+                    const abandoned = first.intake(slow);
+                    await sleep(50);
+                    first.leave();
+                    const second = new DrawingSetStore({ gate, owner: first.owner });
+                    second.enter();
+                    const fast = new MutableFile(await p1Bytes('p1-native-a'), 'p1-native-a.pdf');
+                    const [a, b] = await Promise.all([abandoned, second.intake(fast)]);
+                    out.remountQueue = {
+                        abandoned: resultSummary(a), next: resultSummary(b),
+                        waited: Math.min(...fast.reads.map((r) => r.start)) >= Math.max(...slow.reads.map((r) => r.end)),
+                    };
+                    // d. A store that was left opens no preview at all.
+                    const src = sourcesOf(second)[0];
+                    second.leave();
+                    out.previewAfterLeave = await previewOutcome(second.openPreview(src.id, second.heldFile(src.id) ?? fast, expectedOf(src)));
+                }
+                // e. The Source with the same bytes removed while the file is read: by the time
+                //    its bytes are known no live Source has them, so it is a new Source.
+                {
+                    const store = newStore(new PdfDocumentGate());
+                    const a = await store.intake(fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf'));
+                    const copy = new MutableFile(await p1Bytes('p1-native-a'), 'copy.pdf');
+                    copy.delayMs = 200;
+                    const pending = store.intake(copy);
+                    await sleep(60);
+                    store.removeSource(a.source.id);
+                    out.duplicateRemoved = resultSummary(await pending);
+                    out.sourcesAfter = sourcesOf(store).length;
+                }
+                await sleep(200);
+                out.workersAfter = { pdf: window.__workers.pdf.live, fingerprint: fingerprintWorkerCounts().live };
+                return plainly(out);
+            },
+
+            /** 32. A destruction PDF.js reports as failed stops every open, whatever is reset or mounted again. */
+            async destroyFailure() {
+                const out = {};
+                const proto = await transportPrototype();
+                const realDestroy = proto.destroy;
+                const leaked = [];
+                const failOnce = () => {
+                    proto.destroy = function failingDestroy() {
+                        proto.destroy = realDestroy;
+                        leaked.push(this);
+                        return Promise.reject(new Error('simulated destroy failure'));
+                    };
+                };
+                try {
+                    // a. The preview's document.
+                    const gate = new PdfDocumentGate();
+                    const store = newStore(gate);
+                    const a = await store.intake(fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf'));
+                    const A = a.source.id;
+                    const src = store.currentSet().sources.find((s) => s.id === A);
+                    out.opened = await previewOutcome(store.openPreview(A, store.heldFile(A), expectedOf(src)));
+                    failOnce();
+                    await store.owner.close();
+                    out.unconfirmed = gate.releaseUnconfirmed;
+                    const getDocs = window.__workers.getDocs;
+                    const c = fileOf(await p1Bytes('p1-second-c'), 'p1-second-c.pdf');
+                    out.intake = resultSummary(await store.intake(c));
+                    out.preview = await previewOutcome(store.openPreview(A, store.heldFile(A), expectedOf(src)));
+                    out.extract = reportSummary((await store.extract({ sheetIds: sheetsOfSource(store, A).map((s) => s.id) })).report);
+                    store.reset();
+                    out.afterReset = resultSummary(await store.intake(fileOf(await p1Bytes('p1-second-c'), 'p1-second-c.pdf')));
+                    const remounted = new DrawingSetStore({ gate, owner: store.owner });
+                    remounted.enter();
+                    out.afterRemount = resultSummary(await remounted.intake(fileOf(await p1Bytes('p1-second-c'), 'p1-second-c.pdf')));
+                    const freshOwner = new PreviewDocumentOwner({ gate });
+                    out.freshOwner = await previewOutcome(freshOwner.open('X', c, { sha256: '0'.repeat(64), byteLength: c.size }));
+                    out.getDocsAfterFailure = window.__workers.getDocs - getDocs;
+                    out.gate = gate.counts();
+
+                    // b. The intake's own document.
+                    const gate2 = new PdfDocumentGate();
+                    const store2 = newStore(gate2);
+                    failOnce();
+                    out.intakeWhoseDocumentStays = resultSummary(await store2.intake(fileOf(await p1Bytes('p1-second-c'), 'p1-second-c.pdf')));
+                    out.unconfirmed2 = gate2.releaseUnconfirmed;
+                    const getDocs2 = window.__workers.getDocs;
+                    out.intake2 = resultSummary(await store2.intake(fileOf(await p1Bytes('p1-native-a'), 'p1-native-a.pdf')));
+                    const s2 = sourcesOf(store2)[0];
+                    out.preview2 = await previewOutcome(store2.openPreview(s2.id, store2.heldFile(s2.id), expectedOf(s2)));
+                    out.getDocsAfterFailure2 = window.__workers.getDocs - getDocs2;
+                } finally {
+                    proto.destroy = realDestroy;
+                    for (const transport of leaked) {
+                        await realDestroy.call(transport).catch(() => { });
+                        transport.loadingTask?._worker?.destroy();
+                    }
+                }
+                await sleep(300);
+                out.leakReleased = window.__workers.pdf.live;
+                return plainly(out);
+            },
+
+            /** 33. ADV-37-02: the model changed while a run reads (F1-F7). */
+            async mutations(truths) {
+                const out = {};
+                const geoBytes = await p2aBytes('p2a-geometry');
+                const trBytes = await p2aBytes('p2a-transfer');
+                const rects = truths.geometry.pages[0].uprightRects;
+                const reference = truths.geometry.reference;
+                /** A store with A (8 pages) and B (3 pages); a1-a4 on P, a5-a8 and b1-b3 on Q; a1 and b1 read once already. */
+                const setup = async () => {
+                    const store = newStore(new PdfDocumentGate());
+                    const A = (await store.intake(fileOf(geoBytes, 'A.pdf'))).source.id;
+                    const B = (await store.intake(fileOf(trBytes, 'B.pdf'))).source.id;
+                    const make = (name) => {
+                        let made = null;
+                        store.update((set) => { const r = createProfile(set, { name, transferModel: 'normalised', referencePage: reference, fields: rects }); made = r.profile; return r.drawingSet; });
+                        return made.id;
+                    };
+                    const P = make('P');
+                    const Q = make('Q');
+                    const a = sheetsOfSource(store, A).map((s) => s.id);
+                    const b = sheetsOfSource(store, B).map((s) => s.id);
+                    store.update((set) => assignProfile(set, a.slice(0, 4), P).drawingSet);
+                    store.update((set) => assignProfile(set, [...a.slice(4), ...b], Q).drawingSet);
+                    const first = await store.extract({ sheetIds: [a[0], b[0]] });
+                    return { store, A, B, P, Q, a, b, firstRun: first.report.run.id };
+                };
+                const sheet = (store, id) => store.currentSet().sheets.find((s) => s.id === id);
+                const probe = async (label, mutate) => {
+                    const w = await setup();
+                    const { store, a, b } = w;
+                    const targets = [...a, b[1], b[2]];
+                    const before = { a1: JSON.stringify(sheet(store, a[0]).observation), b1: JSON.stringify(sheet(store, b[0]).observation) };
+                    let applies = 0;
+                    let mutated = null;
+                    const versionBefore = store.getSnapshot().version;
+                    const unsubscribe = store.subscribe(() => { applies += 1; });
+                    const { report } = await store.extract({ sheetIds: targets }, {
+                        onProgress: (e) => { if (e.phase === 'source-done' && e.sourceIndex === 0 && mutated === null) mutated = mutate(w); },
+                    });
+                    unsubscribe();
+                    const runId = report.run?.id;
+                    const by = (id) => {
+                        const s = sheet(store, id);
+                        return { committed: s.observation?.runId === runId, excluded: report.excluded.find((e) => e.sheetId === id)?.code ?? null };
+                    };
+                    out[label] = {
+                        report: reportSummary(report), mutated: plainly(mutated),
+                        a: a.map(by), b: b.map(by),
+                        a1Kept: JSON.stringify(sheet(store, a[0]).observation) === before.a1,
+                        b1Kept: JSON.stringify(sheet(store, b[0]).observation) === before.b1,
+                        b1Currency: currencyLabel(observationCurrency(store.currentSet(), sheet(store, b[0]), store.bindingLedger())),
+                        a1Currency: currencyLabel(observationCurrency(store.currentSet(), sheet(store, a[0]), store.bindingLedger())),
+                        profiles: store.currentSet().titleBlockProfiles.map((p) => ({ name: p.name, revision: p.revision, retired: p.retiredAt !== null })),
+                        assignments: { a1: sheet(store, a[0]).profileAssignment?.profileId === w.P ? 'P' : sheet(store, a[0]).profileAssignment?.profileId === w.Q ? 'Q' : sheet(store, a[0]).profileAssignment ? 'other' : null, b1: sheet(store, b[0]).profileAssignment?.profileId ?? null },
+                        b1Confirmation: sheet(store, b[0]).confirmation ? sheet(store, b[0]).confirmation.values.drawingNumber : null,
+                        runs: store.currentSet().analysisRuns.length,
+                        publishesDuringRun: applies, versionMoved: store.getSnapshot().version - versionBefore,
+                        extra: w.extra ?? null,
+                    };
+                };
+                await probe('F1', (w) => w.store.update((set) => reviseProfile(set, w.P, { fields: { ...rects, drawingTitle: { ...rects.drawingTitle, left: rects.drawingTitle.left + 1 } } }).drawingSet) !== null);
+                await probe('F2', (w) => w.store.update((set) => assignProfile(set, [w.a[4]], w.P, { replace: true }).drawingSet) !== null);
+                await probe('F3', (w) => w.store.update((set) => unassignProfile(set, [w.a[5]]).drawingSet) !== null);
+                await probe('F4', (w) => w.store.update((set) => retireProfile(set, w.Q).drawingSet) !== null);
+                await probe('F5', (w) => {
+                    const there = w.store.update((set) => assignProfile(set, [w.a[0]], w.Q, { replace: true }).drawingSet) !== null;
+                    const back = w.store.update((set) => assignProfile(set, [w.a[0]], w.P, { replace: true }).drawingSet) !== null;
+                    return { there, back };
+                });
+                await probe('F6', (w) => w.store.update((set) => renameProfile(set, w.P, 'P（改名）').drawingSet) !== null);
+                await probe('F7', (w) => {
+                    // Several valid changes made while the run reads; none may be lost when it lands.
+                    const renamed = w.store.update((set) => renameProfile(set, w.Q, 'Q（改名）').drawingSet) !== null;
+                    let third = null;
+                    const created = w.store.update((set) => { const r = createProfile(set, { name: 'R', transferModel: 'corner-anchored', referencePage: reference, fields: rects }); third = r.profile?.id; return r.drawingSet; }) !== null;
+                    const reassigned = w.store.update((set) => assignProfile(set, [w.b[0]], third, { replace: true }).drawingSet) !== null;
+                    const confirmed = w.store.update((set) => {
+                        const r = confirmSheet(set, { sheetId: w.b[0], values: { drawingNumber: 'B-手入力', drawingTitle: 't', revision: 'r', issueDate: 'd' }, basis: 'manual' }, w.store.bindingLedger());
+                        return r.ok ? r.drawingSet : null;
+                    }) !== null;
+                    w.extra = { third };
+                    return { renamed, created, reassigned, confirmed };
+                });
+                out.workersAfter = { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live };
+                return plainly(out);
+            },
+
+            /** 34. M7's PDF.js data files in P1 intake and preview: before and after, on the same pages. */
+            async assets(truths) {
+                const out = { facts: {}, draw: {}, timing: {} };
+                // a. Page facts: computed as P1's intake did before (no data files) and by Production intake now.
+                const names = [['p1', 'p1-native-a'], ['p1', 'p1-image-only-b'], ['p1', 'p1-second-c'], ['p1', 'p1-page-at-bound'],
+                    ['p2a', 'p2a-geometry'], ['p2a', 'p2a-transfer'], ['p2a', 'p2a-register'], ['p2a', 'p2a-cmap'], ['p2a', 'p2a-jpx']];
+                const store = newStore(new PdfDocumentGate());
+                for (const [dir, name] of names) {
+                    const bytes = dir === 'p1' ? await p1Bytes(name) : await p2aBytes(name);
+                    const tb = performance.now();
+                    const before = await factsWith(bytes, {});
+                    const beforeMs = performance.now() - tb;
+                    const t0 = performance.now();
+                    const r = await store.intake(fileOf(bytes, `${name}.pdf`));
+                    const intakeMs = performance.now() - t0;
+                    const after = r.kind === 'accepted' ? sheetsOfSource(store, r.source.id).map(factsOf) : null;
+                    const t1 = performance.now();
+                    const reference = await factsWith(bytes, m7PdfDocumentAssets());
+                    const referenceMs = performance.now() - t1;
+                    out.facts[name] = {
+                        before, after, reference,
+                        changed: after ? after.map((f, i) => (JSON.stringify(f) === JSON.stringify(before[i]) ? null : { page: i + 1, from: before[i], to: f })).filter(Boolean) : null,
+                    };
+                    out.timing[name] = { productionIntakeMs: Math.round(intakeMs), inventoryWithoutAssetsMs: Math.round(beforeMs), inventoryWithAssetsMs: Math.round(referenceMs) };
+                }
+                const geo = truths.geometry;
+                out.rotation = geo.pages.map((p, i) => {
+                    const f = out.facts['p2a-geometry'].after[i];
+                    return { page: p.page, rotate: f.rotate === p.rotate, width: Math.abs(f.uprightWidthPt - p.upright.width) < 0.01, height: Math.abs(f.uprightHeightPt - p.upright.height) < 0.01, offset: p.offset };
+                });
+
+                // b. What the preview draws: the Production preview owner (through the store) against the two references.
+                const cmapSource = sourcesOf(store).find((s) => s.displayName === 'p2a-cmap.pdf');
+                const jpxSource = sourcesOf(store).find((s) => s.displayName === 'p2a-jpx.pdf');
+                const drawCase = async (source, bytes, pages, cells) => {
+                    const t0 = performance.now();
+                    const doc = await store.openPreview(source.id, store.heldFile(source.id), expectedOf(source));
+                    const openMs = performance.now() - t0;
+                    const base = await openDoc(bytes, {});
+                    const m7 = await openDoc(bytes, m7PdfDocumentAssets());
+                    try {
+                        const rows = [];
+                        for (const n of pages) {
+                            const t1 = performance.now();
+                            const preview = await darkPixels(doc, n, cells);
+                            const renderMs = performance.now() - t1;
+                            const t2 = performance.now();
+                            const before = await darkPixels(base.doc, n, cells);
+                            const beforeRenderMs = performance.now() - t2;
+                            rows.push({ page: n, preview, before, reference: await darkPixels(m7.doc, n, cells), renderMs: Math.round(renderMs), beforeRenderMs: Math.round(beforeRenderMs) });
+                        }
+                        return { openMs: Math.round(openMs), rows };
+                    } finally {
+                        await base.task.destroy();
+                        await m7.task.destroy();
+                    }
+                };
+                out.draw.cmap = await drawCase(cmapSource, await p2aBytes('p2a-cmap'), [1, 2, 3, 4], truths.cmap.cells);
+                out.draw.jpx = await drawCase(jpxSource, await p2aBytes('p2a-jpx'), [1, 2], truths.jpx.cells);
+
+                // c. Drawn right is not read right: C2 through the same store's extraction still reads wrong text (ADV-37-01).
+                let profileId = null;
+                store.update((set) => { const r = createProfile(set, { name: 'C', transferModel: 'normalised', referencePage: truths.cmap.reference, fields: truths.cmap.cells }); profileId = r.profile.id; return r.drawingSet; });
+                const cSheets = sheetsOfSource(store, cmapSource.id).map((s) => s.id);
+                store.update((set) => assignProfile(set, cSheets, profileId).drawingSet);
+                const { report } = await store.extract({ sheetIds: cSheets });
+                out.c2 = { outcome: report.outcome, title: store.currentSet().sheets.find((s) => s.id === cSheets[1]).observation?.fields.drawingTitle ?? null };
+                await store.owner.close();
+                out.workersAfter = { pdf: window.__workers.pdf.live, ocr: window.__workers.ocr.live, fingerprint: fingerprintWorkerCounts().live };
+                return plainly(out);
+            },
+
+            /** What this page wrote to browser storage, what it left behind, and what storage holds. */
+            async storage() {
+                const databases = indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : [];
+                const cacheNames = window.caches ? await caches.keys() : [];
+                return plainly({
+                    writes: window.__storage, databases, cacheNames, local: localStorage.length, session: sessionStorage.length,
+                    objectUrls: window.__objectUrls.size,
+                });
+            },
+            workers,
+        };
+        document.getElementById('state').textContent = 'ready';
+        window.__m7p2b1Ready = true;
+    </script>
+</body>
+</html>

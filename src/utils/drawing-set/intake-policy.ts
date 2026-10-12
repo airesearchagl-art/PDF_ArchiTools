@@ -78,7 +78,13 @@ export type IntakeRefusalCode =
     | 'PAGE_USER_UNIT_UNSUPPORTED'
     | 'PAGE_ROTATION_INVALID'
     | 'CLOCK_OUT_OF_RANGE'
-    | 'ID_UNAVAILABLE';
+    | 'ID_UNAVAILABLE'
+    /** The page's PDF.js document gate is held by title-block extraction. */
+    | 'EXTRACTION_ACTIVE'
+    /** A PDF.js document somewhere on the page could not be destroyed: nothing is opened again. */
+    | 'RELEASE_UNCONFIRMED'
+    /** The live Source with these bytes was removed while the file was being read. */
+    | 'DUPLICATE_REMOVED';
 
 export interface IntakeRefusal {
     code: IntakeRefusalCode;

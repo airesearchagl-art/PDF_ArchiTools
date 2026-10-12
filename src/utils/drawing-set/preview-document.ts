@@ -30,14 +30,25 @@
  * Given a PdfDocumentGate (M7-P2), the owner also yields to title-block
  * extraction: the gate closes it before extraction opens its own document, no
  * preview opens while extraction runs, and a destruction that failed anywhere
- * -- here or in extraction -- stops every later open on both sides. Without a
- * gate the owner behaves exactly as above.
+ * -- here, in intake or in extraction -- stops every later open everywhere.
+ * Without a gate the owner behaves exactly as above.
+ *
+ * The preview's own read is a check of the File (M7-P2-B): what it found --
+ * the digest of the bytes it read, or why it read nothing -- is handed to
+ * `onRead`, for the workspace to settle into the session's runtime bindings.
+ * A read that was stopped because the document was no longer wanted reports
+ * nothing. The document is opened with M7's own PDF.js data files (CMaps,
+ * standard fonts, the image decoders, from this origin), as intake and
+ * extraction open theirs, so a page is drawn as it was read.
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { configurePdfWorker } from '../pdf-worker-source';
-import { fingerprintIntoBuffer } from './fingerprint-client';
+import type { SourceFileCheck } from './currency';
+import { readFileDigest } from './file-evidence';
 import { IntakeStop, READ_CHUNK_BYTES } from './intake-policy';
+import type { Uuid } from './model';
+import { m7PdfDocumentAssets } from './pdf-document-assets';
 import type { PdfDocumentGate } from './pdf-document-gate';
 
 export type PreviewErrorCode = 'READ_FAILED' | 'SOURCE_CHANGED' | 'OPEN_FAILED' | 'CLOSED' | 'RELEASE_UNCONFIRMED' | 'EXTRACTION_ACTIVE';
@@ -79,8 +90,24 @@ export interface ExpectedContent {
     byteLength: number;
 }
 
+/** What a caller wants told about the read behind an open. */
+export interface OpenHooks {
+    /** The session the read is made for (its Drawing Set id). */
+    scope?: Uuid | null;
+    /**
+     * Called once, at the moment the read begins -- after every earlier
+     * document has been released, so it may be well after open() -- before a
+     * byte of the File is looked at. A check of the File is begun here, so it
+     * is ordered by when the File was really read.
+     */
+    beginRead?: () => void;
+    /** What the read found about the File, once it is known. Not called for a read that was stopped. */
+    onRead?: (check: SourceFileCheck) => void;
+}
+
 interface Entry {
     sourceId: string;
+    file: Blob;
     promise: Promise<PDFDocumentProxy>;
     task: PDFDocumentLoadingTask | null;
     closed: boolean;
@@ -134,15 +161,33 @@ export class PreviewDocumentOwner {
         return this.entry?.sourceId ?? null;
     }
 
-    /** The document of `sourceId`, opening it from `file` if it is not the one already held. */
-    open(sourceId: string, file: Blob, expected: ExpectedContent): Promise<PDFDocumentProxy> {
+    /**
+     * The document of `sourceId`, opening it from `file` if it is not the one
+     * already held -- for this Source, from this very File.
+     */
+    open(sourceId: string, file: Blob, expected: ExpectedContent, hooks: OpenHooks = {}): Promise<PDFDocumentProxy> {
         if (this.gate?.extractionActive) return Promise.reject(extractionActiveError());
-        if (this.entry && this.entry.sourceId === sourceId) return this.entry.promise;
+        if (this.entry && this.entry.sourceId === sourceId && this.entry.file === file) return this.entry.promise;
         void this.close();
         const waitFor = this.released;
         let readDone: () => void = () => { };
+        const report = (check: SourceFileCheck): void => {
+            try {
+                hooks.onRead?.(check);
+            } catch {
+                // What the caller does with a report never changes the preview.
+            }
+        };
+        const beginRead = (): void => {
+            try {
+                hooks.beginRead?.();
+            } catch {
+                // Nor what it does when the read begins.
+            }
+        };
         const entry: Entry = {
             sourceId,
+            file,
             promise: Promise.resolve(null as unknown as PDFDocumentProxy),
             task: null,
             closed: false,
@@ -159,7 +204,11 @@ export class PreviewDocumentOwner {
                 if (entry.closed) throw closedError();
                 if (this.refusesAll) throw unconfirmedError();
                 if (this.gate?.extractionActive) throw extractionActiveError();
-                if (file.size !== expected.byteLength) throw changedError();
+                beginRead();
+                if (file.size !== expected.byteLength) {
+                    report({ kind: 'NOT_READ', file, reason: 'SIZE_DIFFERS' });
+                    throw changedError();
+                }
                 let bytes: Uint8Array | null;
                 try {
                     bytes = new Uint8Array(expected.byteLength);
@@ -168,19 +217,26 @@ export class PreviewDocumentOwner {
                 }
                 let sha256: string;
                 try {
-                    sha256 = await fingerprintIntoBuffer(file, bytes, { signal: entry.controller.signal, chunkBytes: this.chunkBytes });
+                    const digest = await readFileDigest(file, bytes, { signal: entry.controller.signal, chunkBytes: this.chunkBytes, scope: hooks.scope ?? null });
+                    sha256 = digest.sha256;
+                    if (!entry.closed) report({ kind: 'READ', digest });
                 } catch (error) {
                     if (entry.closed) {
                         this.tally.readsStopped += 1;
                         throw closedError();
                     }
-                    throw error instanceof IntakeStop && error.refusal?.code === 'FILE_CHANGED' ? changedError() : readError();
+                    const changed = error instanceof IntakeStop && error.refusal?.code === 'FILE_CHANGED';
+                    report({ kind: 'NOT_READ', file, reason: changed ? 'CHANGED_WHILE_READ' : 'UNREADABLE' });
+                    throw changed ? changedError() : readError();
                 }
                 if (entry.closed) throw closedError();
                 if (sha256 !== expected.sha256) throw changedError();
+                // A document somewhere could not be destroyed while this one was read.
+                if (this.refusesAll) throw unconfirmedError();
+                if (this.gate?.extractionActive) throw extractionActiveError();
                 configurePdfWorker();
                 // Transferred to PDF.js; the main thread keeps no copy.
-                const task = pdfjsLib.getDocument({ data: bytes, isEvalSupported: false });
+                const task = pdfjsLib.getDocument({ data: bytes, isEvalSupported: false, ...m7PdfDocumentAssets() });
                 bytes = null;
                 entry.task = task;
                 this.tally.opened += 1;

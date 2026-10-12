@@ -9,7 +9,9 @@
  * and the confirmation sits beside it.
  *
  * Two ways to confirm, and both need this session to vouch for the bytes (the
- * Source's File is MATCHED):
+ * Source's File is MATCHED). That is asked of the session's ledger itself, at
+ * the moment of confirming -- not of a list of bindings handed in, which could
+ * be out of date or made up:
  *  - from the observation: only when it is CURRENT, and the confirmation takes
  *    that observation's own basis -- its fingerprint and profile revision. A
  *    stale reading is never given the current profile revision after the
@@ -28,8 +30,8 @@
  * history (RECONFIRMED / WITHDRAWN), which only grows. When the history is
  * full the operation is refused rather than an old entry dropped.
  */
-import type { RuntimeBindings } from './currency';
-import { observationCurrency } from './currency';
+import type { RuntimeBindingLedger } from './currency';
+import { observationCurrency, verifiedBinding } from './currency';
 import type { FieldProblem } from './field-bounds';
 import { MAX_CONFIRMATION_HISTORY, checkFieldValue, describeProblem } from './field-bounds';
 import type {
@@ -115,13 +117,13 @@ const replaceSheet = (set: DrawingSet, next: Sheet): DrawingSet => ({
 export function confirmSheet(
     set: DrawingSet,
     request: { sheetId: Uuid; values: FieldValues; basis: 'observation' | 'manual' },
-    bindings: RuntimeBindings,
+    ledger: RuntimeBindingLedger,
 ): { ok: true; drawingSet: DrawingSet; confirmation: Confirmation } | { ok: false; refusal: ConfirmRefusal } {
     const sheet = liveSheet(set, request.sheetId);
     if ('ok' in sheet) return sheet;
     const source = set.sources.find((s) => s.id === sheet.sourceId);
     if (!source || !isLive(source)) return refuse('SHEET_RETIRED', '外したファイルのページは確定できません。');
-    if (bindings.get(source.id) !== 'MATCHED') {
+    if (verifiedBinding(ledger, set, source.id) !== 'MATCHED') {
         return refuse('SOURCE_NOT_MATCHED', 'ファイルの内容を確認できないため、確定できません。');
     }
     const problems = checkValues(request.values);
@@ -134,7 +136,7 @@ export function confirmSheet(
     let observation: Observation | null = null;
     if (request.basis === 'observation') {
         if (!sheet.observation) return refuse('NO_OBSERVATION', 'このページはまだ読み取られていません。');
-        const currency = observationCurrency(set, sheet, bindings);
+        const currency = observationCurrency(set, sheet, ledger);
         if (currency.state !== 'CURRENT') {
             return refuse('OBSERVATION_NOT_CURRENT', '読み取り値が現在のファイルやプロファイルと一致しないため、この読み取り値では確定できません。読み直すか、プロファイルを使わずに入力してください。');
         }

@@ -304,6 +304,37 @@
     white-space: nowrap;
 }
 
+.ds-source-meta {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+}
+
+/* What this session knows about the File: a fact about its bytes, nothing more. */
+.ds-binding {
+    padding: 0 5px;
+    border: 1px solid var(--ds-border);
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+}
+
+.ds-binding.is-matched {
+    color: #9fd3a8;
+}
+
+.ds-binding.is-unbound {
+    color: var(--ds-muted);
+}
+
+.ds-binding.is-changed,
+.ds-binding.is-missing {
+    color: #f0a0a0;
+    border-color: #6a3a3a;
+}
+
 /* ---------- sheet list ---------- */
 
 .ds-sheet-list {
@@ -561,6 +592,10 @@
 
 .ds-result.is-duplicate .ds-result-state {
     color: #d8c27a;
+}
+
+.ds-result.is-reconnected .ds-result-state {
+    color: #8ab4f8;
 }
 
 .ds-result.is-refused .ds-result-state {

@@ -2,13 +2,14 @@
  * One file into the Drawing Set, as one transaction.
  *
  *   preflight (name, size, room left -- nothing read, nothing allocated)
+ *   -> the page's PDF.js document gate, held until the end (M7-P2-B)
  *   -> allocate the one analysis buffer, exactly file.size
  *   -> read in bounded chunks into it, fingerprinting each chunk in the Worker
  *   -> duplicate check: SHA-256 against the live Sources
  *   -> PDF.js opens the analysis buffer (it is transferred to PDF.js, not copied)
  *   -> page-count gate, before any page is read
  *   -> inventory every page, one at a time
- *   -> destroy the intake document, release the bytes
+ *   -> destroy the intake document and wait for PDF.js, release the bytes
  *   -> a Source with all its Sheets, built off to the side
  *
  * Nothing here touches the Drawing Set. The caller commits the candidate in a
@@ -16,17 +17,36 @@
  * any point leaves no Source and no Sheet behind, and the Sources already
  * accepted are untouched.
  *
+ * The read is evidence. Every byte is read and hashed anyway, so a candidate
+ * or a duplicate comes with the FileDigest of that read (file-evidence.ts):
+ * what lets the caller bind the File it read to its Source without reading it
+ * a second time. A refused or cancelled intake hands no digest out.
+ *
+ * The document is opened with M7's own PDF.js data files (CMaps, standard
+ * fonts, the image decoders, all from this origin), the same ones the preview
+ * and extraction use, so the page facts intake records -- a page has native
+ * text or not -- are read the way the page is drawn and read later.
+ *
+ * Given the page's PdfDocumentGate, intake holds it from start to end: it does
+ * not start while extraction runs, it opens nothing once a PDF.js document
+ * anywhere could not be destroyed, and if its own document cannot be destroyed
+ * it says so to the gate, which then opens nothing for anyone.
+ *
  * file.type is never consulted: it can be empty or wrong. PDF.js accepting the
  * bytes is the proof that they are a PDF. file.name is a display label only.
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { configurePdfWorker } from '../pdf-worker-source';
-import { fingerprintIntoBuffer } from './fingerprint-client';
+import type { FileDigest } from './file-evidence';
+import { readFileDigest } from './file-evidence';
 import type { IntakeRefusal } from './intake-policy';
 import { cancelledStop, checkPageCount, IntakeStop, preflight, refusal } from './intake-policy';
 import type { DrawingSet, InventoriedPage, Source, SourceCandidate } from './model';
 import { buildSourceCandidate, heldCounts, liveSourceWithContent, nowTimestamp } from './model';
+import { m7PdfDocumentAssets } from './pdf-document-assets';
+import type { PdfDocumentGate } from './pdf-document-gate';
+import { GATE_MESSAGES } from './pdf-document-gate';
 import { hasMeaningfulText, pageBoxFacts, pageKindFor } from './page-facts';
 
 export type IntakeProgress =
@@ -35,8 +55,10 @@ export type IntakeProgress =
     | { phase: 'inventory'; pagesDone: number; pagesTotal: number };
 
 export type IntakeOutcome =
-    | { kind: 'candidate'; candidate: SourceCandidate }
-    | { kind: 'duplicate'; sha256: string; existing: Source }
+    /** `evidence`: the digest of the read the candidate was built from. */
+    | { kind: 'candidate'; candidate: SourceCandidate; evidence: FileDigest }
+    /** `evidence`: the digest of the read that found the bytes a live Source already has. */
+    | { kind: 'duplicate'; sha256: string; existing: Source; evidence: FileDigest }
     | { kind: 'refused'; refusal: IntakeRefusal }
     | { kind: 'cancelled' };
 
@@ -49,6 +71,8 @@ export interface IntakeContext {
     chunkBytes?: number;
     /** How the analysis buffer is allocated; tests observe it. */
     allocate?: (size: number) => Uint8Array;
+    /** The page's PDF.js document gate; intake holds it from start to end. */
+    gate?: PdfDocumentGate;
 }
 
 /** Timings of the last intake, for local performance evidence. Durations only. */
@@ -123,11 +147,28 @@ async function inventory(
 
 /** Take one file through the whole transaction. Never throws; every ending is an outcome. */
 export async function intakeSource(file: File, context: IntakeContext): Promise<IntakeOutcome> {
-    const { signal, onProgress } = context;
+    const { signal } = context;
+    if (signal.aborted) return { kind: 'cancelled' };
+    const held = preflight(file, heldCounts(context.current()));
+    if (held) return { kind: 'refused', refusal: held };
+    if (!context.gate) return intakeHeld(file, context);
+    const lease = context.gate.beginIntake();
+    if (!lease.ok) {
+        const code = lease.code === 'RELEASE_UNCONFIRMED' ? 'RELEASE_UNCONFIRMED' : 'EXTRACTION_ACTIVE';
+        return { kind: 'refused', refusal: refusal(code, GATE_MESSAGES[lease.code]) };
+    }
+    try {
+        return await intakeHeld(file, context);
+    } finally {
+        // Only now: the intake document has been destroyed, or reported to the gate as not.
+        lease.end();
+    }
+}
+
+async function intakeHeld(file: File, context: IntakeContext): Promise<IntakeOutcome> {
+    const { signal, onProgress, gate } = context;
     try {
         if (signal.aborted) throw cancelledStop();
-        const gate = preflight(file, heldCounts(context.current()));
-        if (gate) return { kind: 'refused', refusal: gate };
 
         // The one full-size buffer: allocated only now that the size is known
         // to be within the ceiling.
@@ -140,27 +181,38 @@ export async function intakeSource(file: File, context: IntakeContext): Promise<
 
         const readStart = performance.now();
         onProgress?.({ phase: 'reading', bytesDone: 0, bytesTotal: file.size });
-        const sha256 = await fingerprintIntoBuffer(file, analysis, {
+        const evidence = await readFileDigest(file, analysis, {
             signal,
             chunkBytes: context.chunkBytes,
             onProgress: (bytesDone) => onProgress?.({ phase: 'reading', bytesDone, bytesTotal: file.size }),
+            scope: context.current().id,
         });
+        const { sha256 } = evidence;
         const recordedAt = nowTimestamp();
         measure('drawing-set:read-and-fingerprint', readStart);
 
         const existing = liveSourceWithContent(context.current(), sha256);
-        if (existing) return { kind: 'duplicate', sha256, existing };
+        if (existing) return { kind: 'duplicate', sha256, existing, evidence };
         if (signal.aborted) throw cancelledStop();
+        // A document somewhere could not be destroyed while this file was read.
+        if (gate?.releaseUnconfirmed) throw new IntakeStop(refusal('RELEASE_UNCONFIRMED', GATE_MESSAGES.RELEASE_UNCONFIRMED));
 
         onProgress?.({ phase: 'opening' });
         const openStart = performance.now();
         configurePdfWorker();
         // PDF.js takes the buffer itself (it is transferred to its worker), so
         // the main thread keeps no copy; the reference is dropped as well.
-        const task = pdfjsLib.getDocument({ data: analysis, isEvalSupported: false, disableFontFace: true });
+        const task = pdfjsLib.getDocument({ data: analysis, isEvalSupported: false, disableFontFace: true, ...m7PdfDocumentAssets() });
         analysis = null;
+        let destroying: Promise<void> | null = null;
+        const destroy = (): Promise<void> => {
+            // A destruction PDF.js reports as failed leaves its worker
+            // running: the gate is told, and opens nothing after it.
+            destroying ??= task.destroy().then(() => { }, () => { gate?.noteReleaseUnconfirmed(); });
+            return destroying;
+        };
         const abortTask = (): void => {
-            task.destroy().catch(() => { });
+            void destroy();
         };
         signal.addEventListener('abort', abortTask, { once: true });
         try {
@@ -195,12 +247,13 @@ export async function intakeSource(file: File, context: IntakeContext): Promise<
                     recordedAt,
                     pages,
                 }),
+                evidence,
             };
         } finally {
             signal.removeEventListener('abort', abortTask);
             // The intake document is never kept: the preview opens its own,
             // one at a time, when a Sheet is selected.
-            await task.destroy().catch(() => { });
+            await destroy();
         }
     } catch (error) {
         if (error instanceof IntakeStop) {

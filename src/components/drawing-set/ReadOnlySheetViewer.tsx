@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { Maximize, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Sheet, Source } from '../../utils/drawing-set/model';
-import type { PreviewCounts, PreviewDocumentOwner } from '../../utils/drawing-set/preview-document';
+import type { ExpectedContent, PreviewCounts, PreviewDocumentOwner } from '../../utils/drawing-set/preview-document';
 import { PreviewError } from '../../utils/drawing-set/preview-document';
 
 /**
@@ -18,14 +18,20 @@ import { PreviewError } from '../../utils/drawing-set/preview-document';
  * Each render owns the page it fetched and cleans it up once the render has
  * ended, however it ended -- including a page that arrives only after the
  * viewer has moved on, which is never drawn.
+ *
+ * The workspace opens the document through `open`, so that the preview's read
+ * of the File is also a check of it (DrawingSetStore.openPreview); without it
+ * the viewer asks the owner directly.
  */
 
 interface Props {
     owner: PreviewDocumentOwner;
     source: Source;
-    file: File;
+    file: Blob;
     sheet: Sheet;
     pageTotal: number;
+    /** How the document is opened; the owner's own open() when not given. */
+    open?: (sourceId: string, file: Blob, expected: ExpectedContent) => Promise<PDFDocumentProxy>;
 }
 
 const ZOOM_STEP = 1.25;
@@ -42,7 +48,7 @@ type DocState =
 
 type RenderState = { key: string; status: 'rendered' | 'error'; message?: string; counts: PreviewCounts };
 
-export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, sheet, pageTotal }) => {
+export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, sheet, pageTotal, open }) => {
     const paneRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [zoom, setZoom] = useState(1);
@@ -71,7 +77,8 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
     const expectedSha256 = source.fingerprint.sha256;
     useEffect(() => {
         let alive = true;
-        owner.open(sourceId, file, { sha256: expectedSha256, byteLength: expectedBytes }).then(
+        const expected = { sha256: expectedSha256, byteLength: expectedBytes };
+        (open ? open(sourceId, file, expected) : owner.open(sourceId, file, expected)).then(
             (doc) => { if (alive) setDocState({ sourceId, doc }); },
             (error: unknown) => {
                 if (!alive || (error instanceof PreviewError && error.code === 'CLOSED')) return;
@@ -79,7 +86,7 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             },
         );
         return () => { alive = false; };
-    }, [owner, sourceId, file, expectedBytes, expectedSha256]);
+    }, [owner, open, sourceId, file, expectedBytes, expectedSha256]);
 
     // A document destroyed by its owner is never drawn from.
     const doc = docState && docState.sourceId === sourceId && 'doc' in docState && !docState.doc.loadingTask.destroyed

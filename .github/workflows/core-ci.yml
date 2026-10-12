@@ -259,7 +259,13 @@ jobs:
       # OCR, every rotation and CropBox offset, the field bounds, the terminal
       # EXTRACTION run, confirmations, currency, one PDF.js document while
       # extracting, and the PDF.js data files under public/pdfjs/ byte for byte.
-      - name: M7 foundation (P1 + P2-A)
+      # And M7-P2-B1 (scripts/smoke-m7-p2b1-checks.mjs): a runtime binding
+      # only from a real read of the File (forged evidence refused, at runtime
+      # and by a static type check), the session store with one PDF.js gate
+      # for intake, preview and extraction, a failed destruction that stops
+      # every open, re-presenting a Source's bytes, the profile mutation probes
+      # F1-F7, and P1 intake and preview with the data files, before and after.
+      - name: M7 foundation (P1 + P2-A + P2-B1)
         run: node scripts/smoke-m7-p1.mjs
 
       # And the wiring, in the built app: the sixth navigation entry, files
@@ -267,6 +273,8 @@ jobs:
       # that leave accepted files alone, 5000 Sheets in a virtualized list, the
       # read-only viewer with at most one open document, a new Drawing Set
       # started while a file is still being read, and no request leaving the
-      # machine.
+      # machine. Since M7-P2-B1 also the binding shown for each Source, a file
+      # taken away from disk and the same bytes chosen again to reconnect it,
+      # and the PDF.js data files fetched from this origin.
       - name: M7 P1 UI
         run: node scripts/smoke-m7-p1-ui.mjs
