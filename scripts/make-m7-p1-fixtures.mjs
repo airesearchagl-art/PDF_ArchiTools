@@ -19,6 +19,10 @@
  *   page-size bound and one past it (alone, and as page 2 after a good page 1),
  *   a UserUnit page, 5000 and 5001 pages.
  *
+ * The M7-P2-A documents (scripts/make-m7-p2a-fixtures.mjs) are built at the
+ * end, into test-fixtures/m7-p2a, so the one step that prepares the M7 gates
+ * prepares both.
+ *
  * Run:  node scripts/make-m7-p1-fixtures.mjs
  */
 import crypto from 'node:crypto';
@@ -27,6 +31,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { degrees, PDFDocument, PDFName, PDFNumber, rgb, StandardFonts } from 'pdf-lib';
+import { generateP2aFixtures } from './make-m7-p2a-fixtures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'test-fixtures', 'm7-p1');
@@ -273,6 +278,8 @@ async function main() {
 
     console.log(`m7-p1 fixtures: ${written.length} documents in ${path.relative(ROOT, OUT)}`);
     for (const f of written) console.log(`  ${f.name.padEnd(22)} ${String(f.bytes).padStart(9)} B  ${f.sha256.slice(0, 12)}`);
+
+    await generateP2aFixtures();
 }
 
 main().catch((error) => {

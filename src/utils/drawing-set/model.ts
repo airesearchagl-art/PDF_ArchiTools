@@ -1,14 +1,16 @@
 /**
- * The Drawing Set as M7-P1 holds it in memory.
+ * The Drawing Set as M7 holds it in memory.
  *
  * These types are the canonical contract's own shapes
- * (contracts/m7/portable-project.schema.json) for the parts P1 owns: Project,
- * Drawing Set, Source with its fingerprint, Sheet with its page facts. There is
- * no second, P1-only representation to reconcile later. What later phases own
- * is present in the shape P1 can honestly give it -- empty collections, `null`
- * observations -- and P1 never fills it in:
- *  - titleBlockProfiles, profileAssignment, observation, confirmation (M7-P2)
- *  - drawingRegisterReferences, analysisRuns, findings, decisions (M7-P3)
+ * (contracts/m7/portable-project.schema.json) for the parts M7 has built so
+ * far: Project, Drawing Set, Source with its fingerprint, Sheet with its page
+ * facts (M7-P1), and the title-block metadata of M7-P2 -- profiles, their
+ * assignment to Sheets, what the machine read (observation), what a person
+ * stands behind (confirmation and its history), and the EXTRACTION runs that
+ * observations name. There is no second representation to reconcile later.
+ * What later phases own is present in the shape the app can honestly give it
+ * -- empty collections -- and is never filled in:
+ *  - drawingRegisterReferences, findings, decisions, QA runs (M7-P3)
  *  - the file envelope, save and resume (M7-P4)
  *
  * Everything here is plain data. A File, its bytes, a PDF.js document, a
@@ -72,6 +74,115 @@ export interface PageFacts {
     kind: PageKind;
 }
 
+/**
+ * The four title-block fields, in the contract's canonical order. The order is
+ * part of the contract: `editedFields` is written in it (HDR-36-01).
+ */
+export const FIELD_NAMES = ['drawingNumber', 'drawingTitle', 'revision', 'issueDate'] as const;
+export type FieldName = (typeof FIELD_NAMES)[number];
+
+/**
+ * Upright page space: origin top-left of the page as it would be without its
+ * /Rotate, y downwards, PDF points at scale 1. The Drawing Register's own
+ * SelectionRect space.
+ */
+export interface Rect {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+}
+
+/** How a profile's rectangles move to a page of another size. A person chooses it; it is never inferred. */
+export type TransferModel = 'normalised' | 'corner-anchored';
+
+/**
+ * Field rectangles on a reference page. `revision` counts every change to the
+ * geometry, the reference page or the transfer model; a rename does not count.
+ * A profile a person removes is retired, never deleted.
+ */
+export interface TitleBlockProfile {
+    id: Uuid;
+    name: string;
+    revision: number;
+    transferModel: TransferModel;
+    referencePage: { uprightWidthPt: number; uprightHeightPt: number };
+    fields: Record<FieldName, Rect>;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    retiredAt: Timestamp | null;
+}
+
+/** Which profile, at which revision, a reading or a confirmation was made under. */
+export interface ProfileBasis {
+    profileId: Uuid;
+    profileRevision: number;
+}
+
+/** A Sheet belongs to a profile because a person said so; the moment is part of the record. */
+export interface ProfileAssignment {
+    profileId: Uuid;
+    confirmedAt: Timestamp;
+}
+
+export type FieldSource = 'native' | 'ocr' | 'none';
+
+export interface ObservedField {
+    /** One line; at most maxFieldValueLength characters. */
+    value: string;
+    /** What was read inside the one field rectangle; at most maxFieldRawTextLength characters. */
+    rawText: string;
+    source: FieldSource;
+    /** The recogniser's own score. A sort key read by nothing that decides. */
+    ocrScore: number | null;
+}
+
+/** What the machine read from one Sheet, and exactly what it read it from. Never promoted by a score. */
+export interface Observation {
+    runId: Uuid;
+    sourceSha256: Sha256Hex;
+    profile: ProfileBasis;
+    status: 'READ' | 'OCR_FAILED';
+    fields: Record<FieldName, ObservedField>;
+}
+
+export type FieldValues = Record<FieldName, string>;
+
+/** What a person stands behind, against which bytes and which profile arrangement. */
+export interface Confirmation {
+    confirmedAt: Timestamp;
+    sourceSha256: Sha256Hex;
+    /** null when the values were typed with no profile involved. */
+    profile: ProfileBasis | null;
+    values: FieldValues;
+    editedFields: FieldName[];
+}
+
+export interface RetiredConfirmation {
+    confirmation: Confirmation;
+    retiredAt: Timestamp;
+    reason: 'RECONFIRMED' | 'WITHDRAWN';
+}
+
+export type AnalysisRunKind = 'EXTRACTION' | 'QA';
+export type AnalysisRunOutcome = 'COMPLETED' | 'CANCELLED' | 'FAILED';
+
+/**
+ * One execution of an analyser. Append-only: written once, when it ends, and
+ * never rewritten or deleted in a session (HDR-36-02). M7-P2 writes EXTRACTION
+ * runs only.
+ */
+export interface AnalysisRun {
+    id: Uuid;
+    kind: AnalysisRunKind;
+    startedAt: Timestamp;
+    completedAt: Timestamp | null;
+    outcome: AnalysisRunOutcome;
+    engine: { name: 'register-extraction' | 'drawing-set-qa'; version: string };
+    manifestDigest: Sha256Hex;
+    coverage: { sheetsEvaluated: number; sheetsExcluded: number };
+}
+
 export interface Sheet {
     id: Uuid;
     sourceId: Uuid;
@@ -79,14 +190,10 @@ export interface Sheet {
     createdAt: Timestamp;
     retiredAt: Timestamp | null;
     pageFacts: PageFacts | null;
-    /** M7-P2. Always null in P1. */
-    profileAssignment: null;
-    /** M7-P2. Always null in P1. */
-    observation: null;
-    /** M7-P2. Always null in P1. */
-    confirmation: null;
-    /** M7-P2. Always empty in P1. */
-    confirmationHistory: never[];
+    profileAssignment: ProfileAssignment | null;
+    observation: Observation | null;
+    confirmation: Confirmation | null;
+    confirmationHistory: RetiredConfirmation[];
 }
 
 export interface DrawingSet {
@@ -94,16 +201,15 @@ export interface DrawingSet {
     name: string;
     createdAt: Timestamp;
     sources: Source[];
-    /** M7-P2. Always empty in P1. */
-    titleBlockProfiles: never[];
+    titleBlockProfiles: TitleBlockProfile[];
     sheets: Sheet[];
-    /** M7-P3. Always empty in P1. */
+    /** M7-P3. Always empty. */
     drawingRegisterReferences: never[];
-    /** M7-P3. Always empty in P1. */
-    analysisRuns: never[];
-    /** M7-P3. Always empty in P1. */
+    /** EXTRACTION runs from M7-P2; QA runs are M7-P3. */
+    analysisRuns: AnalysisRun[];
+    /** M7-P3. Always empty. */
     findings: never[];
-    /** M7-P3. Always empty in P1. */
+    /** M7-P3. Always empty. */
     decisions: never[];
 }
 

@@ -103,13 +103,35 @@ export interface OcrEngineOptions {
      * that did not request it.
      */
     pageSegMode?: string;
+    /**
+     * Where tesseract.js keeps the language data between workers, as its own
+     * `cacheMethod` option.
+     *
+     * Left undefined by default, and that default is load-bearing too: every
+     * existing caller has always let tesseract.js apply its own default,
+     * `'write'`, which stores the downloaded language data in IndexedDB
+     * (`keyval-store`) from inside the worker, so the next worker reads it
+     * from there instead of downloading it again. Only an engine constructed
+     * with a value passes one, and that value reaches only its own worker.
+     */
+    cacheMethod?: OcrCacheMethod;
 }
+
+/**
+ * tesseract.js's `cacheMethod` values. Its published type says `string`; these
+ * are the four its worker acts on: `'write'` reads the cache and writes to it,
+ * `'readOnly'` only reads it, `'refresh'` only writes it, and `'none'` neither
+ * reads nor writes it -- the language data is fetched for every worker and
+ * never stored.
+ */
+export type OcrCacheMethod = 'write' | 'readOnly' | 'refresh' | 'none';
 
 export class OcrEngine {
     private worker: TesseractWorker | null = null;
     private readonly langs: string;
     private readonly onPageProgress?: (progress: number) => void;
     private readonly pageSegMode?: string;
+    private readonly cacheMethod?: OcrCacheMethod;
 
     constructor(
         langs: string,
@@ -119,6 +141,7 @@ export class OcrEngine {
         this.langs = langs;
         this.onPageProgress = onPageProgress;
         this.pageSegMode = options.pageSegMode;
+        this.cacheMethod = options.cacheMethod;
     }
 
     get started(): boolean {
@@ -128,8 +151,11 @@ export class OcrEngine {
     async start(): Promise<void> {
         if (this.worker) return;
         try {
+            // No cache method configured means no `cacheMethod` key at all --
+            // the same options this call has always sent.
             this.worker = await createWorker(this.langs, 1, {
                 ...TESSERACT_OPTIONS,
+                ...(this.cacheMethod === undefined ? {} : { cacheMethod: this.cacheMethod }),
                 logger: (message: { status: string; progress: number }) => {
                     if (message.status === 'recognizing text') this.onPageProgress?.(message.progress);
                 },

@@ -18,11 +18,18 @@
  *    contract (portable-project.semantic.mjs) -- checked by wrapping it, in
  *    this test only, in a file envelope; P1 has no save;
  *  - virtualization bounds, preview document ownership, and no request leaving
- *    the machine.
+ *    the machine;
+ *  - M7-P2-A (scripts/smoke-m7-p2a-checks.mjs, after the P1 sections, in the
+ *    same browser): profiles, the register adapter over the unchanged Drawing
+ *    Register engine, the EXTRACTION run, confirmations, currency, the PDF.js
+ *    document gate, the PDF.js data files, and the live P2 model against the
+ *    same canonical schema and semantic contract.
  *
  * Run:
- *   node scripts/make-m7-p1-fixtures.mjs
+ *   node scripts/make-m7-p1-fixtures.mjs        (also builds the P2-A fixtures)
  *   node scripts/smoke-m7-p1.mjs
+ *   node scripts/smoke-m7-p1.mjs --browser="C:\Program Files\Google\Chrome\Application\chrome.exe"
+ *   node scripts/smoke-m7-p1.mjs --browser="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -30,6 +37,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer';
 import { createServer } from 'vite';
+import { runP2aChecks } from './smoke-m7-p2a-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5214;
@@ -38,6 +46,7 @@ const FIXTURES = path.join(ROOT, 'test-fixtures', 'm7-p1');
 const SCHEMA_PATH = path.join(ROOT, 'contracts', 'm7', 'portable-project.schema.json');
 const SEMANTIC_PATH = path.join(ROOT, 'contracts', 'm7', 'portable-project.semantic.mjs');
 const CONTRACT_MANIFEST_PATH = path.join(ROOT, 'contracts', 'm7', 'contract-manifest.json');
+const browserArg = process.argv.find((a) => a.startsWith('--browser='))?.slice('--browser='.length) || process.env.M7_BROWSER || '';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -168,14 +177,21 @@ async function main() {
 
     const server = await createServer({ root: ROOT, server: { port: PORT, strictPort: true }, logLevel: 'warn' });
     await server.listen();
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        ...(browserArg ? { executablePath: browserArg } : {}),
+    });
+    console.log(`browser: ${await browser.version()}${browserArg ? ` (${browserArg})` : ' (bundled)'}`);
     let exitCode = 1;
     try {
         const page = await browser.newPage();
         page.setDefaultTimeout(0);
         const external = [];
         const pageErrors = [];
+        const assetRequests = [];
         const record = (url) => {
+            if (url?.startsWith(`${ORIGIN}/pdfjs/`)) assetRequests.push(url);
             if (!url || url.startsWith(ORIGIN)) return;
             try {
                 const { protocol } = new URL(url);
@@ -560,6 +576,14 @@ async function main() {
         section('12. Privacy');
         const workers = await call('workers');
         check('no fingerprint Worker left running', workers.live === 0, `started ${workers.started}`);
+        check('no request left the machine', external.length === 0, external.join(', '));
+        check('no uncaught page error', pageErrors.length === 0, pageErrors.join(' | '));
+
+        await runP2aChecks({
+            page, ROOT, ORIGIN, check, probe, note, section, validate, envelope, schema, checkRelations, RELATION_PROBLEM, assetRequests,
+        });
+
+        section('28. The whole run, P1 and P2-A');
         check('no request left the machine', external.length === 0, external.join(', '));
         check('no uncaught page error', pageErrors.length === 0, pageErrors.join(' | '));
 

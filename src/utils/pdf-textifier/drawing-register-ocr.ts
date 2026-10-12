@@ -20,6 +20,7 @@ import type { OcrWord } from './types';
 import type { SelectionRect } from './table-types';
 import type { RegisterFieldName } from './drawing-register-types';
 import { OcrEngine } from './ocr';
+import type { OcrCacheMethod } from './ocr';
 import { renderRegion, releaseRegion, REGISTER_DPI } from './drawing-register-geometry';
 import { unionRect } from './drawing-register-template';
 
@@ -52,6 +53,15 @@ export interface RegionRecognition {
     calls: number;
 }
 
+export interface RegisterOcrOptions {
+    /**
+     * Handed to the engine's worker as is (`OcrEngineOptions.cacheMethod`).
+     * Omitted, tesseract.js's own default applies, as it always has for the
+     * drawing register.
+     */
+    cacheMethod?: OcrCacheMethod;
+}
+
 /**
  * An OCR engine owned by the drawing register.
  *
@@ -63,9 +73,11 @@ export interface RegionRecognition {
 export class RegisterOcrEngine {
     private engine: OcrEngine | null = null;
     private readonly langs: string;
+    private readonly cacheMethod?: OcrCacheMethod;
 
-    constructor(langs = 'jpn+eng') {
+    constructor(langs = 'jpn+eng', options: RegisterOcrOptions = {}) {
         this.langs = langs;
+        this.cacheMethod = options.cacheMethod;
     }
 
     get started(): boolean {
@@ -92,6 +104,7 @@ export class RegisterOcrEngine {
         }
         const engine = new OcrEngine(this.langs, undefined, {
             pageSegMode: REGISTER_PAGE_SEG_MODE,
+            cacheMethod: this.cacheMethod,
         });
         await engine.start();
         this.engine = engine;
