@@ -1,14 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Copy, FilePlus2, FolderOpen, Layers, RotateCcw, Square, X } from 'lucide-react';
 import { VersionFooter } from '../VersionFooter';
 import { TOOL_VERSIONS } from '../../config/versions';
-import { displaySafeFileName, IntakeStop } from '../../utils/drawing-set/intake-policy';
-import type { DrawingSetSession, Sheet, Source } from '../../utils/drawing-set/model';
-import { commitSourceCandidate, createSession, isLive, liveSheets, liveSources, retireSource } from '../../utils/drawing-set/model';
+import type { SourceBinding } from '../../utils/drawing-set/currency';
+import { displaySafeFileName } from '../../utils/drawing-set/intake-policy';
+import type { Sheet, Source } from '../../utils/drawing-set/model';
+import { isLive, liveSheets, liveSources } from '../../utils/drawing-set/model';
+import { PAGE_PDF_GATE, PAGE_PREVIEW_OWNER } from '../../utils/drawing-set/page-documents';
 import { displayOrientation, displaySizeMm, ORIENTATION_LABEL, paperSizeName } from '../../utils/drawing-set/page-facts';
-import { PreviewDocumentOwner } from '../../utils/drawing-set/preview-document';
-import type { IntakeOutcome, IntakeProgress } from '../../utils/drawing-set/source-intake';
-import { intakeSource } from '../../utils/drawing-set/source-intake';
+import type { IntakeProgress } from '../../utils/drawing-set/source-intake';
+import type { StoreIntakeResult } from '../../utils/drawing-set/workspace-store';
+import { DrawingSetStore } from '../../utils/drawing-set/workspace-store';
 import { ReadOnlySheetViewer } from './ReadOnlySheetViewer';
 import { VirtualSheetList } from './VirtualSheetList';
 import './DrawingSetWorkspace.css';
@@ -21,18 +23,31 @@ import './DrawingSetWorkspace.css';
  * Sheets or not at all. The Sheet List shows every live Sheet; the viewer shows
  * the selected page, read-only; the right pane shows facts, nothing more.
  *
- * Ownership. Every long-running piece of work belongs to a generation of this
- * workspace. Cancelling, starting a new Drawing Set or leaving the workspace
- * moves to a new generation and aborts the old one's work, and nothing the old
- * generation finishes afterwards is published: no Source, no Sheet, no viewer
- * state, no error.
+ * Ownership. The session -- the model, the File held for each Source and what
+ * this session knows about it, and the lifecycle of the work in flight -- has
+ * one synchronous writer, a DrawingSetStore, and this component renders its
+ * snapshot. Cancelling, starting a new Drawing Set or leaving the workspace
+ * ends the work in flight, and nothing it finishes afterwards is published: no
+ * Source, no Sheet, no binding, no viewer state, no error. What is kept here
+ * is the screen's own: the list of files picked and how each one went.
+ *
+ * The PDF.js document gate and the preview owner belong to the page
+ * (page-documents.ts): intake, the preview and extraction take turns through
+ * one gate, and a document PDF.js could not destroy stops all of them until
+ * the page is reloaded, however often the workspace is left and opened again.
+ *
+ * Choosing a PDF whose bytes a live Source already has (M7-P2-B, HD-B-05)
+ * adds nothing. If this session cannot vouch for that Source's File any more
+ * -- it could not be read, or no longer holds those bytes -- the File chosen
+ * stands for the Source from then on, its SHA-256 equal to the Source's
+ * fingerprint: the same Source, the same Sheets.
  *
  * Runtime handles -- each Source's File, the one preview document -- live next
  * to the model, never in it, and go away with the session. Nothing is stored
  * anywhere: no browser storage, no server, no file.
  */
 
-type ItemState = 'queued' | 'processing' | 'accepted' | 'duplicate' | 'refused' | 'cancelled';
+type ItemState = 'queued' | 'processing' | 'accepted' | 'reconnected' | 'duplicate' | 'refused' | 'cancelled';
 
 interface IntakeItem {
     id: number;
@@ -44,18 +59,7 @@ interface IntakeItem {
     progress: string;
 }
 
-type SessionState = { ok: true; session: DrawingSetSession } | { ok: false; message: string };
-
 type Confirmation = { kind: 'reset' } | { kind: 'remove'; sourceId: string } | null;
-
-const startSession = (): SessionState => {
-    try {
-        return { ok: true, session: createSession() };
-    } catch (error) {
-        const message = error instanceof IntakeStop && error.refusal ? error.refusal.message : '図面一式を開始できませんでした。';
-        return { ok: false, message };
-    }
-};
 
 const MiB = 1024 * 1024;
 const formatBytes = (bytes: number): string =>
@@ -76,6 +80,7 @@ const ITEM_LABEL: Record<ItemState, string> = {
     queued: '待機中',
     processing: '処理中',
     accepted: '追加',
+    reconnected: '再接続',
     duplicate: '重複',
     refused: '読み込めません',
     cancelled: '中止',
@@ -85,95 +90,89 @@ const ITEM_LABEL: Record<ItemState, string> = {
 const VISIBLE_RESULTS = 200;
 
 /**
- * One preview owner for the page, not one per visit to the workspace. Leaving
- * the workspace still destroys its document; but a document PDF.js could not
- * destroy outlives the workspace, and a fresh owner would open another beside it.
+ * What this session knows about each Source's File, in the Source list. Facts
+ * about the bytes only: none of them says the drawing is right.
  */
-const pageOwner = new PreviewDocumentOwner();
+const BINDING_LABEL: Record<SourceBinding | 'UNBOUND', { text: string; title: string }> = {
+    MATCHED: {
+        text: 'SHA-256一致',
+        title: 'このファイルの内容（SHA-256）が、読み込んだときと同じであることを、この画面で確かめています。ページを閉じると消えます。',
+    },
+    UNBOUND: {
+        text: '未照合',
+        title: 'このファイルの内容（SHA-256）を、まだ照合していません。',
+    },
+    CHANGED: {
+        text: 'SHA-256不一致',
+        title: 'ファイルの内容（SHA-256）が、読み込んだときと異なります。元のPDFをもう一度「PDFを追加」で選ぶと、このファイルに再接続できます。',
+    },
+    MISSING: {
+        text: '読み込めません',
+        title: 'ファイルを読み込めません（移動・変更・削除された可能性があります）。元のPDFをもう一度「PDFを追加」で選ぶと、このファイルに再接続できます。',
+    },
+};
 
 export const DrawingSetWorkspace: React.FC = () => {
-    const [sessionState, setSessionState] = useState<SessionState>(startSession);
-    const [files, setFiles] = useState<ReadonlyMap<string, File>>(() => new Map());
+    // One store per visit; the PDF.js gate and the preview owner are the page's.
+    const [store] = useState(() => new DrawingSetStore({ gate: PAGE_PDF_GATE, owner: PAGE_PREVIEW_OWNER }));
+    const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+    const sessionState = snapshot.state;
     const [items, setItems] = useState<IntakeItem[]>([]);
     const [busy, setBusy] = useState(false);
     const [selectedSheetId, setSelectedSheetId] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<Confirmation>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [showFullSha, setShowFullSha] = useState(false);
-    const owner = pageOwner;
+    const owner = store.owner;
 
-    // Runtime ownership. Read and written by handlers and the intake loop only.
-    const sessionRef = useRef<DrawingSetSession | null>(sessionState.ok ? sessionState.session : null);
+    // The screen's own queue of picked files. The session is the store's.
     const queueRef = useRef<{ itemId: number; file: File }[]>([]);
-    const generationRef = useRef(0);
-    const controllerRef = useRef<AbortController | null>(null);
+    /** Moves whenever the queue is abandoned (stop, reset, leaving), so a pump of the old one stops. */
+    const queueEpochRef = useRef(0);
     const pumpingRef = useRef(false);
-    /**
-     * Settles when the last intake started has finished, including one that
-     * was abandoned by a stop or a reset and is still letting go of its
-     * buffer: the next file waits for it, so two never overlap.
-     */
-    const intakeDoneRef = useRef<Promise<void>>(Promise.resolve());
     const itemCounterRef = useRef(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Leaving the workspace ends everything it started.
     useEffect(() => {
-        const generation = generationRef;
-        const controller = controllerRef;
         const queue = queueRef;
+        const epoch = queueEpochRef;
         const pumping = pumpingRef;
+        store.enter();
         return () => {
-            generation.current += 1;
-            controller.current?.abort();
-            controller.current = null;
+            epoch.current += 1;
             queue.current = [];
             pumping.current = false;
-            owner.close();
+            store.leave();
         };
-    }, [owner]);
-
-    const publish = (next: DrawingSetSession): void => {
-        sessionRef.current = next;
-        setSessionState({ ok: true, session: next });
-    };
+    }, [store]);
 
     const updateItem = (id: number, patch: Partial<IntakeItem>): void => {
         setItems((list) => list.map((item) => (item.id === id ? { ...item, ...patch } : item)));
     };
 
-    const settle = (itemId: number, file: File, outcome: IntakeOutcome): void => {
-        switch (outcome.kind) {
-            case 'candidate': {
-                const session = sessionRef.current;
-                if (!session) return;
-                const result = commitSourceCandidate(session.drawingSet, outcome.candidate);
-                if (result.kind === 'committed') {
-                    const { source, sheets } = outcome.candidate;
-                    setFiles((current) => new Map(current).set(source.id, file));
-                    publish({ ...session, drawingSet: result.drawingSet });
-                    setSelectedSheetId((current) => current ?? sheets[0]?.id ?? null);
-                    updateItem(itemId, { state: 'accepted', detail: `${sheets.length} ページを追加しました。`, progress: '' });
-                } else if (result.kind === 'duplicate') {
-                    updateItem(itemId, {
-                        state: 'duplicate',
-                        detail: `同じ内容のファイル「${result.existing.displayName}」がすでにあるため、追加しませんでした。`,
-                        progress: '',
-                    });
-                } else {
-                    updateItem(itemId, { state: 'refused', detail: result.refusal.message, progress: '' });
-                }
+    const show = (itemId: number, result: StoreIntakeResult): void => {
+        switch (result.kind) {
+            case 'accepted':
+                setSelectedSheetId((current) => current ?? result.sheets[0]?.id ?? null);
+                updateItem(itemId, { state: 'accepted', detail: `${result.sheets.length} ページを追加しました。`, progress: '' });
                 return;
-            }
+            case 'reconnected':
+                updateItem(itemId, {
+                    state: 'reconnected',
+                    detail: `同じ内容（SHA-256一致）のファイル「${result.existing.displayName}」に再接続しました。新しいファイルとしては追加していません。`,
+                    progress: '',
+                });
+                return;
             case 'duplicate':
                 updateItem(itemId, {
                     state: 'duplicate',
-                    detail: `同じ内容のファイル「${outcome.existing.displayName}」がすでにあるため、追加しませんでした。`,
+                    detail: `同じ内容のファイル「${result.existing.displayName}」がすでにあるため、追加しませんでした。`,
                     progress: '',
                 });
                 return;
             case 'refused':
-                updateItem(itemId, { state: 'refused', detail: outcome.refusal.message, progress: '' });
+                updateItem(itemId, { state: 'refused', detail: result.refusal.message, progress: '' });
                 return;
             case 'cancelled':
                 updateItem(itemId, { state: 'cancelled', detail: '中止しました。', progress: '' });
@@ -181,28 +180,22 @@ export const DrawingSetWorkspace: React.FC = () => {
         }
     };
 
-    /** Take queued files in, one at a time, for as long as this generation lasts. */
+    /** Take queued files in, one at a time, until the queue is empty or abandoned. */
     const pump = async (): Promise<void> => {
         if (pumpingRef.current) return;
         pumpingRef.current = true;
-        const generation = generationRef.current;
-        const controller = new AbortController();
-        controllerRef.current = controller;
+        const epoch = queueEpochRef.current;
         setBusy(true);
         try {
             for (;;) {
-                if (generation !== generationRef.current) return;
-                await intakeDoneRef.current;
-                if (generation !== generationRef.current) return;
+                if (epoch !== queueEpochRef.current) return;
                 const next = queueRef.current.shift();
                 if (!next) break;
                 updateItem(next.itemId, { state: 'processing', progress: '準備中' });
                 let lastProgress = 0;
-                const run = intakeSource(next.file, {
-                    signal: controller.signal,
-                    current: () => sessionRef.current!.drawingSet,
+                const result = await store.intake(next.file, {
                     onProgress: (progress) => {
-                        if (generation !== generationRef.current) return;
+                        if (epoch !== queueEpochRef.current) return;
                         const now = performance.now();
                         const done = (progress.phase === 'reading' && progress.bytesDone === progress.bytesTotal)
                             || (progress.phase === 'inventory' && progress.pagesDone === progress.pagesTotal);
@@ -211,23 +204,20 @@ export const DrawingSetWorkspace: React.FC = () => {
                         updateItem(next.itemId, { progress: progressLabel(progress) });
                     },
                 });
-                intakeDoneRef.current = run.then(() => { }, () => { });
-                const outcome = await run;
-                // A run that is no longer this workspace's publishes nothing.
-                if (generation !== generationRef.current || controller.signal.aborted) return;
-                settle(next.itemId, next.file, outcome);
+                // A run that is no longer this queue's shows nothing.
+                if (epoch !== queueEpochRef.current) return;
+                show(next.itemId, result);
             }
         } finally {
-            if (generation === generationRef.current) {
+            if (epoch === queueEpochRef.current) {
                 pumpingRef.current = false;
-                controllerRef.current = null;
                 setBusy(false);
             }
         }
     };
 
     const addFiles = (list: FileList | null): void => {
-        if (!list || list.length === 0 || !sessionRef.current) return;
+        if (!list || list.length === 0 || !sessionState.ok) return;
         const picked = Array.from(list);
         const added: IntakeItem[] = picked.map((file) => {
             itemCounterRef.current += 1;
@@ -248,9 +238,8 @@ export const DrawingSetWorkspace: React.FC = () => {
 
     /** Stop the file in progress and drop the queue. The Drawing Set is kept. */
     const stopProcessing = (): void => {
-        generationRef.current += 1;
-        controllerRef.current?.abort();
-        controllerRef.current = null;
+        queueEpochRef.current += 1;
+        store.stopIntake();
         queueRef.current = [];
         pumpingRef.current = false;
         setBusy(false);
@@ -263,11 +252,7 @@ export const DrawingSetWorkspace: React.FC = () => {
 
     const resetSession = (): void => {
         stopProcessing();
-        owner.close();
-        const next = startSession();
-        sessionRef.current = next.ok ? next.session : null;
-        setSessionState(next);
-        setFiles(new Map());
+        store.reset();
         setItems([]);
         setSelectedSheetId(null);
         setConfirm(null);
@@ -276,30 +261,19 @@ export const DrawingSetWorkspace: React.FC = () => {
     };
 
     const removeSource = (sourceId: string): void => {
-        const session = sessionRef.current;
         setConfirm(null);
-        if (!session) return;
-        let drawingSet;
-        try {
-            drawingSet = retireSource(session.drawingSet, sourceId);
-        } catch (error) {
-            setNotice(error instanceof IntakeStop && error.refusal ? error.refusal.message : 'ファイルを外せませんでした。');
+        const result = store.removeSource(sourceId);
+        if (!result.ok) {
+            setNotice(result.message);
             return;
         }
-        owner.closeIfSource(sourceId);
-        setFiles((current) => {
-            const next = new Map(current);
-            next.delete(sourceId);
-            return next;
-        });
-        publish({ ...session, drawingSet });
-        const removed = session.drawingSet.sources.find((source) => source.id === sourceId);
+        const drawingSet = store.currentSet();
         setSelectedSheetId((current) => {
             if (!current) return current;
             const sheet = drawingSet.sheets.find((candidate) => candidate.id === current);
             return sheet && isLive(sheet) ? current : drawingSet.sheets.find(isLive)?.id ?? null;
         });
-        setNotice(removed ? `「${removed.displayName}」をこの図面一式から外しました。` : null);
+        setNotice(result.removed ? `「${result.removed.displayName}」をこの図面一式から外しました。` : null);
     };
 
     const drawingSet = sessionState.ok ? sessionState.session.drawingSet : null;
@@ -311,7 +285,8 @@ export const DrawingSetWorkspace: React.FC = () => {
 
     const selectedSheet: Sheet | null = (selectedSheetId && sheetsById.get(selectedSheetId)) || null;
     const selectedSource: Source | null = selectedSheet ? sourcesById.get(selectedSheet.sourceId) ?? null : null;
-    const selectedFile = selectedSource ? files.get(selectedSource.id) ?? null : null;
+    const selectedFile = selectedSource ? store.heldFile(selectedSource.id) : null;
+    const gateCounts = store.gate.counts();
 
     const pending = items.filter((item) => item.state === 'queued' || item.state === 'processing').length;
     const current = items.find((item) => item.state === 'processing');
@@ -378,6 +353,10 @@ export const DrawingSetWorkspace: React.FC = () => {
             data-ds-state={busy ? 'busy' : 'idle'}
             data-ds-sources={sources.length}
             data-ds-sheets={sheets.length}
+            data-ds-gate-intakes-started={gateCounts.intakesStarted}
+            data-ds-gate-intakes-refused={gateCounts.intakesRefused}
+            data-ds-gate-extractions-started={gateCounts.extractionsStarted}
+            data-ds-gate-release-unconfirmed={String(store.gate.releaseUnconfirmed)}
         >
             {picker}
             <header className="ds-header">
@@ -461,12 +440,16 @@ export const DrawingSetWorkspace: React.FC = () => {
                         <section className="ds-sources" aria-label="ファイル一覧" data-ds-source-list>
                             <div className="ds-pane-title">ファイル（{sources.length}）</div>
                             <ul>
-                                {sources.map((source) => (
+                                {sources.map((source) => {
+                                    const binding = snapshot.bindings.get(source.id) ?? 'UNBOUND';
+                                    const label = BINDING_LABEL[binding];
+                                    return (
                                     <li
                                         key={source.id}
                                         className={`ds-source-row${selectedSource?.id === source.id ? ' is-selected' : ''}`}
                                         data-ds-source-row
                                         data-ds-source-id={source.id}
+                                        data-ds-binding={binding}
                                     >
                                         <button
                                             type="button"
@@ -478,7 +461,10 @@ export const DrawingSetWorkspace: React.FC = () => {
                                             }}
                                         >
                                             <span className="ds-source-name">{source.displayName}</span>
-                                            <span className="ds-muted">{source.fingerprint.pageCount} ページ</span>
+                                            <span className="ds-source-meta">
+                                                <span className="ds-muted">{source.fingerprint.pageCount} ページ</span>
+                                                <span className={`ds-binding is-${binding.toLowerCase()}`} title={label.title} data-ds-binding-label>{label.text}</span>
+                                            </span>
                                         </button>
                                         <button
                                             type="button"
@@ -491,7 +477,8 @@ export const DrawingSetWorkspace: React.FC = () => {
                                             <X size={14} />
                                         </button>
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         </section>
                         <div className="ds-pane-title">ページ一覧（{sheets.length}）</div>
@@ -503,6 +490,7 @@ export const DrawingSetWorkspace: React.FC = () => {
                             <ReadOnlySheetViewer
                                 key={selectedSource.id}
                                 owner={owner}
+                                open={store.openPreview}
                                 source={selectedSource}
                                 file={selectedFile}
                                 sheet={selectedSheet}

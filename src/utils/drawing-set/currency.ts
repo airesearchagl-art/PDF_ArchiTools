@@ -23,40 +23,71 @@
  * in the app STALE_SOURCE only arises from a state built for a test; the rule
  * is still the contract's and is derived the same way.
  */
-import type { DrawingSet, ProfileBasis, Sha256Hex, Sheet, Uuid } from './model';
+import type { FileDigest } from './file-evidence';
+import { evidenceTick, readFileDigest, spendFileDigest } from './file-evidence';
+import { IntakeStop } from './intake-policy';
+import type { DrawingSet, ProfileBasis, Sha256Hex, Sheet, Source, Uuid } from './model';
 import { isLive } from './model';
 
 /** What this session knows about the File behind a Source. Runtime only; never stored. */
 export type SourceBinding = 'MATCHED' | 'CHANGED' | 'MISSING';
+/**
+ * The bindings of a session's live Sources, for display. A snapshot: nothing
+ * that decides anything takes one (currency and confirmation ask the ledger
+ * itself, when they are asked), so a Map made by hand vouches for nothing.
+ */
 export type RuntimeBindings = ReadonlyMap<Uuid, SourceBinding>;
 
+/** Why a check took no digest of a File. */
+export type NotReadReason =
+    /** No File was held for the Source. */
+    | 'NO_FILE'
+    /** The File's size is not the fingerprint's; nothing of it was read. */
+    | 'SIZE_DIFFERS'
+    /** The File changed while it was being read. */
+    | 'CHANGED_WHILE_READ'
+    /** The File could not be read. */
+    | 'UNREADABLE';
+
 /**
- * What one check of one Source's File found. `file` is the File that was
- * read -- null when there was none to read -- and `sha256` the fingerprint
- * its bytes were compared with. MATCHED only when the SHA-256 of exactly those
- * bytes equalled it; CHANGED when they did not; MISSING when the File could
- * not be had or read.
+ * What one check of one Source's File found: the digest of a read of it
+ * (file-evidence.ts), or why there is none. The verdict is the ledger's to
+ * draw, not the checker's to state: a digest is MATCHED only if what it
+ * attests equals the Source's fingerprint; it is CHANGED otherwise. A check
+ * that read nothing can only lower what is known: NO_FILE and UNREADABLE are
+ * MISSING, SIZE_DIFFERS and CHANGED_WHILE_READ are CHANGED.
  */
-export interface SourceFileCheck {
-    file: Blob | null;
-    sha256: Sha256Hex;
-    binding: SourceBinding;
-}
+export type SourceFileCheck =
+    | { kind: 'READ'; digest: FileDigest }
+    | { kind: 'NOT_READ'; file: Blob | null; reason: NotReadReason };
+
+const NOT_READ_BINDING: Record<NotReadReason, 'CHANGED' | 'MISSING'> = {
+    NO_FILE: 'MISSING',
+    UNREADABLE: 'MISSING',
+    SIZE_DIFFERS: 'CHANGED',
+    CHANGED_WHILE_READ: 'CHANGED',
+};
 
 /** Why a check's result about one Source was not taken. */
 export type BindingRefusal =
-    /** The check, or the Drawing Set it was settled against, belongs to another session. */
+    /** The check, the Drawing Set it was settled against, or the read behind it, belongs to another session. */
     | 'SESSION_REPLACED'
     /** The Source is retired, or not in the Drawing Set. */
     | 'SOURCE_NOT_LIVE'
     /** The result is about a File this check did not hand out for that Source. */
     | 'NOT_HANDED_OUT'
+    /** The result is not evidence: a digest this session's reads did not issue, or a claim that contradicts the File. */
+    | 'NOT_VERIFIED'
     /** Another File was presented for the Source (or it was withdrawn) after this check took its own. */
     | 'FILE_REPLACED'
     /** A later check of the same File has already been taken. */
     | 'SUPERSEDED'
-    /** The bytes were compared with a fingerprint that is not the Source's now. */
-    | 'FINGERPRINT_DIFFERS';
+    /** The check was handed its File against a fingerprint that is not the Source's now. */
+    | 'FINGERPRINT_DIFFERS'
+    /** The digest was offered before: one read vouches once. */
+    | 'EVIDENCE_SPENT'
+    /** The read began before the File was handed out to this check. */
+    | 'EVIDENCE_OUTDATED';
 export type BindingSettlement = 'APPLIED' | BindingRefusal;
 
 /** Hands a checker the File held for a Source, and notes which one it was and when. */
@@ -64,22 +95,62 @@ export interface BindingCheck {
     fileFor(sourceId: Uuid): Blob | null;
 }
 
+/** The latest result taken for one presentation of a File. */
+type Finding =
+    | { kind: 'READ'; sha256: Sha256Hex; byteLength: number; against: Sha256Hex; checkedAt: number }
+    | { kind: 'NOT_READ'; binding: 'CHANGED' | 'MISSING'; against: Sha256Hex; checkedAt: number };
+
 interface Held {
     file: Blob | null;
-    /** Which presentation of a File this is; every present() starts a new one. 0: none yet. */
-    presentation: number;
-    /** What the latest check taken for this presentation found; null: none taken yet. */
-    binding: SourceBinding | null;
-    /** The fingerprint that check compared with. */
-    sha256: Sha256Hex | null;
-    /** The order of that check (see `sequence`). */
-    checkedAt: number;
+    /** evidenceTick() of this presentation; 0: none yet. */
+    presentedAt: number;
+    finding: Finding | null;
 }
 
 interface HandedOut {
     file: Blob | null;
-    presentation: number;
+    presentedAt: number;
+    /** evidenceTick() of the hand-out. */
     order: number;
+    /** The Source's fingerprint in the set the check was begun against. */
+    expected: { sha256: Sha256Hex; byteLength: number } | null;
+}
+
+interface LedgerState {
+    sessionId: Uuid;
+    held: Map<Uuid, Held>;
+    checks: WeakMap<BindingCheck, Map<Uuid, HandedOut> | null>;
+}
+
+/**
+ * Each ledger's state, reachable only from this module. A ledger is genuine
+ * when it is in here: one made with Object.create, or any other object shaped
+ * like a ledger, is not, and vouches for nothing.
+ */
+const states = new WeakMap<object, LedgerState>();
+
+function stateOf(ledger: unknown): LedgerState | null {
+    return ledger !== null && typeof ledger === 'object' ? states.get(ledger) ?? null : null;
+}
+
+function requireState(ledger: RuntimeBindingLedger): LedgerState {
+    const state = stateOf(ledger);
+    if (!state) throw new TypeError('not a RuntimeBindingLedger');
+    return state;
+}
+
+const liveSource = (set: DrawingSet, sourceId: Uuid): Source | null => {
+    const source = set.sources.find((s) => s.id === sourceId);
+    return source && isLive(source) ? source : null;
+};
+
+/** What a finding says about a Source as it is now; UNBOUND when it says nothing about these bytes. */
+function bindingFrom(finding: Finding | null, source: Source): SourceBinding | 'UNBOUND' {
+    if (!finding) return 'UNBOUND';
+    if (finding.kind === 'NOT_READ' && finding.binding === 'MISSING') return 'MISSING';
+    if (finding.against !== source.fingerprint.sha256) return 'UNBOUND';
+    if (finding.kind === 'NOT_READ') return finding.binding;
+    return finding.sha256 === source.fingerprint.sha256 && finding.byteLength === source.fingerprint.byteLength ? 'MATCHED' : 'CHANGED';
 }
 
 /**
@@ -87,35 +158,51 @@ interface HandedOut {
  * for each Source and what the latest check of it found. Never stored.
  *
  *  - A binding comes only from a check of the File, and MATCHED only from
- *    SHA-256 equality. Presenting a File binds nothing by itself: until a
+ *    SHA-256 equality, shown by a digest of a read of that very File
+ *    (file-evidence.ts). Presenting a File binds nothing by itself: until a
  *    check of it is taken the Source stays UNBOUND, whatever its name or
  *    size, and nothing found about an earlier File carries over to it.
+ *  - A verdict is never taken on anyone's word. A check reports what it read
+ *    -- a digest -- or why it read nothing, and the ledger draws the verdict
+ *    from what the digest's registry recorded, against the Source's
+ *    fingerprint. A digest is about the one File object it was read from, for
+ *    one session, from one moment; it is taken once.
  *  - Nothing sticks. Each check taken replaces what the one before found, so
  *    the same Source -- not a new one -- goes from MISSING or CHANGED back to
  *    MATCHED once a File holding its bytes is checked again, and from
  *    MATCHED to CHANGED or MISSING when the File held stops holding them.
  *  - A result is taken only while it is still about what is held: this
  *    session's check, a live Source, the very File handed out for it and not
- *    since replaced, no later check of that File already taken, and -- for
- *    MATCHED or CHANGED -- compared with the Source's fingerprint now. Any
- *    other result is refused, never merged, so a report that arrives late
- *    cannot undo a newer one.
+ *    since replaced, no later check of that File already taken, handed out
+ *    against the Source's fingerprint now, and a read that began after the
+ *    hand-out. Any other result is refused, never merged, so a report that
+ *    arrives late cannot undo a newer one.
  *  - Each Source stands alone: nothing done for one touches another.
+ *
+ * Intake reads every byte of a File to fingerprint it, so it does not read
+ * them again: presentVerified() presents the File intake read together with
+ * the digest of that read, and binds it only when the digest equals the
+ * Source's fingerprint.
  *
  * It never accepts changed bytes as a Source's content and never chooses
  * between candidate files: that is rebinding (M7-P4).
+ *
+ * What decides -- currency and confirmation -- asks the ledger itself, through
+ * verifiedBinding(), at the moment it decides. bindings() is a snapshot for
+ * display and decides nothing.
  */
 export class RuntimeBindingLedger {
-    private readonly held = new Map<Uuid, Held>();
-    private readonly checks = new WeakMap<BindingCheck, Map<Uuid, HandedOut>>();
-    /** One counter for presentations and checks, so their order can be compared. */
-    private sequence = 0;
-
-    /** The Drawing Set this session holds; a check or a set of any other is refused. */
-    readonly sessionId: Uuid;
+    /** Makes the type nominal: an object of the same shape is not a ledger, for the compiler either. */
+    readonly #sessionId: Uuid;
 
     constructor(sessionId: Uuid) {
-        this.sessionId = sessionId;
+        this.#sessionId = sessionId;
+        states.set(this, { sessionId, held: new Map(), checks: new WeakMap() });
+    }
+
+    /** The Drawing Set this session holds; a check or a set of any other is refused. */
+    get sessionId(): Uuid {
+        return this.#sessionId;
     }
 
     /**
@@ -123,76 +210,198 @@ export class RuntimeBindingLedger {
      * is UNBOUND until a check of this File is taken.
      */
     present(set: DrawingSet, sourceId: Uuid, file: Blob | null): BindingSettlement {
-        if (set.id !== this.sessionId) return 'SESSION_REPLACED';
-        const source = set.sources.find((s) => s.id === sourceId);
-        if (!source || !isLive(source)) return 'SOURCE_NOT_LIVE';
-        this.sequence += 1;
-        this.held.set(sourceId, { file, presentation: this.sequence, binding: null, sha256: null, checkedAt: 0 });
+        const state = requireState(this);
+        if (set.id !== state.sessionId) return 'SESSION_REPLACED';
+        if (!liveSource(set, sourceId)) return 'SOURCE_NOT_LIVE';
+        state.held.set(sourceId, { file, presentedAt: evidenceTick(), finding: null });
+        return 'APPLIED';
+    }
+
+    /**
+     * Present the File a read found, with the digest of that read: what intake
+     * does once it has fingerprinted a File and found it is a Source's bytes.
+     * Bound MATCHED only when the digest equals the Source's fingerprint;
+     * otherwise refused, and nothing is presented -- changed bytes never
+     * become a Source's File this way.
+     */
+    presentVerified(set: DrawingSet, sourceId: Uuid, digest: FileDigest): BindingSettlement {
+        const state = requireState(this);
+        const spent = spendFileDigest(digest);
+        if (set.id !== state.sessionId) return 'SESSION_REPLACED';
+        const source = liveSource(set, sourceId);
+        if (!source) return 'SOURCE_NOT_LIVE';
+        if (!spent) return 'NOT_VERIFIED';
+        const { record, alreadySpent } = spent;
+        if (record.scope !== state.sessionId) return 'SESSION_REPLACED';
+        const held = state.held.get(sourceId);
+        if (held && held.presentedAt >= record.readStartedAt) return 'FILE_REPLACED';
+        if (record.sha256 !== source.fingerprint.sha256 || record.byteLength !== source.fingerprint.byteLength) return 'FINGERPRINT_DIFFERS';
+        if (alreadySpent) return 'EVIDENCE_SPENT';
+        const at = evidenceTick();
+        state.held.set(sourceId, {
+            file: record.file,
+            presentedAt: at,
+            finding: { kind: 'READ', sha256: record.sha256, byteLength: record.byteLength, against: source.fingerprint.sha256, checkedAt: at },
+        });
         return 'APPLIED';
     }
 
     /** The File held for a Source, without checking anything. */
     heldFile(sourceId: Uuid): Blob | null {
-        return this.held.get(sourceId)?.file ?? null;
+        return requireState(this).held.get(sourceId)?.file ?? null;
     }
 
-    /** Begin one check; its `fileFor` is what the checker reads Files through. */
-    beginCheck(): BindingCheck {
-        const handedOut = new Map<Uuid, HandedOut>();
-        const check: BindingCheck = {
-            fileFor: (sourceId) => {
-                const held = this.held.get(sourceId);
-                this.sequence += 1;
+    /**
+     * Begin one check against the Drawing Set as it is now; its `fileFor` is
+     * what the checker reads Files through. A check begun against another
+     * session's set hands out nothing.
+     */
+    beginCheck(set: DrawingSet): BindingCheck {
+        const state = requireState(this);
+        const handedOut = set.id === state.sessionId ? new Map<Uuid, HandedOut>() : null;
+        const check: BindingCheck = Object.freeze({
+            fileFor: (sourceId: Uuid): Blob | null => {
+                if (!handedOut) return null;
+                const held = state.held.get(sourceId);
+                const source = liveSource(set, sourceId);
                 const file = held?.file ?? null;
-                handedOut.set(sourceId, { file, presentation: held?.presentation ?? 0, order: this.sequence });
+                handedOut.set(sourceId, {
+                    file,
+                    presentedAt: held?.presentedAt ?? 0,
+                    order: evidenceTick(),
+                    expected: source ? { sha256: source.fingerprint.sha256, byteLength: source.fingerprint.byteLength } : null,
+                });
                 return file;
             },
-        };
-        this.checks.set(check, handedOut);
+        });
+        state.checks.set(check, handedOut);
         return check;
     }
 
     /** Take what a check found, Source by Source; each result is taken or refused on its own. */
     settle(set: DrawingSet, check: BindingCheck, results: ReadonlyMap<Uuid, SourceFileCheck>): Map<Uuid, BindingSettlement> {
-        const handedOut = this.checks.get(check);
+        const state = requireState(this);
+        const handedOut = state.checks.get(check) ?? null;
         const settled = new Map<Uuid, BindingSettlement>();
-        for (const [sourceId, result] of results) settled.set(sourceId, this.take(set, handedOut, sourceId, result));
+        for (const [sourceId, result] of results) settled.set(sourceId, take(state, set, handedOut, sourceId, result));
         return settled;
     }
 
-    private take(set: DrawingSet, handedOut: Map<Uuid, HandedOut> | undefined, sourceId: Uuid, result: SourceFileCheck): BindingSettlement {
-        if (!handedOut || set.id !== this.sessionId) return 'SESSION_REPLACED';
-        const source = set.sources.find((s) => s.id === sourceId);
-        if (!source || !isLive(source)) return 'SOURCE_NOT_LIVE';
-        const taken = handedOut.get(sourceId);
-        if (!taken || taken.file !== result.file || (result.file === null && result.binding !== 'MISSING')) return 'NOT_HANDED_OUT';
-        const held = this.held.get(sourceId);
-        if ((held?.presentation ?? 0) !== taken.presentation) return 'FILE_REPLACED';
-        if (held && taken.order <= held.checkedAt) return 'SUPERSEDED';
-        if (result.binding !== 'MISSING' && result.sha256 !== source.fingerprint.sha256) return 'FINGERPRINT_DIFFERS';
-        this.held.set(sourceId, {
-            file: taken.file, presentation: taken.presentation, binding: result.binding, sha256: result.sha256, checkedAt: taken.order,
-        });
-        return 'APPLIED';
+    /** Let go of the Files held for Sources that are no longer live. */
+    releaseRetired(set: DrawingSet): void {
+        const state = requireState(this);
+        if (set.id !== state.sessionId) return;
+        for (const sourceId of [...state.held.keys()]) {
+            if (!liveSource(set, sourceId)) state.held.delete(sourceId);
+        }
     }
 
     /**
-     * What this session knows now about the live Sources of the set. A Source
-     * with no check taken is absent (UNBOUND), and so is one whose MATCHED or
-     * CHANGED was found against a fingerprint it no longer has: that check
-     * says nothing about the bytes it is to hold now.
+     * What this session knows now about the live Sources of the set, for
+     * display. A Source with no check taken is absent (UNBOUND), and so is
+     * one whose MATCHED or CHANGED was found against a fingerprint it no
+     * longer has: that check says nothing about the bytes it is to hold now.
      */
     bindings(set: DrawingSet): RuntimeBindings {
+        const state = requireState(this);
         const bindings = new Map<Uuid, SourceBinding>();
-        if (set.id !== this.sessionId) return bindings;
+        if (set.id !== state.sessionId) return bindings;
         for (const source of set.sources) {
-            const held = isLive(source) ? this.held.get(source.id) : undefined;
-            if (!held?.binding) continue;
-            if (held.binding !== 'MISSING' && held.sha256 !== source.fingerprint.sha256) continue;
-            bindings.set(source.id, held.binding);
+            if (!isLive(source)) continue;
+            const binding = bindingFrom(state.held.get(source.id)?.finding ?? null, source);
+            if (binding !== 'UNBOUND') bindings.set(source.id, binding);
         }
         return bindings;
     }
+}
+
+function take(state: LedgerState, set: DrawingSet, handedOut: Map<Uuid, HandedOut> | null, sourceId: Uuid, result: SourceFileCheck): BindingSettlement {
+    // A digest is spent the first time it is offered, whatever the answer.
+    const isRead = result !== null && typeof result === 'object' && result.kind === 'READ';
+    const spent = isRead ? spendFileDigest((result as { digest?: unknown }).digest) : null;
+    if (!handedOut || set.id !== state.sessionId) return 'SESSION_REPLACED';
+    const source = liveSource(set, sourceId);
+    if (!source) return 'SOURCE_NOT_LIVE';
+    const taken = handedOut.get(sourceId);
+    if (!taken) return 'NOT_HANDED_OUT';
+
+    let finding: Finding;
+    if (isRead) {
+        if (!spent) return 'NOT_VERIFIED';
+        if (spent.record.scope !== state.sessionId) return 'SESSION_REPLACED';
+        if (taken.file === null || spent.record.file !== taken.file) return 'NOT_HANDED_OUT';
+        finding = { kind: 'READ', sha256: spent.record.sha256, byteLength: spent.record.byteLength, against: source.fingerprint.sha256, checkedAt: taken.order };
+    } else if (result !== null && typeof result === 'object' && result.kind === 'NOT_READ' && Object.hasOwn(NOT_READ_BINDING, result.reason)) {
+        if (result.file !== taken.file || (result.reason === 'NO_FILE') !== (taken.file === null)) return 'NOT_HANDED_OUT';
+        // A size difference is a fact anyone can see; one that is not there is not taken.
+        if (result.reason === 'SIZE_DIFFERS' && taken.file !== null && taken.expected !== null && taken.file.size === taken.expected.byteLength) return 'NOT_VERIFIED';
+        finding = { kind: 'NOT_READ', binding: NOT_READ_BINDING[result.reason], against: source.fingerprint.sha256, checkedAt: taken.order };
+    } else {
+        return 'NOT_VERIFIED';
+    }
+
+    const held = state.held.get(sourceId);
+    if ((held?.presentedAt ?? 0) !== taken.presentedAt) return 'FILE_REPLACED';
+    if (held?.finding && taken.order <= held.finding.checkedAt) return 'SUPERSEDED';
+    const aboutBytes = finding.kind === 'READ' || finding.binding === 'CHANGED';
+    if (aboutBytes && (taken.expected === null || taken.expected.sha256 !== source.fingerprint.sha256 || taken.expected.byteLength !== source.fingerprint.byteLength)) {
+        return 'FINGERPRINT_DIFFERS';
+    }
+    if (spent) {
+        if (spent.alreadySpent) return 'EVIDENCE_SPENT';
+        if (spent.record.readStartedAt <= taken.order) return 'EVIDENCE_OUTDATED';
+    }
+    state.held.set(sourceId, { file: taken.file, presentedAt: taken.presentedAt, finding });
+    return 'APPLIED';
+}
+
+/**
+ * What the ledger knows about one Source's File now, against the Drawing Set
+ * as it is now. This is what currency and confirmation decide by. Anything
+ * that is not a genuine ledger of this session -- a Map, an object shaped
+ * like a ledger, one built with Object.create, another session's -- knows
+ * nothing: UNBOUND.
+ */
+export function verifiedBinding(ledger: RuntimeBindingLedger, set: DrawingSet, sourceId: Uuid): SourceBinding | 'UNBOUND' {
+    const state = stateOf(ledger);
+    if (!state || set.id !== state.sessionId) return 'UNBOUND';
+    const source = liveSource(set, sourceId);
+    if (!source) return 'UNBOUND';
+    return bindingFrom(state.held.get(sourceId)?.finding ?? null, source);
+}
+
+/**
+ * Check the File held for one Source now: the verification-only path. Reads
+ * the File through the fingerprint Worker (without keeping its bytes) and
+ * settles what it found into the ledger. CANCELLED: the signal aborted, and
+ * nothing was settled.
+ */
+export async function verifyHeldFile(
+    ledger: RuntimeBindingLedger,
+    current: () => DrawingSet,
+    sourceId: Uuid,
+    options: { signal?: AbortSignal; chunkBytes?: number } = {},
+): Promise<BindingSettlement | 'CANCELLED'> {
+    const set = current();
+    const check = ledger.beginCheck(set);
+    const file = check.fileFor(sourceId);
+    const source = liveSource(set, sourceId);
+    if (!source) return 'SOURCE_NOT_LIVE';
+    const signal = options.signal ?? new AbortController().signal;
+    let result: SourceFileCheck;
+    if (!file) {
+        result = { kind: 'NOT_READ', file: null, reason: 'NO_FILE' };
+    } else if (file.size !== source.fingerprint.byteLength) {
+        result = { kind: 'NOT_READ', file, reason: 'SIZE_DIFFERS' };
+    } else {
+        try {
+            result = { kind: 'READ', digest: await readFileDigest(file, null, { signal, chunkBytes: options.chunkBytes, scope: set.id }) };
+        } catch (error) {
+            if (signal.aborted || (error instanceof IntakeStop && error.refusal === null)) return 'CANCELLED';
+            result = { kind: 'NOT_READ', file, reason: error instanceof IntakeStop && error.refusal?.code === 'FILE_CHANGED' ? 'CHANGED_WHILE_READ' : 'UNREADABLE' };
+        }
+    }
+    return ledger.settle(current(), check, new Map([[sourceId, result]])).get(sourceId) ?? 'NOT_HANDED_OUT';
 }
 
 export type StaleReason = 'STALE_SOURCE' | 'STALE_PROFILE';
@@ -215,9 +424,9 @@ export function currencyLabel(currency: RecordCurrency): 'NONE' | 'CURRENT' | 'U
 }
 
 function currencyOf(
-    set: DrawingSet, sheet: Sheet, record: { sourceSha256: Sha256Hex; profile: ProfileBasis | null } | null, bindings: RuntimeBindings,
+    set: DrawingSet, sheet: Sheet, record: { sourceSha256: Sha256Hex; profile: ProfileBasis | null } | null, ledger: RuntimeBindingLedger,
 ): RecordCurrency {
-    const binding = bindings.get(sheet.sourceId) ?? 'UNBOUND';
+    const binding = verifiedBinding(ledger, set, sheet.sourceId);
     if (!record) return { state: 'NONE', staleReasons: [], binding };
     const staleReasons: StaleReason[] = [];
     const source = set.sources.find((s) => s.id === sheet.sourceId);
@@ -235,10 +444,10 @@ function currencyOf(
     return { state: 'CURRENT', staleReasons, binding };
 }
 
-/** Whether a Sheet's observation still stands. */
-export const observationCurrency = (set: DrawingSet, sheet: Sheet, bindings: RuntimeBindings): RecordCurrency =>
-    currencyOf(set, sheet, sheet.observation, bindings);
+/** Whether a Sheet's observation still stands, as the ledger knows its Source's File now. */
+export const observationCurrency = (set: DrawingSet, sheet: Sheet, ledger: RuntimeBindingLedger): RecordCurrency =>
+    currencyOf(set, sheet, sheet.observation, ledger);
 
-/** Whether a Sheet's confirmation still stands. */
-export const confirmationCurrency = (set: DrawingSet, sheet: Sheet, bindings: RuntimeBindings): RecordCurrency =>
-    currencyOf(set, sheet, sheet.confirmation, bindings);
+/** Whether a Sheet's confirmation still stands, as the ledger knows its Source's File now. */
+export const confirmationCurrency = (set: DrawingSet, sheet: Sheet, ledger: RuntimeBindingLedger): RecordCurrency =>
+    currencyOf(set, sheet, sheet.confirmation, ledger);

@@ -97,10 +97,12 @@ export async function runP2aChecks(ctx) {
         || crypto.createHash('sha256').update(fs.readFileSync(path.join(assetDir, rel))).digest('hex') !== lock.files[rel]);
     check('every byte equal to pdfjs-dist, every SHA-256 as recorded', differing.length === 0, differing.slice(0, 5).join(','));
     const src = (rel) => fs.readFileSync(path.join(ROOT, 'src', rel), 'utf8');
-    check('P2-A wires the data files into the extraction document only (P1 intake and preview unchanged)',
-        src('utils/drawing-set/pdf-document-gate.ts').includes('m7PdfDocumentAssets()')
-        && !/cMapUrl|m7PdfDocumentAssets/.test(src('utils/drawing-set/source-intake.ts'))
-        && !/cMapUrl|m7PdfDocumentAssets/.test(src('utils/drawing-set/preview-document.ts')));
+    // Changed by M7-P2-B1 (HD-B-04): P2-A wired the data files into the
+    // extraction document only; the intake and preview documents now open
+    // with the same ones, so all three read a page the same way.
+    check('the intake, preview and extraction documents all open with the same data files, and none with a URL of its own',
+        ['utils/drawing-set/pdf-document-gate.ts', 'utils/drawing-set/source-intake.ts', 'utils/drawing-set/preview-document.ts']
+            .every((f) => src(f).includes('...m7PdfDocumentAssets()') && !/cMapUrl|standardFontDataUrl|wasmUrl/.test(src(f))));
 
     // ------------------------------------------------------------------
     section('15. Field bounds: recorded exactly or not at all');
@@ -301,7 +303,7 @@ export async function runP2aChecks(ctx) {
     check('another profile, no profile, a retired profile: STALE_PROFILE', ['p3Reassigned', 'p3Unassigned', 'p3ProfileRetired'].every((k) => m[k].observation === 'STALE_PROFILE'));
     check('retiring the profile keeps the observation and the confirmation; a typed confirmation stays CURRENT',
         m.retiredKeeps.observation && m.retiredKeeps.confirmation && m.p6ProfileRetired.confirmation === 'CURRENT');
-    check('a binding is what the latest check of the File held found: presenting binds nothing, and none of MATCHED, CHANGED, MISSING sticks (semantic contract §B)',
+    check('a binding is what the latest real check of the File held found -- its bytes changed, restored, unreadable, readable again: presenting binds nothing, and none of MATCHED, CHANGED, MISSING sticks (semantic contract §B)',
         JSON.stringify(m.transitions) === JSON.stringify(['present:APPLIED=UNBOUND', 'MATCHED:APPLIED=MATCHED', 'CHANGED:APPLIED=CHANGED', 'MATCHED:APPLIED=MATCHED', 'MISSING:APPLIED=MISSING', 'MATCHED:APPLIED=MATCHED']),
         JSON.stringify(m.transitions));
     session('register, profile retired', r.retiredSession);
@@ -378,10 +380,23 @@ export async function runP2aChecks(ctx) {
         bd.steps.filter((s) => s.kind === 'present').length === 16
         && bd.steps.filter((s) => s.kind === 'present').every((s) => s.settled.R === 'APPLIED' && s.R === 'UNBOUND' && s.confirmR2 === 'SOURCE_NOT_MATCHED'));
     const f = bd.forged;
-    check('only a check of the File handed out, against the Source\'s fingerprint, makes MATCHED: a File never handed out, another File with the same bytes, another Source\'s fingerprint, an earlier MATCHED replayed -- refused; R stays UNBOUND, no confirmation of either kind',
-        f.neverHandedOut === 'NOT_HANDED_OUT' && f.anotherFileSameBytes === 'NOT_HANDED_OUT' && f.anotherSourcesFingerprint === 'FINGERPRINT_DIFFERS'
-        && f.earlierMatchReplayed === 'FILE_REPLACED' && f.after === 'UNBOUND' && f.confirmAfter === 'SOURCE_NOT_MATCHED' && f.confirmManualAfter === 'SOURCE_NOT_MATCHED', JSON.stringify(f));
-    check('UNBOUND does not become MATCHED by itself: a Source no File was presented for is checked MISSING, and a MATCHED with no File read is refused',
+    // ADV-37-04 (M7-P2-B1): the ledger takes no verdict on anyone's word.
+    probe('evidence made by hand is not evidence: a digest-shaped object, a frozen look-alike, a copy of a real digest\'s fields, the old {binding: MATCHED} claim, an unknown reason, a size difference that is not there -- NOT_VERIFIED',
+        [f.handMadeDigest, f.frozenLookalike, f.copiedDigest, f.legacyVerdict, f.unknownReason, f.falseSizeClaim].every((x) => x === 'NOT_VERIFIED'), JSON.stringify(f));
+    probe('a real read about something else is not taken: no File handed out, another File object with the same bytes, another Source\'s File -- NOT_HANDED_OUT; another session\'s read -- SESSION_REPLACED; a read begun before the hand-out -- EVIDENCE_OUTDATED',
+        f.neverHandedOut === 'NOT_HANDED_OUT' && f.anotherFileSameBytes === 'NOT_HANDED_OUT' && f.anotherSourcesFile === 'NOT_HANDED_OUT'
+        && f.anotherSessionsRead === 'SESSION_REPLACED' && f.readBeforeHandOut === 'EVIDENCE_OUTDATED', JSON.stringify(f));
+    probe('one read vouches once: taken by the first check, EVIDENCE_SPENT for the next; an earlier MATCHED replayed after a new presentation -- FILE_REPLACED',
+        f.firstUse === 'APPLIED' && f.secondUse === 'EVIDENCE_SPENT' && f.earlierMatchReplayed === 'FILE_REPLACED');
+    check('after all of it R stays UNBOUND: no confirmation of either kind', f.after === 'UNBOUND' && f.confirmAfter === 'SOURCE_NOT_MATCHED' && f.confirmManualAfter === 'SOURCE_NOT_MATCHED');
+    const casts = ['map', 'lookalike', 'prototypeOnly', 'boastful', 'otherSession'];
+    probe('confirmation asks the session\'s ledger, nothing handed in: a Map saying MATCHED, a ledger-shaped object, a ledger made with Object.create, a subclass whose bindings() says MATCHED, another session\'s ledger -- every confirmation refused, even for G, whose File is MATCHED',
+        casts.every((k) => f.confirmWith[k].observation === 'SOURCE_NOT_MATCHED' && f.confirmWith[k].manual === 'SOURCE_NOT_MATCHED' && f.confirmWith[k].gObservation === 'SOURCE_NOT_MATCHED')
+        && f.boastfulSaysMatched === 'MATCHED' && f.gStillConfirmable === 'CONFIRMED', JSON.stringify(f.confirmWith));
+    probe('currency asks the ledger too: with any of those, no reading is CURRENT (UNVERIFIED), G\'s included',
+        casts.every((k) => f.currencyWith[k].r2 === 'UNVERIFIED' && f.currencyWith[k].g === 'UNVERIFIED'), JSON.stringify(f.currencyWith));
+    probe('a ledger method called on a look-alike throws (TypeError) rather than act', f.foreignMethodCall === 'TypeError', f.foreignMethodCall);
+    check('UNBOUND does not become MATCHED by itself: a Source no File was presented for is checked MISSING, and a real digest offered with no File handed out is refused',
         f.neverPresented === 0 && f.neverPresentedCheck?.R === 'APPLIED' && f.neverPresentedAfter === 'MISSING' && f.neverPresentedForged === 'NOT_HANDED_OUT');
     check('regained on the same Source: no Source added or replaced, the same ID throughout; page 2 keeps its first reading', bd.sourcesSame && bd.sourceCount === 2 && bd.r2KeptFirstRead);
     check('Source by Source: G stays MATCHED, its reading CURRENT and confirmable, through every step R goes through; one run settles G and R each on its own',
@@ -431,9 +446,11 @@ export async function runP2aChecks(ctx) {
     const cm = truth('p2a-cmap');
     const cx = await call('cmap', cm);
     const sum = (o) => Object.values(o).reduce((s, n) => s + n, 0);
-    check('today (P1 intake, no data files): C1 and C2 count as having no text', JSON.stringify(cx.before.p1IntakeKinds) === '["scanned","scanned","text-native","text-native"]'
-        && JSON.stringify(cx.before.kinds) === JSON.stringify(cx.before.p1IntakeKinds));
-    check('with them every page has its text (what P2-B will give intake)', JSON.stringify(cx.after.kinds) === '["text-native","text-native","text-native","text-native"]');
+    // Changed by M7-P2-B1 (HD-B-04): before, P1's intake opened without the data
+    // files and called C1 and C2 scanned; it now opens with them.
+    check('before (opened as P1 intake opened it until M7-P2-B, no data files): C1 and C2 count as having no text', JSON.stringify(cx.before.kinds) === '["scanned","scanned","text-native","text-native"]');
+    check('after: Production intake now records every page as having its text, exactly as the data files read it', JSON.stringify(cx.after.kinds) === '["text-native","text-native","text-native","text-native"]'
+        && JSON.stringify(cx.after.p1IntakeKinds) === JSON.stringify(cx.after.kinds));
     check('C1 (non-embedded CID font, UniJIS-UCS2-H, no ToUnicode): nothing drawn and nothing read before; exact native text after',
         sum(cx.before.pixels[0]) === 0 && FIELDS.every((f) => cx.after.values[0][f].value === cm.pages[0].values[f] && cx.after.values[0][f].source === 'native')
         && FIELDS.every((f) => cx.before.values[0][f].value !== cm.pages[0].values[f]));

@@ -192,19 +192,21 @@ export interface FingerprintIntoBufferOptions {
 /**
  * Read `file` into `target` chunk by chunk and fingerprint exactly those bytes.
  *
- * `target` must be exactly `file.size` long. Throws `IntakeStop`: with a
- * refusal when the file cannot be read, changes while being read, or cannot be
- * fingerprinted; with no refusal when `signal` aborts.
+ * `target` must be exactly `file.size` long, or null to fingerprint the file
+ * without keeping its bytes (a check that opens nothing needs no full-size
+ * buffer). Throws `IntakeStop`: with a refusal when the file cannot be read,
+ * changes while being read, or cannot be fingerprinted; with no refusal when
+ * `signal` aborts.
  */
 export async function fingerprintIntoBuffer(
     file: Blob,
-    target: Uint8Array,
+    target: Uint8Array | null,
     options: FingerprintIntoBufferOptions,
 ): Promise<string> {
     const { signal } = options;
     const chunkBytes = Math.max(1, Math.floor(options.chunkBytes ?? READ_CHUNK_BYTES));
     const size = file.size;
-    if (target.length !== size) throw new IntakeStop(refusal('FILE_READ_FAILED', 'ファイルを読み込めませんでした。'));
+    if (target !== null && target.length !== size) throw new IntakeStop(refusal('FILE_READ_FAILED', 'ファイルを読み込めませんでした。'));
     if (signal.aborted) throw cancelledStop();
 
     const run = startFingerprintRun();
@@ -235,7 +237,7 @@ export async function fingerprintIntoBuffer(
             if (chunk.byteLength !== endOffset - offset) {
                 throw new IntakeStop(refusal('FILE_CHANGED', '読み込み中にファイルの大きさが変わったため、読み込めません。'));
             }
-            target.set(new Uint8Array(chunk), offset);
+            target?.set(new Uint8Array(chunk), offset);
             if (inFlight) await inFlight;
             if (signal.aborted) throw cancelledStop();
             inFlight = run.push(chunk);

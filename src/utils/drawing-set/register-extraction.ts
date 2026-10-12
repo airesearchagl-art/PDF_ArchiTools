@@ -34,10 +34,10 @@ import { extractRegister } from '../pdf-textifier/drawing-register-extract';
 import { RegisterOcrEngine } from '../pdf-textifier/drawing-register-ocr';
 import type { RegisterExtractionResult, TemplateProfile } from '../pdf-textifier/drawing-register-types';
 import { REGISTER_EXTRACTION_ENGINE, hasRoomForRun, manifestDigest } from './analysis-run';
-import type { SourceBinding, SourceFileCheck } from './currency';
+import type { SourceFileCheck } from './currency';
 import type { FieldProblem } from './field-bounds';
 import { MAX_ANALYSIS_RUNS } from './field-bounds';
-import { fingerprintIntoBuffer } from './fingerprint-client';
+import { readFileDigest } from './file-evidence';
 import { IntakeStop, READ_CHUNK_BYTES } from './intake-policy';
 import type {
     AnalysisRun, AnalysisRunOutcome, DrawingSet, Observation, ProfileBasis, Sha256Hex, Timestamp, Uuid,
@@ -192,8 +192,9 @@ export type ExtractionReport =
         excluded: SheetExclusion[];
         /**
          * What this operation found about each Source's File it checked: the
-         * File, the fingerprint compared with, the verdict. Runtime only; the
-         * caller settles it into the session's RuntimeBindingLedger.
+         * digest of the read that opened it, or why nothing was read. Runtime
+         * only; the caller settles it into the session's RuntimeBindingLedger,
+         * which draws the verdict.
          */
         fileChecks: Map<Uuid, SourceFileCheck>;
         stats: ExtractionStats;
@@ -288,6 +289,8 @@ type SourceResult =
 
 interface SourceEnv {
     runId: Uuid;
+    /** The session the reads are made for: the Drawing Set the run started in. */
+    scope: Uuid;
     lease: ExtractionLease;
     ocr: GuardedRegisterOcr;
     signal: AbortSignal;
@@ -297,37 +300,39 @@ interface SourceEnv {
     stats: ExtractionStats;
 }
 
-/** Read one Source's targeted pages. Returns what to keep, and what its File turned out to be. */
-async function readSource(plan: SourcePlan, env: SourceEnv): Promise<{ result: SourceResult; binding: SourceBinding | null }> {
+/** Read one Source's targeted pages. Returns what to keep, and what was found about its File. */
+async function readSource(plan: SourcePlan, env: SourceEnv): Promise<{ result: SourceResult; check: SourceFileCheck | null }> {
     const aborted = (): boolean => env.signal.aborted;
     const file = env.fileFor(plan.sourceId);
-    if (!file) return { result: { kind: 'excluded', code: 'SOURCE_MISSING' }, binding: 'MISSING' };
-    if (file.size !== plan.byteLength) return { result: { kind: 'excluded', code: 'SOURCE_CHANGED' }, binding: 'CHANGED' };
+    if (!file) return { result: { kind: 'excluded', code: 'SOURCE_MISSING' }, check: { kind: 'NOT_READ', file: null, reason: 'NO_FILE' } };
+    if (file.size !== plan.byteLength) {
+        return { result: { kind: 'excluded', code: 'SOURCE_CHANGED' }, check: { kind: 'NOT_READ', file, reason: 'SIZE_DIFFERS' } };
+    }
     let bytes: Uint8Array | null;
     try {
         bytes = new Uint8Array(plan.byteLength);
     } catch {
-        return { result: { kind: 'excluded', code: 'SOURCE_UNREADABLE' }, binding: null };
+        return { result: { kind: 'excluded', code: 'SOURCE_UNREADABLE' }, check: null };
     }
-    let sha256: string;
+    let check: SourceFileCheck;
     try {
-        sha256 = await fingerprintIntoBuffer(file, bytes, { signal: env.signal, chunkBytes: env.chunkBytes });
+        check = { kind: 'READ', digest: await readFileDigest(file, bytes, { signal: env.signal, chunkBytes: env.chunkBytes, scope: env.scope }) };
     } catch (error) {
-        if (aborted()) return { result: { kind: 'cancelled' }, binding: null };
+        if (aborted()) return { result: { kind: 'cancelled' }, check: null };
         if (error instanceof IntakeStop && error.refusal?.code === 'FILE_CHANGED') {
-            return { result: { kind: 'excluded', code: 'SOURCE_CHANGED' }, binding: 'CHANGED' };
+            return { result: { kind: 'excluded', code: 'SOURCE_CHANGED' }, check: { kind: 'NOT_READ', file, reason: 'CHANGED_WHILE_READ' } };
         }
-        return { result: { kind: 'excluded', code: 'SOURCE_UNREADABLE' }, binding: 'MISSING' };
+        return { result: { kind: 'excluded', code: 'SOURCE_UNREADABLE' }, check: { kind: 'NOT_READ', file, reason: 'UNREADABLE' } };
     }
-    if (sha256 !== plan.sha256) return { result: { kind: 'excluded', code: 'SOURCE_CHANGED' }, binding: 'CHANGED' };
-    if (aborted()) return { result: { kind: 'cancelled' }, binding: 'MATCHED' };
+    if (check.digest.sha256 !== plan.sha256) return { result: { kind: 'excluded', code: 'SOURCE_CHANGED' }, check };
+    if (aborted()) return { result: { kind: 'cancelled' }, check };
 
     const opened = await env.lease.openDocument(bytes);
     bytes = null;
     if (!opened.ok) {
-        if (opened.code === 'OPEN_FAILED') return { result: { kind: 'excluded', code: 'PDF_OPEN_FAILED' }, binding: 'MATCHED' };
+        if (opened.code === 'OPEN_FAILED') return { result: { kind: 'excluded', code: 'PDF_OPEN_FAILED' }, check };
         if (opened.code === 'LEASE_ENDED') throw new Error('extraction document opened after its lease ended');
-        return { result: { kind: 'run-failed' }, binding: 'MATCHED' };
+        return { result: { kind: 'run-failed' }, check };
     }
     env.stats.documentsOpened += 1;
     const { doc, close } = opened.document;
@@ -377,8 +382,8 @@ async function readSource(plan: SourcePlan, env: SourceEnv): Promise<{ result: S
     const released = await close();
     // A Source read to the end keeps its results even if its document could
     // not be destroyed; the operation then stops, and opens nothing more.
-    if (!released && result.kind !== 'read') return { result: { kind: 'run-failed' }, binding: 'MATCHED' };
-    return { result, binding: 'MATCHED' };
+    if (!released && result.kind !== 'read') return { result: { kind: 'run-failed' }, check };
+    return { result, check };
 }
 
 /**
@@ -471,19 +476,14 @@ export async function extractTitleBlocks(
     const staged = new Map<Uuid, Observation>();
     const excluded: SheetExclusion[] = [];
     const fileChecks = new Map<Uuid, SourceFileCheck>();
-    const handedOut = new Map<Uuid, Blob | null>();
     const stats: ExtractionStats = { sourcesRead: 0, documentsOpened: 0, pagesAnalysed: 0, ocrCalls: 0, maxRegionPixels: 0 };
     const progress = (event: ExtractionProgress): void => { context.onProgress?.(event); };
     let cancelled = false;
     let failure: 'RELEASE_UNCONFIRMED' | 'UNEXPECTED' | null = null;
     const env: SourceEnv = {
-        runId, lease, ocr, signal: context.signal ?? new AbortController().signal,
+        runId, scope: startSet.id, lease, ocr, signal: context.signal ?? new AbortController().signal,
         chunkBytes: context.chunkBytes ?? READ_CHUNK_BYTES,
-        fileFor: (sourceId) => {
-            const file = context.fileFor(sourceId);
-            handedOut.set(sourceId, file);
-            return file;
-        },
+        fileFor: context.fileFor,
         progress, stats,
     };
     try {
@@ -494,8 +494,8 @@ export async function extractTitleBlocks(
                 break;
             }
             progress({ phase: 'source', sourceIndex: index, sourceTotal: plan.sources.length, targetSheets: source.targets.length });
-            const { result, binding } = await readSource(source, env);
-            if (binding) fileChecks.set(source.sourceId, { file: handedOut.get(source.sourceId) ?? null, sha256: source.sha256, binding });
+            const { result, check } = await readSource(source, env);
+            if (check) fileChecks.set(source.sourceId, check);
             switch (result.kind) {
                 case 'read':
                     stats.sourcesRead += 1;

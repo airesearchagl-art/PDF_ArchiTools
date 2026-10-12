@@ -16,9 +16,10 @@
  * it by the M7 foundation gate. There is deliberately no CDN fallback: a file
  * that is missing fails, it is never fetched from somebody else's server.
  *
- * M7-P2-A uses these for the extraction document only. The intake and the
- * preview documents of M7-P1 move onto the same files in M7-P2-B, so that all
- * three read a page the same way.
+ * Every M7 document opens with these: the extraction document (M7-P2-A) and,
+ * since M7-P2-B (HD-B-04), the intake and preview documents of M7-P1 too, so
+ * that a page's facts are recorded, drawn and read the same way. The other
+ * five tools keep their own PDF.js settings.
  */
 export const PDFJS_ASSET_ROOT = '/pdfjs/';
 

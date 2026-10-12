@@ -23,7 +23,13 @@
  *    same browser): profiles, the register adapter over the unchanged Drawing
  *    Register engine, the EXTRACTION run, confirmations, currency, the PDF.js
  *    document gate, the PDF.js data files, and the live P2 model against the
- *    same canonical schema and semantic contract.
+ *    same canonical schema and semantic contract;
+ *  - M7-P2-B1 (scripts/smoke-m7-p2b1-checks.mjs, after P2-A): the verified
+ *    evidence a binding needs (ADV-37-04) and its static gate, the session
+ *    store and its one page gate for intake, preview and extraction,
+ *    re-presenting a Source's bytes (HD-B-05), the profile mutation probes
+ *    F1-F7 (ADV-37-02), and P1 intake and preview with M7's PDF.js data files,
+ *    before and after (HD-B-04).
  *
  * Run:
  *   node scripts/make-m7-p1-fixtures.mjs        (also builds the P2-A fixtures)
@@ -38,6 +44,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer';
 import { createServer } from 'vite';
 import { runP2aChecks } from './smoke-m7-p2a-checks.mjs';
+import { runP2b1Checks } from './smoke-m7-p2b1-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5214;
@@ -583,7 +590,9 @@ async function main() {
             page, ROOT, ORIGIN, check, probe, note, section, validate, envelope, schema, checkRelations, RELATION_PROBLEM, assetRequests,
         });
 
-        section('28. The whole run, P1 and P2-A');
+        await runP2b1Checks({ page, ROOT, ORIGIN, check, probe, note, section, assetRequests });
+
+        section('36. The whole run, P1, P2-A and P2-B1');
         check('no request left the machine', external.length === 0, external.join(', '));
         check('no uncaught page error', pageErrors.length === 0, pageErrors.join(' | '));
 
