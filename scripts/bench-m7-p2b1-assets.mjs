@@ -38,12 +38,51 @@ const PORT = Number(arg('port', '5231'));
 const ORIGIN = `http://localhost:${PORT}`;
 
 // Fixtures always come from this checkout: both builds read the same bytes.
-const FILES = [
-    ['cmap (CID fonts)', path.join(HERE, 'test-fixtures', 'm7-p2a', 'p2a-cmap.pdf')],
-    ['jpx (JPEG 2000 scan)', path.join(HERE, 'test-fixtures', 'm7-p2a', 'p2a-jpx.pdf')],
-    ['native A4/A3', path.join(HERE, 'test-fixtures', 'm7-p1', 'p1-native-a.pdf')],
-    ['5000 pages', path.join(HERE, 'test-fixtures', 'm7-p1', 'p1-5000-pages.pdf')],
+// Two groups, each taken into a Drawing Set of its own: 5000 pages fill the
+// Drawing Set's Sheet bound by themselves.
+const GROUPS = [
+    [
+        ['cmap (CID fonts)', path.join(HERE, 'test-fixtures', 'm7-p2a', 'p2a-cmap.pdf')],
+        ['jpx (JPEG 2000 scan)', path.join(HERE, 'test-fixtures', 'm7-p2a', 'p2a-jpx.pdf')],
+        ['native A4/A3', path.join(HERE, 'test-fixtures', 'm7-p1', 'p1-native-a.pdf')],
+    ],
+    [
+        ['5000 pages', path.join(HERE, 'test-fixtures', 'm7-p1', 'p1-5000-pages.pdf')],
+    ],
 ];
+const FILES = GROUPS.flat();
+
+async function measureGroup(page, requests, files, out) {
+    for (const [label, file] of files) {
+        const from = requests.length;
+        const t0 = Date.now();
+        await (await page.$('[data-ds-file-input]')).uploadFile(file);
+        await page.waitForFunction(() => {
+            const el = document.querySelector('[data-ds-root]');
+            return el && el.dataset.dsState === 'idle'
+                && ![...el.querySelectorAll('[data-ds-result]')].some((r) => r.dataset.dsResult === 'queued' || r.dataset.dsResult === 'processing');
+        }, { timeout: 300_000, polling: 20 });
+        const takenMs = Date.now() - t0;
+        // The newest file's first Sheet into the preview.
+        const t1 = Date.now();
+        const clicked = await page.evaluate((name) => {
+            const row = [...document.querySelectorAll('[data-ds-sheet-row]')].find((r) => r.textContent.includes(name) && r.dataset.dsPage === '1');
+            row?.click();
+            return row?.dataset.dsSheetId ?? null;
+        }, path.basename(file));
+        if (!clicked) throw new Error(`${label}: no Sheet row for page 1 of ${path.basename(file)}`);
+        await page.waitForFunction((id) => {
+            const v = document.querySelector('[data-ds-viewer]');
+            return v && v.dataset.dsRenderState === 'rendered' && v.querySelector('canvas')?.dataset.dsRenderedSheet === id;
+        }, { timeout: 120_000, polling: 20 }, clicked).catch(async (error) => {
+            const state = await page.evaluate(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState ?? 'no viewer');
+            throw new Error(`${label}: preview not rendered (${state}): ${error.message}`);
+        });
+        const previewMs = Date.now() - t1;
+        const assets = requests.slice(from).filter((u) => u.includes('/pdfjs/'));
+        out[label] = { takenMs, previewMs, pdfjsDataRequests: assets.length };
+    }
+}
 
 async function measure(page, requests) {
     const out = {};
@@ -51,30 +90,9 @@ async function measure(page, requests) {
     let peak = 0;
     const timer = setInterval(() => { peak = Math.max(peak, pdfWorkers()); }, 5);
     try {
-        for (const [label, file] of FILES) {
-            const from = requests.length;
-            const t0 = Date.now();
-            await (await page.$('[data-ds-file-input]')).uploadFile(file);
-            await page.waitForFunction(() => {
-                const el = document.querySelector('[data-ds-root]');
-                return el && el.dataset.dsState === 'idle'
-                    && ![...el.querySelectorAll('[data-ds-result]')].some((r) => r.dataset.dsResult === 'queued' || r.dataset.dsResult === 'processing');
-            }, { timeout: 300_000, polling: 20 });
-            const takenMs = Date.now() - t0;
-            // The newest file's first Sheet into the preview.
-            const t1 = Date.now();
-            const clicked = await page.evaluate((name) => {
-                const row = [...document.querySelectorAll('[data-ds-sheet-row]')].find((r) => r.textContent.includes(name) && r.dataset.dsPage === '1');
-                row?.click();
-                return row?.dataset.dsSheetId ?? null;
-            }, path.basename(file));
-            await page.waitForFunction((id) => {
-                const v = document.querySelector('[data-ds-viewer]');
-                return v && v.dataset.dsRenderState === 'rendered' && v.querySelector('canvas')?.dataset.dsRenderedSheet === id;
-            }, { timeout: 120_000, polling: 20 }, clicked);
-            const previewMs = Date.now() - t1;
-            const assets = requests.slice(from).filter((u) => u.includes('/pdfjs/'));
-            out[label] = { takenMs, previewMs, pdfjsDataRequests: assets.length };
+        for (const [index, files] of GROUPS.entries()) {
+            if (index > 0) await reset(page);
+            await measureGroup(page, requests, files, out);
         }
     } finally {
         clearInterval(timer);

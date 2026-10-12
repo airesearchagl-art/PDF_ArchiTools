@@ -227,6 +227,9 @@ export async function runP2b1Checks(ctx) {
     check('this harness wrote nothing to localStorage, sessionStorage, IndexedDB or the Cache API, and none holds anything',
         storage.writes.writes === 0 && storage.databases.length === 0 && storage.cacheNames.length === 0 && storage.local === 0 && storage.session === 0, JSON.stringify(storage.writes.calls));
     check('no object URL left behind', storage.objectUrls === 0, String(storage.objectUrls));
+    const strip = (t) => t.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, '');
+    const intakeCode = strip(fs.readFileSync(path.join(ROOT, 'src', 'utils', 'drawing-set', 'source-intake.ts'), 'utf8'));
+    probe('intake still renders no page: it reads page boxes and native text only (no full-page rasterization)', !/\.render\(|getViewport|canvas/i.test(intakeCode));
     const src = fs.readFileSync(path.join(ROOT, 'src', 'utils', 'drawing-set', 'file-evidence.ts'), 'utf8');
     probe('file-evidence.ts exports no way to issue a digest but reading a File', !/export\s+(async\s+)?function\s+(mint|issue|make|create|forge)/i.test(src)
         && (src.match(/issued\.set\(/g) ?? []).length === 1 && /export async function readFileDigest/.test(src));
