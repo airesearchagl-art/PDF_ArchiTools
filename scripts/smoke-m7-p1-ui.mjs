@@ -9,7 +9,10 @@
  * Sheet List at 5000 Sheets, the read-only viewer (render, zoom, switching
  * Sheets and Sources, at most one open document), removing a file, starting
  * a new Drawing Set while a file is still being read, and the five existing
- * tools still reachable. Every request is recorded: nothing may leave the
+ * tools still reachable. Since M7-P2-B1 it also drives what the session
+ * knows about each File (the binding shown in the Source list), a chosen
+ * file taken away and the same bytes chosen again to reconnect the same
+ * Source, and P1 intake and preview with M7's PDF.js data files. Every request is recorded: nothing may leave the
  * machine, and the PDF.js worker must be the local one.
  *
  * Target browsers: by default this runs puppeteer's bundled Chromium (CI). For
@@ -24,6 +27,7 @@
  *   node scripts/smoke-m7-p1-ui.mjs
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
@@ -34,6 +38,8 @@ const PORT = 5215;
 const ORIGIN = `http://localhost:${PORT}`;
 const FIXTURES = path.join(ROOT, 'test-fixtures', 'm7-p1');
 const fixture = (name) => path.join(FIXTURES, `${name}.pdf`);
+const P2A_FIXTURES = path.join(ROOT, 'test-fixtures', 'm7-p2a');
+const p2aFixture = (name) => path.join(P2A_FIXTURES, `${name}.pdf`);
 const browserArg = process.argv.find((a) => a.startsWith('--browser='))?.slice('--browser='.length) || process.env.M7_BROWSER || '';
 
 const checks = [];
@@ -451,6 +457,99 @@ async function main() {
         check('reset clears the session', cleared.sources === 0 && cleared.sheets === 0 && cleared.results.length === 0);
         check('reset destroys the preview document', heldBeforeReset === 1 && await pdfDocumentsSettle(0) === 0,
             `${heldBeforeReset} before, ${pdfDocuments()} after`);
+
+        section('9b. M7-P2-B1: what the session knows about each File, re-presenting a Source, the PDF.js data files');
+        if (!fs.existsSync(p2aFixture('p2a-cmap'))) throw new Error('No P2-A fixtures. Run: node scripts/make-m7-p1-fixtures.mjs');
+        // A copy on disk that can be taken away after it was chosen, as a person's file can.
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'm7-p2b1-ui-'));
+        const away = path.join(tmp, 'p2a-cmap.pdf');
+        fs.copyFileSync(p2aFixture('p2a-cmap'), away);
+        const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'm7-p2b1-ui-other-'));
+        const sameNameOther = path.join(otherDir, 'p2a-cmap.pdf');
+        fs.copyFileSync(fixture('p1-second-c'), sameNameOther);
+        const sourceRows = () => page.evaluate(() => [...document.querySelectorAll('[data-ds-source-row]')].map((r) => ({
+            id: r.dataset.dsSourceId, name: r.querySelector('.ds-source-name')?.textContent ?? '', binding: r.dataset.dsBinding,
+            label: r.querySelector('[data-ds-binding-label]')?.textContent ?? '', title: r.querySelector('[data-ds-binding-label]')?.getAttribute('title') ?? '',
+        })));
+        const gateAttrs = () => page.evaluate(() => {
+            const el = document.querySelector('[data-ds-root]');
+            return { started: Number(el.dataset.dsGateIntakesStarted), refused: Number(el.dataset.dsGateIntakesRefused), unconfirmed: el.dataset.dsGateReleaseUnconfirmed };
+        });
+        const clickSourceSheet = (name, pageNumber) => page.evaluate((n, p) => {
+            const row = [...document.querySelectorAll('[data-ds-sheet-row]')].find((r) => r.textContent.includes(n) && Number(r.dataset.dsPage) === p);
+            row?.click();
+            return row?.dataset.dsSheetId ?? null;
+        }, name, pageNumber);
+        const waitViewer = (state) => page.waitForFunction((s) => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === s, { timeout: 60_000, polling: 100 }, state);
+        const gateBefore = await gateAttrs();
+        const requestsFrom = requests.length;
+        await upload(away, fixture('p1-native-a'));
+        await waitIdle();
+        const taken = await root();
+        check('two files taken in', taken.sources === 2 && taken.results.filter((r) => r.state === 'accepted').length === 2);
+        let rowsNow = await sourceRows();
+        check('each Source shows what this session knows about its File: SHA-256一致 (MATCHED), with what it means and that it is not kept',
+            rowsNow.length === 2 && rowsNow.every((r) => r.binding === 'MATCHED' && r.label === 'SHA-256一致' && r.title.includes('ページを閉じると消えます')), JSON.stringify(rowsNow));
+        probe('no binding label claims more than the bytes: no 確認済み, 正しい, 承認 or 検証済み', !rowsNow.some((r) => /確認済み|正しい|承認|検証済み/.test(r.label + r.title)));
+        const cmapRows = (await rows()).filter((r) => r.text.includes('p2a-cmap.pdf'));
+        check('with the data files every page of the CMap fixture is recorded as having its text (before M7-P2-B1: pages 1 and 2 were テキストなし)',
+            cmapRows.length === 4 && cmapRows.every((r) => r.text.includes('テキストあり')), cmapRows.map((r) => r.text.includes('テキストあり') ? 'あり' : 'なし').join(','));
+        const assetUrls = requests.slice(requestsFrom).filter((u) => u.includes('/pdfjs/'));
+        check('intake and preview fetched M7\'s CMaps and standard fonts, from this origin only',
+            assetUrls.some((u) => u.startsWith(`${ORIGIN}/pdfjs/cmaps/`)) && assetUrls.some((u) => u.startsWith(`${ORIGIN}/pdfjs/standard_fonts/`)) && assetUrls.every((u) => u.startsWith(ORIGIN)),
+            `${assetUrls.length} requests under /pdfjs/`);
+        const c2 = await clickSourceSheet('p2a-cmap.pdf', 2);
+        await waitRendered(c2);
+        check('the C2 page (embedded Adobe-Japan1, no ToUnicode) renders in the preview, with ink', await canvasHasInk());
+        const nativeA = await clickSourceSheet('p1-native-a.pdf', 1);
+        await waitRendered(nativeA);
+        const cmapId = rowsNow.find((r) => r.name === 'p2a-cmap.pdf').id;
+        const sheetsBeforeAway = (await rows()).filter((r) => r.text.includes('p2a-cmap.pdf')).map((r) => r.id).join(',');
+        fs.rmSync(away);
+        await clickSourceSheet('p2a-cmap.pdf', 1);
+        await waitViewer('error');
+        const awayAlert = await page.evaluate(() => document.querySelector('[data-ds-viewer] [role="alert"]')?.textContent ?? '');
+        rowsNow = await sourceRows();
+        const awayRow = rowsNow.find((r) => r.id === cmapId);
+        check('the chosen file taken away: the preview says it cannot be read, and the Source shows 読み込めません (MISSING) with how to recover; the other stays MATCHED',
+            awayAlert.includes('読み込めませんでした') && awayRow?.binding === 'MISSING' && awayRow.label === '読み込めません' && awayRow.title.includes('もう一度')
+            && rowsNow.find((r) => r.id !== cmapId)?.binding === 'MATCHED', `${awayAlert} | ${JSON.stringify(awayRow)}`);
+        await upload(p2aFixture('p2a-cmap'));
+        await waitIdle();
+        const reconnected = await root();
+        const reText = reconnected.results.find((r) => r.state === 'reconnected')?.text ?? '';
+        rowsNow = await sourceRows();
+        check('the same bytes chosen again reconnect that Source: 再接続, naming it; no Source added; the same Source ID and Sheets',
+            reText.includes('再接続') && reText.includes('「p2a-cmap.pdf」') && reconnected.sources === 2 && rowsNow.some((r) => r.id === cmapId)
+            && (await rows()).filter((r) => r.text.includes('p2a-cmap.pdf')).map((r) => r.id).join(',') === sheetsBeforeAway, reText);
+        check('...and it is SHA-256一致 (MATCHED) again', rowsNow.find((r) => r.id === cmapId)?.binding === 'MATCHED');
+        const c1 = await clickSourceSheet('p2a-cmap.pdf', 2);
+        await waitRendered(c1);
+        check('...and its preview renders again', await canvasHasInk());
+        await upload(p2aFixture('p2a-cmap'));
+        await waitIdle();
+        const dupAgain = await root();
+        // The results list shows the newest first.
+        check('chosen once more while MATCHED: reported as a duplicate, nothing changed (P1 behaviour)',
+            dupAgain.results[0]?.state === 'duplicate' && dupAgain.sources === 2 && (await sourceRows()).find((r) => r.id === cmapId)?.binding === 'MATCHED',
+            dupAgain.results.map((r) => r.state).join(','));
+        await upload(sameNameOther);
+        await waitIdle();
+        const newOne = await root();
+        rowsNow = await sourceRows();
+        check('a different PDF under the same name is a new Source, as before; the reconnected one is untouched',
+            newOne.sources === 3 && newOne.results[0]?.state === 'accepted' && rowsNow.filter((r) => r.name === 'p2a-cmap.pdf').length === 2
+            && rowsNow.find((r) => r.id === cmapId)?.binding === 'MATCHED' && rowsNow.every((r) => r.binding === 'MATCHED'));
+        const gateAfter = await gateAttrs();
+        check('every file went through the page\'s one PDF.js gate, none refused, no destruction left unconfirmed',
+            gateAfter.started - gateBefore.started === 5 && gateAfter.refused === gateBefore.refused && gateAfter.unconfirmed === 'false', JSON.stringify({ gateBefore, gateAfter }));
+        fs.rmSync(tmp, { recursive: true, force: true });
+        fs.rmSync(otherDir, { recursive: true, force: true });
+        await page.click('[data-ds-reset]');
+        await page.waitForSelector('[data-ds-confirm="reset"]');
+        await page.click('[data-ds-confirm-yes]');
+        await page.waitForSelector('[data-ds-empty]');
+        check('reset leaves nothing of it', (await root()).sources === 0 && await pdfDocumentsSettle(0) === 0);
 
         section('10. The other tools');
         await upload(fixture('p1-second-c'));
