@@ -356,11 +356,21 @@ try {
     check('drawing-set: SHA-256 is content identification, not a signature',
         d.includes('SHA-256') && d.includes('署名や改ざん防止の証明ではありません'), 'sha');
     check('drawing-set: text yes/no is not OCR',
-        d.includes('文字認識（OCR）は行っていません'), 'no ocr');
-    check('drawing-set: title block, checking and save/resume are stated as not yet available',
-        d.includes('表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません')
-        && d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
-        && d.includes('作業内容の保存・再開には、まだ対応していません'), 'not yet');
+        d.includes('この判定には文字認識（OCR）を使いません'), 'no ocr');
+    // M7-P2-B2: the title block is read and confirmed now; checking and save/resume are still not available.
+    check('drawing-set: the title block -- a profile dragged by the person, assigned explicitly, read in the browser (OCR from this site)',
+        d.includes('ご自身でドラッグして指定') && d.includes('表題欄を自動では探しません') && d.includes('明示的に割り当てます')
+        && d.includes('推測して割り当てることはありません') && d.includes('同じサイトにあるOCRで読み取ります') && d.includes('途中で中止できます'), 'title block');
+    check('drawing-set: confirmed one page at a time against the original drawing and how each value was got; no bulk confirmation; no profile, no confirmation',
+        d.includes('原図') && d.includes('取得方法（PDFの文字／OCR／読み取れず）') && d.includes('1ページずつ確定します') && d.includes('まとめて確定する機能はありません')
+        && d.includes('プロファイルを割り当てていないページは確定できません') && d.includes('修正した項目は記録されます'), 'confirmation');
+    check('drawing-set: neither a reading nor a confirmation is stated as vouching for the drawing',
+        d.includes('図面の内容を保証するものではありません') && !/確認済み|正しい値|承認|検証済み/.test(d), 'no overclaim on confirmation');
+    check('drawing-set: checking and save/resume are still stated as not yet available',
+        d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
+        && d.includes('作業内容の保存・再開には、まだ対応していません')
+        && !d.includes('表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません'), 'not yet');
+    check('drawing-set: profiles, readings and confirmations are not saved either', d.includes('プロファイル・読み取り値・確定した値も保存されず'), 'not saved');
     check('drawing-set: the bounds are stated as current, not permanent',
         d.includes('256 MiB') && d.includes('5000ページ') && d.includes('今後変わることがあります'), 'bounds');
     check('drawing-set: processing stays in the browser, and file names may be confidential',

@@ -32,6 +32,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { preview } from 'vite';
+import { runP2b2UiChecks } from './smoke-m7-p2b2-ui-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5215;
@@ -338,12 +339,14 @@ async function main() {
             return {
                 editing: buttons.filter((t) => /保存|ダウンロード|書き出|注釈|ペン|描画|編集|消しゴム|テキスト追加|Save|Download|Export/i.test(t)),
                 downloads: el.querySelectorAll('a[download], a[href^="blob:"]').length,
-                inputs: [...el.querySelectorAll('input, textarea, [contenteditable="true"]')].filter((i) => !i.matches('[data-ds-file-input]')).length,
+                // M7-P2-B2: the Sheet List's selection boxes are the one other input here; values are typed only in the
+                // profile editor and the confirmation panel (checked in smoke-m7-p2b2-ui-checks.mjs).
+                inputs: [...el.querySelectorAll('input, textarea, [contenteditable="true"]')].filter((i) => !i.matches('[data-ds-file-input], [data-ds-sheet-check]')).length,
                 textLayer: el.querySelectorAll('.textLayer, .annotationLayer').length,
             };
         });
         probe('no save, download, annotation or editing control', controls.editing.length === 0 && controls.downloads === 0, controls.editing.join(' | '));
-        probe('no input other than the file picker, no text or annotation layer', controls.inputs === 0 && controls.textLayer === 0);
+        probe('no input other than the file picker and the Sheet List\'s selection boxes (M7-P2-B2), no text or annotation layer', controls.inputs === 0 && controls.textLayer === 0);
 
         section('5. A refusal leaves the accepted files alone');
         await upload(fixture('p1-not-a-pdf'), fixture('p1-password'));
@@ -550,6 +553,9 @@ async function main() {
         await page.click('[data-ds-confirm-yes]');
         await page.waitForSelector('[data-ds-empty]');
         check('reset leaves nothing of it', (await root()).sources === 0 && await pdfDocumentsSettle(0) === 0);
+
+        await runP2b2UiChecks({ page, ROOT, check, probe, note, section, settle, upload, waitIdle, root, viewer, p2aFixture, external });
+        check('M7-P2-B2: no PDF.js document left once the Drawing Set is new again', await pdfDocumentsSettle(0) === 0, String(pdfDocuments()));
 
         section('10. The other tools');
         await upload(fixture('p1-second-c'));

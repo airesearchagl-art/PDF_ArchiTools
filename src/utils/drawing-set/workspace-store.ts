@@ -53,8 +53,8 @@
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { CROP_MESSAGES, CropError, cropShown, mountCrop, planCrop, releaseCrop, renderCrop } from './crop-service';
-import type { BindingCheck, BindingSettlement, RuntimeBindings, SourceFileCheck } from './currency';
-import { RuntimeBindingLedger, observationCurrency, verifiedBinding, verifyHeldFile } from './currency';
+import type { BindingCheck, BindingSettlement, RecordCurrency, RuntimeBindings, SourceFileCheck } from './currency';
+import { RuntimeBindingLedger, confirmationCurrency, observationCurrency, verifiedBinding, verifyHeldFile } from './currency';
 import type { FieldProblem } from './field-bounds';
 import type { FileDigest } from './file-evidence';
 import type { IntakeRefusal } from './intake-policy';
@@ -371,6 +371,16 @@ export class DrawingSetStore {
     /** This session's ledger, for what decides (currency, confirmation). Null when no session could start. */
     bindingLedger(): RuntimeBindingLedger | null {
         return this.ledger;
+    }
+
+    /**
+     * How a Sheet's reading and confirmation stand now, as the ledger knows
+     * its Source's File -- for the screen, which never holds the ledger itself.
+     */
+    currencyOf(sheet: Sheet): { observation: RecordCurrency; confirmation: RecordCurrency } | null {
+        const set = this.currentSet();
+        if (!this.ledger || set === NO_SESSION_SET) return null;
+        return { observation: observationCurrency(set, sheet, this.ledger), confirmation: confirmationCurrency(set, sheet, this.ledger) };
     }
 
     // ------------------------------------------------------------ lifecycle

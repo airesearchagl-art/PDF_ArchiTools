@@ -4,6 +4,7 @@ import { Maximize, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Sheet, Source } from '../../utils/drawing-set/model';
 import type { ExpectedContent, PreviewCounts, PreviewDocumentOwner } from '../../utils/drawing-set/preview-document';
 import { PreviewError } from '../../utils/drawing-set/preview-document';
+import type { ViewerGeometry } from '../../utils/drawing-set/profile-pointer';
 
 /**
  * The Drawing Set's read-only viewer: one selected page, drawn on one canvas.
@@ -25,6 +26,13 @@ import { PreviewError } from '../../utils/drawing-set/preview-document';
  * The workspace opens the document through `open`, so that the preview's read
  * of the File is also a check of it (DrawingSetStore.openPreview); without it
  * the viewer asks the owner directly.
+ *
+ * M7-P2-B2: over the rendered page the workspace may lay an overlay -- the
+ * title-block profile's rectangles, or the profile editor -- told exactly
+ * where the page lies (ViewerGeometry). The overlay is drawn in CSS over the
+ * canvas and never draws into it. `reopenKey` opens the document again once
+ * extraction has given the documents back; `suspended` says why nothing is
+ * shown meanwhile.
  */
 
 interface Props {
@@ -35,6 +43,12 @@ interface Props {
     pageTotal: number;
     /** How the document is opened; the owner's own open() when not given. */
     open?: (sourceId: string, file: Blob, expected: ExpectedContent) => Promise<PDFDocumentProxy>;
+    /** Laid over the rendered page, told where it lies. */
+    overlay?: (geometry: ViewerGeometry) => React.ReactNode;
+    /** Opens the document again when it changes. */
+    reopenKey?: number;
+    /** Why nothing can be shown just now (shown over the page), or null. */
+    suspended?: string | null;
 }
 
 const ZOOM_STEP = 1.25;
@@ -49,9 +63,9 @@ type DocState =
     | { sourceId: string; doc: PDFDocumentProxy }
     | { sourceId: string; error: string };
 
-type RenderState = { key: string; status: 'rendered' | 'error'; message?: string; counts: PreviewCounts };
+type RenderState = { key: string; status: 'rendered' | 'error'; message?: string; counts: PreviewCounts; geometry?: ViewerGeometry };
 
-export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, sheet, pageTotal, open }) => {
+export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, sheet, pageTotal, open, overlay, reopenKey = 0, suspended = null }) => {
     const paneRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [zoom, setZoom] = useState(1);
@@ -89,7 +103,7 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             },
         );
         return () => { alive = false; };
-    }, [owner, open, sourceId, file, expectedBytes, expectedSha256]);
+    }, [owner, open, sourceId, file, expectedBytes, expectedSha256, reopenKey]);
 
     // A document destroyed by its owner is never drawn from.
     const doc = docState && docState.sourceId === sourceId && 'doc' in docState && !docState.doc.loadingTask.destroyed
@@ -104,6 +118,7 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
         if (!doc || !canvas || pane.width <= 0 || pane.height <= 0) return;
         // Aborting it stops this render: the owner cancels it and cleans the page up.
         const stop = new AbortController();
+        let geometry: ViewerGeometry | undefined;
         owner.withPage(doc, pageNumber, async (page) => {
             const whole = page.getViewport({ scale: 1 });
             const fit = Math.max(0.01, Math.min(
@@ -122,9 +137,16 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             canvas.style.width = `${Math.round(whole.width * cssScale)}px`;
             canvas.style.height = `${Math.round(whole.height * cssScale)}px`;
             await page.render({ canvas, viewport }).promise;
+            // Where the page lies in the canvas's CSS box, for an overlay: the box is rounded, so its own scale is used.
+            geometry = {
+                cssScale: Math.round(whole.width * cssScale) / whole.width,
+                displayWidthPt: whole.width,
+                displayHeightPt: whole.height,
+                rotate: whole.rotation,
+            };
         }, { signal: stop.signal }).then(
             () => {
-                if (!stop.signal.aborted) setRender({ key: renderKey, status: 'rendered', counts: owner.counts() });
+                if (!stop.signal.aborted) setRender({ key: renderKey, status: 'rendered', counts: owner.counts(), geometry });
             },
             (error: unknown) => {
                 // Stopped by this viewer, or by the document closing: nothing to show.
@@ -143,6 +165,7 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             : 'loading';
     const message = openError ?? (status === 'error' ? render?.message : null);
     const counts = render?.counts;
+    const geometry = status === 'rendered' ? render?.geometry : undefined;
 
     return (
         <div
@@ -157,6 +180,8 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             data-ds-render-completed={counts?.renderCompleted ?? ''}
             data-ds-render-cancelled={counts?.renderCancelled ?? ''}
             data-ds-render-failed={counts?.renderFailed ?? ''}
+            data-ds-release-deadline-expired={counts?.releaseDeadlineExpired ?? ''}
+            data-ds-releases-unconfirmed={counts?.releasesUnconfirmed ?? ''}
         >
             <div className="ds-viewer-toolbar">
                 <span className="ds-viewer-label" title={source.displayName}>
@@ -176,14 +201,31 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
                 </span>
             </div>
             <div className="ds-viewer-pane" ref={paneRef}>
-                <canvas
-                    ref={canvasRef}
-                    className="ds-viewer-canvas"
-                    data-ds-rendered-sheet={status === 'rendered' ? sheet.id : ''}
-                    style={{ visibility: status === 'rendered' ? 'visible' : 'hidden' }}
-                />
-                {status === 'loading' && <div className="ds-viewer-overlay">表示を準備しています…</div>}
-                {status === 'error' && <div className="ds-viewer-overlay ds-viewer-error" role="alert">{message}</div>}
+                <div className="ds-viewer-page">
+                    <canvas
+                        ref={canvasRef}
+                        className="ds-viewer-canvas"
+                        data-ds-rendered-sheet={status === 'rendered' ? sheet.id : ''}
+                        style={{ visibility: status === 'rendered' && !suspended ? 'visible' : 'hidden' }}
+                    />
+                    {geometry && !suspended && overlay && (
+                        <div
+                            className="ds-viewer-page-overlay"
+                            data-ds-viewer-overlay
+                            data-ds-css-scale={geometry.cssScale}
+                            data-ds-rotate={geometry.rotate}
+                            data-ds-display={`${geometry.displayWidthPt}x${geometry.displayHeightPt}`}
+                        >
+                            {overlay(geometry)}
+                        </div>
+                    )}
+                </div>
+                {suspended ? <div className="ds-viewer-overlay" data-ds-viewer-suspended>{suspended}</div> : (
+                    <>
+                        {status === 'loading' && <div className="ds-viewer-overlay">表示を準備しています…</div>}
+                        {status === 'error' && <div className="ds-viewer-overlay ds-viewer-error" role="alert">{message}</div>}
+                    </>
+                )}
             </div>
         </div>
     );
