@@ -333,7 +333,7 @@ export async function runP2b2UiChecks(ctx) {
     await page.evaluate(() => { window.__dsDelayMs = 0; });
     const stopped = await page.evaluate(() => document.querySelector('[data-ds-extraction-result]')?.dataset.dsExtractionResult ?? '');
     check('T-02 a reading stopped part-way ends CANCELLED, and the lock is let go', stopped === 'CANCELLED' && await operation() === '', stopped);
-    note('T-02 from 読み取りを中止 to the lock let go (recogniser ended, document destroyed, lease given back), ms — the ~1 s target is for the Release judgement',
+    note('T-02 from 読み取りを中止 to the lock let go (extraction returned: its document destroyed, its lease given back, the recogniser told to end -- a recogniser still starting ends when its start completes; see bench-m7-p2b2-ocr), ms — the ~1 s target is for the Release judgement',
         `${unlockedAfter} (started ${cancelAsked - clicked} ms after the click)`);
     // Read again in full, confirm, then withdraw.
     await page.click('[data-ds-extract]');
