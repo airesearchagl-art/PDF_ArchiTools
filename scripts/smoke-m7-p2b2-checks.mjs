@@ -272,6 +272,17 @@ export async function runP2b2Checks(ctx) {
         !ev.NR13_injected.ok && ev.NR13_injected.code === 'CROP_NOT_SHOWN' && ev.NR13_injected.inSlots === 0, JSON.stringify(ev.NR13_injected));
 
     // ------------------------------------------------------------------
+    const geometryTruth = JSON.parse(fs.readFileSync(path.join(ROOT, 'test-fixtures', 'm7-p2a', 'manifest.json'), 'utf8')).files.find((f) => f.name === 'p2a-geometry').truth;
+    const pt = await call('pointer', geometryTruth);
+    const zooms = [...new Set(pt.rows.map((r) => r.cssScale.toFixed(3)))].length;
+    check('T-01 / H-12 every rotation (0/90/180/270), with and without a CropBox offset, at three zooms: the viewer reports the page\'s own /Rotate and upright size',
+        pt.rows.length === 24 && pt.rows.every((r) => r.viewerRotate === r.rotate && Math.abs(r.upright.width - r.uprightTruth.width) < 0.01 && Math.abs(r.upright.height - r.uprightTruth.height) < 0.01)
+        && zooms >= 3, `${pt.rows.length} cases, ${zooms} scales`);
+    check('H-12 ...a profile rectangle lands on screen where the generator put it on the displayed page, within 1 CSS px',
+        pt.rows.every((r) => r.worstToTruth <= 1), `worst ${Math.max(...pt.rows.map((r) => r.worstToTruth)).toFixed(4)} CSS px`);
+    check('H-12 ...and a drag over it comes back to the same upright rectangle, within 1 CSS px (the contract\'s 0.01 pt is a separate rule)',
+        pt.rows.every((r) => r.worstRoundTrip <= 1), `worst ${Math.max(...pt.rows.map((r) => r.worstRoundTrip)).toFixed(6)} CSS px`);
+
     section('40. W0 -- sessions: reset and leaving while crops are drawn; an old session\'s page arriving late (N-A5, N-A11)');
     const se = await call('sessions');
     for (const how of ['reset', 'leave']) {

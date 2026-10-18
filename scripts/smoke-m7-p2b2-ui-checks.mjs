@@ -255,8 +255,31 @@ export async function runP2b2UiChecks(ctx) {
     check('T-01 a page with /Rotate 90: its crops are turned by CSS (rotate(90deg)), the profile\'s rectangles laid over the page as displayed',
         rot.rotate === 90 && rotated.crops.every((c) => c.transform.includes('rotate(90deg)') && Math.abs(c.cssHeight - c.width * 0.5) <= 1), JSON.stringify(rotated.crops.map((c) => c.transform)));
     const shownRects = await fieldRects('profile');
-    check('...and the overlay on the rotated page lies where the page shows those fields', Object.keys(shownRects).length === 4
-        && FIELDS.every((f) => shownRects[f].box.width > 0 && shownRects[f].box.height > 0), JSON.stringify(Object.keys(shownRects)));
+    const displayed = truth('p2a-geometry').pages[1].displayRects;
+    const offBy = (rects, geo) => Math.max(...FIELDS.map((f) => {
+        const d = displayed[f];
+        const b = rects[f].box;
+        return Math.max(Math.abs(b.left - (geo.left + d.left * geo.scale)), Math.abs(b.top - (geo.top + d.top * geo.scale)),
+            Math.abs(b.left + b.width - (geo.left + d.right * geo.scale)), Math.abs(b.top + b.height - (geo.top + d.bottom * geo.scale)));
+    }));
+    const at1 = offBy(shownRects, rot);
+    check('T-01 ...and the overlay on the rotated page lies where the page shows those fields (the generator\'s display rectangles), within 1 CSS px',
+        Object.keys(shownRects).length === 4 && at1 <= 1, `${at1.toFixed(3)} CSS px`);
+    // The same at a device pixel ratio of 2: the bitmap doubles, the CSS geometry does not move.
+    await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 2 });
+    // The viewer draws at the ratio it finds when it draws: zoom in and back to draw again at 2.
+    await page.click('[data-ds-zoom-in]');
+    await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 60_000, polling: 50 });
+    await page.click('[data-ds-zoom-fit]');
+    await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered' && document.querySelector('[data-ds-viewer-overlay]'),
+        { timeout: 60_000, polling: 50 });
+    await settle(300);
+    const rot2 = await overlayGeometry();
+    const at2 = offBy(await fieldRects('profile'), rot2);
+    const bitmap = await page.evaluate(() => { const c = document.querySelector('[data-ds-viewer] canvas'); return [c.width, parseFloat(c.style.width)]; });
+    check('T-01 at DPR 2: the page is drawn at twice the pixels, and the overlay still lies on the fields within 1 CSS px',
+        at2 <= 1 && bitmap[0] >= bitmap[1] * 1.9, `${at2.toFixed(3)} CSS px; bitmap ${bitmap[0]} px for ${bitmap[1]} CSS px`);
+    await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 1 });
 
     // A Sheet with no profile.
     await selectRow(2);

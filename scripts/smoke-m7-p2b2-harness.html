@@ -121,6 +121,7 @@
         import { DrawingSetStore, EvidenceHandle } from '/src/utils/drawing-set/workspace-store.ts';
         import { ReadOnlySheetViewer } from '/src/components/drawing-set/ReadOnlySheetViewer.tsx';
         import { PAGE_PREVIEW_OWNER } from '/src/utils/drawing-set/page-documents.ts';
+        import { dragToUpright, uprightSize, uprightToScreen } from '/src/utils/drawing-set/profile-pointer.ts';
 
         const P1 = '/test-fixtures/m7-p1';
         const P2A = '/test-fixtures/m7-p2a';
@@ -1316,6 +1317,63 @@
             return plainly(out);
         }
 
+        // T-01 / H-12: where a profile's rectangles land on the viewer, and back, for every rotation, offset and zoom.
+        async function pointer(geometryTruth) {
+            const geometry = await fixture(P2A, 'p2a-geometry');
+            const r = rig();
+            const host = document.createElement('div');
+            host.style.cssText = 'width: 900px; height: 700px;';
+            document.body.appendChild(host);
+            const root = createRoot(host);
+            await r.owner.open('A', geometry.file, geometry.expected);
+            const source = { id: 'A', displayName: 'p2a-geometry.pdf', fingerprint: { sha256: geometry.expected.sha256, byteLength: geometry.expected.byteLength, pageCount: 8 } };
+            const seen = { geometry: null };
+            const rows = [];
+            for (const pageTruth of geometryTruth.pages) {
+                const sheet = { id: `sheet-${pageTruth.page}`, pageNumber: pageTruth.page };
+                const overlay = (g) => { seen.geometry = g; return null; };
+                root.render(createElement(ReadOnlySheetViewer, { owner: r.owner, source, file: geometry.file, sheet, pageTotal: 8, overlay }));
+                const state = () => host.querySelector('[data-ds-viewer]')?.dataset.dsRenderState ?? '';
+                await until(() => state() === 'rendered' && host.querySelector('canvas')?.dataset.dsRenderedSheet === sheet.id, `page ${pageTruth.page}`);
+                for (const zoomClicks of [0, 2, 4]) {
+                    for (let i = 0; i < zoomClicks; i++) host.querySelector('[data-ds-zoom-in]').click();
+                    await tick();
+                    await until(() => state() === 'rendered' && seen.geometry, 'the zoomed render');
+                    await frames(1);
+                    const g = seen.geometry;
+                    const canvasBox = host.querySelector('canvas').getBoundingClientRect();
+                    let worstToTruth = 0;
+                    let worstRoundTrip = 0;
+                    for (const name of FIELDS) {
+                        const upright = pageTruth.uprightRects[name];
+                        const display = pageTruth.displayRects[name];
+                        const box = uprightToScreen(upright, g);
+                        // Against the generator's own display rectangle, in CSS px.
+                        worstToTruth = Math.max(worstToTruth, Math.abs(box.left - display.left * g.cssScale), Math.abs(box.top - display.top * g.cssScale),
+                            Math.abs(box.left + box.width - display.right * g.cssScale), Math.abs(box.top + box.height - display.bottom * g.cssScale));
+                        // A drag over that box back to upright points, in CSS px.
+                        const back = dragToUpright({ x: box.left, y: box.top }, { x: box.left + box.width, y: box.top + box.height }, g);
+                        worstRoundTrip = Math.max(worstRoundTrip, ...['left', 'top', 'right', 'bottom'].map((k) => Math.abs(back[k] - upright[k]) * g.cssScale));
+                    }
+                    rows.push({
+                        page: pageTruth.page, rotate: pageTruth.rotate, offset: pageTruth.offset, zoomClicks, cssScale: g.cssScale, viewerRotate: g.rotate,
+                        upright: uprightSize(g), uprightTruth: pageTruth.upright, canvasCss: [canvasBox.width, canvasBox.height],
+                        worstToTruth, worstRoundTrip,
+                    });
+                    if (zoomClicks > 0) {
+                        seen.geometry = null;
+                        for (let i = 0; i < zoomClicks; i++) host.querySelector('[data-ds-zoom-out]').click();
+                        await tick();
+                        await until(() => state() === 'rendered' && seen.geometry, 'the zoom back');
+                    }
+                }
+            }
+            root.unmount();
+            host.remove();
+            await r.owner.close();
+            return plainly({ rows, record: lastRecord(r.owner) });
+        }
+
         function storage() {
             return {
                 writes: plainly(window.__storage),
@@ -1326,7 +1384,7 @@
             };
         }
 
-        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, storage };
+        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, pointer, storage };
         window.__m7p2b2Ready = true;
         document.getElementById('state').textContent = 'ready';
     </script>
