@@ -61,13 +61,24 @@ export async function runP2b2UiChecks(ctx) {
         const box = o.getBoundingClientRect();
         return { left: box.left, top: box.top, width: box.width, height: box.height, scale: Number(o.dataset.dsCssScale), rotate: Number(o.dataset.dsRotate), display: o.dataset.dsDisplay };
     });
-    /** The page is drawn and its overlay shows `count` rectangles: a panel under the viewer changing size redraws it first. */
-    const waitRects = (mode, count = 4) => page.waitForFunction((m, n) => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered'
-        && document.querySelectorAll(`[data-ds-field-surface="${m}"] [data-ds-field-rect]`).length === n, { timeout: 60_000, polling: 50 }, mode, count);
-    const fieldRects = (mode) => page.evaluate((m) => Object.fromEntries([...document.querySelectorAll(`[data-ds-field-surface="${m}"] [data-ds-field-rect]`)].map((el) => {
-        const box = el.getBoundingClientRect();
-        return [el.dataset.dsFieldRect, { upright: el.dataset.dsUpright.split(',').map(Number), box: { left: box.left, top: box.top, width: box.width, height: box.height } }];
-    })), mode);
+    /**
+     * The overlay's rectangles and the overlay's own geometry, read in one go once the page is drawn and shows
+     * all four: a panel under the viewer changing size redraws the page (sometimes twice), and a read between
+     * two steps would see none.
+     */
+    const overlayNow = async (mode) => (await page.waitForFunction((m) => {
+        const o = document.querySelector('[data-ds-viewer-overlay]');
+        const rects = [...document.querySelectorAll(`[data-ds-field-surface="${m}"] [data-ds-field-rect]`)];
+        if (document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState !== 'rendered' || !o || rects.length !== 4) return false;
+        const g = o.getBoundingClientRect();
+        return {
+            geometry: { left: g.left, top: g.top, width: g.width, height: g.height, scale: Number(o.dataset.dsCssScale), rotate: Number(o.dataset.dsRotate) },
+            rects: Object.fromEntries(rects.map((el) => {
+                const box = el.getBoundingClientRect();
+                return [el.dataset.dsFieldRect, { upright: el.dataset.dsUpright.split(',').map(Number), box: { left: box.left, top: box.top, width: box.width, height: box.height } }];
+            })),
+        };
+    }, { timeout: 60_000, polling: 50 }, mode)).jsonValue();
     /** Drag an upright rectangle of a rotation-0 page onto the viewer, as a mouse would. */
     const dragRect = async (rect) => {
         // The panel under the viewer changing size redraws the page: wait until it is drawn again.
@@ -162,9 +173,9 @@ export async function runP2b2UiChecks(ctx) {
         await page.click(`[data-ds-pick-field="${field}"]`);
         draws[field] = await dragRect(cells[field]);
     }
-    await waitRects('draft');
-    const drawn = await fieldRects('draft');
-    const g = draws.drawingNumber;
+    const drawnNow = await overlayNow('draft');
+    const drawn = drawnNow.rects;
+    const g = drawnNow.geometry;
     const err = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
     const drawErrPx = Math.max(...FIELDS.map((f) => err(drawn[f].upright, [cells[f].left, cells[f].top, cells[f].right, cells[f].bottom]) * g.scale));
     check('H-12 four rectangles dragged on the page: each recorded within 1 CSS px of where the mouse went, in upright points',
@@ -258,8 +269,8 @@ export async function runP2b2UiChecks(ctx) {
     const rot = await overlayGeometry();
     check('T-01 a page with /Rotate 90: its crops are turned by CSS (rotate(90deg)), the profile\'s rectangles laid over the page as displayed',
         rot.rotate === 90 && rotated.crops.every((c) => c.transform.includes('rotate(90deg)') && Math.abs(c.cssHeight - c.width * 0.5) <= 1), JSON.stringify(rotated.crops.map((c) => c.transform)));
-    await waitRects('profile');
-    const shownRects = await fieldRects('profile');
+    const shownNow = await overlayNow('profile');
+    const shownRects = shownNow.rects;
     const displayed = truth('p2a-geometry').pages[1].displayRects;
     const offBy = (rects, geo) => Math.max(...FIELDS.map((f) => {
         const d = displayed[f];
@@ -267,7 +278,7 @@ export async function runP2b2UiChecks(ctx) {
         return Math.max(Math.abs(b.left - (geo.left + d.left * geo.scale)), Math.abs(b.top - (geo.top + d.top * geo.scale)),
             Math.abs(b.left + b.width - (geo.left + d.right * geo.scale)), Math.abs(b.top + b.height - (geo.top + d.bottom * geo.scale)));
     }));
-    const at1 = offBy(shownRects, await overlayGeometry());
+    const at1 = offBy(shownRects, shownNow.geometry);
     check('T-01 ...and the overlay on the rotated page lies where the page shows those fields (the generator\'s display rectangles), within 1 CSS px',
         Object.keys(shownRects).length === 4 && at1 <= 1, `${at1.toFixed(3)} CSS px`);
     // The same at a device pixel ratio of 2: the bitmap doubles, the CSS geometry does not move.
@@ -279,8 +290,8 @@ export async function runP2b2UiChecks(ctx) {
     await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered' && document.querySelector('[data-ds-viewer-overlay]'),
         { timeout: 60_000, polling: 50 });
     await settle(300);
-    await waitRects('profile');
-    const at2 = offBy(await fieldRects('profile'), await overlayGeometry());
+    const atDpr2 = await overlayNow('profile');
+    const at2 = offBy(atDpr2.rects, atDpr2.geometry);
     const bitmap = await page.evaluate(() => { const c = document.querySelector('[data-ds-viewer] canvas'); return [c.width, parseFloat(c.style.width)]; });
     check('T-01 at DPR 2: the page is drawn at twice the pixels, and the overlay still lies on the fields within 1 CSS px',
         at2 <= 1 && bitmap[0] >= bitmap[1] * 1.9, `${at2.toFixed(3)} CSS px; bitmap ${bitmap[0]} px for ${bitmap[1]} CSS px`);
@@ -298,8 +309,7 @@ export async function runP2b2UiChecks(ctx) {
     await waitPanel('ready');
     await page.click('[data-ds-revise-profile]');
     await page.waitForSelector('[data-ds-profile-editor="revise"]');
-    await waitRects('draft');
-    const prefilled = await fieldRects('draft');
+    const prefilled = (await overlayNow('draft')).rects;
     check('revising starts from the profile\'s own rectangles on this page', FIELDS.every((f) => prefilled[f]), Object.keys(prefilled).join(','));
     await page.click('[data-ds-pick-field="revision"]');
     await dragRect({ left: 562, top: 520, right: 660, bottom: 560 });
