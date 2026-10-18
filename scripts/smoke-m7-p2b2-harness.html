@@ -720,7 +720,10 @@
         async function baseline() {
             let module;
             try {
-                module = await import('/test-fixtures/m7-p2b2/baseline-preview-document.ts');
+                // Written by the checks script only when commit 8b825b2 is in the checkout: kept out of Vite's
+                // import analysis, which would otherwise refuse the whole harness when the file is not there.
+                const baselineUrl = '/test-fixtures/m7-p2b2/baseline-preview-document.ts';
+                module = await import(/* @vite-ignore */ baselineUrl);
             } catch (error) {
                 return { available: false, reason: String(error?.message ?? error).slice(0, 200) };
             }

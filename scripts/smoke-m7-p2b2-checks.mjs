@@ -45,6 +45,8 @@ export const LEDGER_CALLERS_ALLOWED = ['src/utils/drawing-set/currency.ts', 'src
 function writeBaseline(ROOT) {
     const target = path.join(ROOT, 'test-fixtures', 'm7-p2b2', 'baseline-preview-document.ts');
     try {
+        // M7_P2B2_NO_BASELINE=1 runs as a shallow clone does (CI), to prove the rest does not depend on it.
+        if (process.env.M7_P2B2_NO_BASELINE === '1') throw new Error('baseline withheld');
         const text = execFileSync('git', ['show', '8b825b2fcd197c4b765e2f4f7d905ae6319e321f:src/utils/drawing-set/preview-document.ts'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8');
         const rewritten = text
             .replace(/from '\.\.\/([^']+)'/g, "from '/src/utils/$1.ts'")
