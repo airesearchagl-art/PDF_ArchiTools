@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Maximize, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Sheet, Source } from '../../utils/drawing-set/model';
 import type { ExpectedContent, PreviewCounts, PreviewDocumentOwner } from '../../utils/drawing-set/preview-document';
@@ -15,9 +15,12 @@ import { PreviewError } from '../../utils/drawing-set/preview-document';
  * render publishes nothing. The workspace mounts one viewer per Source (keyed
  * by its id), so nothing a viewer holds can outlive the Source it was for.
  *
- * Each render owns the page it fetched and cleans it up once the render has
+ * Each render runs in a page section of the owner (withPage, M7-P2-B2), in
+ * turn with the confirmation crops of the same document: the owner hands it
+ * the page, knows the render it starts, stops it when this viewer's signal
+ * aborts or the document closes, and cleans the page up once the render has
  * ended, however it ended -- including a page that arrives only after the
- * viewer has moved on, which is never drawn.
+ * viewer has moved on, which is never drawn. The owner counts the renders.
  *
  * The workspace opens the document through `open`, so that the preview's read
  * of the File is also a check of it (DrawingSetStore.openPreview); without it
@@ -99,62 +102,38 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!doc || !canvas || pane.width <= 0 || pane.height <= 0) return;
-        let cancelled = false;
-        // The render in progress: set when it starts, cleared when it ends.
-        let running: RenderTask | null = null;
-        (async () => {
-            let page: PDFPageProxy | null = null;
-            try {
-                page = await doc.getPage(pageNumber);
-                if (cancelled) return;
-                const whole = page.getViewport({ scale: 1 });
-                const fit = Math.max(0.01, Math.min(
-                    (pane.width - PANE_PADDING) / whole.width,
-                    (pane.height - PANE_PADDING) / whole.height,
-                ));
-                const cssScale = fit * zoom;
-                const ratio = window.devicePixelRatio || 1;
-                let scale = cssScale * ratio;
-                const width = whole.width * scale;
-                const height = whole.height * scale;
-                scale *= Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height), Math.sqrt(MAX_CANVAS_PIXELS / (width * height)));
-                const viewport = page.getViewport({ scale });
-                canvas.width = Math.max(1, Math.floor(viewport.width));
-                canvas.height = Math.max(1, Math.floor(viewport.height));
-                canvas.style.width = `${Math.round(whole.width * cssScale)}px`;
-                canvas.style.height = `${Math.round(whole.height * cssScale)}px`;
-                const task = page.render({ canvas, viewport });
-                running = task;
-                owner.noteRender('started');
-                try {
-                    await task.promise;
-                } catch (error) {
-                    if ((error as { name?: string })?.name === 'RenderingCancelledException') {
-                        owner.noteRender('cancelled');
-                        return;
-                    }
-                    owner.noteRender('failed');
-                    throw error;
-                } finally {
-                    running = null;
-                }
-                owner.noteRender('completed');
-                if (cancelled) return;
-                setRender({ key: renderKey, status: 'rendered', counts: owner.counts() });
-            } catch {
-                if (cancelled) return;
-                setRender({ key: renderKey, status: 'error', message: 'このページを表示できませんでした。', counts: owner.counts() });
-            } finally {
-                // After the render has ended, on every path.
-                page?.cleanup();
-            }
-        })();
-        return () => {
-            cancelled = true;
-            // Only a render still running is cancelled; it is counted, and its
-            // page cleaned up, where it ends.
-            running?.cancel();
-        };
+        // Aborting it stops this render: the owner cancels it and cleans the page up.
+        const stop = new AbortController();
+        owner.withPage(doc, pageNumber, async (page) => {
+            const whole = page.getViewport({ scale: 1 });
+            const fit = Math.max(0.01, Math.min(
+                (pane.width - PANE_PADDING) / whole.width,
+                (pane.height - PANE_PADDING) / whole.height,
+            ));
+            const cssScale = fit * zoom;
+            const ratio = window.devicePixelRatio || 1;
+            let scale = cssScale * ratio;
+            const width = whole.width * scale;
+            const height = whole.height * scale;
+            scale *= Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height), Math.sqrt(MAX_CANVAS_PIXELS / (width * height)));
+            const viewport = page.getViewport({ scale });
+            canvas.width = Math.max(1, Math.floor(viewport.width));
+            canvas.height = Math.max(1, Math.floor(viewport.height));
+            canvas.style.width = `${Math.round(whole.width * cssScale)}px`;
+            canvas.style.height = `${Math.round(whole.height * cssScale)}px`;
+            await page.render({ canvas, viewport }).promise;
+        }, { signal: stop.signal }).then(
+            () => {
+                if (!stop.signal.aborted) setRender({ key: renderKey, status: 'rendered', counts: owner.counts() });
+            },
+            (error: unknown) => {
+                // Stopped by this viewer, or by the document closing: nothing to show.
+                if (stop.signal.aborted || (error instanceof PreviewError && error.code === 'CLOSED')) return;
+                const message = error instanceof PreviewError && error.code !== 'OPEN_FAILED' ? error.message : 'このページを表示できませんでした。';
+                setRender({ key: renderKey, status: 'error', message, counts: owner.counts() });
+            },
+        );
+        return () => stop.abort();
     }, [doc, owner, pageNumber, zoom, pane.width, pane.height, renderKey]);
 
     const status: 'loading' | 'rendered' | 'error' = openError

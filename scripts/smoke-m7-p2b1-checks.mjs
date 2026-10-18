@@ -96,9 +96,13 @@ export async function runP2b1Checks(ctx) {
     const ex = await call('exclusive', truths);
     check('intake holds the gate from start to end: extraction asked meanwhile is refused (INTAKE_ACTIVE); intake leaves no document behind; then extraction runs',
         ex.duringIntake.extract.code === 'INTAKE_ACTIVE' && ex.intake.kind === 'accepted' && ex.pdfLeftByIntake === 0 && ex.afterIntake.outcome === 'COMPLETED', JSON.stringify(ex.duringIntake));
-    check('while extraction runs: intake refused (EXTRACTION_ACTIVE), the preview refused for any Source, a second extraction refused',
-        ex.during.intake.code === 'EXTRACTION_ACTIVE' && ex.during.preview === 'EXTRACTION_ACTIVE' && ex.during.previewOther === 'EXTRACTION_ACTIVE'
-        && ex.during.nested.code === 'EXTRACTION_ACTIVE', JSON.stringify(ex.during));
+    // M7-P2-B2 puts the store's operation lock in front of the gate: intake and a second extraction are now refused
+    // by the store first (OPERATION_LOCKED), and the page gate still refuses both on its own (EXTRACTION_ACTIVE).
+    check('while extraction runs: intake refused (the store\'s lock, OPERATION_LOCKED), the preview refused for any Source (EXTRACTION_ACTIVE), a second extraction refused (OPERATION_LOCKED)',
+        ex.during.intake.code === 'OPERATION_LOCKED' && ex.during.preview === 'EXTRACTION_ACTIVE' && ex.during.previewOther === 'EXTRACTION_ACTIVE'
+        && ex.during.nested.code === 'OPERATION_LOCKED', JSON.stringify(ex.during));
+    check('...and under that lock the page gate itself still refuses intake and extraction (EXTRACTION_ACTIVE)',
+        ex.during.gateIntake === 'EXTRACTION_ACTIVE' && ex.during.gateExtraction === 'EXTRACTION_ACTIVE', JSON.stringify({ i: ex.during.gateIntake, e: ex.during.gateExtraction }));
     const firstStart = ex.events.indexOf('pdf-start');
     check('the open preview is destroyed before the extraction document starts; never more than one PDF.js document while extracting',
         ex.events[0] === 'pdf-end' && firstStart > 0 && ex.extractionPeak === 1 && ex.during.pdfLive === 1, ex.events.join(' > '));

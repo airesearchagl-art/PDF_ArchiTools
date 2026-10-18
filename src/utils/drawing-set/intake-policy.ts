@@ -84,7 +84,9 @@ export type IntakeRefusalCode =
     /** A PDF.js document somewhere on the page could not be destroyed: nothing is opened again. */
     | 'RELEASE_UNCONFIRMED'
     /** The live Source with these bytes was removed while the file was being read. */
-    | 'DUPLICATE_REMOVED';
+    | 'DUPLICATE_REMOVED'
+    /** The session is locked by an operation in progress (title-block extraction, M7-P2-B2). */
+    | 'OPERATION_LOCKED';
 
 export interface IntakeRefusal {
     code: IntakeRefusalCode;

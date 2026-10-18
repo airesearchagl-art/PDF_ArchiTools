@@ -252,6 +252,21 @@ export class RuntimeBindingLedger {
     }
 
     /**
+     * Which presentation of a File, and which check of it, this ledger holds
+     * for a Source now (M7-P2-B2): two numbers, frozen, in a new object each
+     * call -- never the File, the finding or anything that leads back into the
+     * ledger. Every presentation, by any caller, gets a new `presentedAt`, and
+     * every result the ledger takes gets a new `checkedAt`, so evidence that
+     * remembers a stamp can tell that either has moved since. Null when
+     * nothing is held. Changes nothing.
+     */
+    presentationStamp(sourceId: Uuid): Readonly<{ presentedAt: number; checkedAt: number | null }> | null {
+        const held = requireState(this).held.get(sourceId);
+        if (!held) return null;
+        return Object.freeze({ presentedAt: held.presentedAt, checkedAt: held.finding?.checkedAt ?? null });
+    }
+
+    /**
      * Begin one check against the Drawing Set as it is now; its `fileFor` is
      * what the checker reads Files through. A check begun against another
      * session's set hands out nothing.
