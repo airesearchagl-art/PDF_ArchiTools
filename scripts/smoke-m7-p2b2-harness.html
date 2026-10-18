@@ -1312,6 +1312,40 @@
                 out.NL5 = { thrown, operation: t.store.getSnapshot().operation, renameAfter: codeOf(t.store.renameProfile(t.profile.id, 'R')) };
                 await t.dispose();
             }
+            // N-L6: extraction's document cannot be destroyed -- the lock is let go, the gate keeps refusing, the snapshot says so.
+            {
+                const t = await observedStore();
+                const probeDoc = await openDoc(await fixtureBytes(P2A, 'p2a-register'));
+                const proto = Object.getPrototypeOf(probeDoc.doc.loadingTask._transport);
+                await probeDoc.task.destroy();
+                const realDestroy = proto.destroy;
+                const leaked = [];
+                proto.destroy = function failingOnce() {
+                    proto.destroy = realDestroy;
+                    leaked.push(this);
+                    return Promise.reject(new Error('simulated destroy failure'));
+                };
+                let report;
+                try {
+                    report = await t.store.extract({ sheetIds: [t.register1] });
+                } finally {
+                    proto.destroy = realDestroy;
+                }
+                const snap = t.store.getSnapshot();
+                const prepared = await t.store.prepareEvidence(t.register1, { panel: t.panel, slots: t.slots });
+                const intake = await t.store.intake(fileOf(await fixtureBytes(P1, 'p1-second-c'), 'c.pdf'));
+                out.NL6 = {
+                    report: report.report.kind === 'finished' ? { outcome: report.report.outcome, failure: report.report.failure } : report.report.refusal.code,
+                    operation: snap.operation, documentsUnavailable: snap.documentsUnavailable, gate: t.r.gate.releaseUnconfirmed,
+                    prepare: prepared.ok ? 'issued' : prepared.refusal.code, intake: intake.kind === 'refused' ? intake.refusal.code : intake.kind,
+                };
+                // Release by hand what the injected failure left: the transport, then its worker (PDF.js skipped it).
+                for (const transport of leaked) {
+                    await realDestroy.call(transport).catch(() => { });
+                    transport.loadingTask?._worker?.destroy();
+                }
+                await t.dispose();
+            }
             await s.dispose();
             out.workers = workers();
             return plainly(out);

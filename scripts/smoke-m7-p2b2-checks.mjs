@@ -311,6 +311,9 @@ export async function runP2b2Checks(ctx) {
         lk.NL3.afterReset.operation === null && lk.NL3.afterReset.sheets === 0 && lk.NL3.report.applied === false && lk.NL3.report.notApplied === 'SESSION_REPLACED'
         && lk.NL3.progressAfterReset === 0 && lk.NL3.runsNow === 0, JSON.stringify(lk.NL3));
     check('N-L5 extraction that throws: the lock is let go', lk.NL5.thrown === 'simulated' && lk.NL5.operation === null && lk.NL5.renameAfter === 'ok', JSON.stringify(lk.NL5));
+    check('N-L6 extraction\'s document cannot be destroyed: the run FAILED (RELEASE_UNCONFIRMED), the lock is let go, the snapshot says documents are unavailable, and crops and intake are refused',
+        lk.NL6.report.outcome === 'FAILED' && lk.NL6.report.failure === 'RELEASE_UNCONFIRMED' && lk.NL6.operation === null && lk.NL6.documentsUnavailable && lk.NL6.gate
+        && lk.NL6.prepare === 'RELEASE_UNCONFIRMED' && lk.NL6.intake === 'RELEASE_UNCONFIRMED', JSON.stringify(lk.NL6));
     check('no PDF.js document or recogniser left running', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0, JSON.stringify(lk.workers));
 
     // ------------------------------------------------------------------
