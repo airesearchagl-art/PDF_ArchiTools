@@ -190,12 +190,13 @@ export const TitleBlockPanel: React.FC<Props> = ({
                 </div>
             )}
             {lastExtraction && !operation && (
-                <div className="ds-extraction-result" data-ds-extraction-result={lastExtraction.kind === 'refused' ? 'refused' : lastExtraction.outcome ?? ''}>
+                <div className="ds-extraction-result" data-ds-extraction-result={lastExtraction.kind === 'refused' ? 'refused' : lastExtraction.outcome ?? ''} data-ds-extraction-ocr-failed={lastExtraction.ocrFailed}>
                     {lastExtraction.kind === 'refused' ? (
                         <span>{lastExtraction.refusal?.message}</span>
                     ) : (
                         <span>
                             {OUTCOME_LABEL[lastExtraction.outcome ?? 'FAILED']}：{lastExtraction.committed}ページの読み取り値を記録しました。
+                            {lastExtraction.ocrFailed > 0 && ` そのうち${lastExtraction.ocrFailed}ページは文字認識（OCR）ができず、値を読み取れていません。`}
                             {lastExtraction.excluded.length > 0 && ` 読み取れなかったページ：${lastExtraction.excluded.map((e) => `${EXCLUSION_LABEL[e.code] ?? e.code} ${e.count}`).join('、')}`}
                             {!lastExtraction.applied && ' （図面一式が変わったため、記録していません）'}
                         </span>

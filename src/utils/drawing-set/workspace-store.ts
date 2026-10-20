@@ -106,6 +106,8 @@ export interface ExtractionSummary {
     readonly outcome: AnalysisRunOutcome | null;
     readonly applied: boolean;
     readonly committed: number;
+    /** Of those, how many this run recorded as OCR_FAILED: an observation with no field read (RV-39-02). */
+    readonly ocrFailed: number;
     readonly excluded: ReadonlyArray<{ code: ExclusionCode; count: number }>;
     readonly failure: 'RELEASE_UNCONFIRMED' | 'UNEXPECTED' | null;
 }
@@ -741,7 +743,12 @@ export class DrawingSetStore {
         // The report is shown only to the session, and the visit, it was asked in (RF-39-01).
         const sessionEpoch = this.sessionEpoch;
         const { report } = await this.extract({ sheetIds });
-        const summary = summarise(runId, report);
+        const run = report.kind === 'finished' ? report.run : null;
+        const committed = new Set(report.kind === 'finished' ? report.committedSheetIds : []);
+        const ocrFailed = run
+            ? this.currentSet().sheets.filter((sheet) => committed.has(sheet.id) && sheet.observation?.runId === run.id && sheet.observation.status === 'OCR_FAILED').length
+            : 0;
+        const summary = summarise(runId, report, ocrFailed);
         const stale = this.left || sessionEpoch !== this.sessionEpoch || (this.lastExtraction !== null && this.lastExtraction.runId > runId);
         if (!stale && (report.kind !== 'refused' || report.refusal.code !== 'OPERATION_LOCKED')) {
             this.lastExtraction = summary;
@@ -1066,9 +1073,9 @@ export class DrawingSetStore {
     }
 }
 
-function summarise(runId: number, report: StoreExtractionReport): ExtractionSummary {
+function summarise(runId: number, report: StoreExtractionReport, ocrFailed: number): ExtractionSummary {
     if (report.kind === 'refused') {
-        return { runId, kind: 'refused', refusal: { ...report.refusal }, outcome: null, applied: false, committed: 0, excluded: [], failure: null };
+        return { runId, kind: 'refused', refusal: { ...report.refusal }, outcome: null, applied: false, committed: 0, ocrFailed: 0, excluded: [], failure: null };
     }
     const counts = new Map<ExclusionCode, number>();
     for (const exclusion of report.excluded) counts.set(exclusion.code, (counts.get(exclusion.code) ?? 0) + 1);
@@ -1079,6 +1086,7 @@ function summarise(runId: number, report: StoreExtractionReport): ExtractionSumm
         outcome: report.outcome,
         applied: report.applied,
         committed: report.committedSheetIds.length,
+        ocrFailed,
         excluded: [...counts].map(([code, count]) => ({ code, count })),
         failure: report.failure,
     };

@@ -333,8 +333,35 @@ export async function runP2b2Checks(ctx) {
             n.newRun.outcome === 'COMPLETED' && n.newRun.runId > n.oldRunId && n.afterNew.last?.runId === n.newRun.runId
             && n.afterOld.last?.runId === n.newRun.runId && n.afterOld.last.outcome === 'COMPLETED' && n.afterOld.version === n.afterNew.version, JSON.stringify(n));
     }
+    // RV-39-02: extraction cancelled while its recogniser's Worker is still starting. The Worker's start is held
+    // at tesseract.js's own answers by the harness; what holds is checked, and the Worker's lifetime is recorded.
+    const oi = await call('ocrInit');
+    const cancelledText = (p) => p?.result?.state === 'CANCELLED' && /^読み取りを中止しました/.test(p.result.text) && p.progress === null;
+    check('RV-39-02 A cancelled while the recogniser starts: shown as cancelled (not completed), the lock let go, the extraction lease ended',
+        oi.A.atCancel.phase === 'running' && oi.A.firstSummary.outcome === 'CANCELLED' && oi.A.afterCancel.operation === null && !oi.A.afterCancel.extractionActive
+        && cancelledText(oi.A.afterCancel.panel), JSON.stringify({ atCancel: oi.A.atCancel, afterCancel: oi.A.afterCancel }));
+    check('RV-39-02 A ...the next extraction, asked for before the old Worker ended, completes and is shown; the old Worker never recognises anything',
+        oi.A.second.outcome === 'COMPLETED' && oi.A.afterSecond.shown?.runId === oi.A.second.runId && oi.A.afterSecond.observation?.status === 'READ' && !oi.A.oldRecognised,
+        JSON.stringify({ second: oi.A.second, afterSecond: oi.A.afterSecond, log: oi.A.log }));
+    check('RV-39-02 A ...the old start completing afterwards ends its Worker and moves nothing: summary, observation and snapshot version as they were',
+        oi.A.afterOld.live === 0 && oi.A.afterOld.version === oi.A.afterSecond.version && oi.A.afterOld.shown?.runId === oi.A.second.runId
+        && oi.A.afterOld.observation?.runId === oi.A.afterSecond.observation?.runId && oi.A.afterOld.panel.result?.state === 'COMPLETED', JSON.stringify(oi.A.afterOld));
+    check('RV-39-02 B cancelled while the recogniser loads, then its start fails: cancelled, the lock let go; the failure moves nothing and the next extraction completes',
+        oi.B.afterCancel.outcome === 'CANCELLED' && oi.B.afterCancel.operation === null && oi.B.afterFail.operation === null && oi.B.afterFail.version === oi.B.afterCancel.version
+        && oi.B.afterFail.recogniser.started === false && oi.B.afterNext.outcome === 'COMPLETED' && oi.B.afterNext.shown?.outcome === 'COMPLETED', JSON.stringify(oi.B));
+    check('RV-39-02 C the language data refused (tesseract.js never settles the start): shown as still reading, never as finished; once cancelled, shown as cancelled and the lock let go',
+        !oi.C.hanging.settled && oi.C.hanging.operation?.phase === 'running' && oi.C.hanging.shown === null && oi.C.hanging.panel.result === null && /^読み取り中/.test(oi.C.hanging.panel.progress ?? '')
+        && oi.C.afterCancel.outcome === 'CANCELLED' && oi.C.afterCancel.operation === null && cancelledText(oi.C.afterCancel.panel), JSON.stringify(oi.C));
+    check('RV-39-02 D a start that never answers, cancelled: shown as cancelled, the lock let go', oi.D.outcome === 'CANCELLED' && oi.D.operation === null && cancelledText(oi.D.panel), JSON.stringify(oi.D));
+    check('RV-39-02 E the recogniser cannot start (not cancelled): the Sheet is recorded OCR_FAILED with no field read, and the screen says so -- not only "finished"',
+        oi.E.outcome === 'COMPLETED' && oi.E.observation?.status === 'OCR_FAILED' && oi.E.observation.sources.every((x) => x === 'none') && oi.E.ocrFailed === 1
+        && oi.E.panel.result?.ocrFailed === 1 && /文字認識（OCR）ができず、値を読み取れていません/.test(oi.E.panel.result.text), JSON.stringify(oi.E));
+    // Recorded, not passed: where the Worker's lifetime does not follow the lock (B2-D02 "abortの場合はworker終了…の後に解除"). Human Gate.
+    note('RV-39-02 recorded A: Worker alive when the lock was let go', `live ${oi.A.afterCancel.live}, ended ${oi.A.afterCancel.oldEnded}; next Worker spawned with ${oi.A.afterSecond.newLiveAtSpawn} OCR Workers live, recognised before the old one ended: ${oi.A.freshRecognisedBeforeOldEnded}; old ended only when its start completed (${oi.A.log.join(' > ')})`);
+    note('RV-39-02 recorded B/C/D: Worker never ended (no handle anywhere in the app)', `B after the start failed: live ${oi.B.afterFail.live}, ended ${oi.B.afterFail.oldEnded}, next spawned with ${oi.B.afterNext.newLiveAtSpawn} live; C: live ${oi.C.afterCancel.live}, ended ${oi.C.afterCancel.oldEnded}; D: live ${oi.D.live}, ended ${oi.D.oldEnded}`);
+    note('RV-39-02 recorded F: every start fails, not cancelled', `${oi.F.sheets} Sheets, ${oi.F.ocrFailed} OCR_FAILED; ${oi.F.spawned} Workers spawned (one per page that needs OCR), ${oi.F.live} still live, ${oi.F.ended} ended`);
     check('no PDF.js document or recogniser left running', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0
-        && sm.workers.pdf.live === 0 && sm.workers.ocr.live === 0, JSON.stringify({ lk: lk.workers, sm: sm.workers }));
+        && sm.workers.pdf.live === 0 && sm.workers.ocr.live === 0 && oi.workers.pdf.live === 0 && oi.workers.ocr.live === 0, JSON.stringify({ lk: lk.workers, sm: sm.workers, oi: oi.workers }));
 
     // ------------------------------------------------------------------
     section('42. M7-P2-B2 static gates and privacy');
@@ -364,7 +391,10 @@ export async function runP2b2Checks(ctx) {
     const exporters = filesMatching(ROOT, 'src/utils/drawing-set', /toDataURL|toBlob|createObjectURL/).concat(filesMatching(ROOT, 'src/components/drawing-set', /toDataURL|toBlob|createObjectURL/));
     probe('crops are never turned into images, data URLs or object URLs (M7 code)', exporters.length === 0, exporters.join(', '));
     const storage = await call('storage');
-    check('these runs wrote nothing to browser storage, left no object URL, and exported no canvas',
-        storage.writes.writes === 0 && storage.local === 0 && storage.session === 0 && storage.objectUrls === 0 && storage.exports.toDataURL === 0 && storage.exports.toBlob === 0,
-        JSON.stringify(storage));
+    // The RV-39-02 runs recognise real pages: the existing OCR engine hands tesseract.js one data URL per
+    // recognition (in memory, to its Worker). Those, and nothing else, are allowed here.
+    check('these runs wrote nothing to browser storage, left no object URL, and exported no canvas (but the recogniser\'s own input, one per recognition)',
+        storage.writes.writes === 0 && storage.local === 0 && storage.session === 0 && storage.objectUrls === 0
+        && oi.recogniser.recognitions > 0 && oi.recogniser.toDataURL === oi.recogniser.recognitions && storage.exports.toDataURL === oi.recogniser.toDataURL && storage.exports.toBlob === 0,
+        JSON.stringify({ storage, recogniser: oi.recogniser }));
 }
