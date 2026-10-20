@@ -18,5 +18,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["m7-p2b1-evidence.ts"]
+  "include": ["m7-p2b1-evidence.ts", "m7-p2b2-confirmation.ts"]
 }

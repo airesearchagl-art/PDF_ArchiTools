@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Maximize, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Sheet, Source } from '../../utils/drawing-set/model';
 import type { ExpectedContent, PreviewCounts, PreviewDocumentOwner } from '../../utils/drawing-set/preview-document';
 import { PreviewError } from '../../utils/drawing-set/preview-document';
+import type { ViewerGeometry } from '../../utils/drawing-set/profile-pointer';
 
 /**
  * The Drawing Set's read-only viewer: one selected page, drawn on one canvas.
@@ -15,13 +16,23 @@ import { PreviewError } from '../../utils/drawing-set/preview-document';
  * render publishes nothing. The workspace mounts one viewer per Source (keyed
  * by its id), so nothing a viewer holds can outlive the Source it was for.
  *
- * Each render owns the page it fetched and cleans it up once the render has
+ * Each render runs in a page section of the owner (withPage, M7-P2-B2), in
+ * turn with the confirmation crops of the same document: the owner hands it
+ * the page, knows the render it starts, stops it when this viewer's signal
+ * aborts or the document closes, and cleans the page up once the render has
  * ended, however it ended -- including a page that arrives only after the
- * viewer has moved on, which is never drawn.
+ * viewer has moved on, which is never drawn. The owner counts the renders.
  *
  * The workspace opens the document through `open`, so that the preview's read
  * of the File is also a check of it (DrawingSetStore.openPreview); without it
  * the viewer asks the owner directly.
+ *
+ * M7-P2-B2: over the rendered page the workspace may lay an overlay -- the
+ * title-block profile's rectangles, or the profile editor -- told exactly
+ * where the page lies (ViewerGeometry). The overlay is drawn in CSS over the
+ * canvas and never draws into it. `reopenKey` opens the document again once
+ * extraction has given the documents back; `suspended` says why nothing is
+ * shown meanwhile.
  */
 
 interface Props {
@@ -32,6 +43,12 @@ interface Props {
     pageTotal: number;
     /** How the document is opened; the owner's own open() when not given. */
     open?: (sourceId: string, file: Blob, expected: ExpectedContent) => Promise<PDFDocumentProxy>;
+    /** Laid over the rendered page, told where it lies. */
+    overlay?: (geometry: ViewerGeometry) => React.ReactNode;
+    /** Opens the document again when it changes. */
+    reopenKey?: number;
+    /** Why nothing can be shown just now (shown over the page), or null. */
+    suspended?: string | null;
 }
 
 const ZOOM_STEP = 1.25;
@@ -46,9 +63,9 @@ type DocState =
     | { sourceId: string; doc: PDFDocumentProxy }
     | { sourceId: string; error: string };
 
-type RenderState = { key: string; status: 'rendered' | 'error'; message?: string; counts: PreviewCounts };
+type RenderState = { key: string; status: 'rendered' | 'error'; message?: string; counts: PreviewCounts; geometry?: ViewerGeometry };
 
-export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, sheet, pageTotal, open }) => {
+export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, sheet, pageTotal, open, overlay, reopenKey = 0, suspended = null }) => {
     const paneRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [zoom, setZoom] = useState(1);
@@ -86,7 +103,7 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             },
         );
         return () => { alive = false; };
-    }, [owner, open, sourceId, file, expectedBytes, expectedSha256]);
+    }, [owner, open, sourceId, file, expectedBytes, expectedSha256, reopenKey]);
 
     // A document destroyed by its owner is never drawn from.
     const doc = docState && docState.sourceId === sourceId && 'doc' in docState && !docState.doc.loadingTask.destroyed
@@ -99,62 +116,46 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!doc || !canvas || pane.width <= 0 || pane.height <= 0) return;
-        let cancelled = false;
-        // The render in progress: set when it starts, cleared when it ends.
-        let running: RenderTask | null = null;
-        (async () => {
-            let page: PDFPageProxy | null = null;
-            try {
-                page = await doc.getPage(pageNumber);
-                if (cancelled) return;
-                const whole = page.getViewport({ scale: 1 });
-                const fit = Math.max(0.01, Math.min(
-                    (pane.width - PANE_PADDING) / whole.width,
-                    (pane.height - PANE_PADDING) / whole.height,
-                ));
-                const cssScale = fit * zoom;
-                const ratio = window.devicePixelRatio || 1;
-                let scale = cssScale * ratio;
-                const width = whole.width * scale;
-                const height = whole.height * scale;
-                scale *= Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height), Math.sqrt(MAX_CANVAS_PIXELS / (width * height)));
-                const viewport = page.getViewport({ scale });
-                canvas.width = Math.max(1, Math.floor(viewport.width));
-                canvas.height = Math.max(1, Math.floor(viewport.height));
-                canvas.style.width = `${Math.round(whole.width * cssScale)}px`;
-                canvas.style.height = `${Math.round(whole.height * cssScale)}px`;
-                const task = page.render({ canvas, viewport });
-                running = task;
-                owner.noteRender('started');
-                try {
-                    await task.promise;
-                } catch (error) {
-                    if ((error as { name?: string })?.name === 'RenderingCancelledException') {
-                        owner.noteRender('cancelled');
-                        return;
-                    }
-                    owner.noteRender('failed');
-                    throw error;
-                } finally {
-                    running = null;
-                }
-                owner.noteRender('completed');
-                if (cancelled) return;
-                setRender({ key: renderKey, status: 'rendered', counts: owner.counts() });
-            } catch {
-                if (cancelled) return;
-                setRender({ key: renderKey, status: 'error', message: 'このページを表示できませんでした。', counts: owner.counts() });
-            } finally {
-                // After the render has ended, on every path.
-                page?.cleanup();
-            }
-        })();
-        return () => {
-            cancelled = true;
-            // Only a render still running is cancelled; it is counted, and its
-            // page cleaned up, where it ends.
-            running?.cancel();
-        };
+        // Aborting it stops this render: the owner cancels it and cleans the page up.
+        const stop = new AbortController();
+        let geometry: ViewerGeometry | undefined;
+        owner.withPage(doc, pageNumber, async (page) => {
+            const whole = page.getViewport({ scale: 1 });
+            const fit = Math.max(0.01, Math.min(
+                (pane.width - PANE_PADDING) / whole.width,
+                (pane.height - PANE_PADDING) / whole.height,
+            ));
+            const cssScale = fit * zoom;
+            const ratio = window.devicePixelRatio || 1;
+            let scale = cssScale * ratio;
+            const width = whole.width * scale;
+            const height = whole.height * scale;
+            scale *= Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height), Math.sqrt(MAX_CANVAS_PIXELS / (width * height)));
+            const viewport = page.getViewport({ scale });
+            canvas.width = Math.max(1, Math.floor(viewport.width));
+            canvas.height = Math.max(1, Math.floor(viewport.height));
+            canvas.style.width = `${Math.round(whole.width * cssScale)}px`;
+            canvas.style.height = `${Math.round(whole.height * cssScale)}px`;
+            await page.render({ canvas, viewport }).promise;
+            // Where the page lies in the canvas's CSS box, for an overlay: the box is rounded, so its own scale is used.
+            geometry = {
+                cssScale: Math.round(whole.width * cssScale) / whole.width,
+                displayWidthPt: whole.width,
+                displayHeightPt: whole.height,
+                rotate: whole.rotation,
+            };
+        }, { signal: stop.signal }).then(
+            () => {
+                if (!stop.signal.aborted) setRender({ key: renderKey, status: 'rendered', counts: owner.counts(), geometry });
+            },
+            (error: unknown) => {
+                // Stopped by this viewer, or by the document closing: nothing to show.
+                if (stop.signal.aborted || (error instanceof PreviewError && error.code === 'CLOSED')) return;
+                const message = error instanceof PreviewError && error.code !== 'OPEN_FAILED' ? error.message : 'このページを表示できませんでした。';
+                setRender({ key: renderKey, status: 'error', message, counts: owner.counts() });
+            },
+        );
+        return () => stop.abort();
     }, [doc, owner, pageNumber, zoom, pane.width, pane.height, renderKey]);
 
     const status: 'loading' | 'rendered' | 'error' = openError
@@ -164,6 +165,7 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             : 'loading';
     const message = openError ?? (status === 'error' ? render?.message : null);
     const counts = render?.counts;
+    const geometry = status === 'rendered' ? render?.geometry : undefined;
 
     return (
         <div
@@ -178,6 +180,8 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
             data-ds-render-completed={counts?.renderCompleted ?? ''}
             data-ds-render-cancelled={counts?.renderCancelled ?? ''}
             data-ds-render-failed={counts?.renderFailed ?? ''}
+            data-ds-release-deadline-expired={counts?.releaseDeadlineExpired ?? ''}
+            data-ds-releases-unconfirmed={counts?.releasesUnconfirmed ?? ''}
         >
             <div className="ds-viewer-toolbar">
                 <span className="ds-viewer-label" title={source.displayName}>
@@ -197,14 +201,31 @@ export const ReadOnlySheetViewer: React.FC<Props> = ({ owner, source, file, shee
                 </span>
             </div>
             <div className="ds-viewer-pane" ref={paneRef}>
-                <canvas
-                    ref={canvasRef}
-                    className="ds-viewer-canvas"
-                    data-ds-rendered-sheet={status === 'rendered' ? sheet.id : ''}
-                    style={{ visibility: status === 'rendered' ? 'visible' : 'hidden' }}
-                />
-                {status === 'loading' && <div className="ds-viewer-overlay">表示を準備しています…</div>}
-                {status === 'error' && <div className="ds-viewer-overlay ds-viewer-error" role="alert">{message}</div>}
+                <div className="ds-viewer-page">
+                    <canvas
+                        ref={canvasRef}
+                        className="ds-viewer-canvas"
+                        data-ds-rendered-sheet={status === 'rendered' ? sheet.id : ''}
+                        style={{ visibility: status === 'rendered' && !suspended ? 'visible' : 'hidden' }}
+                    />
+                    {geometry && !suspended && overlay && (
+                        <div
+                            className="ds-viewer-page-overlay"
+                            data-ds-viewer-overlay
+                            data-ds-css-scale={geometry.cssScale}
+                            data-ds-rotate={geometry.rotate}
+                            data-ds-display={`${geometry.displayWidthPt}x${geometry.displayHeightPt}`}
+                        >
+                            {overlay(geometry)}
+                        </div>
+                    )}
+                </div>
+                {suspended ? <div className="ds-viewer-overlay" data-ds-viewer-suspended>{suspended}</div> : (
+                    <>
+                        {status === 'loading' && <div className="ds-viewer-overlay">表示を準備しています…</div>}
+                        {status === 'error' && <div className="ds-viewer-overlay ds-viewer-error" role="alert">{message}</div>}
+                    </>
+                )}
             </div>
         </div>
     );

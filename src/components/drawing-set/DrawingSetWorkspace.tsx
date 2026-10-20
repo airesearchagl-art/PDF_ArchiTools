@@ -3,15 +3,26 @@ import { Copy, FilePlus2, FolderOpen, Layers, RotateCcw, Square, X } from 'lucid
 import { VersionFooter } from '../VersionFooter';
 import { TOOL_VERSIONS } from '../../config/versions';
 import type { SourceBinding } from '../../utils/drawing-set/currency';
+import { planCrop } from '../../utils/drawing-set/crop-service';
 import { displaySafeFileName } from '../../utils/drawing-set/intake-policy';
-import type { Sheet, Source } from '../../utils/drawing-set/model';
-import { isLive, liveSheets, liveSources } from '../../utils/drawing-set/model';
+import type { FieldName, Rect, Sheet, Source, TitleBlockProfile, TransferModel } from '../../utils/drawing-set/model';
+import { FIELD_NAMES, isLive, liveSheets, liveSources } from '../../utils/drawing-set/model';
 import { PAGE_PDF_GATE, PAGE_PREVIEW_OWNER } from '../../utils/drawing-set/page-documents';
 import { displayOrientation, displaySizeMm, ORIENTATION_LABEL, paperSizeName } from '../../utils/drawing-set/page-facts';
+import type { ViewerGeometry } from '../../utils/drawing-set/profile-pointer';
+import { uprightSize } from '../../utils/drawing-set/profile-pointer';
 import type { IntakeProgress } from '../../utils/drawing-set/source-intake';
+import { findProfile } from '../../utils/drawing-set/title-block-profiles';
 import type { StoreIntakeResult } from '../../utils/drawing-set/workspace-store';
-import { DrawingSetStore } from '../../utils/drawing-set/workspace-store';
+import { DrawingSetStore, OCR_RELEASE_UNCONFIRMED_MESSAGE } from '../../utils/drawing-set/workspace-store';
+import { GATE_MESSAGES } from '../../utils/drawing-set/pdf-document-gate';
+import { ConfirmationPanel } from './ConfirmationPanel';
+import { confirmationText } from './title-block-labels';
+import type { DraftFields } from './ProfileEditor';
+import { FieldRectsOverlay, ProfileEditorPanel } from './ProfileEditor';
 import { ReadOnlySheetViewer } from './ReadOnlySheetViewer';
+import { TitleBlockPanel } from './TitleBlockPanel';
+import type { SheetRowFacts } from './VirtualSheetList';
 import { VirtualSheetList } from './VirtualSheetList';
 import './DrawingSetWorkspace.css';
 
@@ -45,7 +56,16 @@ import './DrawingSetWorkspace.css';
  * Runtime handles -- each Source's File, the one preview document -- live next
  * to the model, never in it, and go away with the session. Nothing is stored
  * anywhere: no browser storage, no server, no file.
+ *
+ * Title blocks (M7-P2-B2). A person draws a profile's four field rectangles
+ * on the page in the viewer, ticks the Sheets it covers and assigns it, reads
+ * them, and confirms each Sheet on its own against crops of the original
+ * drawing (ConfirmationPanel). Every change goes through the store's
+ * commands, which answer with a refusal the screen shows; nothing here calls
+ * update(). While a reading runs the store is locked, and the screen says so.
  */
+
+type Editor = { mode: 'create'; sheetId: string } | { mode: 'revise'; sheetId: string; profile: TitleBlockProfile } | null;
 
 type ItemState = 'queued' | 'processing' | 'accepted' | 'reconnected' | 'duplicate' | 'refused' | 'cancelled';
 
@@ -123,7 +143,18 @@ export const DrawingSetWorkspace: React.FC = () => {
     const [confirm, setConfirm] = useState<Confirmation>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [showFullSha, setShowFullSha] = useState(false);
+    const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
+    const [editor, setEditor] = useState<Editor>(null);
+    const [draft, setDraft] = useState<DraftFields>({});
+    const [drawingField, setDrawingField] = useState<FieldName | null>(null);
+    const [transferModel, setTransferModel] = useState<TransferModel | null>(null);
+    const [profileName, setProfileName] = useState('');
+    const [editorMessage, setEditorMessage] = useState<string | null>(null);
+    /** Where the viewer last drew the selected page, for the profile editor. */
+    const geometryRef = useRef<{ sheetId: string; geometry: ViewerGeometry } | null>(null);
     const owner = store.owner;
+    const operation = snapshot.operation;
+    const locked = operation !== null;
 
     // The screen's own queue of picked files. The session is the store's.
     const queueRef = useRef<{ itemId: number; file: File }[]>([]);
@@ -250,6 +281,15 @@ export const DrawingSetWorkspace: React.FC = () => {
         )));
     };
 
+    const closeEditor = (): void => {
+        setEditor(null);
+        setDraft({});
+        setDrawingField(null);
+        setTransferModel(null);
+        setProfileName('');
+        setEditorMessage(null);
+    };
+
     const resetSession = (): void => {
         stopProcessing();
         store.reset();
@@ -257,6 +297,8 @@ export const DrawingSetWorkspace: React.FC = () => {
         setSelectedSheetId(null);
         setConfirm(null);
         setShowFullSha(false);
+        setChecked(new Set());
+        closeEditor();
         setNotice('新しい図面一式を始めました。前の図面一式の内容は破棄されました。');
     };
 
@@ -293,11 +335,112 @@ export const DrawingSetWorkspace: React.FC = () => {
     const confirmSource = confirm?.kind === 'remove' ? sourcesById.get(confirm.sourceId) ?? null : null;
 
     const selectSheet = (sheetId: string): void => {
-        if (sheetId !== selectedSheetId) setShowFullSha(false);
+        if (sheetId !== selectedSheetId) {
+            setShowFullSha(false);
+            // A profile is drawn on one page; choosing another ends the drawing.
+            if (editor) {
+                closeEditor();
+                setNotice('別のページを選んだため、範囲の指定をやめました。');
+            }
+        }
         setSelectedSheetId(sheetId);
     };
 
+    const toggleCheck = (sheetId: string): void => {
+        setChecked((current) => {
+            const next = new Set(current);
+            if (next.has(sheetId)) next.delete(sheetId);
+            else next.add(sheetId);
+            return next;
+        });
+    };
+
+    /** Start drawing a profile, or redrawing one, on the page shown now. */
+    const startEditor = (profile: TitleBlockProfile | null): void => {
+        const shown = geometryRef.current;
+        if (!selectedSheet || !shown || shown.sheetId !== selectedSheet.id) return;
+        setEditorMessage(null);
+        setDrawingField(FIELD_NAMES[0]);
+        if (profile) {
+            // The profile's rectangles as they fall on this page, to adjust.
+            const plan = planCrop(profile, uprightSize(shown.geometry));
+            setDraft(Object.fromEntries(FIELD_NAMES.map((name) => [name, plan.fields[name].rect])) as DraftFields);
+            setTransferModel(profile.transferModel);
+            setEditor({ mode: 'revise', sheetId: selectedSheet.id, profile });
+        } else {
+            setDraft({});
+            setTransferModel(null);
+            setProfileName('');
+            setEditor({ mode: 'create', sheetId: selectedSheet.id });
+        }
+    };
+
+    const finishEditor = (): void => {
+        const shown = geometryRef.current;
+        if (!editor || !shown || shown.sheetId !== editor.sheetId || !transferModel || !FIELD_NAMES.every((name) => draft[name])) return;
+        const size = uprightSize(shown.geometry);
+        const referencePage = { uprightWidthPt: size.width, uprightHeightPt: size.height };
+        const fields = draft as Record<FieldName, Rect>;
+        const outcome = editor.mode === 'create'
+            ? store.createProfile({ name: profileName.trim(), transferModel, referencePage, fields })
+            : store.reviseProfile(editor.profile.id, { transferModel, referencePage, fields });
+        if (!outcome.ok) {
+            setEditorMessage(outcome.refusal.message);
+            return;
+        }
+        closeEditor();
+        setNotice(editor.mode === 'create'
+            ? `プロファイル「${profileName.trim()}」を作成しました。ページにチェックを付けて割り当ててください。`
+            : `プロファイル「${editor.profile.name}」の範囲を変更しました。このプロファイルのページは読み取り直しが必要です。`);
+    };
+
     const openPicker = (): void => inputRef.current?.click();
+
+    // What a Sheet List row adds: asked for the rows in view only.
+    const profileNames = useMemo(
+        () => new Map((drawingSet?.titleBlockProfiles ?? []).filter(isLive).map((p) => [p.id, p.name])),
+        [drawingSet],
+    );
+    const describe = (sheet: Sheet): SheetRowFacts => {
+        const profile = sheet.profileAssignment ? profileNames.get(sheet.profileAssignment.profileId) ?? null : null;
+        const currency = store.currencyOf(sheet)?.confirmation ?? null;
+        if (!currency) return { profile, badge: null, confirmedNumber: null };
+        const label = confirmationText(currency);
+        const shown = profile !== null || sheet.observation !== null || sheet.confirmation !== null;
+        return {
+            profile,
+            badge: shown ? { ...label, state: currency.state } : null,
+            confirmedNumber: sheet.confirmation ? sheet.confirmation.values.drawingNumber : null,
+        };
+    };
+
+    // The selected Sheet's profile rectangles over the page, or the ones being drawn.
+    const assignedProfile = selectedSheet?.profileAssignment && drawingSet ? findProfile(drawingSet, selectedSheet.profileAssignment.profileId) : null;
+    const overlay = (geometry: ViewerGeometry): React.ReactNode => {
+        if (selectedSheet) geometryRef.current = { sheetId: selectedSheet.id, geometry };
+        if (editor && selectedSheet && editor.sheetId === selectedSheet.id) {
+            return (
+                <FieldRectsOverlay
+                    geometry={geometry}
+                    rects={draft}
+                    drawing={drawingField}
+                    mode="draft"
+                    onDraw={(field, rect) => {
+                        setDraft((current) => ({ ...current, [field]: rect }));
+                        // On to the next field still to draw.
+                        const next = FIELD_NAMES.find((name) => name !== field && !draft[name]) ?? null;
+                        setDrawingField(next);
+                    }}
+                />
+            );
+        }
+        if (assignedProfile && isLive(assignedProfile)) {
+            const plan = planCrop(assignedProfile, uprightSize(geometry));
+            const rects = Object.fromEntries(FIELD_NAMES.map((name) => [name, plan.fields[name].rect])) as DraftFields;
+            return <FieldRectsOverlay geometry={geometry} rects={rects} mode="profile" />;
+        }
+        return null;
+    };
 
     const picker = (
         <input
@@ -357,6 +500,11 @@ export const DrawingSetWorkspace: React.FC = () => {
             data-ds-gate-intakes-refused={gateCounts.intakesRefused}
             data-ds-gate-extractions-started={gateCounts.extractionsStarted}
             data-ds-gate-release-unconfirmed={String(store.gate.releaseUnconfirmed)}
+            data-ds-operation={operation ? operation.phase : ''}
+            data-ds-documents-unavailable={String(snapshot.documentsUnavailable)}
+            data-ds-ocr-unavailable={String(snapshot.ocr.unavailable)}
+            data-ds-ocr-live={snapshot.ocr.live}
+            data-ds-ocr-slowest-start-ms={snapshot.ocr.slowestStartMs}
         >
             {picker}
             <header className="ds-header">
@@ -371,11 +519,11 @@ export const DrawingSetWorkspace: React.FC = () => {
                     <span className="ds-status" data-ds-status>
                         {busy && current
                             ? `処理中: ${current.name}（${current.progress || '準備中'}）${pending > 1 ? ` ほか ${pending - 1} 件待ち` : ''}`
-                            : '待機中'}
+                            : operation ? '表題欄を読み取っています' : '待機中'}
                     </span>
                 </div>
                 <div className="ds-header-actions">
-                    <button type="button" className="ds-button is-primary" onClick={openPicker} data-ds-add>
+                    <button type="button" className="ds-button is-primary" onClick={openPicker} disabled={locked} title={locked ? '表題欄の読み取り中はファイルを追加できません。' : undefined} data-ds-add>
                         <FilePlus2 size={16} /> PDFを追加
                     </button>
                     {busy && (
@@ -407,6 +555,18 @@ export const DrawingSetWorkspace: React.FC = () => {
                     <button type="button" className="ds-button" onClick={() => setConfirm(null)} data-ds-confirm-no>
                         やめる
                     </button>
+                </div>
+            )}
+
+            {snapshot.documentsUnavailable && (
+                <div className="ds-confirm" role="alert" data-ds-release-unconfirmed-banner>
+                    <span>{GATE_MESSAGES.RELEASE_UNCONFIRMED}</span>
+                </div>
+            )}
+
+            {snapshot.ocr.unavailable && (
+                <div className="ds-confirm" role="alert" data-ds-ocr-unconfirmed-banner>
+                    <span>{OCR_RELEASE_UNCONFIRMED_MESSAGE}</span>
                 </div>
             )}
 
@@ -469,6 +629,7 @@ export const DrawingSetWorkspace: React.FC = () => {
                                         <button
                                             type="button"
                                             className="ds-icon-button"
+                                            disabled={locked}
                                             title="この図面一式から外す"
                                             aria-label={`「${source.displayName}」をこの図面一式から外す`}
                                             onClick={() => setConfirm({ kind: 'remove', sourceId: source.id })}
@@ -482,7 +643,15 @@ export const DrawingSetWorkspace: React.FC = () => {
                             </ul>
                         </section>
                         <div className="ds-pane-title">ページ一覧（{sheets.length}）</div>
-                        <VirtualSheetList sheets={sheets} sourceNames={sourceNames} selectedSheetId={selectedSheet?.id ?? null} onSelect={selectSheet} />
+                        <VirtualSheetList
+                            sheets={sheets}
+                            sourceNames={sourceNames}
+                            selectedSheetId={selectedSheet?.id ?? null}
+                            onSelect={selectSheet}
+                            checked={checked}
+                            onToggle={toggleCheck}
+                            describe={describe}
+                        />
                     </aside>
 
                     <section className="ds-center" aria-label="プレビュー（読み取り専用）">
@@ -495,9 +664,39 @@ export const DrawingSetWorkspace: React.FC = () => {
                                 file={selectedFile}
                                 sheet={selectedSheet}
                                 pageTotal={selectedSource.fingerprint.pageCount}
+                                overlay={overlay}
+                                reopenKey={snapshot.previewEpoch}
+                                suspended={locked ? '表題欄の読み取り中はプレビューを表示しません。読み取りが終わると表示できます。' : null}
                             />
                         ) : (
                             <div className="ds-viewer-placeholder">{busy ? '読み込みが終わると、ここにページを表示します。' : '一覧からページを選ぶと、ここに表示します。'}</div>
+                        )}
+                        {editor && selectedSheet && selectedSource && editor.sheetId === selectedSheet.id ? (
+                            <ProfileEditorPanel
+                                mode={editor.mode}
+                                profileName={editor.mode === 'revise' ? editor.profile.name : ''}
+                                reference={`${selectedSource.displayName} p.${selectedSheet.pageNumber}`}
+                                draft={draft}
+                                drawing={drawingField}
+                                transferModel={transferModel}
+                                name={profileName}
+                                message={editorMessage}
+                                onPick={setDrawingField}
+                                onTransferModel={setTransferModel}
+                                onName={setProfileName}
+                                onDone={finishEditor}
+                                onCancel={closeEditor}
+                            />
+                        ) : selectedSheet && (
+                            <ConfirmationPanel
+                                key={`${selectedSheet.id}:${selectedSheet.observation?.runId ?? ''}:${selectedSheet.confirmation?.confirmedAt ?? ''}`}
+                                store={store}
+                                sheet={selectedSheet}
+                                generation={snapshot.evidenceGeneration}
+                                locked={locked}
+                                documentsUnavailable={snapshot.documentsUnavailable}
+                                onNotice={setNotice}
+                            />
                         )}
                     </section>
 
@@ -506,6 +705,22 @@ export const DrawingSetWorkspace: React.FC = () => {
                             <SheetInfo sheet={selectedSheet} source={selectedSource} showFullSha={showFullSha} onToggleSha={() => setShowFullSha((value) => !value)} />
                         ) : (
                             <p className="ds-muted">ページを選ぶと、用紙サイズや回転などの情報を表示します。</p>
+                        )}
+                        {drawingSet && (
+                            <TitleBlockPanel
+                                store={store}
+                                drawingSet={drawingSet}
+                                checked={checked}
+                                operation={operation}
+                                lastExtraction={snapshot.lastExtraction}
+                                selectedSheet={selectedSheet}
+                                canDraw={Boolean(selectedSheet && selectedFile && !locked && !snapshot.documentsUnavailable)}
+                                editing={editor !== null}
+                                onCheck={(ids) => setChecked(new Set(ids ?? []))}
+                                onCreate={() => startEditor(null)}
+                                onRevise={(profile) => startEditor(profile)}
+                                onNotice={setNotice}
+                            />
                         )}
                         {resultsList}
                     </aside>
@@ -549,7 +764,7 @@ const SheetInfo: React.FC<{ sheet: Sheet; source: Source; showFullSha: boolean; 
                     </>
                 )}
             </dl>
-            {facts && <p className="ds-muted ds-small">テキストの有無はPDF内の情報だけで判定しています。文字認識（OCR）は行っていません。</p>}
+            {facts && <p className="ds-muted ds-small">テキストの有無はPDF内の情報だけで判定しています（この判定に文字認識（OCR）は使っていません）。</p>}
 
             <div className="ds-pane-title">ファイル</div>
             <dl>

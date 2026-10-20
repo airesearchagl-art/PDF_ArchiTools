@@ -20,7 +20,7 @@ import type { OcrWord } from './types';
 import type { SelectionRect } from './table-types';
 import type { RegisterFieldName } from './drawing-register-types';
 import { OcrEngine } from './ocr';
-import type { OcrCacheMethod } from './ocr';
+import type { OcrCacheMethod, OcrEngineOptions } from './ocr';
 import { renderRegion, releaseRegion, REGISTER_DPI } from './drawing-register-geometry';
 import { unionRect } from './drawing-register-template';
 
@@ -60,6 +60,13 @@ export interface RegisterOcrOptions {
      * drawing register.
      */
     cacheMethod?: OcrCacheMethod;
+    /**
+     * Handed to the engine as is (`OcrEngineOptions.createWorker`). Omitted --
+     * the drawing register's own default -- the engine makes its worker with
+     * tesseract.js's `createWorker`, as it always has, and the options it is
+     * given are the same object shape as before.
+     */
+    createWorker?: OcrEngineOptions['createWorker'];
 }
 
 /**
@@ -74,10 +81,12 @@ export class RegisterOcrEngine {
     private engine: OcrEngine | null = null;
     private readonly langs: string;
     private readonly cacheMethod?: OcrCacheMethod;
+    private readonly createWorker?: OcrEngineOptions['createWorker'];
 
     constructor(langs = 'jpn+eng', options: RegisterOcrOptions = {}) {
         this.langs = langs;
         this.cacheMethod = options.cacheMethod;
+        this.createWorker = options.createWorker;
     }
 
     get started(): boolean {
@@ -105,6 +114,7 @@ export class RegisterOcrEngine {
         const engine = new OcrEngine(this.langs, undefined, {
             pageSegMode: REGISTER_PAGE_SEG_MODE,
             cacheMethod: this.cacheMethod,
+            ...(this.createWorker === undefined ? {} : { createWorker: this.createWorker }),
         });
         await engine.start();
         this.engine = engine;

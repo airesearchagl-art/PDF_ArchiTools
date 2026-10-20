@@ -498,6 +498,9 @@
                     preview: await previewOutcome(store.openPreview(G, store.heldFile(G), expectedOf(store.currentSet().sources.find((s) => s.id === G)))),
                     previewOther: await previewOutcome(store.openPreview(cmap.id, store.heldFile(cmap.id), expectedOf(cmap))),
                     nested: reportSummary((await store.extract({ sheetIds: gSheets.slice(0, 1) })).report),
+                    // Under the store's operation lock (M7-P2-B2), the page gate itself still refuses both.
+                    gateIntake: (() => { const hold = gate.beginIntake(); if (hold.ok) hold.end(); return hold.ok ? 'ok' : hold.code; })(),
+                    gateExtraction: await gate.beginExtraction().then((b) => { if (b.ok) b.lease.end(); return b.ok ? 'ok' : b.code; }),
                     pdfLive: window.__workers.pdf.live,
                 };
                 ocr.release();

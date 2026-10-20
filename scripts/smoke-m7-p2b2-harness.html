@@ -1,0 +1,2139 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>M7-P2-B2 harness</title>
+    <style>
+        /* The viewer's pane as the workspace sizes it: a fixed box, so a render never resizes it. */
+        .ds-viewer { display: flex; flex-direction: column; height: 100%; }
+        .ds-viewer-pane { position: relative; flex: 1; min-height: 0; overflow: auto; }
+    </style>
+</head>
+<body>
+    <p id="state">loading</p>
+    <!--
+        Drives the Production M7-P2-B2 modules -- the preview owner's page
+        sections and release (W0), the crop service, the session store's
+        commands, operation lock and confirmation evidence -- in a real
+        browser, through the Vite dev server, for scripts/smoke-m7-p1.mjs
+        (scripts/smoke-m7-p2b2-checks.mjs). Every function returns plain data;
+        the Node side decides what passes. Synthetic fixtures only.
+
+        Delays are deferreds the harness settles itself, and the release
+        deadline is the owner's test seam, fired by hand: nothing here waits
+        on a timer to decide an outcome.
+    -->
+    <script>
+        // Before any module runs: count Workers by kind, canvases made, and
+        // every storage write, object URL and canvas export.
+        (() => {
+            const counts = { pdf: { started: 0, ended: 0, live: 0, peak: 0 }, ocr: { started: 0, ended: 0, live: 0, peak: 0 }, other: { started: 0, ended: 0, live: 0, peak: 0 } };
+            const kindOf = (url) => (/pdf\.worker/.test(url) ? 'pdf' : /\/ocr\//.test(url) ? 'ocr' : 'other');
+            // RV-39-02: the start of an OCR Worker the test planned for is held at one of tesseract.js's
+            // answers (load / loadLanguage / initialize) until the test releases it, fails it, or never does.
+            // The Worker itself is real and does its real work; only when the page hears the answer moves.
+            const ocrStart = { plans: [], made: [], log: [] };
+            const NativeWorker = window.Worker;
+            window.Worker = class extends NativeWorker {
+                constructor(url, options) {
+                    super(url, options);
+                    this.__kind = kindOf(String(url));
+                    const c = counts[this.__kind];
+                    c.started += 1;
+                    c.live += 1;
+                    c.peak = Math.max(c.peak, c.live);
+                    if (this.__kind === 'ocr') {
+                        const plan = ocrStart.plans.shift() ?? null;
+                        let channel = null;
+                        try {
+                            channel = new URLSearchParams(new URL(String(url), location.href).hash.slice(1)).get('channel');
+                        } catch { /* not a URL the app made */ }
+                        const record = { n: ocrStart.made.length + 1, plan, channel, liveAtSpawn: c.live, held: [], thrown: [], released: false, worker: this, heldAcks: [], ackReleased: false };
+                        if (plan) plan.record = record;
+                        ocrStart.made.push(record);
+                        ocrStart.log.push(`${record.n}:spawned`);
+                        this.__ocr = record;
+                    }
+                }
+                postMessage(message, ...rest) {
+                    // Every job the page asks of a planned or unplanned OCR Worker, answered or not.
+                    if (this.__ocr && message?.action) ocrStart.log.push(`${this.__ocr.n}:${message.action}:asked`);
+                    return super.postMessage(message, ...rest);
+                }
+                get onmessage() {
+                    return super.onmessage;
+                }
+                set onmessage(handler) {
+                    const record = this.__ocr;
+                    if (!record || typeof handler !== 'function') {
+                        super.onmessage = handler;
+                        return;
+                    }
+                    const deliver = (event) => {
+                        const data = event.data;
+                        if (data?.status === 'resolve' || data?.status === 'reject') ocrStart.log.push(`${record.n}:${data.action}:${data.status}`);
+                        try {
+                            handler.call(this, event);
+                        } catch (error) {
+                            // tesseract.js throws from its own message handler after a rejection; kept, not lost.
+                            record.thrown.push(String(error?.message ?? error));
+                        }
+                    };
+                    const plan = record.plan;
+                    record.release = () => {
+                        record.released = true;
+                        for (const event of record.held.splice(0)) deliver(event);
+                    };
+                    record.fail = (message) => {
+                        record.released = true;
+                        for (const event of record.held.splice(0)) deliver({ data: { ...event.data, status: 'reject', data: message } });
+                    };
+                    super.onmessage = (event) => {
+                        const data = event.data;
+                        if (plan && !record.released && data?.action === plan.action && data.status === 'resolve') {
+                            if (plan.mode === 'fail') {
+                                record.released = true;
+                                deliver({ data: { ...data, status: 'reject', data: plan.message ?? 'simulated' } });
+                            } else record.held.push(event);
+                            return;
+                        }
+                        deliver(event);
+                    };
+                }
+                terminate() {
+                    // RF-39-03: a planned Worker's first terminate() fails, as Worker.terminate() itself would throw.
+                    if (this.__ocr?.plan?.terminateThrows && !this.__terminateThrown) {
+                        this.__terminateThrown = true;
+                        ocrStart.log.push(`${this.__ocr.n}:terminate-threw`);
+                        throw new Error('simulated: Worker.terminate() failed');
+                    }
+                    if (!this.__ended) {
+                        this.__ended = true;
+                        const c = counts[this.__kind];
+                        c.ended += 1;
+                        c.live -= 1;
+                        if (this.__ocr) ocrStart.log.push(`${this.__ocr.n}:terminated`);
+                    }
+                    super.terminate();
+                }
+            };
+            window.__workers = counts;
+            window.__ocrStart = ocrStart;
+            // RV-39-02 (HG-RV39-OCR-01): a planned Worker's "closed", as the page hears it on its channel, can be held
+            // (and given later, or never) -- the Worker itself has closed; only the page's knowing it is withheld.
+            // And, for a Worker planned so, the page's first "close" can be lost (as one sent before the Worker had
+            // joined its channel would be), and its "alive" heard only when the test says.
+            const NativeChannel = window.BroadcastChannel;
+            window.BroadcastChannel = class extends NativeChannel {
+                postMessage(message) {
+                    const record = ocrStart.made.find((r) => r.channel === this.name);
+                    if (record?.plan?.dropFirstClose && message?.type === 'close' && !record.closeDropped) {
+                        record.closeDropped = true;
+                        ocrStart.log.push(`${record.n}:close-lost`);
+                        return;
+                    }
+                    super.postMessage(message);
+                }
+                get onmessage() {
+                    return super.onmessage;
+                }
+                set onmessage(handler) {
+                    const name = this.name;
+                    if (typeof handler !== 'function') {
+                        super.onmessage = handler;
+                        return;
+                    }
+                    super.onmessage = (event) => {
+                        const record = ocrStart.made.find((r) => r.channel === name);
+                        if (record?.plan?.holdAlive && event.data?.type === 'alive' && !record.aliveReleased) {
+                            (record.heldAlive ??= []).push(event);
+                            record.releaseAlive = () => {
+                                record.aliveReleased = true;
+                                for (const held of record.heldAlive.splice(0)) handler.call(this, held);
+                            };
+                            return;
+                        }
+                        if (record && event.data?.type === 'closed') {
+                            ocrStart.log.push(`${record.n}:closed-heard`);
+                            if (record.plan?.holdClosed && !record.ackReleased) {
+                                record.heldAcks.push(event);
+                                record.releaseAck = () => {
+                                    record.ackReleased = true;
+                                    for (const held of record.heldAcks.splice(0)) handler.call(this, held);
+                                };
+                                return;
+                            }
+                        }
+                        handler.call(this, event);
+                    };
+                }
+            };
+            const canvases = { made: 0, list: [] };
+            const create = Document.prototype.createElement;
+            Document.prototype.createElement = function (name, ...rest) {
+                const element = create.call(this, name, ...rest);
+                if (String(name).toLowerCase() === 'canvas') {
+                    canvases.made += 1;
+                    canvases.list.push(element);
+                    if (canvases.list.length > 64) canvases.list.shift();
+                }
+                return element;
+            };
+            window.__canvases = canvases;
+            const exports = { toDataURL: 0, toBlob: 0 };
+            for (const name of ['toDataURL', 'toBlob']) {
+                const original = HTMLCanvasElement.prototype[name];
+                HTMLCanvasElement.prototype[name] = function (...args) {
+                    exports[name] += 1;
+                    return original.apply(this, args);
+                };
+            }
+            window.__exports = exports;
+            const storage = { writes: 0, calls: [] };
+            for (const name of ['setItem', 'removeItem', 'clear']) {
+                const original = Storage.prototype[name];
+                Storage.prototype[name] = function (...args) {
+                    storage.writes += 1;
+                    storage.calls.push(`Storage.${name}`);
+                    return original.apply(this, args);
+                };
+            }
+            for (const name of ['open', 'deleteDatabase']) {
+                const original = indexedDB[name].bind(indexedDB);
+                indexedDB[name] = (...args) => {
+                    storage.writes += 1;
+                    storage.calls.push(`indexedDB.${name}`);
+                    return original(...args);
+                };
+            }
+            if (window.caches) {
+                const original = caches.open.bind(caches);
+                caches.open = (...args) => {
+                    storage.writes += 1;
+                    storage.calls.push('caches.open');
+                    return original(...args);
+                };
+            }
+            window.__storage = storage;
+            const urls = new Set();
+            const createUrl = URL.createObjectURL.bind(URL);
+            const revokeUrl = URL.revokeObjectURL.bind(URL);
+            URL.createObjectURL = (o) => { const u = createUrl(o); urls.add(u); return u; };
+            URL.revokeObjectURL = (u) => { urls.delete(u); return revokeUrl(u); };
+            window.__objectUrls = urls;
+        })();
+    </script>
+    <script type="module">
+        import * as pdfjsLib from 'pdfjs-dist';
+        import { StrictMode, createElement } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+        import { renderRegion } from '/src/utils/pdf-textifier/drawing-register-geometry.ts';
+        import { PreviewDocumentOwner, RELEASE_DEADLINE_MS } from '/src/utils/drawing-set/preview-document.ts';
+        import { PdfDocumentGate } from '/src/utils/drawing-set/pdf-document-gate.ts';
+        import { m7PdfDocumentAssets } from '/src/utils/drawing-set/pdf-document-assets.ts';
+        import { readFileDigest } from '/src/utils/drawing-set/file-evidence.ts';
+        import { verifyHeldFile, RuntimeBindingLedger, observationCurrency, currencyLabel } from '/src/utils/drawing-set/currency.ts';
+        import { CROP_LIMITS, planCrop } from '/src/utils/drawing-set/crop-service.ts';
+        import { GuardedRegisterOcr } from '/src/utils/drawing-set/register-extraction.ts';
+        // The OCR Worker registry (RV-39-02), loaded by name so the same harness also runs against a tree that has
+        // none -- the before-evidence -- and says so instead of failing to load.
+        const OCR_WORKERS_MODULE = '/src/utils/drawing-set/ocr-workers.ts';
+        const ocrWorkersModule = await import(/* @vite-ignore */ OCR_WORKERS_MODULE).catch(() => null);
+        import { DrawingSetStore, EvidenceHandle } from '/src/utils/drawing-set/workspace-store.ts';
+        import { ReadOnlySheetViewer } from '/src/components/drawing-set/ReadOnlySheetViewer.tsx';
+        import { TitleBlockPanel } from '/src/components/drawing-set/TitleBlockPanel.tsx';
+        import { PAGE_PREVIEW_OWNER } from '/src/utils/drawing-set/page-documents.ts';
+        import { dragToUpright, uprightSize, uprightToScreen } from '/src/utils/drawing-set/profile-pointer.ts';
+
+        const P1 = '/test-fixtures/m7-p1';
+        const P2A = '/test-fixtures/m7-p2a';
+        const FIELDS = ['drawingNumber', 'drawingTitle', 'revision', 'issueDate'];
+        const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+        const workers = () => plainly(window.__workers);
+        const settle = (promise) => promise.then((value) => ({ ok: true, value }), (error) => ({ ok: false, code: error?.code ?? error?.name ?? String(error) }));
+        const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+        const frames = (n = 2) => new Promise((resolve) => {
+            const step = (left) => (left === 0 ? resolve() : requestAnimationFrame(() => step(left - 1)));
+            step(n);
+        });
+        function defer() {
+            let resolve;
+            let reject;
+            const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+            return { promise, resolve, reject };
+        }
+        /** Wait for a condition the harness itself will make true; fails loudly rather than hanging. */
+        async function until(test, what, limitMs = 20000) {
+            const t0 = performance.now();
+            while (!test()) {
+                if (performance.now() - t0 > limitMs) throw new Error(`timed out waiting for ${what}`);
+                await new Promise((resolve) => setTimeout(resolve, 5));
+            }
+        }
+
+        async function fixtureBytes(dir, name) {
+            const response = await fetch(`${dir}/${name}.pdf`);
+            const type = response.headers.get('content-type') || '';
+            if (!response.ok || type.includes('text/html')) throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+            return new Uint8Array(await response.arrayBuffer());
+        }
+        const fileOf = (bytes, name) => new File([bytes], name, { type: '' });
+        async function sha256Hex(bytes) {
+            const digest = await crypto.subtle.digest('SHA-256', bytes);
+            return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+        }
+        async function fixture(dir, name) {
+            const bytes = await fixtureBytes(dir, name);
+            return { bytes, file: fileOf(bytes, `${name}.pdf`), expected: { sha256: await sha256Hex(bytes), byteLength: bytes.byteLength } };
+        }
+        async function canvasDigest(canvas) {
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            return sha256Hex(data);
+        }
+        function darkCount(canvas) {
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let dark = 0;
+            for (let i = 0; i < data.length; i += 4) if (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2] < 128) dark += 1;
+            return dark;
+        }
+
+        /** An upright rectangle as it lies on the page turned clockwise by `rotate`. */
+        function displayRect(r, rotate, W, H) {
+            switch (((rotate % 360) + 360) % 360) {
+                case 90: return { left: H - r.bottom, right: H - r.top, top: r.left, bottom: r.right };
+                case 180: return { left: W - r.right, right: W - r.left, top: H - r.bottom, bottom: H - r.top };
+                case 270: return { left: r.top, right: r.bottom, top: W - r.right, bottom: W - r.left };
+                default: return { ...r };
+            }
+        }
+        /** A copy of a canvas turned clockwise by a multiple of 90 degrees. */
+        function turned(source, rotate) {
+            const r = ((rotate % 360) + 360) % 360;
+            const quarter = r % 180 === 90;
+            const out = document.createElement('canvas');
+            out.width = quarter ? source.height : source.width;
+            out.height = quarter ? source.width : source.height;
+            const ctx = out.getContext('2d', { willReadFrequently: true });
+            ctx.translate(out.width / 2, out.height / 2);
+            ctx.rotate((r * Math.PI) / 180);
+            ctx.drawImage(source, -source.width / 2, -source.height / 2);
+            return out;
+        }
+        /**
+         * How alike two canvases look at a coarse scale: the correlation of
+         * their ink density over 8 px blocks, across the area they share.
+         * Rasterising through a rotation moves strokes by a pixel or so, so
+         * pixels are not compared one by one; the layout is.
+         */
+        function agreement(a, b) {
+            const w = Math.min(a.width, b.width);
+            const h = Math.min(a.height, b.height);
+            const B = 8;
+            const cols = Math.floor(w / B);
+            const rows = Math.floor(h / B);
+            if (cols === 0 || rows === 0) return 0;
+            const density = (canvas) => {
+                const data = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cols * B, rows * B).data;
+                const grid = new Float64Array(cols * rows);
+                for (let y = 0; y < rows * B; y++) {
+                    for (let x = 0; x < cols * B; x++) {
+                        const i = (y * cols * B + x) * 4;
+                        if (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2] < 128) grid[Math.floor(y / B) * cols + Math.floor(x / B)] += 1;
+                    }
+                }
+                return grid;
+            };
+            const ga = density(a);
+            const gb = density(b);
+            a.width = 0;
+            const mean = (g) => g.reduce((s, v) => s + v, 0) / g.length;
+            const ma = mean(ga);
+            const mb = mean(gb);
+            let num = 0;
+            let va = 0;
+            let vb = 0;
+            for (let i = 0; i < ga.length; i++) {
+                num += (ga[i] - ma) * (gb[i] - mb);
+                va += (ga[i] - ma) ** 2;
+                vb += (gb[i] - mb) ** 2;
+            }
+            return va === 0 || vb === 0 ? (va === vb ? 1 : 0) : num / Math.sqrt(va * vb);
+        }
+
+        /**
+         * A gate and an owner with the test seams: page requests through
+         * `pages(doc, n)` (the document's own by default), every one logged,
+         * and the release deadline armed into `deadlines` for the test to
+         * fire by hand.
+         */
+        function rig(pages = null) {
+            const gate = new PdfDocumentGate();
+            const log = [];
+            const deadlines = [];
+            const pageRequests = [];
+            const owner = new PreviewDocumentOwner({
+                gate,
+                pageSource: (doc, n) => {
+                    pageRequests.push(n);
+                    log.push(`page-asked:${n}`);
+                    return pages ? pages(doc, n, log) : doc.getPage(n);
+                },
+                releaseDeadline: (expire) => {
+                    const armed = { expire, disarmed: false };
+                    deadlines.push(armed);
+                    return () => { armed.disarmed = true; };
+                },
+            });
+            return { gate, owner, log, deadlines, pageRequests };
+        }
+
+        /** Log a document's destruction, and let the test hold it, fail it, or never finish it. */
+        function watchDestroy(doc, log, mode = {}) {
+            const task = doc.loadingTask;
+            const real = task.destroy.bind(task);
+            const control = { real, hold: null };
+            task.destroy = () => {
+                log.push('destroy-asked');
+                if (mode.fail) return Promise.reject(new Error('simulated destroy failure'));
+                if (mode.never) return new Promise(() => { });
+                if (mode.hold) {
+                    control.hold = defer();
+                    return control.hold.promise.then(() => real()).then(() => { log.push('destroy-done'); });
+                }
+                return real().then(() => { log.push('destroy-done'); });
+            };
+            return control;
+        }
+
+        /**
+         * A real page whose renders pause at their first step until the test
+         * lets them go (PDF.js's own onContinue hook), and whose renders and
+         * cleanups are logged. `cleanup` can be made to report false, or to throw.
+         */
+        function instrumentPage(page, log, options = {}) {
+            if (page.__instrumented) {
+                page.__options = options;
+                return page;
+            }
+            page.__instrumented = true;
+            page.__options = options;
+            page.__held = [];
+            const realRender = page.render.bind(page);
+            const realCleanup = page.cleanup.bind(page);
+            const realGetViewport = page.getViewport.bind(page);
+            page.render = (params) => {
+                const opts = page.__options;
+                if (opts.renderFails) {
+                    log.push('render-start');
+                    return { promise: Promise.reject(new Error('simulated render failure')), cancel: () => { } };
+                }
+                const task = realRender(params);
+                log.push('render-start');
+                page.__lastCanvas = params.canvas;
+                if (opts.hold) {
+                    task.onContinue = (next) => { page.__held.push(next); opts.onHeld?.(); };
+                }
+                task.promise.then(() => log.push('render-done'), (e) => log.push(`render-${e?.name ?? 'error'}`));
+                return task;
+            };
+            page.cleanup = (...args) => {
+                const opts = page.__options;
+                if (opts.cleanupThrows) {
+                    log.push('cleanup-threw');
+                    throw new Error('simulated cleanup failure');
+                }
+                const result = realCleanup(...args);
+                const reported = opts.cleanupFalse ? false : result;
+                log.push(`cleanup:${reported}`);
+                return reported;
+            };
+            page.getViewport = (params) => {
+                (page.__viewports ??= []).push({ scale: params?.scale, rotation: params?.rotation });
+                const viewport = realGetViewport(params);
+                const shrink = page.__options.shrinkBaseAfter;
+                if (shrink !== undefined && params?.scale === 1 && page.__viewports.filter((v) => v.scale === 1).length > shrink) {
+                    return { ...viewport, width: viewport.width - 120, height: viewport.height };
+                }
+                return viewport;
+            };
+            return page;
+        }
+        const releaseHeld = (page) => { for (const next of page.__held.splice(0)) next(); };
+
+        async function openDoc(bytes) {
+            configurePdfWorker();
+            const task = pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false, ...m7PdfDocumentAssets() });
+            return { task, doc: await task.promise };
+        }
+
+        const lastRecord = (owner) => owner.releaseRecords().at(-1) ?? null;
+        const gateRefusals = async (gate, owner, other) => {
+            const intake = gate.beginIntake();
+            if (intake.ok) intake.end();
+            const extraction = await gate.beginExtraction();
+            if (extraction.ok) extraction.lease.end();
+            const open = await settle(owner.open('Z', other.file, other.expected));
+            return { intake: intake.ok ? 'ok' : intake.code, extraction: extraction.ok ? 'ok' : extraction.code, open: open.ok ? 'opened' : open.code };
+        };
+
+        // ================================================================ W0: the owner
+
+        async function ownerRelease() {
+            const geometry = await fixture(P2A, 'p2a-geometry');
+            const other = await fixture(P1, 'p1-native-a');
+            const third = await fixture(P1, 'p1-second-c');
+            const out = {};
+            const wholeRect = { left: 0, top: 0, right: 800, bottom: 580 };
+
+            // N-A1 / N-A13.2-3: a crop render running when the document closes.
+            {
+                const r = rig((doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true })));
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                let cropError = null;
+                let ranRender = 0;
+                const started = defer();
+                const section = r.owner.withPage(doc, 1, async (page) => {
+                    const counting = new Proxy(page, { get(t, p) { if (p === 'render') ranRender += 1; return t[p]; } });
+                    const go = renderRegion(counting, wholeRect, { dpi: 300 });
+                    started.resolve();
+                    try {
+                        return await go;
+                    } catch (error) {
+                        cropError = error?.name ?? String(error);
+                        throw error;
+                    }
+                });
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                section.catch(() => { });
+                await started.promise;
+                await until(() => r.log.includes('render-start'), 'the crop render to start');
+                const madeBefore = window.__canvases.list.at(-1);
+                const beforeClose = { destroy: lastRecord(r.owner)?.destroy ?? 'none' };
+                const closing = r.owner.close();
+                const atClose = { destroyAsked: r.log.includes('destroy-asked'), steps: lastRecord(r.owner).steps.slice() };
+                await closing;
+                const outcome = await settle(section);
+                const record = lastRecord(r.owner);
+                const order = r.log.filter((e) => e.startsWith('render-') || e.startsWith('cleanup') || e.startsWith('destroy'));
+                out.NA1 = {
+                    beforeClose, atClose, outcome, cropError, ranRender, order, record,
+                    canvasZeroed: madeBefore ? madeBefore.width === 0 && madeBefore.height === 0 : null,
+                    canvasWasTheRendered: madeBefore !== undefined,
+                    counts: r.owner.counts(), deadlineDisarmed: r.deadlines.every((d) => d.disarmed), unconfirmed: r.gate.releaseUnconfirmed,
+                };
+            }
+
+            // N-A2 / N-A2b / N-A2c: a page request that does not settle.
+            for (const variant of ['never', 'rejectBeforeDestroy', 'resolveBeforeDestroy']) {
+                const pending = defer();
+                const r = rig(() => pending.promise);
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const realPage = variant === 'resolveBeforeDestroy' ? await doc.getPage(1) : null;
+                const destroy = watchDestroy(doc, r.log, { hold: variant !== 'never' });
+                let runCalls = 0;
+                const section = r.owner.withPage(doc, 1, async () => { runCalls += 1; });
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                section.catch(() => { });
+                await until(() => r.pageRequests.length === 1, 'the page request');
+                const closing = r.owner.close();
+                if (variant !== 'never') {
+                    await until(() => r.log.includes('destroy-asked'), 'the destruction to be asked for');
+                    if (variant === 'rejectBeforeDestroy') pending.reject(new Error('Transport destroyed'));
+                    else pending.resolve(realPage);
+                    await tick();
+                    destroy.hold.resolve();
+                }
+                const closed = await Promise.race([closing.then(() => 'resolved'), new Promise((resolve) => setTimeout(() => resolve('still waiting'), 15000))]);
+                const sectionOutcome = await settle(section);
+                const record = lastRecord(r.owner);
+                const after = await gateRefusals(r.gate, r.owner, other);
+                out[`NA2_${variant}`] = { closed, sectionOutcome, runCalls, record, unconfirmed: r.gate.releaseUnconfirmed, after, counts: r.owner.counts() };
+                if (variant === 'never') pending.reject(new Error('released by the harness'));
+                await r.owner.close();
+            }
+
+            // N-A3: sections waiting when the document closes never ask for a page.
+            {
+                const r = rig();
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                const hold = defer();
+                const entered = defer();
+                const first = r.owner.withPage(doc, 1, async () => { entered.resolve(); await hold.promise; });
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                first.catch(() => { });
+                const second = r.owner.withPage(doc, 2, async () => 'second');
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                second.catch(() => { });
+                const third_ = r.owner.withPage(doc, 3, async () => 'third');
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                third_.catch(() => { });
+                await entered.promise;
+                const closing = r.owner.close();
+                const waitingOutcomes = await Promise.all([settle(second), settle(third_)]);
+                await tick();
+                const whileRunning = { destroyAsked: r.log.includes('destroy-asked'), destroy: lastRecord(r.owner).destroy };
+                hold.resolve();
+                await closing;
+                out.NA3 = {
+                    waitingOutcomes, pageRequests: r.pageRequests.slice(), whileRunning, first: await settle(first), record: lastRecord(r.owner),
+                    counts: r.owner.counts(),
+                };
+            }
+
+            // N-A4: switching Source while a crop runs -- A drained and destroyed before B is read.
+            {
+                const r = rig((doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true })));
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                const section = r.owner.withPage(doc, 1, (page) => renderRegion(page, wholeRect, { dpi: 300 }));
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                section.catch(() => { });
+                await until(() => r.log.includes('render-start'), 'the crop render');
+                const docB = await r.owner.open('B', other.file, other.expected, { beginRead: () => r.log.push('B-read-begins') });
+                await settle(section);
+                out.NA4 = { order: r.log.filter((e) => /^(render-|cleanup|destroy|B-read)/.test(e)), bPages: docB.numPages, record: r.owner.releaseRecords()[0] };
+                await r.owner.close();
+            }
+
+            // N-A6: extraction asked for while a crop runs -- the lease only after drain and destruction.
+            {
+                const r = rig((doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true })));
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                const section = r.owner.withPage(doc, 1, (page) => renderRegion(page, wholeRect, { dpi: 300 }));
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                section.catch(() => { });
+                await until(() => r.log.includes('render-start'), 'the crop render');
+                const begun = await r.gate.beginExtraction();
+                const atLease = { ok: begun.ok, previewLive: r.owner.counts().live, record: lastRecord(r.owner), log: r.log.slice() };
+                if (begun.ok) begun.lease.end();
+                out.NA6 = { atLease, section: await settle(section), extractionActive: r.gate.extractionActive };
+            }
+
+            // N-A7: the destruction fails after the drain.
+            {
+                const r = rig((doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true })));
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const control = watchDestroy(doc, r.log, { fail: true });
+                r.owner.withPage(doc, 1, (page) => renderRegion(page, wholeRect, { dpi: 300 })).catch(() => { });
+                await until(() => r.log.includes('render-start'), 'the crop render');
+                await r.owner.close();
+                const record = lastRecord(r.owner);
+                const sectionAfter = await settle(r.owner.withPage(doc, 1, async () => 'never'));
+                const after = await gateRefusals(r.gate, r.owner, other);
+                out.NA7 = { record, sectionAfter, after, unconfirmed: r.gate.releaseUnconfirmed, documentsUnavailable: r.owner.documentsUnavailable };
+                await control.real();
+            }
+
+            // N-A9 / N-A13.1 / N-A13.4: the page a section is handed, against the real page.
+            {
+                const r = rig();
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const rect = { left: 560, top: 440, right: 780, bottom: 480 };
+                const accessed = new Set();
+                let handedPage = null;
+                const viaSection = await r.owner.withPage(doc, 1, async (page) => {
+                    handedPage = page;
+                    const spy = new Proxy(page, { get(t, p) { accessed.add(String(p)); return t[p]; } });
+                    const region = await renderRegion(spy, rect, { dpi: 300 });
+                    return { width: region.width, height: region.height, digest: await canvasDigest(region.canvas) };
+                });
+                const { task, doc: oracleDoc } = await openDoc(geometry.bytes);
+                const oraclePage = await oracleDoc.getPage(1);
+                const oracleRegion = await renderRegion(oraclePage, rect, { dpi: 300 });
+                const oracle = { width: oracleRegion.width, height: oracleRegion.height, digest: await canvasDigest(oracleRegion.canvas) };
+                await task.destroy();
+                const other_ = (fn) => { try { fn(); return 'no throw'; } catch (error) { return error?.code ?? error?.name ?? 'threw'; } };
+                out.NA9 = {
+                    viaSection, oracle, accessed: [...accessed],
+                    askedForCleanup: other_(() => handedPage.cleanup),
+                    askedForRotate: other_(() => handedPage.rotate),
+                    askedForCommonObjs: other_(() => handedPage.commonObjs),
+                    renderAfterEnd: other_(() => handedPage.render({ canvas: document.createElement('canvas'), viewport: handedPage.getViewport({ scale: 1 }) })),
+                    thenable: typeof handedPage.then,
+                };
+                await r.owner.close();
+            }
+
+            // N-A12: a render that never settles after it is cancelled.
+            {
+                const never = defer();
+                const r = rig(async (doc, n) => {
+                    const page = await doc.getPage(n);
+                    return {
+                        getViewport: (p) => page.getViewport(p),
+                        render: () => ({ promise: never.promise, cancel: () => { } }),
+                        cleanup: () => page.cleanup(),
+                    };
+                });
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const control = watchDestroy(doc, r.log);
+                const rendering = defer();
+                const section = r.owner.withPage(doc, 1, async (page) => {
+                    const job = page.render({ canvas: document.createElement('canvas'), viewport: page.getViewport({ scale: 1 }) });
+                    rendering.resolve();
+                    await job.promise;
+                });
+                // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+                section.catch(() => { });
+                await rendering.promise;
+                let closeSettled = false;
+                const closing = r.owner.close().then(() => { closeSettled = true; });
+                const extraction = r.gate.beginExtraction();
+                await tick();
+                await tick();
+                const beforeDeadline = { closeSettled, destroyAsked: r.log.includes('destroy-asked'), record: lastRecord(r.owner), deadlines: r.deadlines.length };
+                r.deadlines.at(-1).expire();
+                await closing;
+                const begun = await extraction;
+                if (begun.ok) begun.lease.end();
+                const afterDeadline = {
+                    closeSettled, extraction: begun.ok ? 'ok' : begun.code, record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed,
+                    withPage: (await settle(r.owner.withPage(doc, 1, async () => 'x'))).code, counts: r.owner.counts(),
+                };
+                await tick();
+                out.NA12 = { beforeDeadline, afterDeadline, section: 'never settles (by construction)', destroyAskedAfter: r.log.includes('destroy-asked') };
+                void section;
+                await control.real().catch(() => { });
+            }
+
+            // N-A14a / b / c: page.cleanup() reports false before the destruction.
+            for (const variant of ['released', 'destroyFails', 'pageRequestPending']) {
+                let first = true;
+                const stuck = defer();
+                const r = rig((doc, n, log) => {
+                    if (variant === 'pageRequestPending' && first) {
+                        first = false;
+                        return stuck.promise;
+                    }
+                    return doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true, cleanupFalse: true }));
+                });
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const control = watchDestroy(doc, r.log, { fail: variant === 'destroyFails' });
+                if (variant === 'pageRequestPending') {
+                    const giveUp = new AbortController();
+                    const abandoned = r.owner.withPage(doc, 2, async () => 'never', { signal: giveUp.signal });
+                    await until(() => r.pageRequests.length === 1, 'the stuck page request');
+                    giveUp.abort();
+                    await settle(abandoned);
+                }
+                r.owner.withPage(doc, 1, (page) => renderRegion(page, wholeRect, { dpi: 300 })).catch(() => { });
+                await until(() => r.log.includes('render-start'), 'the crop render');
+                await r.owner.close();
+                const record = lastRecord(r.owner);
+                const next = await settle(r.owner.open('B', third.file, third.expected));
+                out[`NA14_${variant}`] = { record, next: next.ok ? `opened:${next.value.numPages}` : next.code, unconfirmed: r.gate.releaseUnconfirmed, counts: r.owner.counts() };
+                await r.owner.close();
+                if (variant === 'destroyFails') await control.real();
+                if (variant === 'pageRequestPending') stuck.reject(new Error('released by the harness'));
+            }
+
+            // The same with PDF.js saying it, not a wrapper: a render cancelled part-way, then cleanup().
+            {
+                const r = rig((doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true })));
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                r.owner.withPage(doc, 1, (page) => renderRegion(page, wholeRect, { dpi: 300 })).catch(() => { });
+                await until(() => r.log.includes('render-start'), 'the crop render');
+                await r.owner.close();
+                out.NA14_real = { record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed };
+            }
+
+            // N-A15: page.cleanup() throws.
+            {
+                const r = rig((doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { hold: true, cleanupThrows: true })));
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                r.owner.withPage(doc, 1, (page) => renderRegion(page, wholeRect, { dpi: 300 })).catch(() => { });
+                await until(() => r.log.includes('render-start'), 'the crop render');
+                await r.owner.close();
+                out.NA15 = { record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed, after: await gateRefusals(r.gate, r.owner, other), destroyed: r.log.includes('destroy-done') };
+            }
+
+            // N-A16: RenderTask.cancel() throws.
+            {
+                const settleLater = defer();
+                const r = rig(async (doc, n) => {
+                    const page = await doc.getPage(n);
+                    return {
+                        getViewport: (p) => page.getViewport(p),
+                        render: () => ({ promise: settleLater.promise, cancel: () => { throw new Error('simulated cancel failure'); } }),
+                        cleanup: () => page.cleanup(),
+                    };
+                });
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                const rendering = defer();
+                r.owner.withPage(doc, 1, async (page) => {
+                    const job = page.render({ canvas: document.createElement('canvas'), viewport: page.getViewport({ scale: 1 }) });
+                    rendering.resolve();
+                    await job.promise;
+                }).catch(() => { });
+                await rendering.promise;
+                const closing = r.owner.close();
+                const atCancel = { unconfirmed: r.gate.releaseUnconfirmed, record: lastRecord(r.owner) };
+                settleLater.reject(Object.assign(new Error('cancelled'), { name: 'RenderingCancelledException' }));
+                await closing;
+                out.NA16 = { atCancel, record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed, destroyed: r.log.includes('destroy-done') };
+            }
+
+            // N-A17: the destruction's promise never settles.
+            {
+                const r = rig();
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const control = watchDestroy(doc, r.log, { never: true });
+                let closeSettled = false;
+                const closing = r.owner.close().then(() => { closeSettled = true; });
+                const extraction = r.gate.beginExtraction();
+                await tick();
+                const before = { closeSettled, destroyAsked: r.log.includes('destroy-asked'), unconfirmed: r.gate.releaseUnconfirmed };
+                r.deadlines.at(-1).expire();
+                await closing;
+                const begun = await extraction;
+                if (begun.ok) begun.lease.end();
+                out.NA17 = { before, closeSettled, extraction: begun.ok ? 'ok' : begun.code, record: lastRecord(r.owner), after: await gateRefusals(r.gate, r.owner, other) };
+                await control.real();
+            }
+
+            // N-A18: the release finishes after the deadline -- nothing is given back.
+            {
+                const r = rig();
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                const control = watchDestroy(doc, r.log, { hold: true });
+                const closing = r.owner.close();
+                await until(() => r.log.includes('destroy-asked'), 'the destruction');
+                r.deadlines.at(-1).expire();
+                await closing;
+                const atDeadline = { record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed };
+                control.hold.resolve();
+                await until(() => r.log.includes('destroy-done'), 'the late destruction');
+                await tick();
+                out.NA18 = { atDeadline, late: { record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed, live: r.owner.counts().live }, after: await gateRefusals(r.gate, r.owner, other) };
+            }
+
+            // N-A19: a release that finishes in time disarms the deadline; firing it later changes nothing.
+            {
+                const r = rig();
+                const doc = await r.owner.open('A', geometry.file, geometry.expected);
+                watchDestroy(doc, r.log);
+                await r.owner.close();
+                const armed = r.deadlines.at(-1);
+                const atRelease = { disarmed: armed.disarmed, record: lastRecord(r.owner) };
+                armed.expire();
+                await tick();
+                const next = await settle(r.owner.open('B', other.file, other.expected));
+                out.NA19 = {
+                    atRelease, afterLateFire: { record: lastRecord(r.owner), unconfirmed: r.gate.releaseUnconfirmed, expired: r.owner.counts().releaseDeadlineExpired },
+                    next: next.ok ? `opened:${next.value.numPages}` : next.code,
+                };
+                await r.owner.close();
+            }
+
+            out.deadlineMs = RELEASE_DEADLINE_MS;
+            out.pageOwnerUsesDefaults = PAGE_PREVIEW_OWNER instanceof PreviewDocumentOwner;
+            out.workers = workers();
+            return plainly(out);
+        }
+
+        // N-A8: the owner before this change (8b825b2), written out by the checks script.
+        async function baseline() {
+            let module;
+            try {
+                // Written by the checks script only when commit 8b825b2 is in the checkout: kept out of Vite's
+                // import analysis, which would otherwise refuse the whole harness when the file is not there.
+                const baselineUrl = '/test-fixtures/m7-p2b2/baseline-preview-document.ts';
+                module = await import(/* @vite-ignore */ baselineUrl);
+            } catch (error) {
+                return { available: false, reason: String(error?.message ?? error).slice(0, 200) };
+            }
+            const geometry = await fixture(P2A, 'p2a-geometry');
+            const log = [];
+            const owner = new module.PreviewDocumentOwner();
+            const doc = await owner.open('A', geometry.file, geometry.expected);
+            watchDestroy(doc, log);
+            // The viewer as it was: getPage, render, and page.cleanup() once the render ends.
+            const page = instrumentPage(await doc.getPage(1), log, { hold: true });
+            const canvas = document.createElement('canvas');
+            const viewport = page.getViewport({ scale: 2 });
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            const task = page.render({ canvas, viewport });
+            const viewerEnded = task.promise.then(() => 'completed', (e) => e?.name ?? 'error').then((how) => {
+                log.push(`viewer-cleanup:${page.cleanup()}`);
+                return how;
+            });
+            await until(() => log.includes('render-start'), 'the render');
+            const closing = owner.close();
+            const atClose = { destroyAsked: log.includes('destroy-asked'), renderSettled: log.some((e) => e === 'render-done' || e.startsWith('render-R')) };
+            await closing;
+            const how = await viewerEnded;
+            return { available: true, atClose, how, order: log.filter((e) => /^(render-|cleanup|destroy|viewer-cleanup)/.test(e)) };
+        }
+
+        // N-A10: the viewer and a crop of the same document, taking turns.
+        async function viewerAndCrop() {
+            const geometry = await fixture(P2A, 'p2a-geometry');
+            const events = [];
+            let active = 0;
+            let peak = 0;
+            const r = rig((doc, n) => doc.getPage(n).then((page) => {
+                if (!page.__turns) {
+                    page.__turns = true;
+                    const realRender = page.render.bind(page);
+                    page.render = (params) => {
+                        const task = realRender(params);
+                        active += 1;
+                        peak = Math.max(peak, active);
+                        events.push(`start:${params.intent ?? 'display'}`);
+                        if (page.__hold) task.onContinue = (next) => { page.__held.push(next); };
+                        task.promise.then(() => { active -= 1; events.push('end'); }, () => { active -= 1; events.push('end-cancelled'); });
+                        return task;
+                    };
+                    page.__held = [];
+                }
+                return page;
+            }));
+            const host = document.createElement('div');
+            host.style.width = '640px';
+            host.style.height = '480px';
+            document.body.appendChild(host);
+            const root = createRoot(host);
+            const doc = await r.owner.open('A', geometry.file, geometry.expected);
+            const source = { id: 'A', displayName: 'p2a-geometry.pdf', fingerprint: { sha256: geometry.expected.sha256, byteLength: geometry.expected.byteLength, pageCount: 8 } };
+            const sheet = { id: 'sheet-1', pageNumber: 1 };
+            root.render(createElement(StrictMode, null, createElement(ReadOnlySheetViewer, { owner: r.owner, source, file: geometry.file, sheet, pageTotal: 8 })));
+            const state = () => host.querySelector('[data-ds-viewer]')?.dataset.dsRenderState ?? '';
+            await until(() => state() === 'rendered', 'the viewer');
+            // The crop asked for, and the viewer redrawn (zoom) while the crop runs.
+            const page1 = await doc.getPage(1);
+            page1.__hold = true;
+            const crop = r.owner.withPage(doc, 1, (page) => renderRegion(page, { left: 0, top: 0, right: 800, bottom: 580 }, { dpi: 300 }));
+            // Settled later; marked handled now, so a rejection meanwhile is not reported as unhandled.
+            crop.catch(() => { });
+            await until(() => events.filter((e) => e === 'start:print').length === 1, 'the crop render');
+            host.querySelector('[data-ds-zoom-in]').click();
+            await tick();
+            const whileCrop = { active, viewerState: state() };
+            page1.__hold = false;
+            releaseHeld(page1);
+            await settle(crop);
+            await until(() => state() === 'rendered', 'the viewer again');
+            const counts = r.owner.counts();
+            root.unmount();
+            host.remove();
+            await r.owner.close();
+            return plainly({ events, peak, whileCrop, counts, final: r.owner.counts(), record: lastRecord(r.owner) });
+        }
+
+        // ================================================================ evidence
+
+        /** A store on its own gate and owner (with the owner's test seams), with p2a sources read and observed. */
+        async function observedStore(options = {}) {
+            const r = rig(options.pages ?? null);
+            const store = new DrawingSetStore({ gate: r.gate, owner: r.owner, ...(options.ocrWorkers ? { ocrWorkers: options.ocrWorkers } : {}) });
+            store.enter();
+            const register = await fixture(P2A, 'p2a-register');
+            const geometry = await fixture(P2A, 'p2a-geometry');
+            const files = { register: register.file, geometry: geometry.file };
+            const accepted = {};
+            for (const [key, file] of Object.entries(files)) {
+                const result = await store.intake(file);
+                if (result.kind !== 'accepted') throw new Error(`intake of ${key}: ${result.kind}`);
+                accepted[key] = result;
+            }
+            const cells = { drawingNumber: { left: 560, top: 440, right: 780, bottom: 480 }, drawingTitle: { left: 560, top: 480, right: 780, bottom: 520 }, revision: { left: 560, top: 520, right: 660, bottom: 560 }, issueDate: { left: 660, top: 520, right: 780, bottom: 560 } };
+            const profile = store.createProfile({ name: 'P', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: cells });
+            if (!profile.ok) throw new Error(`profile: ${profile.refusal.code}`);
+            const sheetsOf = (key) => accepted[key].sheets.map((s) => s.id);
+            const register1 = sheetsOf('register')[0];
+            const geometrySheets = sheetsOf('geometry');
+            const assigned = store.assignProfile([register1, ...geometrySheets], profile.profile.id);
+            if (!assigned.ok) throw new Error(`assign: ${assigned.refusal.code}`);
+            const run = await store.extract({ sheetIds: [register1, ...geometrySheets] });
+            if (run.report.kind !== 'finished' || run.report.outcome !== 'COMPLETED') throw new Error(`extract: ${JSON.stringify(plainly(run.report))}`);
+            const panel = document.createElement('div');
+            panel.style.cssText = 'width: 900px; position: relative;';
+            const slots = {};
+            for (const name of FIELDS) {
+                const slot = document.createElement('div');
+                slot.dataset.slot = name;
+                slot.style.cssText = 'min-height: 10px; overflow: auto;';
+                panel.appendChild(slot);
+                slots[name] = slot;
+            }
+            document.body.appendChild(panel);
+            const sheet = (id) => store.currentSet().sheets.find((s) => s.id === id);
+            const sourceOf = (id) => store.currentSet().sources.find((s) => s.id === sheet(id).sourceId);
+            const openFor = async (id) => {
+                const source = sourceOf(id);
+                return store.openPreview(source.id, store.heldFile(source.id), { sha256: source.fingerprint.sha256, byteLength: source.fingerprint.byteLength });
+            };
+            const valuesOf = (id) => Object.fromEntries(FIELDS.map((name) => [name, sheet(id).observation.fields[name].value]));
+            const prepare = async (id, signal) => {
+                await openFor(id);
+                let result = await store.prepareEvidence(id, { panel, slots }, { signal });
+                // The preview's own read may have moved the generation: once more, as the panel would.
+                if (!result.ok && result.refusal.code === 'EVIDENCE_STALE') result = await store.prepareEvidence(id, { panel, slots }, { signal });
+                return result;
+            };
+            const confirm = (id, handle, values = valuesOf(id)) => {
+                const result = store.confirmSheet({ sheetId: id, values, evidence: handle });
+                return result.ok ? { ok: true, profile: result.confirmation.profile, editedFields: result.confirmation.editedFields } : { ok: false, code: result.refusal.code };
+            };
+            const dispose = async () => {
+                panel.remove();
+                store.leave();
+                await r.owner.close();
+            };
+            return { r, store, profile: profile.profile, register1, geometrySheets, panel, slots, sheet, sourceOf, openFor, prepare, confirm, valuesOf, dispose, files };
+        }
+
+        async function evidence() {
+            const out = {};
+            const s = await observedStore();
+            const { store, register1: R } = s;
+            const ledger = store.bindingLedger();
+            const sourceId = s.sheet(R).sourceId;
+            const held = store.heldFile(sourceId);
+
+            // The positive path.
+            const first = await s.prepare(R);
+            out.issued = first.ok ? { ok: true, rotate: first.view.rotate, fields: first.view.fields, canvasesInSlots: FIELDS.every((n) => s.slots[n].querySelector('canvas[data-ds-crop-canvas]')) } : { ok: false, code: first.refusal.code };
+            out.observation = { currency: currencyLabel(observationCurrency(store.currentSet(), s.sheet(R), ledger)), sources: FIELDS.map((n) => s.sheet(R).observation.fields[n].source) };
+            out.confirmed = first.ok ? s.confirm(R, first.handle) : null;
+            out.spentAgain = first.ok ? s.confirm(R, first.handle) : null; // N-C12
+            // A correction: recorded against the observation (editedFields), never as manual.
+            const second = await s.prepare(R);
+            const edited = { ...s.valuesOf(R), drawingTitle: `${s.valuesOf(R).drawingTitle}（修正）` };
+            out.corrected = second.ok ? s.confirm(R, second.handle, edited) : { ok: false, code: second.refusal.code };
+
+            const fresh = async () => {
+                const result = await s.prepare(R);
+                if (!result.ok) throw new Error(`prepare: ${result.refusal.code}`);
+                return result.handle;
+            };
+            const restoreBinding = async () => {
+                const copy = fileOf(new Uint8Array(await held.arrayBuffer()), 'p2a-register.pdf');
+                const result = await store.intake(copy);
+                return result.kind;
+            };
+
+            // N-B1: from outside the store, the same File presented again, and checked back to MATCHED.
+            {
+                const handle = await fresh();
+                const generation = store.getSnapshot().evidenceGeneration;
+                const presented = ledger.present(store.currentSet(), sourceId, store.heldFile(sourceId));
+                const backTo = await verifyHeldFile(ledger, () => store.currentSet(), sourceId);
+                out.NB1 = { presented, backTo, binding: store.bindingOf(sourceId), generationMoved: store.getSnapshot().evidenceGeneration !== generation, result: s.confirm(R, handle) };
+            }
+            // N-B2: from outside, the File let go of (releaseRetired), and a CHANGED settled.
+            {
+                const handle = await fresh();
+                const set = store.currentSet();
+                const retiredView = { ...set, sources: set.sources.map((x) => (x.id === sourceId ? { ...x, retiredAt: '2026-10-18T00:00:00.000Z' } : x)) };
+                ledger.releaseRetired(retiredView);
+                out.NB2_releaseRetired = { binding: store.bindingOf(sourceId), result: s.confirm(R, handle) };
+                out.NB2_restore = await restoreBinding();
+                const handle2 = await fresh();
+                const check = ledger.beginCheck(store.currentSet());
+                const file = check.fileFor(sourceId);
+                const settled = ledger.settle(store.currentSet(), check, new Map([[sourceId, { kind: 'NOT_READ', file, reason: 'CHANGED_WHILE_READ' }]]));
+                out.NB2_changed = { settled: settled.get(sourceId), binding: store.bindingOf(sourceId), result: s.confirm(R, handle2) }; // also N-B11
+                out.NB2_restore2 = await verifyHeldFile(ledger, () => store.currentSet(), sourceId);
+            }
+            // N-B3: the preview reads the File again and settles a new finding.
+            {
+                const handle = await fresh();
+                await s.r.owner.close();
+                await s.openFor(R);
+                out.NB3 = { result: s.confirm(R, handle) };
+            }
+            // N-B5: the panel hidden (display:none) and shown again.
+            {
+                const handle = await fresh();
+                s.panel.style.display = 'none';
+                await frames(3);
+                s.panel.style.display = '';
+                await frames(2);
+                out.NB5 = { result: s.confirm(R, handle) };
+            }
+            // N-B6: a crop render cancelled, or failing: no evidence.
+            {
+                const before = store.getSnapshot().evidenceGeneration;
+                const stop = new AbortController();
+                await s.openFor(R);
+                const pending = store.prepareEvidence(R, { panel: s.panel, slots: s.slots }, { signal: stop.signal });
+                await tick();
+                stop.abort();
+                const cancelled = await pending;
+                out.NB6_cancelled = { ok: cancelled.ok, code: cancelled.ok ? null : cancelled.refusal.code, generationBefore: before };
+                const t = await observedStore({ pages: (doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { renderFails: true })) });
+                const failed = await t.prepare(t.register1);
+                out.NB6_failed = { ok: failed.ok, code: failed.ok ? null : failed.refusal.code, inSlots: FIELDS.filter((n) => t.slots[n].querySelector('canvas')).length, counts: t.r.owner.counts() };
+                await t.dispose();
+            }
+            // N-B7: another Sheet's crops drawn, then back -- the first handle no longer confirms.
+            {
+                const handle = await fresh();
+                const other = await s.prepare(s.geometrySheets[0]);
+                out.NB7 = { otherIssued: other.ok, result: s.confirm(R, handle) };
+                if (other.ok) out.NC1 = { result: s.confirm(R, other.handle) }; // N-C1: another Sheet's handle
+            }
+            // N-B8: from outside, a new digest presented with presentVerified.
+            {
+                const handle = await fresh();
+                const copy = fileOf(new Uint8Array(await held.arrayBuffer()), 'p2a-register.pdf');
+                const digest = await readFileDigest(copy, null, { scope: store.currentSet().id, signal: new AbortController().signal });
+                const presented = ledger.presentVerified(store.currentSet(), sourceId, digest);
+                out.NB8 = { presented, binding: store.bindingOf(sourceId), result: s.confirm(R, handle) };
+            }
+            // N-B10: the stamp -- frozen numbers, a new object each call, writing to it changes nothing.
+            {
+                const a = ledger.presentationStamp(sourceId);
+                const b = ledger.presentationStamp(sourceId);
+                let wrote = 'no error';
+                try { a.presentedAt = 0; } catch (error) { wrote = error?.name ?? 'threw'; }
+                const c = ledger.presentationStamp(sourceId);
+                out.NB10 = {
+                    frozen: Object.isFrozen(a), keys: Object.keys(a), types: Object.values(a).map((v) => typeof v), distinct: a !== b,
+                    wrote, unchanged: c.presentedAt === b.presentedAt && c.checkedAt === b.checkedAt, none: ledger.presentationStamp('00000000-0000-4000-8000-000000000000'),
+                    noFile: !Object.values(a).some((v) => v instanceof Blob),
+                };
+            }
+            // N-B9: the File's bytes changed (CHANGED), then restored (MATCHED): a handle from before does not confirm.
+            {
+                const handle = await fresh();
+                const original = new Uint8Array(await held.arrayBuffer());
+                const altered = original.slice();
+                altered[altered.length - 2] ^= 0xff;
+                const swapping = new File([altered], 'p2a-register.pdf');
+                ledger.present(store.currentSet(), sourceId, swapping);
+                const changed = await store.verifyFile(sourceId);
+                const bindingChanged = store.bindingOf(sourceId);
+                const back = await restoreBinding();
+                out.NB9 = { changed: changed.ok ? changed.settlement : changed.refusal.code, bindingChanged, back, binding: store.bindingOf(sourceId), result: s.confirm(R, handle) };
+            }
+            // N-C3: a new extraction run after the handle was issued.
+            {
+                const handle = await fresh();
+                const run = await store.extract({ sheetIds: [R] });
+                out.NC3 = { run: run.report.kind === 'finished' ? run.report.outcome : run.report.refusal.code, result: s.confirm(R, handle) };
+            }
+            // N-C4: the profile revised after the handle was issued -- and no crop is paired with the old reading.
+            {
+                const handle = await fresh();
+                const revised = store.reviseProfile(s.profile.id, { fields: { ...s.profile.fields, revision: { left: 562, top: 520, right: 660, bottom: 560 } } });
+                const canvasesBefore = window.__canvases.made;
+                const again = await s.prepare(R);
+                out.NC4 = {
+                    revised: revised.ok, result: s.confirm(R, handle), prepareAfter: again.ok ? 'issued' : again.refusal.code,
+                    canvasesMade: window.__canvases.made - canvasesBefore, currency: currencyLabel(observationCurrency(store.currentSet(), s.sheet(R), ledger)),
+                };
+                // Read again under the new revision, so the rest runs on CURRENT observations.
+                await store.extract({ sheetIds: [R, ...s.geometrySheets] });
+                s.profile.fields = store.currentSet().titleBlockProfiles.find((p) => p.id === s.profile.id).fields;
+            }
+            // N-C9: a look-alike handle, one made with the prototype, one forged, one from another store.
+            {
+                await fresh();
+                const lookalike = { sheetId: R };
+                const prototyped = Object.create(EvidenceHandle.prototype);
+                let forged = 'not thrown';
+                try { new EvidenceHandle(Symbol('evidence'), R); } catch (error) { forged = error?.name ?? 'threw'; }
+                const t = await observedStore();
+                const theirs = await t.prepare(t.register1);
+                out.NC9 = {
+                    lookalike: s.confirm(R, lookalike), prototyped: s.confirm(R, prototyped), forged,
+                    anotherStores: theirs.ok ? s.confirm(R, theirs.handle) : { ok: false, code: `prepare ${theirs.refusal.code}` },
+                };
+                await t.dispose();
+            }
+            // N-C10 / N-C11: a crop hidden, sized to nothing, or taken out of the page.
+            {
+                const handle = await fresh();
+                s.slots.revision.querySelector('canvas').style.visibility = 'hidden';
+                out.NC10_hidden = s.confirm(R, handle);
+                const handle2 = await fresh();
+                s.slots.issueDate.querySelector('canvas').style.opacity = '0';
+                out.NC10_transparent = s.confirm(R, handle2);
+                const handle3 = await fresh();
+                s.slots.drawingTitle.querySelector('canvas').remove();
+                out.NC11_removed = s.confirm(R, handle3);
+            }
+            // N-C13: the Source's File went missing, and the same bytes were chosen again (another presentation).
+            {
+                const handle = await fresh();
+                const gone = await store.verifyFile(sourceId).then(() => {
+                    ledger.present(store.currentSet(), sourceId, null);
+                    return store.bindingOf(sourceId);
+                });
+                const back = await restoreBinding();
+                out.NC13 = { gone, back, binding: store.bindingOf(sourceId), result: s.confirm(R, handle) };
+            }
+            // N-R12 / N-R13: each rotation and CropBox offset -- crops drawn upright at rotation 0, turned by CSS only, the size worked out beforehand.
+            {
+                const geometry = await fixture(P2A, 'p2a-geometry');
+                const { task, doc: oracleDoc } = await openDoc(geometry.bytes);
+                const rows = [];
+                for (const id of s.geometrySheets) {
+                    const sheet = s.sheet(id);
+                    const result = await s.prepare(id);
+                    if (!result.ok) {
+                        rows.push({ page: sheet.pageNumber, refused: result.refusal.code });
+                        continue;
+                    }
+                    const oraclePage = await oracleDoc.getPage(sheet.pageNumber);
+                    const R = result.view.rotate;
+                    const row = { page: sheet.pageNumber, rotate: R, factsRotate: sheet.pageFacts.rotate, pdfRotate: oraclePage.rotate, fields: {} };
+                    const W = sheet.pageFacts.uprightWidthPt;
+                    const H = sheet.pageFacts.uprightHeightPt;
+                    for (const name of FIELDS) {
+                        const canvas = s.slots[name].querySelector('canvas');
+                        const rect = result.view.fields[name].rect;
+                        const oracle = await renderRegion(oraclePage, rect, { dpi: 300 });
+                        // As the viewer shows the page: the same field through the page's own /Rotate.
+                        const shown = displayRect(rect, R, W, H);
+                        const asDisplayed = await renderRegion(oraclePage, shown, { dpi: 300, rotation: R });
+                        row.fields[name] = {
+                            planned: [result.view.fields[name].width, result.view.fields[name].height],
+                            drawn: [canvas.width, canvas.height],
+                            sameAsOracle: (await canvasDigest(canvas)) === (await canvasDigest(oracle.canvas)),
+                            transform: canvas.style.transform,
+                            frame: [canvas.parentElement.style.width, canvas.parentElement.style.height],
+                            dark: darkCount(canvas),
+                            // How well the crop turned by its CSS rotation matches the page as displayed; and turned the wrong way, as a control.
+                            likeDisplayed: agreement(turned(canvas, R), asDisplayed.canvas),
+                            likeDisplayedWrongWay: agreement(turned(canvas, R + 180), asDisplayed.canvas),
+                        };
+                        oracle.canvas.width = 0;
+                        asDisplayed.canvas.width = 0;
+                    }
+                    rows.push(row);
+                }
+                await task.destroy();
+                out.NR12 = rows;
+            }
+            // N-R13 (injected): renderRegion's page box differs from the one the plan used -- the sizes disagree.
+            {
+                const t = await observedStore({ pages: (doc, n, log) => doc.getPage(n).then((p) => instrumentPage(p, log, { shrinkBaseAfter: 1 })) });
+                const result = await t.prepare(t.register1);
+                out.NR13_injected = { ok: result.ok, code: result.ok ? null : result.refusal.code, inSlots: FIELDS.filter((n) => t.slots[n].querySelector('canvas')).length };
+                await t.dispose();
+            }
+            // N-R3: rectangles past each limit -- refused before any canvas exists.
+            {
+                // Through the whole path: a field over 4,000,000 px on a real page.
+                const big = store.createProfile({ name: 'big-field', transferModel: 'corner-anchored', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: { ...s.profile.fields, drawingTitle: { left: 0, top: 0, right: 800, bottom: 580 } } });
+                const sheetId = s.geometrySheets[0];
+                let pipeline = { created: big.ok ? 'ok' : big.refusal.code };
+                if (big.ok) {
+                    store.assignProfile([sheetId], big.profile.id, { replace: true });
+                    const run = await store.extract({ sheetIds: [sheetId] });
+                    const plan = planCrop(store.currentSet().titleBlockProfiles.find((p) => p.id === big.profile.id), { width: 800, height: 580 });
+                    const canvasesBefore = window.__canvases.made;
+                    const renderedBefore = s.r.owner.counts().renderStarted;
+                    const result = await s.prepare(sheetId);
+                    pipeline = {
+                        run: run.report.kind === 'finished' ? run.report.outcome : run.report.refusal.code,
+                        plan: plan.exceeds, title: plan.fields.drawingTitle, code: result.ok ? 'issued' : result.refusal.code,
+                        canvasesMade: window.__canvases.made - canvasesBefore, rendersStarted: s.r.owner.counts().renderStarted - renderedBefore,
+                        inSlots: FIELDS.filter((n) => s.slots[n].querySelector('canvas')).length,
+                    };
+                    store.assignProfile([sheetId], s.profile.id, { replace: true });
+                }
+                // Each limit on its own, as planned (no canvas is made by planning).
+                const at = (fields, upright) => planCrop({ ...s.profile, referencePage: { uprightWidthPt: upright.width, uprightHeightPt: upright.height }, fields }, upright);
+                const small = s.profile.fields;
+                const canvasesBefore = window.__canvases.made;
+                const side = at({ ...small, drawingTitle: { left: 0, top: 100, right: 1970, bottom: 110 } }, { width: 14400, height: 14400 });
+                const sideOk = at({ ...small, drawingTitle: { left: 0, top: 100, right: 1966, bottom: 110 } }, { width: 14400, height: 14400 });
+                const field = at({ ...small, drawingTitle: { left: 0, top: 0, right: 480, bottom: 481 } }, { width: 14400, height: 14400 });
+                const fieldOk = at({ ...small, drawingTitle: { left: 0, top: 0, right: 479, bottom: 479 } }, { width: 14400, height: 14400 });
+                const fourAtLimit = at(Object.fromEntries(FIELDS.map((n) => [n, { left: 0, top: 0, right: 479, bottom: 479 }])), { width: 800, height: 580 });
+                const summary = (p) => ({ exceeds: p.exceeds, title: [p.fields.drawingTitle.width, p.fields.drawingTitle.height], total: p.totalPixels });
+                out.NR3 = {
+                    pipeline, constants: CROP_LIMITS,
+                    side: summary(side), sideOk: summary(sideOk), field: summary(field), fieldOk: summary(fieldOk), fourAtLimit: summary(fourAtLimit),
+                    planningMadeCanvases: window.__canvases.made - canvasesBefore,
+                };
+            }
+            // N-C16: an OCR_FAILED reading confirmed with values typed in -- still needs its crops; all four edited.
+            {
+                const sheetId = s.sheet(s.geometrySheets[1]).id;
+                class FailingOcr extends GuardedRegisterOcr {
+                    async recogniseFields() { throw new Error('simulated recognition failure'); }
+                }
+                const raster = await fixture(P2A, 'p2a-register');
+                void raster;
+                const regSheets = store.currentSet().sheets.filter((x) => x.sourceId === s.sheet(R).sourceId && x.retiredAt === null).sort((a, b) => a.pageNumber - b.pageNumber);
+                const rasterSheet = regSheets[1].id;
+                store.assignProfile([rasterSheet], s.profile.id, { replace: true });
+                const run = await store.extract({ sheetIds: [rasterSheet] }, { createOcr: () => new FailingOcr() });
+                const observed = s.sheet(rasterSheet).observation;
+                const typed = { drawingNumber: 'A-102', drawingTitle: '2階平面図', revision: 'A', issueDate: '2026.09.01' };
+                const without = store.confirmSheet({ sheetId: rasterSheet, values: typed, evidence: null });
+                const handle = await s.prepare(rasterSheet);
+                out.NC16 = {
+                    run: run.report.kind === 'finished' ? run.report.outcome : run.report.refusal.code, status: observed?.status, sources: observed ? FIELDS.map((n) => observed.fields[n].source) : null,
+                    without: without.ok ? 'confirmed' : without.refusal.code, withCrop: handle.ok ? s.confirm(rasterSheet, handle.handle, typed) : { ok: false, code: handle.refusal.code },
+                };
+                void sheetId;
+            }
+            // CROP_NOT_AVAILABLE (H-13): a Sheet with no profile has nothing to show the drawing of.
+            {
+                const unassigned = store.currentSet().sheets.find((x) => x.retiredAt === null && x.profileAssignment === null);
+                const prepared = unassigned ? await store.prepareEvidence(unassigned.id, { panel: s.panel, slots: s.slots }) : null;
+                const direct = unassigned ? store.confirmSheet({ sheetId: unassigned.id, values: { drawingNumber: 'X', drawingTitle: 'X', revision: 'X', issueDate: 'X' }, evidence: null }) : null;
+                out.cropNotAvailable = { prepared: prepared?.ok ? 'issued' : prepared?.refusal.code, direct: direct?.ok ? 'confirmed' : direct?.refusal.code };
+            }
+            // Every confirmation this store made names its profile (N-C8).
+            out.allConfirmationsHaveProfile = store.currentSet().sheets.flatMap((x) => [x.confirmation, ...x.confirmationHistory.map((h) => h.confirmation)]).filter(Boolean).every((c) => c.profile !== null);
+            out.confirmationCount = store.currentSet().sheets.flatMap((x) => [x.confirmation, ...x.confirmationHistory.map((h) => h.confirmation)]).filter(Boolean).length;
+            out.bulk = { confirmSheets: typeof store.confirmSheets, confirmAll: typeof store.confirmAll };
+            await s.dispose();
+            out.workers = workers();
+            return plainly(out);
+        }
+
+        // N-A5 / N-A11: reset and leaving while crops are drawn, and an old session's page arriving late.
+        async function sessions() {
+            const out = {};
+            for (const how of ['reset', 'leave']) {
+                const hold = { page: null };
+                const s = await observedStore({ pages: (doc, n, log) => doc.getPage(n).then((p) => { hold.page = instrumentPage(p, log, { hold: true }); return hold.page; }) });
+                await s.openFor(s.register1);
+                const versionBefore = store => store.getSnapshot().version;
+                const pending = s.store.prepareEvidence(s.register1, { panel: s.panel, slots: s.slots });
+                await until(() => s.r.log.includes('render-start'), 'the crop render');
+                if (how === 'reset') s.store.reset();
+                else s.store.leave();
+                const result = await pending;
+                await until(() => lastRecord(s.r.owner)?.outcome !== 'pending', 'the release');
+                out[`NA5_${how}`] = {
+                    result: result.ok ? 'issued' : result.refusal.code, record: lastRecord(s.r.owner), cropsInSlots: FIELDS.filter((n) => s.slots[n].querySelector('canvas')).length,
+                    version: versionBefore(s.store),
+                };
+                await s.dispose();
+            }
+            {
+                const stuck = defer();
+                let held = false;
+                const s = await observedStore({ pages: (doc, n) => (held ? stuck.promise : doc.getPage(n)) });
+                await s.openFor(s.register1);
+                held = true;
+                const pending = s.store.prepareEvidence(s.register1, { panel: s.panel, slots: s.slots });
+                await until(() => s.r.pageRequests.length > 0 && s.r.log.at(-1)?.startsWith('page-asked'), 'the held page request');
+                s.store.reset();
+                const result = await pending;
+                const afterReset = { version: s.store.getSnapshot().version, generation: s.store.getSnapshot().evidenceGeneration };
+                const late = await openDoc(await fixtureBytes(P2A, 'p2a-register'));
+                stuck.resolve(await late.doc.getPage(1));
+                await tick();
+                await tick();
+                await late.task.destroy();
+                const afterLate = { version: s.store.getSnapshot().version, generation: s.store.getSnapshot().evidenceGeneration };
+                out.NA11 = {
+                    result: result.ok ? 'issued' : result.refusal.code, afterReset, afterLate, sheets: s.store.currentSet().sheets.length,
+                    crops: FIELDS.filter((n) => s.slots[n].querySelector('canvas')).length, record: lastRecord(s.r.owner),
+                };
+                await s.dispose();
+            }
+            out.workers = workers();
+            return plainly(out);
+        }
+
+        // ================================================================ the operation lock (B2-D02)
+
+        async function lock() {
+            const out = {};
+            class HeldOcr extends GuardedRegisterOcr {
+                constructor() {
+                    super();
+                    this.entered = defer();
+                    this.gate = defer();
+                }
+                async recogniseFields(page, rects, options) {
+                    await this.start();
+                    this.entered.resolve();
+                    await this.gate.promise;
+                    return super.recogniseFields(page, rects, options);
+                }
+            }
+            const s = await observedStore();
+            const { store } = s;
+            const regSheets = store.currentSet().sheets.filter((x) => x.sourceId === s.sheet(s.register1).sourceId && x.retiredAt === null).sort((a, b) => a.pageNumber - b.pageNumber);
+            const raster = regSheets[1].id;
+            store.assignProfile([raster], s.profile.id, { replace: true });
+            const handle = (await s.prepare(s.register1));
+            const ocr = new HeldOcr();
+            const progressSeen = [];
+            const running = store.extract({ sheetIds: [raster] }, { createOcr: () => ocr, onProgress: (event) => progressSeen.push(event.phase) });
+            const atStart = { operation: plainly(store.getSnapshot().operation) };
+            await ocr.entered.promise;
+            const setBefore = store.currentSet();
+            const tryAll = {
+                createProfile: store.createProfile({ name: 'Q', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: s.profile.fields }),
+                renameProfile: store.renameProfile(s.profile.id, 'P2'),
+                reviseProfile: store.reviseProfile(s.profile.id, { transferModel: 'corner-anchored' }),
+                retireProfile: store.retireProfile(s.profile.id),
+                assign: store.assignProfile([regSheets[2].id], s.profile.id),
+                unassign: store.unassignProfile([s.register1]),
+                confirm: handle.ok ? store.confirmSheet({ sheetId: s.register1, values: s.valuesOf(s.register1), evidence: handle.handle }) : { ok: false, refusal: { code: `prepare ${handle.refusal.code}` } },
+                withdraw: store.withdrawConfirmation(s.register1),
+                removeSource: store.removeSource(s.sheet(s.register1).sourceId),
+                verifyFile: await store.verifyFile(s.sheet(s.register1).sourceId),
+                intake: await store.intake(fileOf(await fixtureBytes(P1, 'p1-second-c'), 'p1-second-c.pdf')),
+                extract: await store.extract({ sheetIds: [s.register1] }),
+                prepareEvidence: await store.prepareEvidence(s.register1, { panel: s.panel, slots: s.slots }),
+            };
+            const codeOf = (r) => (r?.ok === false ? r.refusal?.code ?? r.code : r?.kind === 'refused' ? r.refusal.code : r?.report?.kind === 'refused' ? r.report.refusal.code : r?.code ?? (r?.ok ? 'ok' : 'unknown'));
+            out.during = Object.fromEntries(Object.entries(tryAll).map(([k, v]) => [k, codeOf(v)]));
+            out.modelUntouched = store.currentSet() === setBefore;
+            out.gateStillRefuses = { intake: (() => { const i = s.r.gate.beginIntake(); if (i.ok) i.end(); return i.ok ? 'ok' : i.code; })(), extraction: await s.r.gate.beginExtraction().then((b) => { if (b.ok) b.lease.end(); return b.ok ? 'ok' : b.code; }) };
+            // Cancel: idempotent; nothing it reported afterwards is shown.
+            const progressAtCancel = progressSeen.length;
+            store.cancelExtraction();
+            store.cancelExtraction();
+            const cancelling = plainly(store.getSnapshot().operation);
+            ocr.gate.resolve();
+            const finished = await running;
+            out.cancel = {
+                cancelling: cancelling?.phase, report: finished.report.kind === 'finished' ? finished.report.outcome : finished.report.refusal.code,
+                progressAfterCancel: progressSeen.length - progressAtCancel, operationAfter: store.getSnapshot().operation, workers: workers(),
+                previewEpochMoved: store.getSnapshot().previewEpoch > 0,
+            };
+            out.atStart = atStart;
+            out.afterUnlock = { rename: codeOf(store.renameProfile(s.profile.id, 'P（改名）')), cancelNothing: (() => { store.cancelExtraction(); return store.getSnapshot().operation; })() };
+
+            // N-L3: reset while extraction runs -- the old run lands nowhere; the new session is untouched and unlocked.
+            {
+                const t = await observedStore();
+                const reg = t.store.currentSet().sheets.filter((x) => x.sourceId === t.sheet(t.register1).sourceId && x.retiredAt === null).sort((a, b) => a.pageNumber - b.pageNumber);
+                t.store.assignProfile([reg[1].id], t.profile.id, { replace: true });
+                const held = new HeldOcr();
+                const progress = [];
+                const run = t.store.extract({ sheetIds: [reg[1].id] }, { createOcr: () => held, onProgress: (e) => progress.push(e.phase) });
+                await held.entered.promise;
+                const seen = progress.length;
+                t.store.reset();
+                const afterReset = { operation: t.store.getSnapshot().operation, sheets: t.store.currentSet().sheets.length, runs: t.store.currentSet().analysisRuns.length };
+                held.gate.resolve();
+                const report = await run;
+                out.NL3 = { afterReset, report: report.report.kind === 'finished' ? { applied: report.report.applied, notApplied: report.report.notApplied } : report.report.refusal.code, progressAfterReset: progress.length - seen, operation: t.store.getSnapshot().operation, runsNow: t.store.currentSet().analysisRuns.length };
+                await t.dispose();
+            }
+            // N-L5: extraction that throws -- the lock is let go.
+            {
+                const t = await observedStore();
+                let thrown = 'not thrown';
+                try {
+                    await t.store.extract({ sheetIds: [t.register1] }, { createOcr: () => { throw new Error('simulated'); } });
+                } catch (error) {
+                    thrown = error?.message ?? 'threw';
+                }
+                out.NL5 = { thrown, operation: t.store.getSnapshot().operation, renameAfter: codeOf(t.store.renameProfile(t.profile.id, 'R')) };
+                await t.dispose();
+            }
+            // N-L6: extraction's document cannot be destroyed -- the lock is let go, the gate keeps refusing, the snapshot says so.
+            {
+                const t = await observedStore();
+                const probeDoc = await openDoc(await fixtureBytes(P2A, 'p2a-register'));
+                const proto = Object.getPrototypeOf(probeDoc.doc.loadingTask._transport);
+                await probeDoc.task.destroy();
+                const realDestroy = proto.destroy;
+                const leaked = [];
+                proto.destroy = function failingOnce() {
+                    proto.destroy = realDestroy;
+                    leaked.push(this);
+                    return Promise.reject(new Error('simulated destroy failure'));
+                };
+                let report;
+                try {
+                    report = await t.store.extract({ sheetIds: [t.register1] });
+                } finally {
+                    proto.destroy = realDestroy;
+                }
+                const snap = t.store.getSnapshot();
+                const prepared = await t.store.prepareEvidence(t.register1, { panel: t.panel, slots: t.slots });
+                const intake = await t.store.intake(fileOf(await fixtureBytes(P1, 'p1-second-c'), 'c.pdf'));
+                out.NL6 = {
+                    report: report.report.kind === 'finished' ? { outcome: report.report.outcome, failure: report.report.failure } : report.report.refusal.code,
+                    operation: snap.operation, documentsUnavailable: snap.documentsUnavailable, gate: t.r.gate.releaseUnconfirmed,
+                    prepare: prepared.ok ? 'issued' : prepared.refusal.code, intake: intake.kind === 'refused' ? intake.refusal.code : intake.kind,
+                };
+                // Release by hand what the injected failure left: the transport, then its worker (PDF.js skipped it).
+                for (const transport of leaked) {
+                    await realDestroy.call(transport).catch(() => { });
+                    transport.loadingTask?._worker?.destroy();
+                }
+                await t.dispose();
+            }
+            await s.dispose();
+            out.workers = workers();
+            return plainly(out);
+        }
+
+        // RF-39-01: the summary the screen shows after extraction, through startExtraction() itself.
+        // The next run is held at the gate's door until the test lets it in: no timer decides the order.
+        function holdNextExtraction(gate) {
+            const asked = defer();
+            const held = defer();
+            gate.beginExtraction = function heldOnce() {
+                delete gate.beginExtraction;
+                asked.resolve();
+                return held.promise.then(() => gate.beginExtraction());
+            };
+            return { asked: asked.promise, release: () => held.resolve() };
+        }
+
+        async function summaries() {
+            const out = {};
+            const view = (store) => {
+                const snap = store.getSnapshot();
+                return { version: snap.version, operation: plainly(snap.operation), last: snap.lastExtraction ? { runId: snap.lastExtraction.runId, kind: snap.lastExtraction.kind, outcome: snap.lastExtraction.outcome, code: snap.lastExtraction.refusal?.code ?? null } : null };
+            };
+            // In one session: a run that completes, and a run that is cancelled, are each shown.
+            {
+                const s = await observedStore();
+                const done = await s.store.startExtraction([s.register1]);
+                out.completed = { returned: { runId: done.runId, outcome: done.outcome }, shown: view(s.store).last };
+                const hold = holdNextExtraction(s.r.gate);
+                const running = s.store.startExtraction([s.register1]);
+                await hold.asked;
+                s.store.cancelExtraction();
+                hold.release();
+                const cancelled = await running;
+                out.cancelled = { returned: { runId: cancelled.runId, outcome: cancelled.outcome }, shown: view(s.store).last, operation: view(s.store).operation };
+                await s.dispose();
+            }
+            for (const how of ['reset', 'leave']) {
+                const s = await observedStore();
+                const { store } = s;
+                // A summary shown before; then a run held while the session is replaced, or the workspace left and entered again.
+                const before = await store.startExtraction([s.register1]);
+                const hold = holdNextExtraction(s.r.gate);
+                const old = store.startExtraction([s.register1]);
+                await hold.asked;
+                const whileRunning = view(store);
+                if (how === 'reset') store.reset();
+                else {
+                    store.leave();
+                    store.enter();
+                }
+                const afterSwitch = view(store);
+                // The old run ends now, before anything new: none of it is shown, and the snapshot does not move.
+                hold.release();
+                const oldSummary = await old;
+                await tick();
+                const afterOld = view(store);
+                out[`${how}_alone`] = { before: { runId: before.runId, outcome: before.outcome }, whileRunning, afterSwitch, oldRunId: oldSummary.runId, afterOld };
+                await s.dispose();
+            }
+            // The old run ends after a new run of the new session (or visit) has been shown: it does not replace it.
+            for (const how of ['reset', 'leave']) {
+                const s = await observedStore();
+                const { store } = s;
+                const hold = holdNextExtraction(s.r.gate);
+                const old = store.startExtraction([s.register1]);
+                await hold.asked;
+                if (how === 'reset') store.reset();
+                else {
+                    store.leave();
+                    store.enter();
+                }
+                let target = s.register1;
+                if (how === 'reset') {
+                    const accepted = await store.intake(s.files.register);
+                    if (accepted.kind !== 'accepted') throw new Error(`intake after reset: ${accepted.kind}`);
+                    const profile = store.createProfile({ name: 'P', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: s.profile.fields });
+                    if (!profile.ok) throw new Error(`profile after reset: ${profile.refusal.code}`);
+                    target = accepted.sheets[0].id;
+                    const assigned = store.assignProfile([target], profile.profile.id);
+                    if (!assigned.ok) throw new Error(`assign after reset: ${assigned.refusal.code}`);
+                }
+                const fresh = await store.startExtraction([target]);
+                const afterNew = view(store);
+                hold.release();
+                const oldSummary = await old;
+                await tick();
+                const afterOld = view(store);
+                out[`${how}_thenNew`] = { newRun: { runId: fresh.runId, outcome: fresh.outcome }, oldRunId: oldSummary.runId, afterNew, afterOld };
+                await s.dispose();
+            }
+            out.workers = workers();
+            return plainly(out);
+        }
+
+        // RV-39-02 / HG-RV39-OCR-01: extraction stopped, or failing, while its recogniser's Worker starts.
+        // Each scenario plans the next OCR Worker's start (window.__ocrStart: one of tesseract.js's answers held,
+        // failed or never given; the Worker's "closed" withheld from the page) and drives the screen's way in,
+        // startExtraction(), on a store with its own registry whose deadlines the test fires by hand. A Worker is
+        // gone only when the browser itself no longer lists it (window.__browserOcrWorkers, asked of the Node side):
+        // neither the app's own record of it nor the harness ending it counts. The harness ends a planned Worker
+        // only after everything about it has been read.
+        async function ocrInit(which) {
+            const out = { registryLoaded: Boolean(ocrWorkersModule) };
+            const ocrStart = window.__ocrStart;
+            const exportsBefore = { ...window.__exports };
+            const logBefore = ocrStart.log.length;
+            const Registry = ocrWorkersModule?.OcrWorkerRegistry ?? null;
+            const START_MS = ocrWorkersModule?.OCR_START_DEADLINE_MS ?? null;
+            const CLOSE_MS = ocrWorkersModule?.OCR_CLOSE_DEADLINE_MS ?? null;
+            out.deadlines = { start: START_MS, close: CLOSE_MS };
+            const browserOcr = async () => (typeof window.__browserOcrWorkers === 'function' ? window.__browserOcrWorkers() : -1);
+            // The browser drops a Worker from its list a moment after it ends; waits for that, or gives the count it has.
+            const browserSettles = async (n) => {
+                const t0 = performance.now();
+                for (; ;) {
+                    const count = await browserOcr();
+                    if (count === n || performance.now() - t0 > 20000) return count;
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+            };
+            // A run that may never end: waits for it within a bound, and says whether it ended.
+            const within = (promise, ms) => Promise.race([
+                promise.then((value) => ({ settled: true, value }), (error) => ({ settled: true, error: String(error?.message ?? error) })),
+                new Promise((resolve) => setTimeout(() => resolve({ settled: false }), ms)),
+            ]);
+            const planNext = (plan) => {
+                ocrStart.plans.push(plan);
+                return plan;
+            };
+            const shown = (store) => {
+                const last = store.getSnapshot().lastExtraction;
+                return last ? { runId: last.runId, kind: last.kind, outcome: last.outcome, committed: last.committed, ocrFailed: last.ocrFailed, code: last.refusal?.code ?? null } : null;
+            };
+            const rasterOf = (s) => {
+                const reg = s.store.currentSet().sheets.filter((x) => x.sourceId === s.sheet(s.register1).sourceId && x.retiredAt === null).sort((a, b) => a.pageNumber - b.pageNumber);
+                const raster = reg[1].id;
+                const assigned = s.store.assignProfile([raster], s.profile.id, { replace: true });
+                if (!assigned.ok) throw new Error(`assign: ${assigned.refusal.code}`);
+                return raster;
+            };
+            const observationOf = (s, id) => {
+                const o = s.sheet(id)?.observation;
+                return o ? { runId: o.runId, status: o.status, sources: FIELDS.map((n) => o.fields[n].source) } : null;
+            };
+            const heldIn = (plan, what) => until(() => (plan.record?.held.length ?? 0) > 0, what, 60000);
+            const logFrom = (mark) => ocrStart.log.slice(mark);
+            // What the screen's title-block panel says now, drawn from the store's snapshot as the workspace draws it.
+            const panelSays = async (store) => {
+                const host = document.createElement('div');
+                document.body.appendChild(host);
+                const root = createRoot(host);
+                const snap = store.getSnapshot();
+                const noop = () => { };
+                root.render(createElement(TitleBlockPanel, {
+                    store, drawingSet: store.currentSet(), checked: new Set(), operation: snap.operation, lastExtraction: snap.lastExtraction,
+                    selectedSheet: null, canDraw: false, editing: false, onCheck: noop, onCreate: noop, onRevise: noop, onNotice: noop,
+                }));
+                await frames(2);
+                const result = host.querySelector('[data-ds-extraction-result]');
+                const said = {
+                    result: result ? { state: result.dataset.dsExtractionResult, ocrFailed: Number(result.dataset.dsExtractionOcrFailed), text: result.textContent.trim() } : null,
+                    progress: host.querySelector('[data-ds-extraction-progress]')?.textContent.trim() ?? null,
+                };
+                root.unmount();
+                host.remove();
+                return said;
+            };
+            const manualClock = () => {
+                const armed = [];
+                return {
+                    armed,
+                    arm: (ms, expire) => {
+                        const d = { ms, expire, disarmed: false, fired: false };
+                        armed.push(d);
+                        return () => { d.disarmed = true; };
+                    },
+                    fire: (ms) => {
+                        let n = 0;
+                        for (const d of armed) {
+                            if (d.ms === ms && !d.disarmed && !d.fired) {
+                                d.fired = true;
+                                n += 1;
+                                d.expire();
+                            }
+                        }
+                        return n;
+                    },
+                    // Every deadline ever armed, disarmed ones included: one that fires late must change nothing.
+                    fireAll: () => {
+                        let n = 0;
+                        for (const d of armed) {
+                            if (!d.fired) {
+                                d.fired = true;
+                                n += 1;
+                                d.expire();
+                            }
+                        }
+                        return n;
+                    },
+                    live: (ms) => armed.filter((d) => d.ms === ms && !d.disarmed && !d.fired).length,
+                };
+            };
+            // A store on its own registry; every snapshot it publishes is kept with the registry's Workers at that moment.
+            const setup = async (opts = {}) => {
+                const clock = manualClock();
+                const registry = Registry ? new Registry({ deadline: clock.arm, ...(opts.terminate ? { terminate: opts.terminate } : {}) }) : null;
+                const s = await observedStore(registry ? { ocrWorkers: registry } : {});
+                const raster = rasterOf(s);
+                const trail = [];
+                const stopTrail = s.store.subscribe(() => {
+                    const snap = s.store.getSnapshot();
+                    trail.push({ phase: snap.operation?.phase ?? null, live: registry ? registry.live : null, states: registry ? registry.records().map((r) => r.state) : null });
+                });
+                const transitions = [];
+                const stopRegistry = registry ? registry.subscribe(() => {
+                    const line = registry.records().map((r) => `${r.n}:${r.state}`).join(',');
+                    if (transitions.at(-1) !== line) transitions.push(line);
+                }) : () => { };
+                const mark = ocrStart.log.length;
+                return {
+                    s, store: s.store, raster, clock, registry, trail, transitions, mark,
+                    // At most this many of the registry's Workers were ever not known ended at the same time.
+                    concurrent: () => Math.max(0, ...transitions.map((line) => line.split(',').filter((x) => /:(starting|started|closing)$/.test(x)).length)),
+                    // The lock as the screen saw it let go after a cancel: what the Workers were at that moment.
+                    unlockAfterCancel: () => {
+                        const i = trail.findIndex((e, k) => k > 0 && e.phase === null && trail[k - 1].phase === 'cancelling');
+                        return i < 0 ? null : trail[i];
+                    },
+                    counts: () => (registry ? registry.counts() : null),
+                    records: () => (registry ? registry.records() : null),
+                    done: async () => {
+                        stopTrail();
+                        stopRegistry();
+                        await s.dispose();
+                    },
+                };
+            };
+
+            // A. Cancelled while initialising; the next extraction asked for at once; the old start's answers given afterwards.
+            if (which === 'A') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize' });
+                const first = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                const atCancel = { browser: await browserOcr(), phase: t.store.getSnapshot().operation?.phase ?? null, records: t.records() };
+                t.store.cancelExtraction();
+                const firstSummary = await first;
+                const unlock = t.unlockAfterCancel();
+                const afterCancel = { browser: await browserSettles(0), operation: plainly(t.store.getSnapshot().operation), shown: shown(t.store), extractionActive: t.s.r.gate.extractionActive, counts: t.counts(), records: t.records(), panel: await panelSays(t.store) };
+                const second = await t.store.startExtraction([t.raster]);
+                const afterSecond = { browser: await browserSettles(0), shown: shown(t.store), observation: observationOf(t.s, t.raster), version: t.store.getSnapshot().version, counts: t.counts(), startDeadlinesLive: START_MS === null ? null : t.clock.live(START_MS) };
+                // The old Worker's held answers, given now: to a Worker that has closed itself.
+                plan.record.release();
+                await tick();
+                await tick();
+                const afterOld = { browser: await browserSettles(0), shown: shown(t.store), observation: observationOf(t.s, t.raster), version: t.store.getSnapshot().version, counts: t.counts() };
+                // H. Every deadline armed so far fired late, disarmed ones included: nothing moves.
+                const fired = t.clock.fireAll();
+                await tick();
+                const afterLateDeadlines = { fired, counts: t.counts(), shown: shown(t.store), version: t.store.getSnapshot().version, unavailable: t.store.getSnapshot().ocr?.unavailable ?? null };
+                out.A = {
+                    atCancel, firstSummary: { runId: firstSummary.runId, outcome: firstSummary.outcome }, unlock, afterCancel,
+                    second: { runId: second.runId, outcome: second.outcome }, afterSecond, afterOld, afterLateDeadlines,
+                    concurrent: t.concurrent(), transitions: t.transitions, log: logFrom(t.mark),
+                };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // B. Cancelled while loading; then the load answered as failed (createWorker rejects): nothing moves, nothing left.
+            if (which === 'B') {
+                const t = await setup();
+                const plan = planNext({ action: 'load' });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its load');
+                t.store.cancelExtraction();
+                const summary = await run;
+                const afterCancel = { browser: await browserSettles(0), operation: plainly(t.store.getSnapshot().operation), outcome: summary.outcome, version: t.store.getSnapshot().version, counts: t.counts(), unlock: t.unlockAfterCancel() };
+                plan.record.fail('simulated: the recogniser could not load');
+                await tick();
+                await tick();
+                const afterFail = { browser: await browserSettles(0), version: t.store.getSnapshot().version, counts: t.counts(), thrownInHandler: plan.record.thrown.length };
+                const next = await t.store.startExtraction([t.raster]);
+                const afterNext = { browser: await browserSettles(0), outcome: next.outcome, shown: shown(t.store), counts: t.counts() };
+                out.B = { afterCancel, afterFail, afterNext, concurrent: t.concurrent(), log: logFrom(t.mark) };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // C. The language data refused (loadLanguage rejected; tesseract.js never settles its createWorker), not cancelled.
+            if (which === 'C') {
+                const t = await setup();
+                const plan = planNext({ action: 'loadLanguage', mode: 'fail', message: 'simulated: the language data could not be fetched' });
+                const run = t.store.startExtraction([t.raster]);
+                const ended = await within(run, 30000);
+                const atEnd = { settled: ended.settled, outcome: ended.value?.outcome ?? null, ocrFailed: ended.value?.ocrFailed ?? null, operation: plainly(t.store.getSnapshot().operation), browser: await browserSettles(0), counts: t.counts(), thrownInHandler: plan.record?.thrown.length ?? null, observation: observationOf(t.s, t.raster), panel: await panelSays(t.store) };
+                if (!ended.settled) {
+                    t.store.cancelExtraction();
+                    await within(run, 30000);
+                }
+                out.C = { atEnd, log: logFrom(t.mark) };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // D1. A start that never answers, cancelled: ended in finite time.
+            if (which === 'D1') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize' });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                t.store.cancelExtraction();
+                const ended = await within(run, 30000);
+                out.D1 = { settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), browser: await browserSettles(0), counts: t.counts(), records: t.records(), unlock: t.unlockAfterCancel(), panel: await panelSays(t.store) };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // D2. A start that never answers, not cancelled: its start deadline taken as a failure; the Worker closed; the run ends.
+            if (which === 'D2') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize' });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                const fired = START_MS === null ? 0 : t.clock.fire(START_MS);
+                const ended = await within(run, fired ? 30000 : 3000);
+                out.D2 = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, ocrFailed: ended.value?.ocrFailed ?? null, observation: observationOf(t.s, t.raster),
+                    browser: await browserSettles(0), counts: t.counts(), records: t.records(), panel: await panelSays(t.store),
+                };
+                if (!ended.settled) {
+                    t.store.cancelExtraction();
+                    await within(run, 30000);
+                }
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // E. The recogniser cannot load, not cancelled: OCR_FAILED shown, the Worker gone.
+            if (which === 'E') {
+                const t = await setup();
+                const plan = planNext({ action: 'load', mode: 'fail', message: 'simulated: the recogniser could not load' });
+                const summary = await t.store.startExtraction([t.raster]);
+                await tick();
+                out.E = {
+                    outcome: summary.outcome, ocrFailed: summary.ocrFailed, observation: observationOf(t.s, t.raster),
+                    browser: await browserSettles(0), counts: t.counts(), thrownInHandler: plan.record.thrown.length, panel: await panelSays(t.store),
+                };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // F. Every start would fail; every register page assigned: one Worker for the run, not one per page.
+            if (which === 'F') {
+                const t = await setup();
+                const reg = t.store.currentSet().sheets.filter((x) => x.sourceId === t.s.sheet(t.s.register1).sourceId && x.retiredAt === null).map((x) => x.id);
+                t.store.assignProfile(reg, t.s.profile.id, { replace: true });
+                const madeBefore = ocrStart.made.length;
+                for (let i = 0; i < 32; i += 1) planNext({ action: 'load', mode: 'fail', message: 'simulated: the recogniser could not load' });
+                const summary = await t.store.startExtraction(reg);
+                await tick();
+                const made = ocrStart.made.slice(madeBefore);
+                ocrStart.plans.splice(0);
+                out.F = {
+                    sheets: reg.length, outcome: summary.outcome, ocrFailed: summary.ocrFailed, ocrFailedSheets: reg.filter((id) => observationOf(t.s, id)?.status === 'OCR_FAILED').length,
+                    spawned: made.length, browser: await browserSettles(0), counts: t.counts(),
+                };
+                for (const r of made) r.worker.terminate();
+                await t.done();
+            }
+            // G. Told to close, the Worker's "closed" never reaches the page: the lock waits for its deadline; then the
+            //    page's OCR fails closed, stays so when the answer comes late, and only a new registry (a reload) reads again.
+            if (which === 'G') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize', holdClosed: true });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                t.store.cancelExtraction();
+                // (A tree without the registry has no channel: nothing to wait for, and the checks below say what it did.)
+                if (Registry) await until(() => (plan.record.heldAcks?.length ?? 0) > 0, 'the Worker said closed (withheld from the page)', 30000);
+                await tick();
+                const whileUnheard = { phase: t.store.getSnapshot().operation?.phase ?? null, rename: (() => { const r = t.store.renameProfile(t.s.profile.id, 'G'); return r.ok ? 'ok' : r.refusal.code; })(), closeDeadlinesLive: CLOSE_MS === null ? null : t.clock.live(CLOSE_MS), counts: t.counts() };
+                const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                const ended = await within(run, 30000);
+                const afterDeadline = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null,
+                    counts: t.counts(), records: t.records(),
+                };
+                const refused = await t.store.startExtraction([t.raster]);
+                const refusedView = { kind: refused.kind, code: refused.refusal?.code ?? null, panel: await panelSays(t.store) };
+                plan.record.releaseAck?.();
+                await tick();
+                const afterLateAnswer = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, again: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
+                await t.done();
+                // What a reload gives: a registry of its own.
+                const fresh = await setup();
+                const reloaded = await fresh.store.startExtraction([fresh.raster]);
+                out.G = { whileUnheard, afterDeadline, refused: refusedView, afterLateAnswer, reloaded: { outcome: reloaded.outcome, browser: await browserSettles(0), counts: fresh.counts() } };
+                plan.record.worker.terminate();
+                await fresh.done();
+            }
+            // I. Cancelled, then a new Drawing Set (or leaving and entering again) while the old Worker's "closed" is not yet
+            //    heard: the old run still holds the extraction lease, so nothing new reads; once heard, the next run does --
+            //    and at no moment are two of the registry's Workers not known ended.
+            if (which === 'I') for (const how of ['reset', 'leave']) {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize', holdClosed: true });
+                const old = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                t.store.cancelExtraction();
+                // (A tree without the registry has no channel: nothing to wait for, and the checks below say what it did.)
+                if (Registry) await until(() => (plan.record.heldAcks?.length ?? 0) > 0, 'the Worker said closed (withheld from the page)', 30000);
+                if (how === 'reset') t.store.reset();
+                else {
+                    t.store.leave();
+                    t.store.enter();
+                }
+                // Asked at once: the new session's intake, or the same session's next reading.
+                let early = null;
+                const tooSoon = how === 'reset'
+                    ? await t.store.intake(t.s.files.register).then((x) => { early = x; return x.kind === 'refused' ? x.refusal.code : x.kind; })
+                    : await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome);
+                const whileOldCloses = { tooSoon, counts: t.counts(), operation: plainly(t.store.getSnapshot().operation) };
+                plan.record.releaseAck?.();
+                const oldEnded = await within(old, 30000);
+                let target = t.raster;
+                if (how === 'reset') {
+                    const accepted = early?.kind === 'accepted' ? early : await t.store.intake(t.s.files.register);
+                    if (accepted.kind !== 'accepted') throw new Error(`intake after reset: ${accepted.kind}`);
+                    const profile = t.store.createProfile({ name: 'P', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: t.s.profile.fields });
+                    if (!profile.ok) throw new Error(`profile after reset: ${profile.refusal.code}`);
+                    target = accepted.sheets.map((x) => x.id)[1];
+                    const assigned = t.store.assignProfile([target], profile.profile.id);
+                    if (!assigned.ok) throw new Error(`assign after reset: ${assigned.refusal.code}`);
+                }
+                const next = await t.store.startExtraction([target]);
+                out[`I_${how}`] = {
+                    whileOldCloses, oldSettled: oldEnded.settled, next: { outcome: next.outcome, refusal: next.refusal?.code ?? null }, shown: shown(t.store),
+                    browser: await browserSettles(0), counts: t.counts(), concurrent: t.concurrent(), transitions: t.transitions,
+                };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // J. Told to close before the page has heard the Worker is alive, and that first "close" lost (as one sent
+            //    before the Worker joined its channel is): once "alive" is heard, it is asked again, and ends.
+            if (which === 'J') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize', holdAlive: true, dropFirstClose: true });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                const aliveWithheld = plan.record.heldAlive?.length ?? 0;
+                t.store.cancelExtraction();
+                await tick();
+                await tick();
+                const beforeAlive = { phase: t.store.getSnapshot().operation?.phase ?? null, closeLost: Boolean(plan.record.closeDropped), browser: await browserOcr(), counts: t.counts() };
+                plan.record.releaseAlive?.();
+                const ended = await within(run, 30000);
+                out.J = {
+                    aliveWithheld, beforeAlive, settled: ended.settled, outcome: ended.value?.outcome ?? null, unlock: t.unlockAfterCancel(),
+                    browser: await browserSettles(0), counts: t.counts(), records: t.records(), log: logFrom(t.mark),
+                };
+                if (!ended.settled) {
+                    if (CLOSE_MS !== null) t.clock.fire(CLOSE_MS);
+                    await within(run, 30000);
+                }
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // RF-39-03: a started Worker's own terminate() fails, throws, never settles, or comes late -- none of which
+            // is an end. Ended only by its completing or by the Worker's "closed"; otherwise the close deadline decides.
+            const gateOf = (t) => ({ extractionActive: t.s.r.gate.extractionActive, releaseUnconfirmed: t.s.r.gate.releaseUnconfirmed });
+            // K. The real thing: Worker.terminate() throws inside tesseract.js's terminate(), which therefore rejects.
+            //    Not counted; the Worker, still alive, is asked on its channel, says closed, and that is its end.
+            if (which === 'K') {
+                const t = await setup();
+                const plan = planNext({ terminateThrows: true });
+                // Bounded: a tree that does not ask the Worker on its channel would wait here for a deadline no one fires.
+                const run = t.store.startExtraction([t.raster]);
+                const ended = await within(run, 30000);
+                const afterRun = { settled: ended.settled, browser: await browserSettles(0), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t), counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null };
+                if (!ended.settled && CLOSE_MS !== null) {
+                    t.clock.fire(CLOSE_MS);
+                    await within(run, 30000);
+                }
+                const next = ended.settled ? await t.store.startExtraction([t.raster]) : { refusal: { code: 'NOT_ASKED' } };
+                out.K = { outcome: ended.value?.outcome ?? null, afterRun, next: next.refusal?.code ?? next.outcome, threw: ocrStart.log.slice(t.mark).includes(`${plan.record?.n}:terminate-threw`), log: logFrom(t.mark) };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // L. terminate() throws (through the seam), and the Worker's "closed" never reaches the page: the lock and the
+            //    lease are held until the close deadline; then the run ends, both are given back, and the page's OCR fails closed.
+            if (which === 'L') {
+                const t = await setup({ terminate: () => { throw new Error('simulated: terminate() threw'); } });
+                const plan = planNext({ holdClosed: true });
+                const run = t.store.startExtraction([t.raster]);
+                // The run's reading is done and it is closing its recogniser: the Worker said closed, withheld.
+                // Bounded, and not an error: a tree that never asks the Worker on its channel is reported by the checks, not here.
+                const heardClosed = await until(() => (plan.record?.heldAcks?.length ?? 0) > 0 || !Registry, 'the Worker said closed (withheld)', 30000).then(() => true, () => false);
+                await tick();
+                const whileUnknown = {
+                    operation: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), records: t.records(),
+                    heardClosed, rename: (() => { const r = t.store.renameProfile(t.s.profile.id, 'L'); return r.ok ? 'ok' : r.refusal.code; })(),
+                };
+                const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                const ended = await within(run, 30000);
+                const afterDeadline = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                    unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(),
+                };
+                const next = await t.store.startExtraction([t.raster]);
+                const intake = await t.store.intake(fileOf(await fixtureBytes(P1, 'p1-second-c'), 'c.pdf')).then((x) => (x.kind === 'refused' ? x.refusal.code : x.kind));
+                out.L = { whileUnknown, afterDeadline, next: next.refusal?.code ?? next.outcome, intake };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // M. terminate() never settles (through the seam) and "closed" is withheld: the next reading is refused while the
+            //    end is unknown; the deadline fails the page's OCR closed; terminate() then completing late is recorded,
+            //    and restores nothing.
+            if (which === 'M') {
+                const late = defer();
+                let asked = 0;
+                const t = await setup({ terminate: (end) => { asked += 1; return late.promise.then(() => end()); } });
+                const plan = planNext({ holdClosed: true });
+                const run = t.store.startExtraction([t.raster]);
+                // Bounded, and not an error: a tree that never asks the Worker on its channel is reported by the checks, not here.
+                const heardClosed = await until(() => (plan.record?.heldAcks?.length ?? 0) > 0 || !Registry, 'the Worker said closed (withheld)', 30000).then(() => true, () => false);
+                await tick();
+                const tooSoon = await t.store.startExtraction([t.raster]);
+                const whileUnknown = {
+                    heardClosed, asked, operation: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), records: t.records(),
+                    next: tooSoon.refusal?.code ?? tooSoon.outcome,
+                };
+                const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                const ended = await within(run, 30000);
+                const afterDeadline = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                    unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(),
+                };
+                late.resolve();
+                await tick();
+                await tick();
+                const afterLate = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, next: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
+                out.M = { whileUnknown, afterDeadline, afterLate };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // N. A terminate() that completes, as production calls it: nothing fails closed, no deadline expires.
+            if (which === 'N') {
+                const t = await setup();
+                const first = await t.store.startExtraction([t.raster]);
+                const second = await t.store.startExtraction([t.raster]);
+                out.N = { outcomes: [first.outcome, second.outcome], browser: await browserSettles(0), counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, concurrent: t.concurrent() };
+                await t.done();
+            }
+            // S. A recognition that stalls: the engine ends that Worker (its terminate() completing) and, for the next page
+            //    that needs OCR, makes another -- only once the first is known ended; never two at a time.
+            if (which === 'S') {
+                const t = await setup();
+                const reg = t.store.currentSet().sheets.filter((x) => x.sourceId === t.s.sheet(t.s.register1).sourceId && x.retiredAt === null).map((x) => x.id);
+                t.store.assignProfile(reg, t.s.profile.id, { replace: true });
+                const plan = planNext({ action: 'recognize' });
+                // The Drawing Register's own stall handling, with a shorter bound so the test does not wait two minutes:
+                // the held answer never comes, so the bound running out is the only way on.
+                // Only the first recognition -- the one whose answer is held -- gets the short bound; every other keeps the
+                // engine's own, so a real recognition on a slow machine is never cut short by the test.
+                class Stalling extends GuardedRegisterOcr {
+                    recogniseFields(page, rects, options) {
+                        const first = !this.shortened;
+                        this.shortened = true;
+                        return super.recogniseFields(page, rects, first ? { ...options, timeoutMs: 300 } : options);
+                    }
+                }
+                const run = await t.store.extract({ sheetIds: reg }, { createOcr: () => new Stalling(t.registry ? { workers: t.registry } : {}) });
+                const report = run.report;
+                out.S = {
+                    outcome: report.outcome, heldRecognitions: plan.record?.held.length ?? 0,
+                    ocrFailedSheets: reg.filter((id) => observationOf(t.s, id)?.status === 'OCR_FAILED').length,
+                    ocrReadSheets: reg.filter((id) => observationOf(t.s, id)?.sources.includes('ocr')).length,
+                    browser: await browserSettles(0), counts: t.counts(), records: t.records(), concurrent: t.concurrent(), transitions: t.transitions,
+                    operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // The recogniser's own input: each recognition hands tesseract.js one data URL of the region (the existing
+            // OCR engine). Counted so the privacy check can tell them from any other export.
+            out.recogniser = {
+                recognitions: ocrStart.log.slice(logBefore).filter((l) => l.endsWith(':recognize:asked')).length,
+                toDataURL: window.__exports.toDataURL - exportsBefore.toDataURL,
+                toBlob: window.__exports.toBlob - exportsBefore.toBlob,
+            };
+            out.browserAtEnd = await browserSettles(0);
+            out.workers = workers();
+            return plainly(out);
+        }
+
+        // T-01 / H-12: where a profile's rectangles land on the viewer, and back, for every rotation, offset and zoom.
+        async function pointer(geometryTruth) {
+            const geometry = await fixture(P2A, 'p2a-geometry');
+            const r = rig();
+            const host = document.createElement('div');
+            host.style.cssText = 'width: 900px; height: 700px;';
+            document.body.appendChild(host);
+            const root = createRoot(host);
+            await r.owner.open('A', geometry.file, geometry.expected);
+            const source = { id: 'A', displayName: 'p2a-geometry.pdf', fingerprint: { sha256: geometry.expected.sha256, byteLength: geometry.expected.byteLength, pageCount: 8 } };
+            const seen = { geometry: null };
+            const rows = [];
+            for (const pageTruth of geometryTruth.pages) {
+                const sheet = { id: `sheet-${pageTruth.page}`, pageNumber: pageTruth.page };
+                const overlay = (g) => { seen.geometry = g; return null; };
+                root.render(createElement(ReadOnlySheetViewer, { owner: r.owner, source, file: geometry.file, sheet, pageTotal: 8, overlay }));
+                const state = () => host.querySelector('[data-ds-viewer]')?.dataset.dsRenderState ?? '';
+                await until(() => state() === 'rendered' && host.querySelector('canvas')?.dataset.dsRenderedSheet === sheet.id, `page ${pageTruth.page}`);
+                for (const zoomClicks of [0, 2, 4]) {
+                    for (let i = 0; i < zoomClicks; i++) host.querySelector('[data-ds-zoom-in]').click();
+                    await tick();
+                    await until(() => state() === 'rendered' && seen.geometry, 'the zoomed render');
+                    await frames(1);
+                    const g = seen.geometry;
+                    const canvasBox = host.querySelector('canvas').getBoundingClientRect();
+                    let worstToTruth = 0;
+                    let worstRoundTrip = 0;
+                    for (const name of FIELDS) {
+                        const upright = pageTruth.uprightRects[name];
+                        const display = pageTruth.displayRects[name];
+                        const box = uprightToScreen(upright, g);
+                        // Against the generator's own display rectangle, in CSS px.
+                        worstToTruth = Math.max(worstToTruth, Math.abs(box.left - display.left * g.cssScale), Math.abs(box.top - display.top * g.cssScale),
+                            Math.abs(box.left + box.width - display.right * g.cssScale), Math.abs(box.top + box.height - display.bottom * g.cssScale));
+                        // A drag over that box back to upright points, in CSS px.
+                        const back = dragToUpright({ x: box.left, y: box.top }, { x: box.left + box.width, y: box.top + box.height }, g);
+                        worstRoundTrip = Math.max(worstRoundTrip, ...['left', 'top', 'right', 'bottom'].map((k) => Math.abs(back[k] - upright[k]) * g.cssScale));
+                    }
+                    rows.push({
+                        page: pageTruth.page, rotate: pageTruth.rotate, offset: pageTruth.offset, zoomClicks, cssScale: g.cssScale, viewerRotate: g.rotate,
+                        upright: uprightSize(g), uprightTruth: pageTruth.upright, canvasCss: [canvasBox.width, canvasBox.height],
+                        worstToTruth, worstRoundTrip,
+                    });
+                    if (zoomClicks > 0) {
+                        seen.geometry = null;
+                        for (let i = 0; i < zoomClicks; i++) host.querySelector('[data-ds-zoom-out]').click();
+                        await tick();
+                        await until(() => state() === 'rendered' && seen.geometry, 'the zoom back');
+                    }
+                }
+            }
+            root.unmount();
+            host.remove();
+            await r.owner.close();
+            return plainly({ rows, record: lastRecord(r.owner) });
+        }
+
+        function storage() {
+            return {
+                writes: plainly(window.__storage),
+                local: localStorage.length,
+                session: sessionStorage.length,
+                objectUrls: window.__objectUrls.size,
+                exports: plainly(window.__exports),
+            };
+        }
+
+        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, summaries, ocrInit, pointer, storage };
+        window.__m7p2b2Ready = true;
+        document.getElementById('state').textContent = 'ready';
+    </script>
+</body>
+</html>

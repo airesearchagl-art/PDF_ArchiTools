@@ -43,6 +43,8 @@ import type {
     AnalysisRun, AnalysisRunOutcome, DrawingSet, Observation, ProfileBasis, Sha256Hex, Timestamp, Uuid,
 } from './model';
 import { isLive, mintUuid, nowTimestamp } from './model';
+import { PAGE_OCR_WORKERS } from './ocr-workers';
+import type { OcrRecogniserWorkers, OcrWorkerRegistry } from './ocr-workers';
 import type { ExtractionLease, GateRefusalCode, PdfDocumentGate } from './pdf-document-gate';
 import { GATE_MESSAGES } from './pdf-document-gate';
 import { assignmentsFor, observationFromRow, toTemplateProfile } from './register-adapter';
@@ -56,6 +58,13 @@ import { assignmentsFor, observationFromRow, toTemplateProfile } from './registe
  * worker -- including one whose start was already under way when it closed --
  * so a cancelled run cannot leave a worker behind.
  *
+ * Its Workers are owned from the moment each is made (ocr-workers.ts,
+ * RV-39-02): close() ends every one -- started, still starting, or whose
+ * start failed -- and resolves only once each is known ended, or given up as
+ * unconfirmed (the page's OCR then stays refused until a reload). A start that
+ * fails ends OCR for the rest of the run: its Worker is closed, and no other
+ * is made, so a recogniser that cannot load does not leave a Worker per page.
+ *
  * It also keeps nothing. M7 writes nothing to browser storage, and
  * tesseract.js by default stores the language data it downloads in IndexedDB
  * from inside its worker; `'none'` makes this engine's worker neither read nor
@@ -65,11 +74,15 @@ import { assignmentsFor, observationFromRow, toTemplateProfile } from './registe
  */
 export class GuardedRegisterOcr extends RegisterOcrEngine {
     private closed = false;
-    private readonly tally = { workersStarted: 0, closes: 0, refusedAfterClose: 0 };
+    private startFailed = false;
+    private readonly workers: OcrRecogniserWorkers;
+    private readonly tally = { workersStarted: 0, closes: 0, refusedAfterClose: 0, refusedAfterStartFailed: 0 };
 
-    constructor() {
+    constructor(options: { workers?: OcrWorkerRegistry } = {}) {
+        const workers = (options.workers ?? PAGE_OCR_WORKERS).recogniser();
         // The languages stay the Drawing Register's own default.
-        super(undefined, { cacheMethod: 'none' });
+        super(undefined, { cacheMethod: 'none', createWorker: workers.makeWorker });
+        this.workers = workers;
     }
 
     override async start(): Promise<void> {
@@ -77,8 +90,17 @@ export class GuardedRegisterOcr extends RegisterOcrEngine {
             this.tally.refusedAfterClose += 1;
             throw new Error('OCR closed');
         }
+        if (this.startFailed) {
+            this.tally.refusedAfterStartFailed += 1;
+            throw new Error('OCR could not start');
+        }
         const wasStarted = this.started;
-        await super.start();
+        try {
+            await super.start();
+        } catch (error) {
+            if (!this.started) this.startFailed = true;
+            throw error;
+        }
         if (!wasStarted && this.started) this.tally.workersStarted += 1;
         if (this.closed) {
             await super.terminate().catch(() => { });
@@ -90,15 +112,17 @@ export class GuardedRegisterOcr extends RegisterOcrEngine {
         await this.close();
     }
 
-    /** Terminate the worker, if any, and refuse every later start. Never rejects. */
+    /** End every Worker this recogniser made, and refuse every later start. Resolves once each is known ended or unconfirmed. Never rejects. */
     async close(): Promise<void> {
         this.closed = true;
         this.tally.closes += 1;
         await super.terminate().catch(() => { });
+        // Never rejects: a Worker whose end cannot be known fails the page's OCR closed instead.
+        await this.workers.closeAll();
     }
 
-    counts(): { workersStarted: number; closes: number; refusedAfterClose: number; started: boolean } {
-        return { ...this.tally, started: this.started };
+    counts(): { workersStarted: number; closes: number; refusedAfterClose: number; refusedAfterStartFailed: number; started: boolean; workers: ReturnType<OcrRecogniserWorkers['counts']> } {
+        return { ...this.tally, started: this.started, workers: this.workers.counts() };
     }
 }
 
@@ -525,8 +549,13 @@ export async function extractTitleBlocks(
     } catch {
         failure = 'UNEXPECTED';
     } finally {
-        await ocr.close();
-        lease.end();
+        // The lease is given back however the recogniser's close went (RF-39-03). close() resolves once every
+        // Worker is known ended or given up as unconfirmed -- the page's OCR then stays refused until a reload.
+        try {
+            await ocr.close();
+        } finally {
+            lease.end();
+        }
     }
 
     // Every targeted Sheet with neither an observation nor a reason was not

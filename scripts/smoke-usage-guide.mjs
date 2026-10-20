@@ -21,7 +21,7 @@ const PORT = 5182;
 const ORIGIN = `http://localhost:${PORT}`;
 
 const TOOLS = ['annotator', 'comparator', 'processor', 'split-merge', 'textifier', 'drawing-set'];
-// 図面管理 (v0.1.0) is written up in text only; it has no screenshot yet, so the
+// 図面管理 is written up in text only; it has no screenshot yet, so the
 // screenshot checks cover the five tools that do.
 const SCREENSHOT_TOOLS = TOOLS.filter((t) => t !== 'drawing-set');
 
@@ -198,7 +198,7 @@ try {
     console.log(`  ${JSON.stringify(versions)}`);
     check('PDF加工 shows v1.4.0', versions.processor === '1.4.0', JSON.stringify(versions));
     check('PDFテキスト化 shows v1.7.0', versions.textifier === '1.7.0', JSON.stringify(versions));
-    check('図面管理 shows v0.1.0', versions['drawing-set'] === '0.1.0', JSON.stringify(versions));
+    check('図面管理 shows v0.2.0', versions['drawing-set'] === '0.2.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
     // ---- content, read from the panel it belongs to ---------------------------
@@ -347,20 +347,38 @@ try {
     check('textifier: nothing claims Word keeps the layout',
         !t.includes('レイアウトを保持') && !t.includes('レイアウトを再現します'), 'no layout claim');
 
-    // 図面管理 -- only what M7-P1 does, and plainly what it does not do yet.
+    // 図面管理 -- only what it does now, and plainly what it does not do yet.
     const d = text['drawing-set'];
     check('drawing-set: says what it is for',
-        d.includes('図面一式のPDFをまとめて読み込み') && d.includes('読み取り専用のプレビュー'), 'purpose');
+        d.includes('図面一式のPDFをまとめて読み込み') && d.includes('読み取り専用のプレビュー')
+        && d.includes('表題欄（図面番号・図面名称・版・日付）を読み取り、原図と見比べながら1ページずつ確定'), 'purpose');
     check('drawing-set: one file at a time, with per-file results, and accepted files survive a refusal',
         d.includes('1ファイルずつ順に読み込みます') && d.includes('すでに読み込んだファイルはそのまま残ります'), 'intake');
     check('drawing-set: SHA-256 is content identification, not a signature',
         d.includes('SHA-256') && d.includes('署名や改ざん防止の証明ではありません'), 'sha');
     check('drawing-set: text yes/no is not OCR',
-        d.includes('文字認識（OCR）は行っていません'), 'no ocr');
-    check('drawing-set: title block, checking and save/resume are stated as not yet available',
-        d.includes('表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません')
-        && d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
-        && d.includes('作業内容の保存・再開には、まだ対応していません'), 'not yet');
+        d.includes('この判定には文字認識（OCR）を使いません'), 'no ocr');
+    // M7-P2-B2: the title block is read and confirmed now; checking and save/resume are still not available.
+    check('drawing-set: the title block -- a profile dragged by the person, assigned explicitly, read in the browser (OCR from this site)',
+        d.includes('ご自身でドラッグして指定') && d.includes('表題欄を自動では探しません') && d.includes('明示的に割り当てます')
+        && d.includes('推測して割り当てることはありません') && d.includes('同じサイトにあるOCRで読み取ります') && d.includes('途中で中止できます'), 'title block');
+    check('drawing-set: confirmed one page at a time against the original drawing and how each value was got; no bulk confirmation; no profile, no confirmation',
+        d.includes('原図') && d.includes('取得方法（PDFの文字／OCR／読み取れず）') && d.includes('1ページずつ確定します') && d.includes('まとめて確定する機能はありません')
+        && d.includes('プロファイルを割り当てていないページは確定できません') && d.includes('修正した項目は記録されます'), 'confirmation');
+    check('drawing-set: a cancel can wait for OCR to end; an OCR end that cannot be confirmed stops reading, a PDF close that cannot be confirmed stops confirming too, and both ask for a reload',
+        d.includes('中止した後も、文字認識（OCR）の終了を待つ') && d.includes('「中止しています…」')
+        && d.includes('文字認識（OCR）を安全に終了できたことを確かめられない場合は、表題欄の読み取りができなくなります')
+        && d.includes('開いたPDFを安全に閉じられたことを確かめられない場合も、読み取りや確定ができなくなります')
+        && d.includes('どちらの場合も、ページの再読み込みを案内します') && d.includes('再読み込みの後でファイルを追加し直してください'), 'cancel and reload');
+    check('drawing-set: the explanation stays out of implementation names and review IDs',
+        !/Worker|worker|Tesseract|tesseract|BroadcastChannel|PDF\.js|lease|Lock|B2-D\d|RF-?\d|IR-\d|HG-|RV-?\d|M7|P2/.test(d), 'no internals');
+    check('drawing-set: neither a reading nor a confirmation is stated as vouching for the drawing',
+        d.includes('図面の内容を保証するものではありません') && !/確認済み|正しい値|承認|検証済み/.test(d), 'no overclaim on confirmation');
+    check('drawing-set: checking and save/resume are still stated as not yet available',
+        d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
+        && d.includes('作業内容の保存・再開には、まだ対応していません')
+        && !d.includes('表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません'), 'not yet');
+    check('drawing-set: profiles, readings and confirmations are not saved either', d.includes('プロファイル・読み取り値・確定した値も保存されず'), 'not saved');
     check('drawing-set: the bounds are stated as current, not permanent',
         d.includes('256 MiB') && d.includes('5000ページ') && d.includes('今後変わることがあります'), 'bounds');
     check('drawing-set: processing stays in the browser, and file names may be confidential',
@@ -394,33 +412,75 @@ try {
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
     check('and the newest entries are the ones just added',
-        historyDates[0] === '20261010' && historyDates[1] === '20261003',
+        historyDates[0] === '20261020' && historyDates[1] === '20261010' && historyDates[2] === '20261003',
         historyText.slice(0, 90).replace(/\n/g, ' | '));
     // The banner above the guide is written by hand, so it can fall behind the
     // history. Tie it, the newest entry and the 図面管理 header to one release.
     const releaseHeads = await page.evaluate(() => [...document.querySelectorAll('#release-history h4')]
         .map((h) => (h.innerText || '').replace(/\s+/g, ' ').trim()));
+    // Each entry read as its own card, so a sentence is checked in the release it belongs to.
+    const releaseCards = await page.evaluate(() => [...document.querySelectorAll('#release-history h4')]
+        .map((h) => ({
+            head: (h.innerText || '').replace(/\s+/g, ' ').trim(),
+            items: [...(h.parentElement?.querySelectorAll('li') ?? [])].map((li) => (li.innerText || '').trim()),
+        })));
+    const cardOf = (head) => releaseCards.find((c) => c.head === head) ?? { head: '', items: [] };
     const processor140 = releaseHeads.filter((h) => h.includes('PDF加工') && h.includes('1.4.0'));
     check('exactly one PDF加工 1.4.0 entry, dated 2026/10/03',
         processor140.length === 1 && processor140[0].startsWith('2026/10/03'), JSON.stringify(processor140));
+    const drawingSet020 = releaseHeads.filter((h) => h.includes('図面管理') && h.includes('0.2.0'));
+    check('exactly one 図面管理 0.2.0 entry, dated 2026/10/20, and it is the newest',
+        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[0] === drawingSet020[0], releaseHeads[0]);
     const drawingSet010 = releaseHeads.filter((h) => h.includes('図面管理') && h.includes('0.1.0'));
-    check('exactly one 図面管理 0.1.0 entry, dated 2026/10/10, and it is the newest',
-        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[0] === drawingSet010[0], releaseHeads[0]);
-    check('and PDF加工 1.4.0 comes right after it', releaseHeads[1] === processor140[0], releaseHeads[1]);
+    check('exactly one 図面管理 0.1.0 entry, dated 2026/10/10, and it comes right after 0.2.0',
+        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[1] === drawingSet010[0], releaseHeads[1]);
+    check('and PDF加工 1.4.0 comes right after it', releaseHeads[2] === processor140[0], releaseHeads[2]);
+    // The version, the date and the history are written in two files; read the
+    // source of truth so neither can move without the other.
+    const versionsSource = fs.readFileSync(path.join(ROOT, 'src', 'config', 'versions.ts'), 'utf8');
+    const drawingSetVersion = /drawingSet:\s*\{\s*version:\s*'([^']+)',\s*lastUpdate:\s*'([^']+)'/.exec(versionsSource);
+    check('versions.ts gives 図面管理 0.2.0 dated 2026/10/20, the date of its newest entry',
+        drawingSetVersion?.[1] === '0.2.0' && drawingSetVersion?.[2] === '2026/10/20'
+        && (drawingSet020[0] ?? '').startsWith(drawingSetVersion[2]), JSON.stringify(drawingSetVersion?.slice(1)));
+    check('versions.ts gives the app 1.3.0', /export const APP_VERSION = '1\.3\.0';/.test(versionsSource), 'APP_VERSION');
     const banners = await page.evaluate(() => [...document.querySelectorAll('p')]
         .map((p) => (p.textContent || '').replace(/\s+/g, ' ').trim())
         .filter((s) => s.includes('最近の更新')));
     const banner = banners[0] ?? '';
     console.log(`  banner: ${banner}`);
     check('there is one 最近の更新 banner', banners.length === 1, `${banners.length}`);
-    check('the banner names 図面管理 v0.1.0',
-        banner.includes('図面管理') && banner.includes('v0.1.0'), banner);
+    check('the banner names 図面管理 v0.2.0 and the title block, and no longer v0.1.0',
+        banner.includes('図面管理') && banner.includes('v0.2.0') && banner.includes('表題欄の読み取りと確定')
+        && !banner.includes('v0.1.0'), banner);
+    // 0.2.0: what is new, what the person compares, how a cancel ends, and what is still missing.
+    const ds020 = cardOf(drawingSet020[0]).items.join('\n');
+    check('the 図面管理 0.2.0 entry: the title block is read from a dragged, explicitly assigned profile',
+        ds020.includes('表題欄の読み取りと確定に対応しました') && ds020.includes('ご自身でドラッグして指定')
+        && ds020.includes('推測して割り当てたりはしません') && ds020.includes('ブラウザ内の文字認識（OCR）で読み取ります'), 'reading');
+    check('the 図面管理 0.2.0 entry: compared with the original drawing and how each value was got, one page at a time',
+        ds020.includes('原図') && ds020.includes('取得方法（PDFの文字／OCR／読み取れず）')
+        && ds020.includes('1ページずつ確定します') && ds020.includes('まとめて確定する機能はありません'), 'confirmation');
+    check('the 図面管理 0.2.0 entry: a cancel can wait for OCR to end, and an end that cannot be confirmed needs a reload',
+        ds020.includes('中止した後も、文字認識（OCR）の終了を待つ')
+        && ds020.includes('文字認識（OCR）を安全に終了できたことを確かめられない場合は、表題欄の読み取りができなくなります')
+        && ds020.includes('開いたPDFを安全に閉じられたことを確かめられない場合も、読み取りや確定ができなくなります')
+        && ds020.includes('どちらの場合も、ページを再読み込みしてください'), 'cancel');
+    check('the 図面管理 0.2.0 entry: checking and save/resume are still not available, and nothing leaves the browser or is kept',
+        ds020.includes('図面一式のチェック（番号の重複や抜けなど）と、作業内容の保存・再開には、まだ対応していません')
+        && ds020.includes('ブラウザ内で行い') && ds020.includes('送信しません') && ds020.includes('保存されず'), 'not yet');
+    check('the 図面管理 0.2.0 entry stays out of implementation names and review IDs',
+        ds020.length > 0 && !/Worker|worker|Tesseract|tesseract|BroadcastChannel|PDF\.js|lease|Lock|B2-D\d|RF-?\d|IR-\d|HG-|RV-?\d|M7|P2/.test(ds020), 'no internals');
+    // 0.1.0 is history: it keeps saying what it said when it shipped.
+    const ds010 = cardOf(drawingSet010[0]).items;
+    check('the 図面管理 0.1.0 entry is kept as it shipped (6 items, first and last unchanged)',
+        ds010.length === 6 && ds010[0].startsWith('新しいツール「図面管理」を追加しました。')
+        && ds010[5] === '表題欄の読み取り、図面一式のチェック、作業内容の保存・再開には、まだ対応していません。', `${ds010.length} items`);
     check('the 図面管理 0.1.0 entry says what is not available yet',
         historyText.includes('表題欄の読み取り、図面一式のチェック、作業内容の保存・再開には、まだ対応していません'));
     check('the banner no longer names Word / PDFテキスト化 v1.5.0 as the latest update',
         !banner.includes('Word') && !banner.includes('PDFテキスト化') && !banner.includes('v1.5.0'), banner);
     check('the banner stays out of implementation detail',
-        !/Hybrid|Policy R|RF-?\d|pako|\/Size/.test(banner), banner);
+        !/Hybrid|Policy R|RF-?\d|pako|\/Size|Worker|IR-\d|HG-|M7|P2/.test(banner), banner);
     check('the PDF加工 1.4.0 entry says lossless, one file at a time, the original under 1%, and 1 GiB for ~250 MiB',
         historyText.includes('1.4.0') && historyText.includes('無損失') && historyText.includes('1ファイルずつ')
         && historyText.includes('1%以上小さくならなかった場合は、元のファイルをそのまま返します')
