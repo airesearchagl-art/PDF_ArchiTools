@@ -55,6 +55,11 @@
                         this.__ocr = record;
                     }
                 }
+                postMessage(message, ...rest) {
+                    // Every job the page asks of a planned or unplanned OCR Worker, answered or not.
+                    if (this.__ocr && message?.action) ocrStart.log.push(`${this.__ocr.n}:${message.action}:asked`);
+                    return super.postMessage(message, ...rest);
+                }
                 get onmessage() {
                     return super.onmessage;
                 }
@@ -96,6 +101,12 @@
                     };
                 }
                 terminate() {
+                    // RF-39-03: a planned Worker's first terminate() fails, as Worker.terminate() itself would throw.
+                    if (this.__ocr?.plan?.terminateThrows && !this.__terminateThrown) {
+                        this.__terminateThrown = true;
+                        ocrStart.log.push(`${this.__ocr.n}:terminate-threw`);
+                        throw new Error('simulated: Worker.terminate() failed');
+                    }
                     if (!this.__ended) {
                         this.__ended = true;
                         const c = counts[this.__kind];
@@ -1666,9 +1677,9 @@
                 };
             };
             // A store on its own registry; every snapshot it publishes is kept with the registry's Workers at that moment.
-            const setup = async () => {
+            const setup = async (opts = {}) => {
                 const clock = manualClock();
-                const registry = Registry ? new Registry({ deadline: clock.arm }) : null;
+                const registry = Registry ? new Registry({ deadline: clock.arm, ...(opts.terminate ? { terminate: opts.terminate } : {}) }) : null;
                 const s = await observedStore(registry ? { ocrWorkers: registry } : {});
                 const raster = rasterOf(s);
                 const trail = [];
@@ -1925,10 +1936,126 @@
                 plan.record.worker.terminate();
                 await t.done();
             }
+            // RF-39-03: a started Worker's own terminate() fails, throws, never settles, or comes late -- none of which
+            // is an end. Ended only by its completing or by the Worker's "closed"; otherwise the close deadline decides.
+            const gateOf = (t) => ({ extractionActive: t.s.r.gate.extractionActive, releaseUnconfirmed: t.s.r.gate.releaseUnconfirmed });
+            // K. The real thing: Worker.terminate() throws inside tesseract.js's terminate(), which therefore rejects.
+            //    Not counted; the Worker, still alive, is asked on its channel, says closed, and that is its end.
+            if (which === 'K') {
+                const t = await setup();
+                const plan = planNext({ terminateThrows: true });
+                // Bounded: a tree that does not ask the Worker on its channel would wait here for a deadline no one fires.
+                const run = t.store.startExtraction([t.raster]);
+                const ended = await within(run, 30000);
+                const afterRun = { settled: ended.settled, browser: await browserSettles(0), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t), counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null };
+                if (!ended.settled && CLOSE_MS !== null) {
+                    t.clock.fire(CLOSE_MS);
+                    await within(run, 30000);
+                }
+                const next = ended.settled ? await t.store.startExtraction([t.raster]) : { refusal: { code: 'NOT_ASKED' } };
+                out.K = { outcome: ended.value?.outcome ?? null, afterRun, next: next.refusal?.code ?? next.outcome, threw: ocrStart.log.slice(t.mark).includes(`${plan.record?.n}:terminate-threw`), log: logFrom(t.mark) };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // L. terminate() throws (through the seam), and the Worker's "closed" never reaches the page: the lock and the
+            //    lease are held until the close deadline; then the run ends, both are given back, and the page's OCR fails closed.
+            if (which === 'L') {
+                const t = await setup({ terminate: () => { throw new Error('simulated: terminate() threw'); } });
+                const plan = planNext({ holdClosed: true });
+                const run = t.store.startExtraction([t.raster]);
+                // The run's reading is done and it is closing its recogniser: the Worker said closed, withheld.
+                // Bounded, and not an error: a tree that never asks the Worker on its channel is reported by the checks, not here.
+                const heardClosed = await until(() => (plan.record?.heldAcks?.length ?? 0) > 0 || !Registry, 'the Worker said closed (withheld)', 30000).then(() => true, () => false);
+                await tick();
+                const whileUnknown = {
+                    operation: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), records: t.records(),
+                    heardClosed, rename: (() => { const r = t.store.renameProfile(t.s.profile.id, 'L'); return r.ok ? 'ok' : r.refusal.code; })(),
+                };
+                const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                const ended = await within(run, 30000);
+                const afterDeadline = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                    unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(),
+                };
+                const next = await t.store.startExtraction([t.raster]);
+                const intake = await t.store.intake(fileOf(await fixtureBytes(P1, 'p1-second-c'), 'c.pdf')).then((x) => (x.kind === 'refused' ? x.refusal.code : x.kind));
+                out.L = { whileUnknown, afterDeadline, next: next.refusal?.code ?? next.outcome, intake };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // M. terminate() never settles (through the seam) and "closed" is withheld: the next reading is refused while the
+            //    end is unknown; the deadline fails the page's OCR closed; terminate() then completing late is recorded,
+            //    and restores nothing.
+            if (which === 'M') {
+                const late = defer();
+                let asked = 0;
+                const t = await setup({ terminate: (end) => { asked += 1; return late.promise.then(() => end()); } });
+                const plan = planNext({ holdClosed: true });
+                const run = t.store.startExtraction([t.raster]);
+                // Bounded, and not an error: a tree that never asks the Worker on its channel is reported by the checks, not here.
+                const heardClosed = await until(() => (plan.record?.heldAcks?.length ?? 0) > 0 || !Registry, 'the Worker said closed (withheld)', 30000).then(() => true, () => false);
+                await tick();
+                const tooSoon = await t.store.startExtraction([t.raster]);
+                const whileUnknown = {
+                    heardClosed, asked, operation: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), records: t.records(),
+                    next: tooSoon.refusal?.code ?? tooSoon.outcome,
+                };
+                const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                const ended = await within(run, 30000);
+                const afterDeadline = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                    unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(),
+                };
+                late.resolve();
+                await tick();
+                await tick();
+                const afterLate = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, next: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
+                out.M = { whileUnknown, afterDeadline, afterLate };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // N. A terminate() that completes, as production calls it: nothing fails closed, no deadline expires.
+            if (which === 'N') {
+                const t = await setup();
+                const first = await t.store.startExtraction([t.raster]);
+                const second = await t.store.startExtraction([t.raster]);
+                out.N = { outcomes: [first.outcome, second.outcome], browser: await browserSettles(0), counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, concurrent: t.concurrent() };
+                await t.done();
+            }
+            // S. A recognition that stalls: the engine ends that Worker (its terminate() completing) and, for the next page
+            //    that needs OCR, makes another -- only once the first is known ended; never two at a time.
+            if (which === 'S') {
+                const t = await setup();
+                const reg = t.store.currentSet().sheets.filter((x) => x.sourceId === t.s.sheet(t.s.register1).sourceId && x.retiredAt === null).map((x) => x.id);
+                t.store.assignProfile(reg, t.s.profile.id, { replace: true });
+                const plan = planNext({ action: 'recognize' });
+                // The Drawing Register's own stall handling, with a shorter bound so the test does not wait two minutes:
+                // the held answer never comes, so the bound running out is the only way on.
+                // Only the first recognition -- the one whose answer is held -- gets the short bound; every other keeps the
+                // engine's own, so a real recognition on a slow machine is never cut short by the test.
+                class Stalling extends GuardedRegisterOcr {
+                    recogniseFields(page, rects, options) {
+                        const first = !this.shortened;
+                        this.shortened = true;
+                        return super.recogniseFields(page, rects, first ? { ...options, timeoutMs: 300 } : options);
+                    }
+                }
+                const run = await t.store.extract({ sheetIds: reg }, { createOcr: () => new Stalling(t.registry ? { workers: t.registry } : {}) });
+                const report = run.report;
+                out.S = {
+                    outcome: report.outcome, heldRecognitions: plan.record?.held.length ?? 0,
+                    ocrFailedSheets: reg.filter((id) => observationOf(t.s, id)?.status === 'OCR_FAILED').length,
+                    ocrReadSheets: reg.filter((id) => observationOf(t.s, id)?.sources.includes('ocr')).length,
+                    browser: await browserSettles(0), counts: t.counts(), records: t.records(), concurrent: t.concurrent(), transitions: t.transitions,
+                    operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
             // The recogniser's own input: each recognition hands tesseract.js one data URL of the region (the existing
             // OCR engine). Counted so the privacy check can tell them from any other export.
             out.recogniser = {
-                recognitions: ocrStart.log.slice(logBefore).filter((l) => l.endsWith(':recognize:resolve')).length,
+                recognitions: ocrStart.log.slice(logBefore).filter((l) => l.endsWith(':recognize:asked')).length,
                 toDataURL: window.__exports.toDataURL - exportsBefore.toDataURL,
                 toBlob: window.__exports.toBlob - exportsBefore.toBlob,
             };

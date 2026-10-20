@@ -17,12 +17,15 @@
  * the worker path, and an error handler that hears a start that failed, are
  * this recogniser's own. The other tools' OCR is not touched.
  *
- * A Worker is ended when either is known: its terminate() was called (its
+ * A Worker is ended when either is known: its own terminate() completed (its
  * start had completed: Worker.terminate() ends it there and then), or it said
  * "closed" on its channel. Nothing else counts -- not a deadline, not a start
- * that failed, not silence. One told to close that has said neither within
- * OCR_CLOSE_DEADLINE_MS leaves the registry unconfirmed for good: no Worker is
- * made again until the page is reloaded, which is what ends every Worker.
+ * that failed, not a terminate() that threw, rejected or never settled, not
+ * silence. One told to close that has done neither within
+ * OCR_CLOSE_DEADLINE_MS, however its end was sought, leaves the registry
+ * unconfirmed for good: no Worker is made again until the page is reloaded,
+ * which is what ends every Worker. An end that comes later is recorded and
+ * restores nothing.
  *
  * One live Worker on the page at a time: a new one is made only once every one
  * being closed is known to have ended.
@@ -59,6 +62,12 @@ export const OCR_CLOSE_DEADLINE_MS = 60_000;
 /** Arms a deadline; returns its disarm. Production uses timers; tests fire them by hand. */
 export type OcrDeadline = (ms: number, expire: () => void) => () => void;
 
+/**
+ * Calls a started Worker's own terminate() (`end`) and gives back what it gave. Production calls it as it is;
+ * tests make it reject, throw, never settle, or settle late. Only its completing counts as the Worker's end.
+ */
+export type OcrTerminate = (end: () => Promise<unknown>) => Promise<unknown>;
+
 export type OcrWorkerFactory = typeof createWorker;
 
 export type OcrWorkerState = 'starting' | 'started' | 'closing' | 'ended' | 'unconfirmed';
@@ -74,6 +83,8 @@ export interface OcrWorkerRecord {
     startFailure: 'REJECTED' | 'DEADLINE' | null;
     /** How its end is known; null until it is. */
     ended: 'TERMINATED' | 'CLOSED' | null;
+    /** Its own terminate() was asked and did not complete: it threw, or rejected. Not an end; the channel or the deadline decides. */
+    terminateFailure: 'THREW' | 'REJECTED' | null;
     /** From being made to started, when it did. */
     startMs: number | null;
     /** How the caller's start was answered: it always is, so nothing waits on a Worker that is gone. */
@@ -88,6 +99,7 @@ export interface OcrWorkerCounts {
     startFailed: number;
     terminated: number;
     closed: number;
+    terminateFailed: number;
     unconfirmed: number;
     refused: number;
     deadlinesArmed: number;
@@ -132,13 +144,14 @@ class OwnedWorker {
     private disarmClose: (() => void) | null = null;
     private heardEnd: (() => void) | null = null;
     private abandonStart: (() => void) | null = null;
+    private terminateAsked = false;
     private readonly madeAt = now();
 
     constructor(registry: OcrWorkerRegistry, n: number) {
         this.registry = registry;
         this.record = {
             n, channel: `m7-ocr-${globalThis.crypto.randomUUID()}`, state: 'starting', alive: false,
-            startFailure: null, ended: null, startMs: null, startAnswered: null, lateEnd: null,
+            startFailure: null, ended: null, terminateFailure: null, startMs: null, startAnswered: null, lateEnd: null,
         };
         this.settled = new Promise((resolve) => { this.markSettled = resolve; });
     }
@@ -222,27 +235,65 @@ class OwnedWorker {
         this.record.state = 'closing';
         this.abandonStart?.();
         this.registry.changed();
-        if (this.terminateHandle) {
-            await this.endWithHandle();
-            return;
-        }
+        // One deadline, however the end is sought: past it the end is unconfirmed, and nothing here waits longer.
         await new Promise<void>((resolve) => {
             this.heardEnd = resolve;
-            this.disarmClose = this.registry.arm(OCR_CLOSE_DEADLINE_MS, () => {
+            try {
+                this.disarmClose = this.registry.arm(OCR_CLOSE_DEADLINE_MS, () => {
+                    this.unconfirm();
+                    resolve();
+                });
+                // Asked on its channel whichever way it is ended -- its "closed" is an end too -- and asked again
+                // when it says it is alive, should this reach it before it has joined the channel.
+                this.ask();
+                if (this.terminateHandle) void this.endWithHandle();
+            } catch {
+                // Whatever went wrong, its end is not known. Its own terminate() is still tried: an end it brings is recorded, late.
                 this.unconfirm();
                 resolve();
-            });
-            // Asked again when it says it is alive, should this reach it before it has joined the channel.
-            this.channel?.postMessage({ type: 'close' });
+                if (this.terminateHandle) void this.endWithHandle();
+            }
         });
     }
 
-    /** The worker object's own terminate(): Worker.terminate(), which ends it there and then. */
+    /**
+     * The worker object's own terminate(): Worker.terminate(), which ends it there and then. Only its completing
+     * counts as the end. One that throws or rejects is not an end: the Worker is still asked on its channel, and
+     * its "closed", or the close deadline, decides. One that never settles is the deadline's.
+     */
     private async endWithHandle(): Promise<void> {
-        const handle = this.terminateHandle;
-        if (!handle) return;
-        await handle().catch(() => { });
+        const own = this.terminateHandle;
+        if (!own || this.terminateAsked) return;
+        this.terminateAsked = true;
+        let ending: Promise<unknown>;
+        try {
+            ending = this.registry.callTerminate(own);
+        } catch {
+            this.terminateFailed('THREW');
+            return;
+        }
+        try {
+            await ending;
+        } catch {
+            this.terminateFailed('REJECTED');
+            return;
+        }
         this.finish('TERMINATED');
+    }
+
+    /** Tell the Worker on its channel to close. Never throws: a channel already closed has no one to tell. */
+    private ask(): void {
+        try {
+            this.channel?.postMessage({ type: 'close' });
+        } catch {
+            // Closed with its Worker's end, or given up on: nothing to ask.
+        }
+    }
+
+    private terminateFailed(how: 'THREW' | 'REJECTED'): void {
+        if (!this.record.terminateFailure) this.record.terminateFailure = how;
+        this.registry.noteTerminateFailed();
+        if (this.record.state === 'closing' || this.record.state === 'unconfirmed') this.ask();
     }
 
     private heard(data: unknown): void {
@@ -250,7 +301,7 @@ class OwnedWorker {
         if (type === 'alive') {
             this.record.alive = true;
             // Told to close before it had joined (or given up on since): ask it now. Restores nothing if it answers.
-            if (this.record.state === 'closing' || this.record.state === 'unconfirmed') this.channel?.postMessage({ type: 'close' });
+            if (this.record.state === 'closing' || this.record.state === 'unconfirmed') this.ask();
             this.registry.changed();
         } else if (type === 'closed') {
             this.finish('CLOSED');
@@ -309,7 +360,9 @@ export class OcrRecogniserWorkers {
     /** Make no further Worker, and end every one made. Resolves once each is known ended or unconfirmed. Never rejects. */
     async closeAll(): Promise<void> {
         this.done = true;
-        await Promise.all([...this.mine].map((worker) => worker.close()));
+        const ends = await Promise.allSettled([...this.mine].map((worker) => worker.close()));
+        // close() does not reject; should one ever, that Worker's end is not known, and the page's OCR fails closed.
+        if (ends.some((end) => end.status === 'rejected')) this.registry.failClosed();
     }
 
     counts(): { made: number; ended: number; unconfirmed: number; live: number } {
@@ -331,10 +384,13 @@ export class OcrWorkerRegistry {
     private readonly all: OwnedWorker[] = [];
     private readonly listeners = new Set<() => void>();
     private readonly deadline: OcrDeadline;
-    private readonly tally = { made: 0, started: 0, startFailed: 0, terminated: 0, closed: 0, unconfirmed: 0, refused: 0, deadlinesArmed: 0, deadlinesExpired: 0, slowestStartMs: 0 };
+    private readonly terminate: OcrTerminate | null;
+    private readonly tally = { made: 0, started: 0, startFailed: 0, terminated: 0, closed: 0, terminateFailed: 0, unconfirmed: 0, refused: 0, deadlinesArmed: 0, deadlinesExpired: 0, slowestStartMs: 0 };
 
-    constructor(options: { deadline?: OcrDeadline } = {}) {
+    /** Both seams are for tests; the page's registry is made with neither. */
+    constructor(options: { deadline?: OcrDeadline; terminate?: OcrTerminate } = {}) {
         this.deadline = options.deadline ?? timerDeadline;
+        this.terminate = options.terminate ?? null;
     }
 
     /** True once a Worker's end could not be confirmed. Stays true: only a reload ends what may be left. */
@@ -410,6 +466,23 @@ export class OcrWorkerRegistry {
         };
     }
 
+    /** A started Worker's own terminate(), called as production calls it unless a test says otherwise. May throw. */
+    callTerminate(end: () => Promise<unknown>): Promise<unknown> {
+        return this.terminate ? this.terminate(end) : end();
+    }
+
+    /** A Worker's end cannot be known in any other way: no Worker again until a reload. */
+    failClosed(): void {
+        if (!this.unconfirmed) this.tally.unconfirmed += 1;
+        this.unconfirmed = true;
+        this.changed();
+    }
+
+    noteTerminateFailed(): void {
+        this.tally.terminateFailed += 1;
+        this.changed();
+    }
+
     noteStarted(ms: number): void {
         this.tally.started += 1;
         this.tally.slowestStartMs = Math.max(this.tally.slowestStartMs, ms);
@@ -433,7 +506,13 @@ export class OcrWorkerRegistry {
     }
 
     changed(): void {
-        for (const listener of [...this.listeners]) listener();
+        for (const listener of [...this.listeners]) {
+            try {
+                listener();
+            } catch {
+                // A listener's failure is its own: the Workers' ends, deadlines and the lock do not wait on it.
+            }
+        }
     }
 }
 

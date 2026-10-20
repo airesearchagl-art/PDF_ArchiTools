@@ -117,6 +117,7 @@ export class GuardedRegisterOcr extends RegisterOcrEngine {
         this.closed = true;
         this.tally.closes += 1;
         await super.terminate().catch(() => { });
+        // Never rejects: a Worker whose end cannot be known fails the page's OCR closed instead.
         await this.workers.closeAll();
     }
 
@@ -548,8 +549,13 @@ export async function extractTitleBlocks(
     } catch {
         failure = 'UNEXPECTED';
     } finally {
-        await ocr.close();
-        lease.end();
+        // The lease is given back however the recogniser's close went (RF-39-03). close() resolves once every
+        // Worker is known ended or given up as unconfirmed -- the page's OCR then stays refused until a reload.
+        try {
+            await ocr.close();
+        } finally {
+            lease.end();
+        }
     }
 
     // Every targeted Sheet with neither an observation nor a reason was not

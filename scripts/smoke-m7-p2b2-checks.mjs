@@ -345,7 +345,7 @@ export async function runP2b2Checks(ctx) {
     // A Worker left, or a second one alive beside it, is a FAIL.
     // One scenario per call, so none runs into the protocol's timeout -- not even on a tree whose Workers linger.
     const oi = { recogniser: { recognitions: 0, toDataURL: 0, toBlob: 0 }, browserAtEnds: [] };
-    for (const which of ['A', 'B', 'C', 'D1', 'D2', 'E', 'F', 'G', 'I', 'J']) {
+    for (const which of ['A', 'B', 'C', 'D1', 'D2', 'E', 'F', 'G', 'I', 'J', 'K', 'L', 'M', 'N', 'S']) {
         const { recogniser, browserAtEnd, workers: w, registryLoaded, deadlines, ...scenarios } = await call('ocrInit', which);
         Object.assign(oi, scenarios, { workers: w, registryLoaded, deadlines });
         for (const k of ['recognitions', 'toDataURL', 'toBlob']) oi.recogniser[k] += recogniser[k];
@@ -413,6 +413,37 @@ export async function runP2b2Checks(ctx) {
         oi.J?.aliveWithheld > 0 && oi.J.beforeAlive.closeLost && oi.J.beforeAlive.phase === 'cancelling' && oi.J.beforeAlive.browser === 1
         && oi.J.settled && oi.J.outcome === 'CANCELLED' && oi.J.unlock?.live === 0 && oi.J.records?.[0]?.ended === 'CLOSED' && oi.J.records[0].startAnswered === 'CLOSED'
         && oi.J.browser === 0 && noneLeft(oi.J.counts), JSON.stringify(oi.J));
+    // RF-39-03: a started Worker's own terminate() that fails, throws, never settles or comes late is never its end.
+    const ended = (r) => r && r.state === 'ended';
+    check('RF-39-03 K Worker.terminate() throws inside tesseract.js\'s terminate() (it rejects): not counted as the end; the Worker, asked on its channel, says closed -- that is its end; nothing fails closed; no Worker',
+        oi.K.threw && oi.K.afterRun.settled && oi.K.outcome === 'COMPLETED' && oi.K.afterRun.records?.[0]?.terminateFailure === 'REJECTED' && oi.K.afterRun.records[0].ended === 'CLOSED' && ended(oi.K.afterRun.records[0])
+        && oi.K.afterRun.counts?.terminated === 0 && oi.K.afterRun.counts.closed === 1 && oi.K.afterRun.counts.terminateFailed === 1 && noneLeft(oi.K.afterRun.counts)
+        && oi.K.afterRun.browser === 0 && oi.K.afterRun.operation === null && !oi.K.afterRun.gate.extractionActive && oi.K.afterRun.unavailable === false && oi.K.next === 'COMPLETED',
+        JSON.stringify({ outcome: oi.K.outcome, afterRun: oi.K.afterRun, next: oi.K.next }));
+    check('RF-39-03 L terminate() throws and "closed" never reaches the page: the Worker was still asked on its channel (it answered); not ended (still closing, no TERMINATED); the lock and the extraction lease are held until the close deadline',
+        oi.L.whileUnknown.heardClosed === true && oi.L.whileUnknown.records?.[0]?.terminateFailure === 'THREW' && oi.L.whileUnknown.records[0].state === 'closing' && oi.L.whileUnknown.records[0].ended === null
+        && oi.L.whileUnknown.counts?.terminated === 0 && oi.L.whileUnknown.operation !== null && oi.L.whileUnknown.gate.extractionActive && oi.L.whileUnknown.rename === 'OPERATION_LOCKED',
+        JSON.stringify(oi.L.whileUnknown));
+    check('RF-39-03 L ...at the deadline the end is unconfirmed (never inferred): the run ends, the lease and the lock are given back, the PDF.js gate untouched; the page\'s OCR fails closed -- reading refused OCR_RELEASE_UNCONFIRMED, intake still works',
+        oi.L.afterDeadline.fired === 1 && oi.L.afterDeadline.settled && oi.L.afterDeadline.operation === null && !oi.L.afterDeadline.gate.extractionActive && !oi.L.afterDeadline.gate.releaseUnconfirmed
+        && oi.L.afterDeadline.unavailable === true && oi.L.afterDeadline.records?.[0]?.state === 'unconfirmed' && oi.L.afterDeadline.records[0].ended === null
+        && oi.L.next === 'OCR_RELEASE_UNCONFIRMED' && oi.L.intake === 'accepted', JSON.stringify({ afterDeadline: oi.L.afterDeadline, next: oi.L.next, intake: oi.L.intake }));
+    check('RF-39-03 M terminate() never settles and "closed" is withheld: close() does not wait past its deadline; while the end is unknown the next reading is refused (OPERATION_LOCKED) and the lease is held',
+        oi.M.whileUnknown.heardClosed === true && oi.M.whileUnknown.asked === 1 && oi.M.whileUnknown.records?.[0]?.state === 'closing' && oi.M.whileUnknown.counts?.terminated === 0 && oi.M.whileUnknown.next === 'OPERATION_LOCKED'
+        && oi.M.whileUnknown.operation !== null && oi.M.whileUnknown.gate.extractionActive
+        && oi.M.afterDeadline.fired === 1 && oi.M.afterDeadline.settled && oi.M.afterDeadline.operation === null && !oi.M.afterDeadline.gate.extractionActive
+        && oi.M.afterDeadline.unavailable === true && oi.M.afterDeadline.records?.[0]?.state === 'unconfirmed', JSON.stringify({ whileUnknown: oi.M.whileUnknown, afterDeadline: oi.M.afterDeadline }));
+    check('RF-39-03 M ...terminate() completing after the deadline is recorded (late end) and restores nothing: still unconfirmed, still refused OCR_RELEASE_UNCONFIRMED',
+        oi.M.afterLate.records?.[0]?.lateEnd === 'TERMINATED' && oi.M.afterLate.records[0].state === 'unconfirmed' && oi.M.afterLate.unavailable === true
+        && oi.M.afterLate.counts?.releaseUnconfirmed && oi.M.afterLate.next === 'OCR_RELEASE_UNCONFIRMED', JSON.stringify(oi.M.afterLate));
+    check('RF-39-03 N terminate() completing, as production calls it: each Worker ended TERMINATED, no terminate failure, no deadline expired, nothing fails closed; no Worker',
+        oi.N.outcomes.every((x) => x === 'COMPLETED') && oi.N.records?.length === 2 && oi.N.records.every((r) => r.state === 'ended' && r.ended === 'TERMINATED' && r.terminateFailure === null)
+        && oi.N.counts?.terminateFailed === 0 && oi.N.counts.deadlinesExpired === 0 && oi.N.unavailable === false && oi.N.concurrent === 1 && oi.N.browser === 0 && noneLeft(oi.N.counts),
+        JSON.stringify(oi.N));
+    check('RF-39-03 S a recognition that stalls: that Worker is ended by its own terminate() and another is made for the next page only after (never two); that Sheet OCR_FAILED, the rest read; nothing fails closed; no Worker',
+        oi.S.outcome === 'COMPLETED' && oi.S.heldRecognitions >= 1 && oi.S.ocrFailedSheets === 1 && oi.S.ocrReadSheets === 2
+        && oi.S.counts?.made === 2 && oi.S.counts.terminated === 2 && oi.S.records?.every((r) => r.state === 'ended' && r.ended === 'TERMINATED')
+        && oi.S.concurrent === 1 && oi.S.browser === 0 && noneLeft(oi.S.counts) && oi.S.operation === null && !oi.S.gate.extractionActive, JSON.stringify({ ...oi.S, transitions: undefined }));
     // Housekeeping for the sections after this one, read after the harness has ended its planned Workers: not evidence
     // of any release by the app (that is each scenario's own browser count above, taken before the harness ends anything).
     check('these sections leave no PDF.js document or recogniser running for the next (the browser\'s list after the harness\'s own clean-up)', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0
