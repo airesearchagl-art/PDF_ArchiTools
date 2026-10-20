@@ -1,0 +1,573 @@
+{
+  "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Each probe removes one safeguard from the prototype and requires the test suite to fail.",
+  "baseline": {
+    "pass": 201,
+    "fail": 0
+  },
+  "probes": 51,
+  "caught": 51,
+  "missedOrNotApplied": 0,
+  "prototypeFilesRestoredByteIdentical": true,
+  "suiteAfterRestore": {
+    "pass": 201,
+    "fail": 0
+  },
+  "results": [
+    {
+      "what": "duplicate JSON keys are accepted",
+      "file": "prototype/bounded-json.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "a duplicate key is refused, at any depth, however it is spelled",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "nesting depth is not bounded",
+      "file": "prototype/bounded-json.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "excessive nesting is refused by the scan, at any depth, without a stack",
+        "the importer says about every fixture what expected.json says it must",
+        "the bounds apply to an old file exactly as to a current one"
+      ]
+    },
+    {
+      "what": "an object may have any number of keys",
+      "file": "prototype/bounded-json.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "an object wider than any the schema declares is refused by the scan, before its keys are collected"
+      ]
+    },
+    {
+      "what": "the byte bound is not checked",
+      "file": "prototype/bounded-json.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a file over the byte bound is refused on its length alone"
+      ]
+    },
+    {
+      "what": "unknown fields are ignored",
+      "file": "prototype/schema-subset.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 5,
+      "firstFailing": [
+        "an unexpected key is refused, including the ones that are special in JavaScript",
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "Infinity is a number like any other",
+      "file": "prototype/schema-subset.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "pathological numbers are refused: Infinity, fractions, unsafe integers, negatives, the wrong type",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "an unknown schema keyword is ignored",
+      "file": "prototype/schema-subset.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "an unknown keyword is an error, not a constraint that silently does nothing"
+      ]
+    },
+    {
+      "what": "duplicate ids are accepted",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must",
+        "a duplicate id is refused for every kind of entity, and across kinds"
+      ]
+    },
+    {
+      "what": "a dangling decision is accepted",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "the importer says about every fixture what expected.json says it must",
+        "a dangling findingId is refused",
+        "a file is refused whole: one dangling decision does not become a file with one decision fewer"
+      ]
+    },
+    {
+      "what": "a decision need not match its finding's evidence",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "the importer says about every fixture what expected.json says it must",
+        "a decision is bound to the evidence of the finding it names"
+      ]
+    },
+    {
+      "what": "an impossible timestamp is accepted",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "timestamp anomalies: a malformed one is refused, an implausible one is surfaced",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "a future schema version is read as far as it goes",
+      "file": "prototype/project-io.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "a future schema version is refused outright, not read as far as it goes",
+        "the importer says about every fixture what expected.json says it must",
+        "a future version is refused whatever else the file contains"
+      ]
+    },
+    {
+      "what": "the writer is not an allow-list",
+      "file": "prototype/project-io.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "what a session hangs on a register does not reach the file",
+        "the writer is an allow-list: runtime state on the model does not reach the file",
+        "the serialisation is canonical: the same model always gives the same bytes"
+      ]
+    },
+    {
+      "what": "the writer does not check what it writes",
+      "file": "prototype/project-io.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "the writer refuses to write what the reader would refuse"
+      ]
+    },
+    {
+      "what": "a file name match counts as a content match",
+      "file": "prototype/rebind.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "case 3 -- same name, different bytes: CHANGED, never MATCHED",
+        "case 7 -- one of several sources changed: a partial rebind, source by source",
+        "name hints ignore case and Unicode composition, as file systems do"
+      ]
+    },
+    {
+      "what": "two name candidates are resolved by taking the first",
+      "file": "prototype/rebind.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "case 5 -- more than one candidate by name: AMBIGUOUS, and no guess is made",
+        "a person's assignment resolves MISSING or AMBIGUOUS into CHANGED -- never into MATCHED",
+        "the result does not depend on the order files were selected in"
+      ]
+    },
+    {
+      "what": "a replaced source does not make its observations stale",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "SOURCE_CONTENT_REPLACED: only that source's sheets go stale; the other sources are untouched",
+        "after a replacement, a QA run does not close what it could not look at"
+      ]
+    },
+    {
+      "what": "a replaced source does not ask for re-confirmation",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "4. stale confirmation: still blocked -- by a replaced source, and by a changed profile",
+        "SOURCE_CONTENT_REPLACED: only that source's sheets go stale; the other sources are untouched",
+        "after a replacement, a QA run does not close what it could not look at"
+      ]
+    },
+    {
+      "what": "a profile change does not reach its sheets",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "4. stale confirmation: still blocked -- by a replaced source, and by a changed profile",
+        "PROFILE_GEOMETRY_CHANGED: observations and profile-based confirmations of that profile's sheets, nothing else"
+      ]
+    },
+    {
+      "what": "an unbound source counts as verified",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "SOURCE_NOT_PROVIDED: the data is not stale, it is unverified -- and only for that source",
+        "on resume everything is UNVERIFIED until the sources are bound, then exactly as it was saved"
+      ]
+    },
+    {
+      "what": "FALSE_POSITIVE on QA02 lifts the metadata-confirmation requirement",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "1. unconfirmed + FALSE_POSITIVE: Final is blocked by METADATA_NOT_CONFIRMED",
+        "the exemption is per sheet: one INTENTIONAL does not cover a sheet decided FALSE_POSITIVE",
+        "the decision in force is the latest: INTENTIONAL withdrawn to FALSE_POSITIVE blocks again"
+      ]
+    },
+    {
+      "what": "any decision on QA02 lifts the metadata-confirmation requirement",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 6,
+      "firstFailing": [
+        "1. unconfirmed + FALSE_POSITIVE: Final is blocked by METADATA_NOT_CONFIRMED",
+        "ACTION_REQUIRED and HOLD do not lift the metadata requirement either",
+        "the exemption is per sheet: one INTENTIONAL does not cover a sheet decided FALSE_POSITIVE"
+      ]
+    },
+    {
+      "what": "a stale declared register still counts as current",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "a stale declared register does not block Final",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "Final does not say that QA09 was not evaluated",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "with no declared register QA09 states nothing, and that is \"not evaluable\", not a pass",
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated",
+        "withdrawing the register closes its findings: with nothing declared there is no QA09 finding"
+      ]
+    },
+    {
+      "what": "Final does not require every finding to be decided",
+      "file": "prototype/currency.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "the starting point: six unconfirmed sheets, six QA02 findings, nothing decided",
+        "an INTENTIONAL decision does not outlive the evidence it was made on",
+        "completion is \"no unreviewed current finding\", not \"no findings\""
+      ]
+    },
+    {
+      "what": "changed evidence keeps the old finding and its decision",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "an INTENTIONAL decision does not outlive the evidence it was made on",
+        "changed evidence supersedes: a third sheet joining a duplicate asks the question again",
+        "re-reading and re-confirming the replaced source supersedes its findings; the old decisions become history"
+      ]
+    },
+    {
+      "what": "a run that never saw the import warnings closes the project-file finding",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "QA10: a source that is not the bytes the project remembers, and a file with a strange history"
+      ]
+    },
+    {
+      "what": "QA09 is evaluated against a register that is not current",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "a withdrawn register leaves its QA09 findings open",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "withdrawing the register closes its findings: with nothing declared there is no QA09 finding"
+      ]
+    },
+    {
+      "what": "a QA09 finding is closed by a run that compared nothing",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated"
+      ]
+    },
+    {
+      "what": "a folded spelling counts as listed",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "correspondence is the exact drawing number; a spelling that would match once folded is a hint, never a match"
+      ]
+    },
+    {
+      "what": "the Sheet list / page inventory mismatch is filed as QA09",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "QA10 (manifest): M7's own Sheet list against the pages the source actually has",
+        "a replacement with a different page count leaves the mismatch for a person and reports it"
+      ]
+    },
+    {
+      "what": "a run closes findings it could not look at",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "a register is bound to the bytes it was declared from: replace them and QA09 is not evaluated",
+        "QA10: a source that is not the bytes the project remembers, and a file with a strange history",
+        "QA10 does not call an unlooked-for source abnormal, and does not close a finding it did not re-check"
+      ]
+    },
+    {
+      "what": "evidence ignores which bytes a sheet was read from",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "the committed fixtures are exactly what make-fixtures.mjs generates",
+        "re-reading and re-confirming the replaced source supersedes its findings; the old decisions become history"
+      ]
+    },
+    {
+      "what": "A-101 and a-101 are certainly the same number",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 4,
+      "firstFailing": [
+        "correspondence is the exact drawing number; a spelling that would match once folded is a hint, never a match",
+        "exactKey trims and does nothing else, exactly like the existing register",
+        "QA01 does not merge A-101 with A101, or with its full-width spelling; QA01B asks about the latter"
+      ]
+    },
+    {
+      "what": "a blank title counts as a different title",
+      "file": "prototype/qa-rules.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a blank title, revision or date is unknown, not different"
+      ]
+    },
+    {
+      "what": "a path separator survives in a display name",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a file name from any system is stored as a bare label that cannot be read as a path"
+      ]
+    },
+    {
+      "what": "the same bytes can be added as two sources",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "the same bytes cannot be added twice, or installed as another source's replacement"
+      ]
+    },
+    {
+      "what": "a live sheet may point at a retired profile",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a live sheet cannot be assigned to a retired profile"
+      ]
+    },
+    {
+      "what": "a register row with no drawing number is declared anyway",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a declaration is refused if it names no source, no page, no region, no rows, or a row with no number"
+      ]
+    },
+    {
+      "what": "a register can be declared with no rows",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a declaration is refused if it names no source, no page, no region, no rows, or a row with no number"
+      ]
+    },
+    {
+      "what": "a dangling register entry is accepted",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "a register row naming no drawing is accepted from a file",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole",
+        "the importer says about every fixture what expected.json says it must"
+      ]
+    },
+    {
+      "what": "a live register may hang off a retired source",
+      "file": "prototype/semantic.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a file whose declared register does not hold together is refused whole"
+      ]
+    },
+    {
+      "what": "an empty drawing-number cell becomes a register row",
+      "file": "prototype/register-list-adapter.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 3,
+      "firstFailing": [
+        "Production reconstructSelection reads a ruled list page; the adapter turns its grid into register rows",
+        "from a table a person pointed at to QA09, with the engine untouched",
+        "the adapter keeps a cell on one line, bounds it, and insists on a drawing-number column"
+      ]
+    },
+    {
+      "what": "a grid the engine could not read is offered for declaration",
+      "file": "prototype/register-list-adapter.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "a scanned list page is refused by the engine, and nothing is declared from it"
+      ]
+    },
+    {
+      "what": "a re-confirmation overwrites the earlier one",
+      "file": "prototype/model-ops.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "re-reading and re-confirming the replaced source supersedes its findings; the old decisions become history"
+      ]
+    },
+    {
+      "what": "SHA-256 padding is wrong at one length",
+      "file": "prototype/sha256-stream.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 2,
+      "firstFailing": [
+        "NIST vectors",
+        "every length around the block and padding boundaries agrees with node:crypto"
+      ]
+    },
+    {
+      "what": "a migrated document is not validated again",
+      "file": "prototype/migrate.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "conversion earns no trust: the converted document is validated again as current"
+      ]
+    },
+    {
+      "what": "an old file is converted without being validated as old",
+      "file": "prototype/migrate.mjs",
+      "applied": true,
+      "caught": true,
+      "failingTests": 1,
+      "firstFailing": [
+        "an old file is held to its own schema before anything is converted"
+      ]
+    }
+  ]
+}
