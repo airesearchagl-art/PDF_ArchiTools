@@ -316,7 +316,25 @@ export async function runP2b2Checks(ctx) {
     check('N-L6 extraction\'s document cannot be destroyed: the run FAILED (RELEASE_UNCONFIRMED), the lock is let go, the snapshot says documents are unavailable, and crops and intake are refused',
         lk.NL6.report.outcome === 'FAILED' && lk.NL6.report.failure === 'RELEASE_UNCONFIRMED' && lk.NL6.operation === null && lk.NL6.documentsUnavailable && lk.NL6.gate
         && lk.NL6.prepare === 'RELEASE_UNCONFIRMED' && lk.NL6.intake === 'RELEASE_UNCONFIRMED', JSON.stringify(lk.NL6));
-    check('no PDF.js document or recogniser left running', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0, JSON.stringify(lk.workers));
+    // RF-39-01: what startExtraction() -- the screen's way in -- leaves for the screen to show.
+    const sm = await call('summaries');
+    check('RF-39-01 in one session, a completed run and a cancelled run are each shown as what they were',
+        sm.completed.shown?.runId === sm.completed.returned.runId && sm.completed.shown.outcome === 'COMPLETED'
+        && sm.cancelled.shown?.runId === sm.cancelled.returned.runId && sm.cancelled.shown.outcome === 'CANCELLED' && sm.cancelled.operation === null, JSON.stringify({ completed: sm.completed, cancelled: sm.cancelled }));
+    for (const how of ['reset', 'leave']) {
+        const a = sm[`${how}_alone`];
+        const what = how === 'reset' ? 'a new Drawing Set' : 'leaving and entering again';
+        check(`RF-39-01 ${what} while a run is held: nothing of before is shown, the lock is gone, and the old run, ending, shows nothing and does not move the snapshot`,
+            a.whileRunning.operation?.kind === 'extraction' && a.whileRunning.last?.runId === a.before.runId
+            && a.afterSwitch.last === null && a.afterSwitch.operation === null
+            && a.afterOld.last === null && a.afterOld.operation === null && a.afterOld.version === a.afterSwitch.version, JSON.stringify(a));
+        const n = sm[`${how}_thenNew`];
+        check(`RF-39-01 ${what}, then a new run shown: the old run, ending afterwards, does not replace it`,
+            n.newRun.outcome === 'COMPLETED' && n.newRun.runId > n.oldRunId && n.afterNew.last?.runId === n.newRun.runId
+            && n.afterOld.last?.runId === n.newRun.runId && n.afterOld.last.outcome === 'COMPLETED' && n.afterOld.version === n.afterNew.version, JSON.stringify(n));
+    }
+    check('no PDF.js document or recogniser left running', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0
+        && sm.workers.pdf.live === 0 && sm.workers.ocr.live === 0, JSON.stringify({ lk: lk.workers, sm: sm.workers }));
 
     // ------------------------------------------------------------------
     section('42. M7-P2-B2 static gates and privacy');

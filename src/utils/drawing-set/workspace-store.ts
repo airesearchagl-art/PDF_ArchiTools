@@ -421,9 +421,11 @@ export class DrawingSetStore {
         this.revokeStanding('EVIDENCE_STALE');
     }
 
-    /** The workspace is shown (again). */
+    /** The workspace is shown (again). Coming back, the screen is shown what leave() ended, not what it was before. */
     enter(): void {
+        if (!this.left) return;
         this.left = false;
+        this.publish();
     }
 
     /** The workspace went away: end everything it started and close the preview. */
@@ -433,6 +435,7 @@ export class DrawingSetStore {
         this.intakeEpoch += 1;
         this.abort('all');
         this.endSessionWork();
+        this.lastExtraction = null;
         this.evidenceGeneration += 1;
         void this.owner.close();
     }
@@ -735,11 +738,14 @@ export class DrawingSetStore {
     /** Read the title blocks of the named Sheets, from the screen. The report is kept for display. */
     async startExtraction(sheetIds: readonly Uuid[]): Promise<ExtractionSummary> {
         const runId = this.runCounter + 1;
+        // The report is shown only to the session, and the visit, it was asked in (RF-39-01).
+        const sessionEpoch = this.sessionEpoch;
         const { report } = await this.extract({ sheetIds });
         const summary = summarise(runId, report);
-        if (report.kind !== 'refused' || report.refusal.code !== 'OPERATION_LOCKED') {
+        const stale = this.left || sessionEpoch !== this.sessionEpoch || (this.lastExtraction !== null && this.lastExtraction.runId > runId);
+        if (!stale && (report.kind !== 'refused' || report.refusal.code !== 'OPERATION_LOCKED')) {
             this.lastExtraction = summary;
-            if (!this.left) this.publish();
+            this.publish();
         }
         return summary;
     }

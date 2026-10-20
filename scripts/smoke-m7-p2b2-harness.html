@@ -1354,6 +1354,97 @@
             return plainly(out);
         }
 
+        // RF-39-01: the summary the screen shows after extraction, through startExtraction() itself.
+        // The next run is held at the gate's door until the test lets it in: no timer decides the order.
+        function holdNextExtraction(gate) {
+            const asked = defer();
+            const held = defer();
+            gate.beginExtraction = function heldOnce() {
+                delete gate.beginExtraction;
+                asked.resolve();
+                return held.promise.then(() => gate.beginExtraction());
+            };
+            return { asked: asked.promise, release: () => held.resolve() };
+        }
+
+        async function summaries() {
+            const out = {};
+            const view = (store) => {
+                const snap = store.getSnapshot();
+                return { version: snap.version, operation: plainly(snap.operation), last: snap.lastExtraction ? { runId: snap.lastExtraction.runId, kind: snap.lastExtraction.kind, outcome: snap.lastExtraction.outcome, code: snap.lastExtraction.refusal?.code ?? null } : null };
+            };
+            // In one session: a run that completes, and a run that is cancelled, are each shown.
+            {
+                const s = await observedStore();
+                const done = await s.store.startExtraction([s.register1]);
+                out.completed = { returned: { runId: done.runId, outcome: done.outcome }, shown: view(s.store).last };
+                const hold = holdNextExtraction(s.r.gate);
+                const running = s.store.startExtraction([s.register1]);
+                await hold.asked;
+                s.store.cancelExtraction();
+                hold.release();
+                const cancelled = await running;
+                out.cancelled = { returned: { runId: cancelled.runId, outcome: cancelled.outcome }, shown: view(s.store).last, operation: view(s.store).operation };
+                await s.dispose();
+            }
+            for (const how of ['reset', 'leave']) {
+                const s = await observedStore();
+                const { store } = s;
+                // A summary shown before; then a run held while the session is replaced, or the workspace left and entered again.
+                const before = await store.startExtraction([s.register1]);
+                const hold = holdNextExtraction(s.r.gate);
+                const old = store.startExtraction([s.register1]);
+                await hold.asked;
+                const whileRunning = view(store);
+                if (how === 'reset') store.reset();
+                else {
+                    store.leave();
+                    store.enter();
+                }
+                const afterSwitch = view(store);
+                // The old run ends now, before anything new: none of it is shown, and the snapshot does not move.
+                hold.release();
+                const oldSummary = await old;
+                await tick();
+                const afterOld = view(store);
+                out[`${how}_alone`] = { before: { runId: before.runId, outcome: before.outcome }, whileRunning, afterSwitch, oldRunId: oldSummary.runId, afterOld };
+                await s.dispose();
+            }
+            // The old run ends after a new run of the new session (or visit) has been shown: it does not replace it.
+            for (const how of ['reset', 'leave']) {
+                const s = await observedStore();
+                const { store } = s;
+                const hold = holdNextExtraction(s.r.gate);
+                const old = store.startExtraction([s.register1]);
+                await hold.asked;
+                if (how === 'reset') store.reset();
+                else {
+                    store.leave();
+                    store.enter();
+                }
+                let target = s.register1;
+                if (how === 'reset') {
+                    const accepted = await store.intake(s.files.register);
+                    if (accepted.kind !== 'accepted') throw new Error(`intake after reset: ${accepted.kind}`);
+                    const profile = store.createProfile({ name: 'P', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: s.profile.fields });
+                    if (!profile.ok) throw new Error(`profile after reset: ${profile.refusal.code}`);
+                    target = accepted.sheets[0].id;
+                    const assigned = store.assignProfile([target], profile.profile.id);
+                    if (!assigned.ok) throw new Error(`assign after reset: ${assigned.refusal.code}`);
+                }
+                const fresh = await store.startExtraction([target]);
+                const afterNew = view(store);
+                hold.release();
+                const oldSummary = await old;
+                await tick();
+                const afterOld = view(store);
+                out[`${how}_thenNew`] = { newRun: { runId: fresh.runId, outcome: fresh.outcome }, oldRunId: oldSummary.runId, afterNew, afterOld };
+                await s.dispose();
+            }
+            out.workers = workers();
+            return plainly(out);
+        }
+
         // T-01 / H-12: where a profile's rectangles land on the viewer, and back, for every rotation, offset and zoom.
         async function pointer(geometryTruth) {
             const geometry = await fixture(P2A, 'p2a-geometry');
@@ -1421,7 +1512,7 @@
             };
         }
 
-        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, pointer, storage };
+        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, summaries, pointer, storage };
         window.__m7p2b2Ready = true;
         document.getElementById('state').textContent = 'ready';
     </script>
