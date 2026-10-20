@@ -124,6 +124,9 @@ async function runCondition(browser) {
                 ocrRequests: ocr.length, ocrBodyBytes: sum(ocr.map((r) => r.bytes || 0)), ocrFromCache: ocr.filter((r) => r.fromCache).length,
                 ocr: ocr.map((r) => ({ path: r.url.slice(ORIGIN.length), status: r.status, bytes: r.bytes, fromCache: r.fromCache })),
                 ocrWorkersAfter: ocrWorkers(),
+                // The page's own record (RV-39-02): its slowest OCR Worker start so far, and whether its OCR failed closed.
+                ocrSlowestStartMs: await page.evaluate(() => Number(document.querySelector('[data-ds-root]')?.dataset.dsOcrSlowestStartMs ?? NaN)),
+                ocrUnavailable: await page.evaluate(() => document.querySelector('[data-ds-root]')?.dataset.dsOcrUnavailable ?? null),
             });
         }
 
@@ -152,7 +155,10 @@ async function runCondition(browser) {
         const result = await page.evaluate(() => document.querySelector('[data-ds-extraction-result]')?.dataset.dsExtractionResult ?? '');
         return {
             sheets, runs,
-            cancel: { sawOcr, askedAfterMs: asked - t0, unlockedMs, ocrWorkersAtUnlock: workersAtUnlock, workerGoneMs, result },
+            cancel: {
+                sawOcr, askedAfterMs: asked - t0, unlockedMs, ocrWorkersAtUnlock: workersAtUnlock, workerGoneMs, result,
+                ocrUnavailable: await page.evaluate(() => document.querySelector('[data-ds-root]')?.dataset.dsOcrUnavailable ?? null),
+            },
             offOrigin,
         };
     } finally {
@@ -174,10 +180,10 @@ async function main() {
     try {
         const r = await runCondition(browser);
         for (const run of r.runs) {
-            console.log(`  run ${run.run}: ${run.ms} ms for ${r.sheets} Sheets — ${run.result}; /ocr/ ${run.ocrRequests} req, ${(run.ocrBodyBytes / 1048576).toFixed(2)} MiB body, ${run.ocrFromCache} from cache; OCR workers after ${run.ocrWorkersAfter}`);
+            console.log(`  run ${run.run}: ${run.ms} ms for ${r.sheets} Sheets — ${run.result}; /ocr/ ${run.ocrRequests} req, ${(run.ocrBodyBytes / 1048576).toFixed(2)} MiB body, ${run.ocrFromCache} from cache; OCR workers after ${run.ocrWorkersAfter}; slowest OCR start so far ${run.ocrSlowestStartMs} ms; OCR unavailable ${run.ocrUnavailable}`);
         }
         console.log(`  cancel: OCR running ${r.cancel.sawOcr}, asked ${r.cancel.askedAfterMs} ms after the click; lock let go ${r.cancel.unlockedMs} ms after 読み取りを中止;`
-            + ` OCR worker reported gone at ${r.cancel.workerGoneMs} ms (still listed at the unlock: ${r.cancel.ocrWorkersAtUnlock}); ${r.cancel.result}`);
+            + ` OCR worker reported gone at ${r.cancel.workerGoneMs} ms (still listed at the unlock: ${r.cancel.ocrWorkersAtUnlock}); ${r.cancel.result}; OCR unavailable ${r.cancel.ocrUnavailable}`);
         console.log(`  summary: first ${r.runs[0].ms} ms, repeat median ${median(r.runs.slice(1).map((x) => x.ms))} ms; off-origin requests ${r.offOrigin.length}`);
         if (OUT) {
             fs.writeFileSync(OUT, JSON.stringify({ browser: version, repeat: REPEAT, httpCache: HTTP_CACHE, throttle: THROTTLE, ...r }, null, 2));

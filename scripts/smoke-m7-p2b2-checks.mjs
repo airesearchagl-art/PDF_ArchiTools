@@ -22,6 +22,8 @@ import path from 'node:path';
 
 const FIELDS = ['drawingNumber', 'drawingTitle', 'revision', 'issueDate'];
 const strip = (t) => t.replace(/\/\*[\s\S]*?\*\/|(^|[^:\\])\/\/[^\n]*/g, '$1');
+/** A file's text, or '' when the tree has none (the before-evidence runs these gates on a tree without it). */
+const readIfThere = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
 
 /** Files under `dir` (recursively) whose comment-stripped text matches `pattern`, relative to ROOT. */
 function filesMatching(ROOT, dir, pattern, exts = /\.(ts|tsx)$/) {
@@ -64,6 +66,11 @@ export async function runP2b2Checks(ctx) {
     const { page, ROOT, ORIGIN, check, probe, note, section } = ctx;
     const baselineWritten = writeBaseline(ROOT);
 
+    // RV-39-02: the browser's own list of the page's Workers, for the harness to ask (not the app's record, not the harness's).
+    if (!page.__m7BrowserOcrWorkers) {
+        await page.exposeFunction('__browserOcrWorkers', () => page.workers().filter((w) => /\/ocr\//.test(w.url())).length);
+        page.__m7BrowserOcrWorkers = true;
+    }
     await page.goto(`${ORIGIN}/scripts/smoke-m7-p2b2-harness.html`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.__m7p2b2Ready === true, { timeout: 300000 });
     const call = (fn, ...args) => page.evaluate((f, a) => window.__m7p2b2[f](...a), fn, args);
@@ -333,35 +340,83 @@ export async function runP2b2Checks(ctx) {
             n.newRun.outcome === 'COMPLETED' && n.newRun.runId > n.oldRunId && n.afterNew.last?.runId === n.newRun.runId
             && n.afterOld.last?.runId === n.newRun.runId && n.afterOld.last.outcome === 'COMPLETED' && n.afterOld.version === n.afterNew.version, JSON.stringify(n));
     }
-    // RV-39-02: extraction cancelled while its recogniser's Worker is still starting. The Worker's start is held
-    // at tesseract.js's own answers by the harness; what holds is checked, and the Worker's lifetime is recorded.
-    const oi = await call('ocrInit');
+    // RV-39-02 / HG-RV39-OCR-01: extraction stopped, or failing, while its recogniser's Worker starts. The start is
+    // held at tesseract.js's own answers by the harness; a Worker is gone only when the browser no longer lists it.
+    // A Worker left, or a second one alive beside it, is a FAIL.
+    // One scenario per call, so none runs into the protocol's timeout -- not even on a tree whose Workers linger.
+    const oi = { recogniser: { recognitions: 0, toDataURL: 0, toBlob: 0 }, browserAtEnds: [] };
+    for (const which of ['A', 'B', 'C', 'D1', 'D2', 'E', 'F', 'G', 'I', 'J']) {
+        const { recogniser, browserAtEnd, workers: w, registryLoaded, deadlines, ...scenarios } = await call('ocrInit', which);
+        Object.assign(oi, scenarios, { workers: w, registryLoaded, deadlines });
+        for (const k of ['recognitions', 'toDataURL', 'toBlob']) oi.recogniser[k] += recogniser[k];
+        oi.browserAtEnds.push(browserAtEnd);
+    }
+    oi.browserAtEnd = oi.browserAtEnds.every((n) => n === 0) ? 0 : oi.browserAtEnds.find((n) => n !== 0);
     const cancelledText = (p) => p?.result?.state === 'CANCELLED' && /^読み取りを中止しました/.test(p.result.text) && p.progress === null;
-    check('RV-39-02 A cancelled while the recogniser starts: shown as cancelled (not completed), the lock let go, the extraction lease ended',
-        oi.A.atCancel.phase === 'running' && oi.A.firstSummary.outcome === 'CANCELLED' && oi.A.afterCancel.operation === null && !oi.A.afterCancel.extractionActive
-        && cancelledText(oi.A.afterCancel.panel), JSON.stringify({ atCancel: oi.A.atCancel, afterCancel: oi.A.afterCancel }));
-    check('RV-39-02 A ...the next extraction, asked for before the old Worker ended, completes and is shown; the old Worker never recognises anything',
-        oi.A.second.outcome === 'COMPLETED' && oi.A.afterSecond.shown?.runId === oi.A.second.runId && oi.A.afterSecond.observation?.status === 'READ' && !oi.A.oldRecognised,
-        JSON.stringify({ second: oi.A.second, afterSecond: oi.A.afterSecond, log: oi.A.log }));
-    check('RV-39-02 A ...the old start completing afterwards ends its Worker and moves nothing: summary, observation and snapshot version as they were',
-        oi.A.afterOld.live === 0 && oi.A.afterOld.version === oi.A.afterSecond.version && oi.A.afterOld.shown?.runId === oi.A.second.runId
-        && oi.A.afterOld.observation?.runId === oi.A.afterSecond.observation?.runId && oi.A.afterOld.panel.result?.state === 'COMPLETED', JSON.stringify(oi.A.afterOld));
-    check('RV-39-02 B cancelled while the recogniser loads, then its start fails: cancelled, the lock let go; the failure moves nothing and the next extraction completes',
-        oi.B.afterCancel.outcome === 'CANCELLED' && oi.B.afterCancel.operation === null && oi.B.afterFail.operation === null && oi.B.afterFail.version === oi.B.afterCancel.version
-        && oi.B.afterFail.recogniser.started === false && oi.B.afterNext.outcome === 'COMPLETED' && oi.B.afterNext.shown?.outcome === 'COMPLETED', JSON.stringify(oi.B));
-    check('RV-39-02 C the language data refused (tesseract.js never settles the start): shown as still reading, never as finished; once cancelled, shown as cancelled and the lock let go',
-        !oi.C.hanging.settled && oi.C.hanging.operation?.phase === 'running' && oi.C.hanging.shown === null && oi.C.hanging.panel.result === null && /^読み取り中/.test(oi.C.hanging.panel.progress ?? '')
-        && oi.C.afterCancel.outcome === 'CANCELLED' && oi.C.afterCancel.operation === null && cancelledText(oi.C.afterCancel.panel), JSON.stringify(oi.C));
-    check('RV-39-02 D a start that never answers, cancelled: shown as cancelled, the lock let go', oi.D.outcome === 'CANCELLED' && oi.D.operation === null && cancelledText(oi.D.panel), JSON.stringify(oi.D));
-    check('RV-39-02 E the recogniser cannot start (not cancelled): the Sheet is recorded OCR_FAILED with no field read, and the screen says so -- not only "finished"',
-        oi.E.outcome === 'COMPLETED' && oi.E.observation?.status === 'OCR_FAILED' && oi.E.observation.sources.every((x) => x === 'none') && oi.E.ocrFailed === 1
-        && oi.E.panel.result?.ocrFailed === 1 && /文字認識（OCR）ができず、値を読み取れていません/.test(oi.E.panel.result.text), JSON.stringify(oi.E));
-    // Recorded, not passed: where the Worker's lifetime does not follow the lock (B2-D02 "abortの場合はworker終了…の後に解除"). Human Gate.
-    note('RV-39-02 recorded A: Worker alive when the lock was let go', `live ${oi.A.afterCancel.live}, ended ${oi.A.afterCancel.oldEnded}; next Worker spawned with ${oi.A.afterSecond.newLiveAtSpawn} OCR Workers live, recognised before the old one ended: ${oi.A.freshRecognisedBeforeOldEnded}; old ended only when its start completed (${oi.A.log.join(' > ')})`);
-    note('RV-39-02 recorded B/C/D: Worker never ended (no handle anywhere in the app)', `B after the start failed: live ${oi.B.afterFail.live}, ended ${oi.B.afterFail.oldEnded}, next spawned with ${oi.B.afterNext.newLiveAtSpawn} live; C: live ${oi.C.afterCancel.live}, ended ${oi.C.afterCancel.oldEnded}; D: live ${oi.D.live}, ended ${oi.D.oldEnded}`);
-    note('RV-39-02 recorded F: every start fails, not cancelled', `${oi.F.sheets} Sheets, ${oi.F.ocrFailed} OCR_FAILED; ${oi.F.spawned} Workers spawned (one per page that needs OCR), ${oi.F.live} still live, ${oi.F.ended} ended`);
-    check('no PDF.js document or recogniser left running', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0
-        && sm.workers.pdf.live === 0 && sm.workers.ocr.live === 0 && oi.workers.pdf.live === 0 && oi.workers.ocr.live === 0, JSON.stringify({ lk: lk.workers, sm: sm.workers, oi: oi.workers }));
+    const ocrFailedText = (p, n) => p?.result?.state === 'COMPLETED' && p.result.ocrFailed === n && /文字認識（OCR）ができず、値を読み取れていません/.test(p.result.text);
+    const noneLeft = (c) => c && c.live === 0 && c.unconfirmed === 0 && !c.releaseUnconfirmed;
+    check('RV-39-02 the recogniser\'s Worker registry is in this tree, with its deadlines (start 120,000 ms, close 60,000 ms)',
+        oi.registryLoaded && oi.deadlines.start === 120000 && oi.deadlines.close === 60000, JSON.stringify({ registryLoaded: oi.registryLoaded, deadlines: oi.deadlines }));
+    check('RV-39-02 A cancelled while the Worker initialises: when the lock is let go the Worker is already known ended (it said closed), the browser lists no OCR Worker, the run shows cancelled',
+        oi.A.atCancel.browser === 1 && oi.A.atCancel.phase === 'running' && oi.A.firstSummary.outcome === 'CANCELLED'
+        && oi.A.unlock?.live === 0 && oi.A.unlock.states?.every((x) => x === 'ended')
+        && oi.A.afterCancel.browser === 0 && oi.A.afterCancel.operation === null && !oi.A.afterCancel.extractionActive && oi.A.afterCancel.counts?.closed === 1 && noneLeft(oi.A.afterCancel.counts)
+        && oi.A.afterCancel.records?.[0]?.startAnswered === 'CLOSED'
+        && cancelledText(oi.A.afterCancel.panel), JSON.stringify({ atCancel: oi.A.atCancel, unlock: oi.A.unlock, afterCancel: oi.A.afterCancel }));
+    check('RV-39-02 A ...the next extraction, asked for at once, completes with one new Worker, made only after the old one was known ended (never two at a time), and ended by its own terminate()',
+        oi.A.second.outcome === 'COMPLETED' && oi.A.afterSecond.observation?.status === 'READ' && oi.A.afterSecond.browser === 0 && oi.A.concurrent === 1
+        && oi.A.afterSecond.counts?.made === 2 && oi.A.afterSecond.counts.terminated === 1 && noneLeft(oi.A.afterSecond.counts),
+        JSON.stringify({ second: oi.A.second, afterSecond: oi.A.afterSecond, concurrent: oi.A.concurrent, transitions: oi.A.transitions }));
+    check('RV-39-02 A ...the old start\'s answers given afterwards, to a Worker that has closed itself, move nothing: summary, observation and snapshot version as they were; no Worker',
+        oi.A.afterOld.browser === 0 && oi.A.afterOld.version === oi.A.afterSecond.version && oi.A.afterOld.shown?.runId === oi.A.second.runId
+        && oi.A.afterOld.observation?.runId === oi.A.afterSecond.observation?.runId && noneLeft(oi.A.afterOld.counts), JSON.stringify(oi.A.afterOld));
+    check('RV-39-02 H deadlines: a completed start leaves none armed; every deadline fired late (disarmed ones included) moves nothing -- no failure, no unconfirmed, the snapshot as it was',
+        oi.A.afterSecond.startDeadlinesLive === 0 && oi.A.afterLateDeadlines.fired > 0 && oi.A.afterLateDeadlines.counts?.deadlinesExpired === 0
+        && oi.A.afterLateDeadlines.counts.startFailed === 0 && !oi.A.afterLateDeadlines.unavailable && oi.A.afterLateDeadlines.version === oi.A.afterOld.version,
+        JSON.stringify(oi.A.afterLateDeadlines));
+    check('RV-39-02 B cancelled while loading, then the load fails: the Worker was already ended; the failure moves nothing and throws nothing; the next extraction completes; no Worker',
+        oi.B.afterCancel.outcome === 'CANCELLED' && oi.B.afterCancel.browser === 0 && oi.B.afterCancel.unlock?.live === 0
+        && oi.B.afterFail.browser === 0 && oi.B.afterFail.version === oi.B.afterCancel.version && oi.B.afterFail.thrownInHandler === 0 && noneLeft(oi.B.afterFail.counts)
+        && oi.B.afterNext.outcome === 'COMPLETED' && oi.B.afterNext.browser === 0 && oi.B.concurrent === 1, JSON.stringify(oi.B));
+    check('RV-39-02 C the language data refused (tesseract.js never settles its start): the run ends by itself -- not left reading -- with the Sheet OCR_FAILED and said so; its Worker closed; no Worker',
+        oi.C.atEnd.settled && oi.C.atEnd.outcome === 'COMPLETED' && oi.C.atEnd.operation === null && oi.C.atEnd.observation?.status === 'OCR_FAILED'
+        && ocrFailedText(oi.C.atEnd.panel, 1) && oi.C.atEnd.browser === 0 && oi.C.atEnd.counts?.startFailed === 1 && oi.C.atEnd.counts.closed === 1 && noneLeft(oi.C.atEnd.counts)
+        && oi.C.atEnd.thrownInHandler === 0, JSON.stringify(oi.C.atEnd));
+    check('RV-39-02 D1 a start that never answers, cancelled: the run ends cancelled in finite time, the Worker known ended before the lock was let go; no Worker',
+        oi.D1.settled && oi.D1.outcome === 'CANCELLED' && oi.D1.operation === null && oi.D1.unlock?.live === 0 && oi.D1.browser === 0 && noneLeft(oi.D1.counts) && cancelledText(oi.D1.panel)
+        && oi.D1.records?.[0]?.startAnswered === 'CLOSED', JSON.stringify(oi.D1));
+    check('RV-39-02 D2 a start that never answers, not cancelled: its start deadline is taken as a failure only -- the Worker is still closed and heard closed -- the Sheet OCR_FAILED and said so; no Worker',
+        oi.D2.fired === 1 && oi.D2.settled && oi.D2.outcome === 'COMPLETED' && oi.D2.observation?.status === 'OCR_FAILED' && ocrFailedText(oi.D2.panel, 1)
+        && oi.D2.browser === 0 && oi.D2.records?.[0]?.startFailure === 'DEADLINE' && oi.D2.records[0].ended === 'CLOSED' && noneLeft(oi.D2.counts), JSON.stringify(oi.D2));
+    check('RV-39-02 E the recogniser cannot load, not cancelled: the Sheet OCR_FAILED (no field read) and said so; nothing thrown; no Worker',
+        oi.E.outcome === 'COMPLETED' && oi.E.ocrFailed === 1 && oi.E.observation?.status === 'OCR_FAILED' && oi.E.observation.sources.every((x) => x === 'none')
+        && ocrFailedText(oi.E.panel, 1) && oi.E.thrownInHandler === 0 && oi.E.browser === 0 && noneLeft(oi.E.counts), JSON.stringify(oi.E));
+    check('RV-39-02 F every start would fail across the register: one Worker for the run, not one per page that needs OCR; every such Sheet OCR_FAILED and counted; no Worker',
+        oi.F.outcome === 'COMPLETED' && oi.F.ocrFailedSheets === 3 && oi.F.ocrFailed === 3 && oi.F.spawned === 1 && oi.F.counts?.made === 1 && oi.F.browser === 0 && noneLeft(oi.F.counts), JSON.stringify(oi.F));
+    check('RV-39-02 G a Worker\'s end never heard: the lock is held (cancelling; commands refused) until its close deadline; then the run ends and the page\'s OCR fails closed',
+        oi.G.whileUnheard.phase === 'cancelling' && oi.G.whileUnheard.rename === 'OPERATION_LOCKED' && oi.G.whileUnheard.closeDeadlinesLive === 1
+        && oi.G.afterDeadline.fired === 1 && oi.G.afterDeadline.settled && oi.G.afterDeadline.outcome === 'CANCELLED' && oi.G.afterDeadline.operation === null
+        && oi.G.afterDeadline.unavailable === true && oi.G.afterDeadline.counts?.unconfirmed === 1 && oi.G.afterDeadline.counts.releaseUnconfirmed
+        && oi.G.afterDeadline.records?.[0]?.startAnswered === 'CLOSED',
+        JSON.stringify({ whileUnheard: oi.G.whileUnheard, afterDeadline: oi.G.afterDeadline }));
+    check('RV-39-02 G ...no Worker is started again: reading is refused OCR_RELEASE_UNCONFIRMED with the reload guidance, and stays refused when the Worker\'s answer comes late; a reload (a registry of its own) reads again',
+        oi.G.refused.kind === 'refused' && oi.G.refused.code === 'OCR_RELEASE_UNCONFIRMED' && /ページを再読み込みしてください/.test(oi.G.refused.panel?.result?.text ?? '')
+        && oi.G.afterLateAnswer.unavailable === true && oi.G.afterLateAnswer.again === 'OCR_RELEASE_UNCONFIRMED' && oi.G.afterLateAnswer.records?.[0]?.lateEnd === 'CLOSED'
+        && oi.G.afterLateAnswer.counts?.releaseUnconfirmed && oi.G.reloaded.outcome === 'COMPLETED' && oi.G.reloaded.browser === 0 && noneLeft(oi.G.reloaded.counts),
+        JSON.stringify({ refused: oi.G.refused, afterLateAnswer: oi.G.afterLateAnswer, reloaded: oi.G.reloaded }));
+    for (const how of ['reset', 'leave']) {
+        const i = oi[`I_${how}`];
+        check(`RV-39-02 I ${how === 'reset' ? 'a new Drawing Set' : 'leaving and entering again'} right after a cancel, the old Worker's end not yet heard: nothing new reads (the old run still holds the lease); once heard, the next run completes; never two Workers at a time; no Worker`,
+            i.whileOldCloses.tooSoon === 'EXTRACTION_ACTIVE' && i.oldSettled && i.next.outcome === 'COMPLETED' && i.concurrent === 1 && i.browser === 0 && noneLeft(i.counts), JSON.stringify(i));
+    }
+    check('RV-39-02 J told to close before the page heard the Worker was alive, and that first close lost: the lock is held; once alive is heard the Worker is asked again and ends; the caller\'s start answered; no Worker',
+        oi.J?.aliveWithheld > 0 && oi.J.beforeAlive.closeLost && oi.J.beforeAlive.phase === 'cancelling' && oi.J.beforeAlive.browser === 1
+        && oi.J.settled && oi.J.outcome === 'CANCELLED' && oi.J.unlock?.live === 0 && oi.J.records?.[0]?.ended === 'CLOSED' && oi.J.records[0].startAnswered === 'CLOSED'
+        && oi.J.browser === 0 && noneLeft(oi.J.counts), JSON.stringify(oi.J));
+    // Housekeeping for the sections after this one, read after the harness has ended its planned Workers: not evidence
+    // of any release by the app (that is each scenario's own browser count above, taken before the harness ends anything).
+    check('these sections leave no PDF.js document or recogniser running for the next (the browser\'s list after the harness\'s own clean-up)', lk.workers.pdf.live === 0 && lk.workers.ocr.live === 0 && se.workers.pdf.live === 0 && ev.workers.pdf.live === 0
+        && sm.workers.pdf.live === 0 && sm.workers.ocr.live === 0 && oi.workers.pdf.live === 0 && oi.browserAtEnd === 0, JSON.stringify({ lk: lk.workers, sm: sm.workers, oi: oi.workers, browserAtEnd: oi.browserAtEnd }));
 
     // ------------------------------------------------------------------
     section('42. M7-P2-B2 static gates and privacy');
@@ -383,6 +438,26 @@ export async function runP2b2Checks(ctx) {
     const pageDocuments = strip(fs.readFileSync(path.join(ROOT, 'src', 'utils', 'drawing-set', 'page-documents.ts'), 'utf8'));
     check('the owner\'s test seams are in the owner only; the page\'s owner is made with the gate and nothing else',
         JSON.stringify(seams) === '["src/utils/drawing-set/preview-document.ts"]' && /new PreviewDocumentOwner\(\{ gate: PAGE_PDF_GATE \}\)/.test(pageDocuments), seams.join(', '));
+    // RV-39-02 (HG-RV39-OCR-01): M7 owns its OCR Workers without touching anyone else's.
+    const registries = filesMatching(ROOT, 'src', /new OcrWorkerRegistry\(/);
+    const ocrWorkersSource = strip(readIfThere(path.join(ROOT, 'src', 'utils', 'drawing-set', 'ocr-workers.ts')));
+    check('RV-39-02 the OCR Worker registry is made in its own module only, the page\'s with no test seam',
+        JSON.stringify(registries) === '["src/utils/drawing-set/ocr-workers.ts"]' && /PAGE_OCR_WORKERS = new OcrWorkerRegistry\(\);/.test(ocrWorkersSource)
+        && (ocrWorkersSource.match(/new OcrWorkerRegistry\(/g) ?? []).length === 1, registries.join(', '));
+    const injected = filesMatching(ROOT, 'src', /\bcreateWorker:/);
+    check('RV-39-02 the worker-making seam of the shared OCR engine is used by 図面管理\'s recogniser only (passed on by the register engine); every other OCR caller makes its worker as before',
+        JSON.stringify(injected) === '["src/utils/drawing-set/register-extraction.ts","src/utils/pdf-textifier/drawing-register-ocr.ts"]'
+        && /cacheMethod: 'none', createWorker: workers\.makeWorker/.test(strip(fs.readFileSync(path.join(ROOT, 'src', 'utils', 'drawing-set', 'register-extraction.ts'), 'utf8'))), injected.join(', '));
+    const globalWorker = filesMatching(ROOT, 'src', /\b(window|globalThis|self)\.(Worker|BroadcastChannel)\s*=/);
+    check('RV-39-02 nothing in the app replaces the global Worker or BroadcastChannel', globalWorker.length === 0, globalWorker.join(', '));
+    const m7Worker = readIfThere(path.join(ROOT, 'public', 'ocr', 'm7', 'register-ocr-worker.js'));
+    const tesseractWorker = fs.readFileSync(path.join(ROOT, 'public', 'ocr', 'tesseract', 'worker.min.js'));
+    const tesseractShipped = fs.readFileSync(path.join(ROOT, 'node_modules', 'tesseract.js', 'dist', 'worker.min.js'));
+    const tesseractVersion = JSON.parse(fs.readFileSync(path.join(ROOT, 'node_modules', 'tesseract.js', 'package.json'), 'utf8')).version;
+    check('RV-39-02 M7\'s worker script loads tesseract.js\'s own worker script, unchanged (byte for byte the installed 7.0.0), and reaches nothing else',
+        (strip(m7Worker).match(/importScripts\(/g) ?? []).length === 1 && strip(m7Worker).includes("importScripts('/ocr/tesseract/worker.min.js')")
+        && !/\bfetch\(|XMLHttpRequest|postMessage\((?!\{ type: 'closed' \}|\{ type: 'alive' \})/.test(strip(m7Worker))
+        && tesseractVersion === '7.0.0' && Buffer.compare(tesseractWorker, tesseractShipped) === 0, `tesseract.js ${tesseractVersion}`);
     const manual = filesMatching(ROOT, 'src', /basis:\s*'manual'|'manual'\s+as\b/);
     check('H-13 nothing in the app asks for a manual confirmation (`basis: \'manual\'` appears only in the pure confirmSheet\'s own module)',
         manual.every((f) => f === 'src/utils/drawing-set/metadata-confirmation.ts'), manual.join(', '));

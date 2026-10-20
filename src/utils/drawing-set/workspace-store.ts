@@ -68,8 +68,10 @@ import type { PdfDocumentGate } from './pdf-document-gate';
 import { GATE_MESSAGES } from './pdf-document-gate';
 import type { ExpectedContent, PreviewDocumentOwner } from './preview-document';
 import { PreviewError } from './preview-document';
-import type { ExclusionCode, ExtractionContext, ExtractionProgress, ExtractionReport, GuardedRegisterOcr } from './register-extraction';
-import { extractTitleBlocks } from './register-extraction';
+import type { OcrWorkerRegistry } from './ocr-workers';
+import { PAGE_OCR_WORKERS } from './ocr-workers';
+import type { ExclusionCode, ExtractionContext, ExtractionProgress, ExtractionReport } from './register-extraction';
+import { GuardedRegisterOcr, extractTitleBlocks } from './register-extraction';
 import type { IntakeOutcome, IntakeProgress } from './source-intake';
 import { intakeSource } from './source-intake';
 import type { ProfileGeometry, ProfileRefusalCode } from './title-block-profiles';
@@ -81,7 +83,7 @@ import {
 export type SessionState = { ok: true; session: DrawingSetSession } | { ok: false; message: string };
 
 /** Extraction's report, or the store's own refusal: another operation holds the lock. */
-export type StoreExtractionReport = ExtractionReport | { kind: 'refused'; refusal: { code: 'OPERATION_LOCKED'; message: string } };
+export type StoreExtractionReport = ExtractionReport | { kind: 'refused'; refusal: { code: 'OPERATION_LOCKED' | 'OCR_RELEASE_UNCONFIRMED'; message: string } };
 
 /** The operation that locks the session, while it runs. */
 export interface StoreOperation {
@@ -131,6 +133,11 @@ export interface StoreSnapshot {
     readonly documentsUnavailable: boolean;
     /** Moves when extraction gives the documents back, so a closed preview opens again. */
     readonly previewEpoch: number;
+    /**
+     * The recogniser's Workers (ocr-workers.ts). `unavailable`: one could not be
+     * confirmed ended, so no title block is read until the page is reloaded.
+     */
+    readonly ocr: { readonly unavailable: boolean; readonly live: number; readonly slowestStartMs: number };
 }
 
 /** How one file's intake ended, as the session took it. */
@@ -175,9 +182,13 @@ export interface StoreRefusal {
 
 export type Refused = { ok: false; refusal: StoreRefusal };
 
+/** What the screen says while a recogniser's Worker could not be confirmed ended (RV-39-02). */
+export const OCR_RELEASE_UNCONFIRMED_MESSAGE = '文字認識（OCR）を止められたか確認できないため、表題欄を読み取れません。ページを再読み込みしてください。図面一式は保存されていないため、再読み込みの後でファイルを追加し直してください。';
+
 const MESSAGES = {
     UNAVAILABLE: '図面一式がないため、操作できません。',
     OPERATION_LOCKED: '表題欄の読み取り中は、この操作はできません。読み取りが終わるか、中止してから操作してください。',
+    OCR_RELEASE_UNCONFIRMED: OCR_RELEASE_UNCONFIRMED_MESSAGE,
     CROP_NOT_AVAILABLE: 'プロファイルが割り当てられていないページは確定できません。プロファイルを割り当てて読み取ると確定できます。',
     NO_OBSERVATION: 'このページはまだ読み取られていません。読み取りを実行してください。',
     OBSERVATION_NOT_CURRENT: '読み取り値が、現在のプロファイルやファイルと一致しません。読み取りを実行し直してください。',
@@ -288,6 +299,9 @@ const nextFrame = (): Promise<void> => new Promise((resolve) => {
 export class DrawingSetStore {
     readonly gate: PdfDocumentGate;
     readonly owner: PreviewDocumentOwner;
+    /** The recogniser's Workers: the page's own unless a test gives its own. */
+    readonly ocrWorkers: OcrWorkerRegistry;
+    private stopWatchingOcr: (() => void) | null = null;
 
     private session: DrawingSetSession | null = null;
     private ledger: RuntimeBindingLedger | null = null;
@@ -314,11 +328,22 @@ export class DrawingSetStore {
     private standing: EvidenceRecord | null = null;
     private readonly verifying = new Set<Uuid>();
 
-    constructor(options: { gate: PdfDocumentGate; owner: PreviewDocumentOwner }) {
+    constructor(options: { gate: PdfDocumentGate; owner: PreviewDocumentOwner; ocrWorkers?: OcrWorkerRegistry }) {
         this.gate = options.gate;
         this.owner = options.owner;
+        this.ocrWorkers = options.ocrWorkers ?? PAGE_OCR_WORKERS;
         this.startSession();
         this.snapshot = this.project();
+    }
+
+    /**
+     * A recogniser's Worker given up as unconfirmed is shown at once, whenever it happens -- while the workspace is
+     * shown: from enter() to leave(), so a store that is made and never shown (React StrictMode's second) keeps nothing.
+     */
+    private watchOcr(): void {
+        this.stopWatchingOcr ??= this.ocrWorkers.subscribe(() => {
+            if (!this.left && this.ocrWorkers.releaseUnconfirmed !== this.snapshot.ocr.unavailable) this.publish();
+        });
     }
 
     // ---------------------------------------------------------------- React
@@ -342,6 +367,10 @@ export class DrawingSetStore {
             evidenceGeneration: this.evidenceGeneration,
             documentsUnavailable: this.owner.documentsUnavailable || this.gate.releaseUnconfirmed,
             previewEpoch: this.previewEpoch,
+            ocr: (() => {
+                const counts = this.ocrWorkers.counts();
+                return { unavailable: counts.releaseUnconfirmed, live: counts.live, slowestStartMs: counts.slowestStartMs };
+            })(),
         };
     }
 
@@ -425,6 +454,7 @@ export class DrawingSetStore {
 
     /** The workspace is shown (again). Coming back, the screen is shown what leave() ended, not what it was before. */
     enter(): void {
+        this.watchOcr();
         if (!this.left) return;
         this.left = false;
         this.publish();
@@ -433,6 +463,8 @@ export class DrawingSetStore {
     /** The workspace went away: end everything it started and close the preview. */
     leave(): void {
         this.left = true;
+        this.stopWatchingOcr?.();
+        this.stopWatchingOcr = null;
         this.sessionEpoch += 1;
         this.intakeEpoch += 1;
         this.abort('all');
@@ -781,6 +813,10 @@ export class DrawingSetStore {
         if (this.operation) {
             return { report: { kind: 'refused', refusal: { code: 'OPERATION_LOCKED', message: MESSAGES.OPERATION_LOCKED } }, settled: null };
         }
+        // A recogniser's Worker may still be running: no other is started until the page is reloaded (RV-39-02).
+        if (this.ocrWorkers.releaseUnconfirmed) {
+            return { report: { kind: 'refused', refusal: { code: 'OCR_RELEASE_UNCONFIRMED', message: MESSAGES.OCR_RELEASE_UNCONFIRMED } }, settled: null };
+        }
         const sessionEpoch = this.sessionEpoch;
         const current = (): boolean => !this.left && sessionEpoch === this.sessionEpoch && this.ledger === ledger;
         const controller = this.track('extraction');
@@ -803,7 +839,8 @@ export class DrawingSetStore {
                 fileFor: options.fileFor ? (sourceId) => options.fileFor!(sourceId, check.fileFor) : check.fileFor,
                 gate: this.gate,
                 signal: controller.signal,
-                createOcr: options.createOcr,
+                // The run's recogniser makes its Workers through this store's registry: every one is owned and ended.
+                createOcr: options.createOcr ?? (() => new GuardedRegisterOcr({ workers: this.ocrWorkers })),
                 chunkBytes: options.chunkBytes,
                 // Progress of a run that is no longer this session's, or was stopped, is never shown.
                 onProgress: (event) => {

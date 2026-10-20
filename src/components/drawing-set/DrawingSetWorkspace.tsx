@@ -14,7 +14,7 @@ import { uprightSize } from '../../utils/drawing-set/profile-pointer';
 import type { IntakeProgress } from '../../utils/drawing-set/source-intake';
 import { findProfile } from '../../utils/drawing-set/title-block-profiles';
 import type { StoreIntakeResult } from '../../utils/drawing-set/workspace-store';
-import { DrawingSetStore } from '../../utils/drawing-set/workspace-store';
+import { DrawingSetStore, OCR_RELEASE_UNCONFIRMED_MESSAGE } from '../../utils/drawing-set/workspace-store';
 import { GATE_MESSAGES } from '../../utils/drawing-set/pdf-document-gate';
 import { ConfirmationPanel } from './ConfirmationPanel';
 import { confirmationText } from './title-block-labels';
@@ -502,6 +502,9 @@ export const DrawingSetWorkspace: React.FC = () => {
             data-ds-gate-release-unconfirmed={String(store.gate.releaseUnconfirmed)}
             data-ds-operation={operation ? operation.phase : ''}
             data-ds-documents-unavailable={String(snapshot.documentsUnavailable)}
+            data-ds-ocr-unavailable={String(snapshot.ocr.unavailable)}
+            data-ds-ocr-live={snapshot.ocr.live}
+            data-ds-ocr-slowest-start-ms={snapshot.ocr.slowestStartMs}
         >
             {picker}
             <header className="ds-header">
@@ -558,6 +561,12 @@ export const DrawingSetWorkspace: React.FC = () => {
             {snapshot.documentsUnavailable && (
                 <div className="ds-confirm" role="alert" data-ds-release-unconfirmed-banner>
                     <span>{GATE_MESSAGES.RELEASE_UNCONFIRMED}</span>
+                </div>
+            )}
+
+            {snapshot.ocr.unavailable && (
+                <div className="ds-confirm" role="alert" data-ds-ocr-unconfirmed-banner>
+                    <span>{OCR_RELEASE_UNCONFIRMED_MESSAGE}</span>
                 </div>
             )}
 

@@ -115,6 +115,17 @@ export interface OcrEngineOptions {
      * with a value passes one, and that value reaches only its own worker.
      */
     cacheMethod?: OcrCacheMethod;
+    /**
+     * What makes the worker: tesseract.js's own `createWorker`, or one with its
+     * signature.
+     *
+     * Left undefined -- every existing caller -- it is `createWorker` itself,
+     * called with exactly the arguments it has always had. Only 図面管理's
+     * title-block recogniser passes one, so that it owns its Worker from the
+     * moment it is made (drawing-set/ocr-workers.ts); it reaches only that
+     * engine's worker.
+     */
+    createWorker?: typeof createWorker;
 }
 
 /**
@@ -132,6 +143,7 @@ export class OcrEngine {
     private readonly onPageProgress?: (progress: number) => void;
     private readonly pageSegMode?: string;
     private readonly cacheMethod?: OcrCacheMethod;
+    private readonly makeWorker: typeof createWorker;
 
     constructor(
         langs: string,
@@ -142,6 +154,7 @@ export class OcrEngine {
         this.onPageProgress = onPageProgress;
         this.pageSegMode = options.pageSegMode;
         this.cacheMethod = options.cacheMethod;
+        this.makeWorker = options.createWorker ?? createWorker;
     }
 
     get started(): boolean {
@@ -153,7 +166,7 @@ export class OcrEngine {
         try {
             // No cache method configured means no `cacheMethod` key at all --
             // the same options this call has always sent.
-            this.worker = await createWorker(this.langs, 1, {
+            this.worker = await this.makeWorker(this.langs, 1, {
                 ...TESSERACT_OPTIONS,
                 ...(this.cacheMethod === undefined ? {} : { cacheMethod: this.cacheMethod }),
                 logger: (message: { status: string; progress: number }) => {

@@ -44,7 +44,11 @@
                     c.peak = Math.max(c.peak, c.live);
                     if (this.__kind === 'ocr') {
                         const plan = ocrStart.plans.shift() ?? null;
-                        const record = { n: ocrStart.made.length + 1, plan, liveAtSpawn: c.live, held: [], thrown: [], released: false, worker: this };
+                        let channel = null;
+                        try {
+                            channel = new URLSearchParams(new URL(String(url), location.href).hash.slice(1)).get('channel');
+                        } catch { /* not a URL the app made */ }
+                        const record = { n: ocrStart.made.length + 1, plan, channel, liveAtSpawn: c.live, held: [], thrown: [], released: false, worker: this, heldAcks: [], ackReleased: false };
                         if (plan) plan.record = record;
                         ocrStart.made.push(record);
                         ocrStart.log.push(`${record.n}:spawned`);
@@ -104,6 +108,55 @@
             };
             window.__workers = counts;
             window.__ocrStart = ocrStart;
+            // RV-39-02 (HG-RV39-OCR-01): a planned Worker's "closed", as the page hears it on its channel, can be held
+            // (and given later, or never) -- the Worker itself has closed; only the page's knowing it is withheld.
+            // And, for a Worker planned so, the page's first "close" can be lost (as one sent before the Worker had
+            // joined its channel would be), and its "alive" heard only when the test says.
+            const NativeChannel = window.BroadcastChannel;
+            window.BroadcastChannel = class extends NativeChannel {
+                postMessage(message) {
+                    const record = ocrStart.made.find((r) => r.channel === this.name);
+                    if (record?.plan?.dropFirstClose && message?.type === 'close' && !record.closeDropped) {
+                        record.closeDropped = true;
+                        ocrStart.log.push(`${record.n}:close-lost`);
+                        return;
+                    }
+                    super.postMessage(message);
+                }
+                get onmessage() {
+                    return super.onmessage;
+                }
+                set onmessage(handler) {
+                    const name = this.name;
+                    if (typeof handler !== 'function') {
+                        super.onmessage = handler;
+                        return;
+                    }
+                    super.onmessage = (event) => {
+                        const record = ocrStart.made.find((r) => r.channel === name);
+                        if (record?.plan?.holdAlive && event.data?.type === 'alive' && !record.aliveReleased) {
+                            (record.heldAlive ??= []).push(event);
+                            record.releaseAlive = () => {
+                                record.aliveReleased = true;
+                                for (const held of record.heldAlive.splice(0)) handler.call(this, held);
+                            };
+                            return;
+                        }
+                        if (record && event.data?.type === 'closed') {
+                            ocrStart.log.push(`${record.n}:closed-heard`);
+                            if (record.plan?.holdClosed && !record.ackReleased) {
+                                record.heldAcks.push(event);
+                                record.releaseAck = () => {
+                                    record.ackReleased = true;
+                                    for (const held of record.heldAcks.splice(0)) handler.call(this, held);
+                                };
+                                return;
+                            }
+                        }
+                        handler.call(this, event);
+                    };
+                }
+            };
             const canvases = { made: 0, list: [] };
             const create = Document.prototype.createElement;
             Document.prototype.createElement = function (name, ...rest) {
@@ -172,6 +225,10 @@
         import { verifyHeldFile, RuntimeBindingLedger, observationCurrency, currencyLabel } from '/src/utils/drawing-set/currency.ts';
         import { CROP_LIMITS, planCrop } from '/src/utils/drawing-set/crop-service.ts';
         import { GuardedRegisterOcr } from '/src/utils/drawing-set/register-extraction.ts';
+        // The OCR Worker registry (RV-39-02), loaded by name so the same harness also runs against a tree that has
+        // none -- the before-evidence -- and says so instead of failing to load.
+        const OCR_WORKERS_MODULE = '/src/utils/drawing-set/ocr-workers.ts';
+        const ocrWorkersModule = await import(/* @vite-ignore */ OCR_WORKERS_MODULE).catch(() => null);
         import { DrawingSetStore, EvidenceHandle } from '/src/utils/drawing-set/workspace-store.ts';
         import { ReadOnlySheetViewer } from '/src/components/drawing-set/ReadOnlySheetViewer.tsx';
         import { TitleBlockPanel } from '/src/components/drawing-set/TitleBlockPanel.tsx';
@@ -866,7 +923,7 @@
         /** A store on its own gate and owner (with the owner's test seams), with p2a sources read and observed. */
         async function observedStore(options = {}) {
             const r = rig(options.pages ?? null);
-            const store = new DrawingSetStore({ gate: r.gate, owner: r.owner });
+            const store = new DrawingSetStore({ gate: r.gate, owner: r.owner, ...(options.ocrWorkers ? { ocrWorkers: options.ocrWorkers } : {}) });
             store.enter();
             const register = await fixture(P2A, 'p2a-register');
             const geometry = await fixture(P2A, 'p2a-geometry');
@@ -1500,22 +1557,44 @@
             return plainly(out);
         }
 
-        // RV-39-02: extraction cancelled while its recogniser's Worker is still starting.
-        // Each scenario plans the next OCR Worker's start (window.__ocrStart) and drives the screen's way in,
-        // startExtraction(), or extract() with the default recogniser captured to read who holds what.
-        async function ocrInit() {
-            const out = {};
+        // RV-39-02 / HG-RV39-OCR-01: extraction stopped, or failing, while its recogniser's Worker starts.
+        // Each scenario plans the next OCR Worker's start (window.__ocrStart: one of tesseract.js's answers held,
+        // failed or never given; the Worker's "closed" withheld from the page) and drives the screen's way in,
+        // startExtraction(), on a store with its own registry whose deadlines the test fires by hand. A Worker is
+        // gone only when the browser itself no longer lists it (window.__browserOcrWorkers, asked of the Node side):
+        // neither the app's own record of it nor the harness ending it counts. The harness ends a planned Worker
+        // only after everything about it has been read.
+        async function ocrInit(which) {
+            const out = { registryLoaded: Boolean(ocrWorkersModule) };
             const ocrStart = window.__ocrStart;
             const exportsBefore = { ...window.__exports };
             const logBefore = ocrStart.log.length;
-            const live = () => window.__workers.ocr.live;
+            const Registry = ocrWorkersModule?.OcrWorkerRegistry ?? null;
+            const START_MS = ocrWorkersModule?.OCR_START_DEADLINE_MS ?? null;
+            const CLOSE_MS = ocrWorkersModule?.OCR_CLOSE_DEADLINE_MS ?? null;
+            out.deadlines = { start: START_MS, close: CLOSE_MS };
+            const browserOcr = async () => (typeof window.__browserOcrWorkers === 'function' ? window.__browserOcrWorkers() : -1);
+            // The browser drops a Worker from its list a moment after it ends; waits for that, or gives the count it has.
+            const browserSettles = async (n) => {
+                const t0 = performance.now();
+                for (; ;) {
+                    const count = await browserOcr();
+                    if (count === n || performance.now() - t0 > 20000) return count;
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+            };
+            // A run that may never end: waits for it within a bound, and says whether it ended.
+            const within = (promise, ms) => Promise.race([
+                promise.then((value) => ({ settled: true, value }), (error) => ({ settled: true, error: String(error?.message ?? error) })),
+                new Promise((resolve) => setTimeout(() => resolve({ settled: false }), ms)),
+            ]);
             const planNext = (plan) => {
                 ocrStart.plans.push(plan);
                 return plan;
             };
             const shown = (store) => {
                 const last = store.getSnapshot().lastExtraction;
-                return last ? { runId: last.runId, kind: last.kind, outcome: last.outcome, committed: last.committed } : null;
+                return last ? { runId: last.runId, kind: last.kind, outcome: last.outcome, committed: last.committed, ocrFailed: last.ocrFailed, code: last.refusal?.code ?? null } : null;
             };
             const rasterOf = (s) => {
                 const reg = s.store.currentSet().sheets.filter((x) => x.sourceId === s.sheet(s.register1).sourceId && x.retiredAt === null).sort((a, b) => a.pageNumber - b.pageNumber);
@@ -1525,7 +1604,7 @@
                 return raster;
             };
             const observationOf = (s, id) => {
-                const o = s.sheet(id).observation;
+                const o = s.sheet(id)?.observation;
                 return o ? { runId: o.runId, status: o.status, sources: FIELDS.map((n) => o.fields[n].source) } : null;
             };
             const heldIn = (plan, what) => until(() => (plan.record?.held.length ?? 0) > 0, what, 60000);
@@ -1551,142 +1630,309 @@
                 host.remove();
                 return said;
             };
-
-            // A. Held in its start (initialize not yet answered), cancelled; the next extraction asked for before
-            //    the old Worker has ended; then the old start completes.
-            {
-                const s = await observedStore();
-                const { store } = s;
-                const raster = rasterOf(s);
-                const mark = ocrStart.log.length;
-                const plan = planNext({ action: 'initialize' });
-                const first = store.startExtraction([raster]);
-                await heldIn(plan, 'the recogniser held in its start');
-                const atCancel = { live: live(), phase: store.getSnapshot().operation?.phase ?? null };
-                store.cancelExtraction();
-                const firstSummary = await first;
-                const afterCancel = { live: live(), operation: plainly(store.getSnapshot().operation), shown: shown(store), extractionActive: s.r.gate.extractionActive, oldEnded: !!plan.record.worker.__ended, panel: await panelSays(store) };
-                const second = await store.startExtraction([raster]);
-                const fresh = ocrStart.made.at(-1);
-                const afterSecond = { live: live(), newLiveAtSpawn: fresh.liveAtSpawn, oldEnded: !!plan.record.worker.__ended, shown: shown(store), observation: observationOf(s, raster), version: store.getSnapshot().version };
-                plan.record.release();
-                await until(() => plan.record.worker.__ended, 'the old Worker ended once its start completed', 60000);
-                await tick();
-                await tick();
-                const afterOld = { live: live(), shown: shown(store), observation: observationOf(s, raster), version: store.getSnapshot().version };
-                afterOld.panel = await panelSays(store);
-                const log = logFrom(mark);
-                out.A = {
-                    atCancel, firstSummary: { runId: firstSummary.runId, outcome: firstSummary.outcome }, afterCancel,
-                    second: { runId: second.runId, outcome: second.outcome }, afterSecond, afterOld, log,
-                    old: plan.record.n, fresh: fresh.n,
-                    freshRecognisedBeforeOldEnded: log.indexOf(`${fresh.n}:recognize:resolve`) >= 0 && log.indexOf(`${fresh.n}:recognize:resolve`) < log.indexOf(`${plan.record.n}:terminated`),
-                    oldRecognised: log.some((l) => l.startsWith(`${plan.record.n}:recognize`)),
+            const manualClock = () => {
+                const armed = [];
+                return {
+                    armed,
+                    arm: (ms, expire) => {
+                        const d = { ms, expire, disarmed: false, fired: false };
+                        armed.push(d);
+                        return () => { d.disarmed = true; };
+                    },
+                    fire: (ms) => {
+                        let n = 0;
+                        for (const d of armed) {
+                            if (d.ms === ms && !d.disarmed && !d.fired) {
+                                d.fired = true;
+                                n += 1;
+                                d.expire();
+                            }
+                        }
+                        return n;
+                    },
+                    // Every deadline ever armed, disarmed ones included: one that fires late must change nothing.
+                    fireAll: () => {
+                        let n = 0;
+                        for (const d of armed) {
+                            if (!d.fired) {
+                                d.fired = true;
+                                n += 1;
+                                d.expire();
+                            }
+                        }
+                        return n;
+                    },
+                    live: (ms) => armed.filter((d) => d.ms === ms && !d.disarmed && !d.fired).length,
                 };
-                await s.dispose();
-            }
-            // B. Held in its start (load not yet answered), cancelled; then the start fails (createWorker rejects).
-            {
-                const s = await observedStore();
-                const { store } = s;
+            };
+            // A store on its own registry; every snapshot it publishes is kept with the registry's Workers at that moment.
+            const setup = async () => {
+                const clock = manualClock();
+                const registry = Registry ? new Registry({ deadline: clock.arm }) : null;
+                const s = await observedStore(registry ? { ocrWorkers: registry } : {});
                 const raster = rasterOf(s);
+                const trail = [];
+                const stopTrail = s.store.subscribe(() => {
+                    const snap = s.store.getSnapshot();
+                    trail.push({ phase: snap.operation?.phase ?? null, live: registry ? registry.live : null, states: registry ? registry.records().map((r) => r.state) : null });
+                });
+                const transitions = [];
+                const stopRegistry = registry ? registry.subscribe(() => {
+                    const line = registry.records().map((r) => `${r.n}:${r.state}`).join(',');
+                    if (transitions.at(-1) !== line) transitions.push(line);
+                }) : () => { };
                 const mark = ocrStart.log.length;
-                let ocr = null;
-                const plan = planNext({ action: 'load' });
-                const run = store.extract({ sheetIds: [raster] }, { createOcr: () => (ocr = new GuardedRegisterOcr()) });
-                await heldIn(plan, 'the recogniser held in its load');
-                store.cancelExtraction();
-                const report = await run;
-                const afterCancel = { live: live(), operation: plainly(store.getSnapshot().operation), recogniser: ocr.counts(), oldEnded: !!plan.record.worker.__ended, outcome: report.report.outcome, version: store.getSnapshot().version };
-                plan.record.fail('simulated: the recogniser could not load');
-                await until(() => plan.record.thrown.length > 0, 'the failure answered', 60000);
-                await tick();
-                await tick();
-                const afterFail = { live: live(), oldEnded: !!plan.record.worker.__ended, recogniser: ocr.counts(), thrown: plan.record.thrown.length, operation: plainly(store.getSnapshot().operation), version: store.getSnapshot().version };
-                const next = await store.startExtraction([raster]);
-                const afterNext = { live: live(), newLiveAtSpawn: ocrStart.made.at(-1).liveAtSpawn, shown: shown(store), outcome: next.outcome };
-                out.B = { afterCancel, afterFail, afterNext, log: logFrom(mark) };
-                // Nothing in the app holds this Worker any more; the harness ends it so later sections start clean.
-                plan.record.worker.terminate();
-                await s.dispose();
-            }
-            // C. The language data refused (loadLanguage rejected): tesseract.js never settles the start.
-            //    Not cancelled at first -- what the screen shows -- then cancelled.
-            {
-                const s = await observedStore();
-                const { store } = s;
-                const raster = rasterOf(s);
-                const mark = ocrStart.log.length;
-                const plan = planNext({ action: 'loadLanguage', mode: 'fail', message: 'simulated: the language data could not be fetched' });
-                let settled = false;
-                const run = store.startExtraction([raster]);
-                run.then(() => { settled = true; }, () => { settled = true; });
-                await until(() => plan.record?.released, 'the language data refused', 60000);
-                for (let i = 0; i < 50; i += 1) await tick();
-                const hanging = { settled, operation: plainly(store.getSnapshot().operation), shown: shown(store), live: live(), thrown: plan.record.thrown.length, panel: await panelSays(store) };
-                store.cancelExtraction();
-                const summary = await run;
-                const afterCancel = { outcome: summary.outcome, shown: shown(store), operation: plainly(store.getSnapshot().operation), live: live(), oldEnded: !!plan.record.worker.__ended, panel: await panelSays(store) };
-                out.C = { hanging, afterCancel, log: logFrom(mark) };
-                plan.record.worker.terminate();
-                await s.dispose();
-            }
-            // D. Held in its start and never answered (a stall), cancelled.
-            {
-                const s = await observedStore();
-                const { store } = s;
-                const raster = rasterOf(s);
+                return {
+                    s, store: s.store, raster, clock, registry, trail, transitions, mark,
+                    // At most this many of the registry's Workers were ever not known ended at the same time.
+                    concurrent: () => Math.max(0, ...transitions.map((line) => line.split(',').filter((x) => /:(starting|started|closing)$/.test(x)).length)),
+                    // The lock as the screen saw it let go after a cancel: what the Workers were at that moment.
+                    unlockAfterCancel: () => {
+                        const i = trail.findIndex((e, k) => k > 0 && e.phase === null && trail[k - 1].phase === 'cancelling');
+                        return i < 0 ? null : trail[i];
+                    },
+                    counts: () => (registry ? registry.counts() : null),
+                    records: () => (registry ? registry.records() : null),
+                    done: async () => {
+                        stopTrail();
+                        stopRegistry();
+                        await s.dispose();
+                    },
+                };
+            };
+
+            // A. Cancelled while initialising; the next extraction asked for at once; the old start's answers given afterwards.
+            if (which === 'A') {
+                const t = await setup();
                 const plan = planNext({ action: 'initialize' });
-                const run = store.startExtraction([raster]);
+                const first = t.store.startExtraction([t.raster]);
                 await heldIn(plan, 'the recogniser held in its start');
-                store.cancelExtraction();
-                const summary = await run;
-                for (let i = 0; i < 50; i += 1) await tick();
-                out.D = { outcome: summary.outcome, shown: shown(store), operation: plainly(store.getSnapshot().operation), live: live(), oldEnded: !!plan.record.worker.__ended, panel: await panelSays(store) };
+                const atCancel = { browser: await browserOcr(), phase: t.store.getSnapshot().operation?.phase ?? null, records: t.records() };
+                t.store.cancelExtraction();
+                const firstSummary = await first;
+                const unlock = t.unlockAfterCancel();
+                const afterCancel = { browser: await browserSettles(0), operation: plainly(t.store.getSnapshot().operation), shown: shown(t.store), extractionActive: t.s.r.gate.extractionActive, counts: t.counts(), records: t.records(), panel: await panelSays(t.store) };
+                const second = await t.store.startExtraction([t.raster]);
+                const afterSecond = { browser: await browserSettles(0), shown: shown(t.store), observation: observationOf(t.s, t.raster), version: t.store.getSnapshot().version, counts: t.counts(), startDeadlinesLive: START_MS === null ? null : t.clock.live(START_MS) };
+                // The old Worker's held answers, given now: to a Worker that has closed itself.
+                plan.record.release();
+                await tick();
+                await tick();
+                const afterOld = { browser: await browserSettles(0), shown: shown(t.store), observation: observationOf(t.s, t.raster), version: t.store.getSnapshot().version, counts: t.counts() };
+                // H. Every deadline armed so far fired late, disarmed ones included: nothing moves.
+                const fired = t.clock.fireAll();
+                await tick();
+                const afterLateDeadlines = { fired, counts: t.counts(), shown: shown(t.store), version: t.store.getSnapshot().version, unavailable: t.store.getSnapshot().ocr?.unavailable ?? null };
+                out.A = {
+                    atCancel, firstSummary: { runId: firstSummary.runId, outcome: firstSummary.outcome }, unlock, afterCancel,
+                    second: { runId: second.runId, outcome: second.outcome }, afterSecond, afterOld, afterLateDeadlines,
+                    concurrent: t.concurrent(), transitions: t.transitions, log: logFrom(t.mark),
+                };
                 plan.record.worker.terminate();
-                await s.dispose();
+                await t.done();
             }
-            // E. The start fails at once (load rejected), not cancelled: what the run and the screen say.
-            {
-                const s = await observedStore();
-                const { store } = s;
-                const raster = rasterOf(s);
+            // B. Cancelled while loading; then the load answered as failed (createWorker rejects): nothing moves, nothing left.
+            if (which === 'B') {
+                const t = await setup();
+                const plan = planNext({ action: 'load' });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its load');
+                t.store.cancelExtraction();
+                const summary = await run;
+                const afterCancel = { browser: await browserSettles(0), operation: plainly(t.store.getSnapshot().operation), outcome: summary.outcome, version: t.store.getSnapshot().version, counts: t.counts(), unlock: t.unlockAfterCancel() };
+                plan.record.fail('simulated: the recogniser could not load');
+                await tick();
+                await tick();
+                const afterFail = { browser: await browserSettles(0), version: t.store.getSnapshot().version, counts: t.counts(), thrownInHandler: plan.record.thrown.length };
+                const next = await t.store.startExtraction([t.raster]);
+                const afterNext = { browser: await browserSettles(0), outcome: next.outcome, shown: shown(t.store), counts: t.counts() };
+                out.B = { afterCancel, afterFail, afterNext, concurrent: t.concurrent(), log: logFrom(t.mark) };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // C. The language data refused (loadLanguage rejected; tesseract.js never settles its createWorker), not cancelled.
+            if (which === 'C') {
+                const t = await setup();
+                const plan = planNext({ action: 'loadLanguage', mode: 'fail', message: 'simulated: the language data could not be fetched' });
+                const run = t.store.startExtraction([t.raster]);
+                const ended = await within(run, 30000);
+                const atEnd = { settled: ended.settled, outcome: ended.value?.outcome ?? null, ocrFailed: ended.value?.ocrFailed ?? null, operation: plainly(t.store.getSnapshot().operation), browser: await browserSettles(0), counts: t.counts(), thrownInHandler: plan.record?.thrown.length ?? null, observation: observationOf(t.s, t.raster), panel: await panelSays(t.store) };
+                if (!ended.settled) {
+                    t.store.cancelExtraction();
+                    await within(run, 30000);
+                }
+                out.C = { atEnd, log: logFrom(t.mark) };
+                plan.record?.worker.terminate();
+                await t.done();
+            }
+            // D1. A start that never answers, cancelled: ended in finite time.
+            if (which === 'D1') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize' });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                t.store.cancelExtraction();
+                const ended = await within(run, 30000);
+                out.D1 = { settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), browser: await browserSettles(0), counts: t.counts(), records: t.records(), unlock: t.unlockAfterCancel(), panel: await panelSays(t.store) };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // D2. A start that never answers, not cancelled: its start deadline taken as a failure; the Worker closed; the run ends.
+            if (which === 'D2') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize' });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                const fired = START_MS === null ? 0 : t.clock.fire(START_MS);
+                const ended = await within(run, fired ? 30000 : 3000);
+                out.D2 = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, ocrFailed: ended.value?.ocrFailed ?? null, observation: observationOf(t.s, t.raster),
+                    browser: await browserSettles(0), counts: t.counts(), records: t.records(), panel: await panelSays(t.store),
+                };
+                if (!ended.settled) {
+                    t.store.cancelExtraction();
+                    await within(run, 30000);
+                }
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // E. The recogniser cannot load, not cancelled: OCR_FAILED shown, the Worker gone.
+            if (which === 'E') {
+                const t = await setup();
                 const plan = planNext({ action: 'load', mode: 'fail', message: 'simulated: the recogniser could not load' });
-                const summary = await store.startExtraction([raster]);
+                const summary = await t.store.startExtraction([t.raster]);
                 await tick();
                 out.E = {
-                    outcome: summary.outcome, committed: summary.committed, excluded: summary.excluded, shown: shown(store), observation: observationOf(s, raster),
-                    currency: currencyLabel(store.currencyOf(s.sheet(raster)).observation), live: live(), oldEnded: !!plan.record.worker.__ended,
-                    ocrFailed: summary.ocrFailed, panel: await panelSays(store),
+                    outcome: summary.outcome, ocrFailed: summary.ocrFailed, observation: observationOf(t.s, t.raster),
+                    browser: await browserSettles(0), counts: t.counts(), thrownInHandler: plan.record.thrown.length, panel: await panelSays(t.store),
                 };
                 plan.record.worker.terminate();
-                await s.dispose();
+                await t.done();
             }
-            // F. Every start fails (load rejected), every register page assigned, not cancelled: one Worker per page that needs OCR.
-            {
-                const s = await observedStore();
-                const { store } = s;
-                const reg = store.currentSet().sheets.filter((x) => x.sourceId === s.sheet(s.register1).sourceId && x.retiredAt === null).map((x) => x.id);
-                store.assignProfile(reg, s.profile.id, { replace: true });
+            // F. Every start would fail; every register page assigned: one Worker for the run, not one per page.
+            if (which === 'F') {
+                const t = await setup();
+                const reg = t.store.currentSet().sheets.filter((x) => x.sourceId === t.s.sheet(t.s.register1).sourceId && x.retiredAt === null).map((x) => x.id);
+                t.store.assignProfile(reg, t.s.profile.id, { replace: true });
                 const madeBefore = ocrStart.made.length;
-                const plans = Array.from({ length: 32 }, () => planNext({ action: 'load', mode: 'fail', message: 'simulated: the recogniser could not load' }));
-                const summary = await store.startExtraction(reg);
+                for (let i = 0; i < 32; i += 1) planNext({ action: 'load', mode: 'fail', message: 'simulated: the recogniser could not load' });
+                const summary = await t.store.startExtraction(reg);
                 await tick();
                 const made = ocrStart.made.slice(madeBefore);
-                const ocrFailed = reg.filter((id) => s.sheet(id).observation?.status === 'OCR_FAILED').length;
-                out.F = { sheets: reg.length, outcome: summary.outcome, committed: summary.committed, ocrFailed, spawned: made.length, live: live(), ended: made.filter((r) => r.worker.__ended).length };
                 ocrStart.plans.splice(0);
+                out.F = {
+                    sheets: reg.length, outcome: summary.outcome, ocrFailed: summary.ocrFailed, ocrFailedSheets: reg.filter((id) => observationOf(t.s, id)?.status === 'OCR_FAILED').length,
+                    spawned: made.length, browser: await browserSettles(0), counts: t.counts(),
+                };
                 for (const r of made) r.worker.terminate();
-                void plans;
-                await s.dispose();
+                await t.done();
             }
-            // The recogniser's own input: each recognition hands tesseract.js one data URL of the region (the
-            // existing OCR engine). Counted so the privacy check below can tell them from any other export.
+            // G. Told to close, the Worker's "closed" never reaches the page: the lock waits for its deadline; then the
+            //    page's OCR fails closed, stays so when the answer comes late, and only a new registry (a reload) reads again.
+            if (which === 'G') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize', holdClosed: true });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                t.store.cancelExtraction();
+                // (A tree without the registry has no channel: nothing to wait for, and the checks below say what it did.)
+                if (Registry) await until(() => (plan.record.heldAcks?.length ?? 0) > 0, 'the Worker said closed (withheld from the page)', 30000);
+                await tick();
+                const whileUnheard = { phase: t.store.getSnapshot().operation?.phase ?? null, rename: (() => { const r = t.store.renameProfile(t.s.profile.id, 'G'); return r.ok ? 'ok' : r.refusal.code; })(), closeDeadlinesLive: CLOSE_MS === null ? null : t.clock.live(CLOSE_MS), counts: t.counts() };
+                const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                const ended = await within(run, 30000);
+                const afterDeadline = {
+                    fired, settled: ended.settled, outcome: ended.value?.outcome ?? null, operation: plainly(t.store.getSnapshot().operation), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null,
+                    counts: t.counts(), records: t.records(),
+                };
+                const refused = await t.store.startExtraction([t.raster]);
+                const refusedView = { kind: refused.kind, code: refused.refusal?.code ?? null, panel: await panelSays(t.store) };
+                plan.record.releaseAck?.();
+                await tick();
+                const afterLateAnswer = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, again: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
+                await t.done();
+                // What a reload gives: a registry of its own.
+                const fresh = await setup();
+                const reloaded = await fresh.store.startExtraction([fresh.raster]);
+                out.G = { whileUnheard, afterDeadline, refused: refusedView, afterLateAnswer, reloaded: { outcome: reloaded.outcome, browser: await browserSettles(0), counts: fresh.counts() } };
+                plan.record.worker.terminate();
+                await fresh.done();
+            }
+            // I. Cancelled, then a new Drawing Set (or leaving and entering again) while the old Worker's "closed" is not yet
+            //    heard: the old run still holds the extraction lease, so nothing new reads; once heard, the next run does --
+            //    and at no moment are two of the registry's Workers not known ended.
+            if (which === 'I') for (const how of ['reset', 'leave']) {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize', holdClosed: true });
+                const old = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                t.store.cancelExtraction();
+                // (A tree without the registry has no channel: nothing to wait for, and the checks below say what it did.)
+                if (Registry) await until(() => (plan.record.heldAcks?.length ?? 0) > 0, 'the Worker said closed (withheld from the page)', 30000);
+                if (how === 'reset') t.store.reset();
+                else {
+                    t.store.leave();
+                    t.store.enter();
+                }
+                // Asked at once: the new session's intake, or the same session's next reading.
+                let early = null;
+                const tooSoon = how === 'reset'
+                    ? await t.store.intake(t.s.files.register).then((x) => { early = x; return x.kind === 'refused' ? x.refusal.code : x.kind; })
+                    : await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome);
+                const whileOldCloses = { tooSoon, counts: t.counts(), operation: plainly(t.store.getSnapshot().operation) };
+                plan.record.releaseAck?.();
+                const oldEnded = await within(old, 30000);
+                let target = t.raster;
+                if (how === 'reset') {
+                    const accepted = early?.kind === 'accepted' ? early : await t.store.intake(t.s.files.register);
+                    if (accepted.kind !== 'accepted') throw new Error(`intake after reset: ${accepted.kind}`);
+                    const profile = t.store.createProfile({ name: 'P', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: t.s.profile.fields });
+                    if (!profile.ok) throw new Error(`profile after reset: ${profile.refusal.code}`);
+                    target = accepted.sheets.map((x) => x.id)[1];
+                    const assigned = t.store.assignProfile([target], profile.profile.id);
+                    if (!assigned.ok) throw new Error(`assign after reset: ${assigned.refusal.code}`);
+                }
+                const next = await t.store.startExtraction([target]);
+                out[`I_${how}`] = {
+                    whileOldCloses, oldSettled: oldEnded.settled, next: { outcome: next.outcome, refusal: next.refusal?.code ?? null }, shown: shown(t.store),
+                    browser: await browserSettles(0), counts: t.counts(), concurrent: t.concurrent(), transitions: t.transitions,
+                };
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // J. Told to close before the page has heard the Worker is alive, and that first "close" lost (as one sent
+            //    before the Worker joined its channel is): once "alive" is heard, it is asked again, and ends.
+            if (which === 'J') {
+                const t = await setup();
+                const plan = planNext({ action: 'initialize', holdAlive: true, dropFirstClose: true });
+                const run = t.store.startExtraction([t.raster]);
+                await heldIn(plan, 'the recogniser held in its start');
+                const aliveWithheld = plan.record.heldAlive?.length ?? 0;
+                t.store.cancelExtraction();
+                await tick();
+                await tick();
+                const beforeAlive = { phase: t.store.getSnapshot().operation?.phase ?? null, closeLost: Boolean(plan.record.closeDropped), browser: await browserOcr(), counts: t.counts() };
+                plan.record.releaseAlive?.();
+                const ended = await within(run, 30000);
+                out.J = {
+                    aliveWithheld, beforeAlive, settled: ended.settled, outcome: ended.value?.outcome ?? null, unlock: t.unlockAfterCancel(),
+                    browser: await browserSettles(0), counts: t.counts(), records: t.records(), log: logFrom(t.mark),
+                };
+                if (!ended.settled) {
+                    if (CLOSE_MS !== null) t.clock.fire(CLOSE_MS);
+                    await within(run, 30000);
+                }
+                plan.record.worker.terminate();
+                await t.done();
+            }
+            // The recogniser's own input: each recognition hands tesseract.js one data URL of the region (the existing
+            // OCR engine). Counted so the privacy check can tell them from any other export.
             out.recogniser = {
                 recognitions: ocrStart.log.slice(logBefore).filter((l) => l.endsWith(':recognize:resolve')).length,
                 toDataURL: window.__exports.toDataURL - exportsBefore.toDataURL,
                 toBlob: window.__exports.toBlob - exportsBefore.toBlob,
             };
+            out.browserAtEnd = await browserSettles(0);
             out.workers = workers();
             return plainly(out);
         }
