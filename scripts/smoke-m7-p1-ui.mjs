@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { preview } from 'vite';
 import { runP2b2UiChecks } from './smoke-m7-p2b2-ui-checks.mjs';
+import { runAdvVerifyUiChecks } from './smoke-m7-adv-verify-ui-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5215;
@@ -556,6 +557,10 @@ async function main() {
 
         await runP2b2UiChecks({ page, ROOT, check, probe, note, section, settle, upload, waitIdle, root, viewer, p2aFixture, external });
         check('M7-P2-B2: no PDF.js document left once the Drawing Set is new again', await pdfDocumentsSettle(0) === 0, String(pdfDocuments()));
+
+        // M7-ADV-VERIFY-01: the screen's half of the ADV-37-01 verification (test only). Its FINDINGs are reported, not gates.
+        await runAdvVerifyUiChecks({ page, ROOT, check, probe, note, section, settle, upload, waitIdle, root, viewer, p2aFixture, external });
+        check('M7-ADV-VERIFY: no PDF.js document left once the Drawing Set is new again', await pdfDocumentsSettle(0) === 0, String(pdfDocuments()));
 
         section('10. The other tools');
         await upload(fixture('p1-second-c'));

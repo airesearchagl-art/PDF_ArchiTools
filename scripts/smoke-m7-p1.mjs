@@ -46,6 +46,7 @@ import { createServer } from 'vite';
 import { runP2aChecks } from './smoke-m7-p2a-checks.mjs';
 import { runP2b1Checks } from './smoke-m7-p2b1-checks.mjs';
 import { runP2b2Checks } from './smoke-m7-p2b2-checks.mjs';
+import { runAdvVerifyChecks } from './smoke-m7-adv-verify-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5214;
@@ -594,6 +595,9 @@ async function main() {
         await runP2b1Checks({ page, ROOT, ORIGIN, check, probe, note, section, assetRequests });
 
         await runP2b2Checks({ page, ROOT, ORIGIN, check, probe, note, section });
+
+        // M7-ADV-VERIFY-01: the ADV-37-01 / 03 verification (test only). Its FINDINGs are reported, not gates.
+        await runAdvVerifyChecks({ page, ROOT, ORIGIN, check, probe, note, section });
 
         section('43. The whole run, P1, P2-A, P2-B1 and P2-B2');
         check('no request left the machine', external.length === 0, external.join(', '));

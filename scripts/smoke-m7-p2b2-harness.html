@@ -58,6 +58,8 @@
                 postMessage(message, ...rest) {
                     // Every job the page asks of a planned or unplanned OCR Worker, answered or not.
                     if (this.__ocr && message?.action) ocrStart.log.push(`${this.__ocr.n}:${message.action}:asked`);
+                    // M7-ADV-VERIFY: when each job was asked, on the page's clock.
+                    if (this.__ocr && message?.action) (this.__ocr.asked ??= []).push({ action: message.action, at: performance.now() });
                     return super.postMessage(message, ...rest);
                 }
                 get onmessage() {
@@ -90,6 +92,10 @@
                     };
                     super.onmessage = (event) => {
                         const data = event.data;
+                        // M7-ADV-VERIFY: what the Worker itself says while it works -- tesseract.js's progress reports
+                        // ('recognizing text' 0..1) -- and when each job was answered, on the page's clock. Observation only.
+                        if (data?.status === 'progress') (record.progress ??= []).push({ action: data.action ?? null, status: data.data?.status ?? null, p: data.data?.progress ?? null, at: performance.now() });
+                        if (data?.status === 'resolve' || data?.status === 'reject') (record.answered ??= []).push({ action: data.action, status: data.status, at: performance.now() });
                         if (plan && !record.released && data?.action === plan.action && data.status === 'resolve') {
                             if (plan.mode === 'fail') {
                                 record.released = true;
@@ -119,6 +125,11 @@
             };
             window.__workers = counts;
             window.__ocrStart = ocrStart;
+            // M7-ADV-VERIFY: anything thrown or rejected that nobody handled, with when.
+            const faults = { errors: [], rejections: [] };
+            window.addEventListener('error', (e) => faults.errors.push({ at: performance.now(), message: String(e.message ?? e.error ?? e) }));
+            window.addEventListener('unhandledrejection', (e) => faults.rejections.push({ at: performance.now(), message: String(e.reason?.message ?? e.reason) }));
+            window.__faults = faults;
             // RV-39-02 (HG-RV39-OCR-01): a planned Worker's "closed", as the page hears it on its channel, can be held
             // (and given later, or never) -- the Worker itself has closed; only the page's knowing it is withheld.
             // And, for a Worker planned so, the page's first "close" can be lost (as one sent before the Worker had
@@ -2052,6 +2063,305 @@
                 plan.record?.worker.terminate();
                 await t.done();
             }
+            // ------------------------------------------------------------------
+            // M7-ADV-VERIFY-01 (ADV-37-01 / ADV-37-03 verification; test only, no product change).
+            // Real recogniser Workers, real recognition. Every time below is on the page's clock (performance.now()).
+            // ------------------------------------------------------------------
+            const advNow = () => performance.now();
+            const advRound = (x) => (x === null || x === undefined ? null : Math.round(x * 10) / 10);
+            // The Workers this run made, by their order in the page's own list.
+            const advMadeSince = (n0) => ocrStart.made.slice(n0);
+            const advAsked = (r, action) => (r.asked ?? []).filter((a) => a.action === action);
+            const advAnswered = (r, action) => (r.answered ?? []).filter((a) => a.action === action);
+            const advRecognising = (r, since) => (r.progress ?? []).filter((e) => e.status === 'recognizing text' && e.at >= since && e.p !== null && e.p > 0 && e.p < 1);
+            // A recognition truly under way in a Worker of this run: asked, unanswered, and the Worker itself
+            // has since reported recognising (0 < progress < 1). Null until then.
+            const advInRecognition = (n0) => {
+                for (const r of advMadeSince(n0)) {
+                    const asked = advAsked(r, 'recognize');
+                    const answered = advAnswered(r, 'recognize');
+                    if (asked.length === 0 || answered.length >= asked.length) continue;
+                    const last = asked[asked.length - 1];
+                    const progress = advRecognising(r, last.at);
+                    if (progress.length > 0) return { record: r, askedAt: last.at, progress, recognitionIndex: asked.length };
+                }
+                return null;
+            };
+            // Canvases made since a mark, with their bitmap size now.
+            const advCanvasMark = () => window.__canvases.made;
+            const advCanvasesSince = (made0) => {
+                const n = Math.min(window.__canvases.made - made0, window.__canvases.list.length);
+                return n > 0 ? window.__canvases.list.slice(-n) : [];
+            };
+            const advBitmaps = (list) => list.map((c) => ({ width: c.width, height: c.height }));
+            // The store's lock, the registry's Worker states, and the time each first changed. Workers are keyed by
+            // their channel: the registry and the page's own list number them apart.
+            const advWatch = (t) => {
+                const seen = { unlockedAt: null, endedAt: {}, states: [] };
+                const stopStore = t.store.subscribe(() => {
+                    if (seen.unlockedAt === null && seen.cancelAt !== undefined && t.store.getSnapshot().operation === null) seen.unlockedAt = advNow();
+                });
+                const stopRegistry = t.registry ? t.registry.subscribe(() => {
+                    for (const r of t.registry.records()) {
+                        if (r.state === 'ended' && seen.endedAt[r.channel] === undefined) seen.endedAt[r.channel] = { at: advNow(), ended: r.ended };
+                        if (r.state === 'unconfirmed' && seen.endedAt[r.channel] === undefined) seen.endedAt[r.channel] = { at: advNow(), ended: 'UNCONFIRMED' };
+                    }
+                }) : () => { };
+                return { seen, stop: () => { stopStore(); stopRegistry(); } };
+            };
+            const advBrowserGone = async (since) => {
+                for (; ;) {
+                    const count = await browserOcr();
+                    if (count === 0) return { count, at: advNow(), ms: advRound(advNow() - since) };
+                    if (advNow() - since > 30000) return { count, at: null, ms: null };
+                    await new Promise((resolve) => setTimeout(resolve, 5));
+                }
+            };
+            const advReport = (report) => (report?.kind === 'finished' ? {
+                outcome: report.outcome, failure: report.failure, runOutcome: report.run?.outcome ?? null, coverage: report.run?.coverage ?? null,
+                committed: report.committedSheetIds.length, excluded: report.excluded.map((e) => e.code), ocr: plainly(report.ocr),
+            } : plainly(report));
+            const advSheetState = (s, id) => {
+                const sh = s.sheet(id);
+                return { observationRunId: sh?.observation?.runId ?? null, status: sh?.observation?.status ?? null, confirmation: sh?.confirmation ? JSON.stringify(sh.confirmation) : null, history: sh?.confirmationHistory?.length ?? 0 };
+            };
+            const advSheetOnPage = (s, page) => s.store.currentSet().sheets.find((x) => x.sourceId === s.sheet(s.register1).sourceId && x.retiredAt === null && x.pageNumber === page).id;
+
+            // RT. Control: how long a real recognition of the raster title block takes here, and whether the Worker
+            //     reports 'recognizing text' while it works. Three readings, nothing cancelled.
+            if (which === 'RT') {
+                const t = await setup();
+                const runs = [];
+                for (let i = 0; i < 3; i++) {
+                    const n0 = ocrStart.made.length;
+                    const summary = await t.store.startExtraction([t.raster]);
+                    const made = advMadeSince(n0);
+                    runs.push({
+                        outcome: summary.outcome,
+                        recognitions: made.flatMap((r) => advAsked(r, 'recognize').map((a, k) => {
+                            const answer = advAnswered(r, 'recognize')[k] ?? null;
+                            const progress = (r.progress ?? []).filter((e) => e.status === 'recognizing text' && e.at >= a.at && (!answer || e.at <= answer.at));
+                            return { ms: answer ? advRound(answer.at - a.at) : null, answered: answer?.status ?? null, progressReports: progress.length, inside: progress.filter((e) => e.p > 0 && e.p < 1).length };
+                        })),
+                    });
+                }
+                out.RT = { runs, browser: await browserSettles(0), counts: t.counts() };
+                await t.done();
+            }
+
+            // R1 / R1L. Cancelled while a real recognition is under way (the Worker has reported recognising, and has
+            //     not answered). R1: the engine's own recognition bound (PAGE_OCR_TIMEOUT_MS); what is still held a
+            //     moment after the lock is let go is recorded. R1L: the first recognition given a short bound (as S does),
+            //     so what the abandoned recognition does when that bound passes can be watched within the test.
+            if (which === 'R1' || which === 'R1L') {
+                const LATE_MS = 3000;
+                const t = await setup();
+                const watch = advWatch(t);
+                const n0 = ocrStart.made.length;
+                const canvas0 = advCanvasMark();
+                const faults0 = { errors: window.__faults.errors.length, rejections: window.__faults.rejections.length };
+                class Bounded extends GuardedRegisterOcr {
+                    recogniseFields(page, rects, options) {
+                        const first = !this.bounded;
+                        this.bounded = true;
+                        return super.recogniseFields(page, rects, first ? { ...options, timeoutMs: LATE_MS } : options);
+                    }
+                }
+                const run = t.store.extract({ sheetIds: [t.raster] }, which === 'R1L' ? { createOcr: () => new Bounded(t.registry ? { workers: t.registry } : {}) } : {});
+                let found = null;
+                await until(() => { found = advInRecognition(n0); return Boolean(found); }, 'a recognition under way', 120000);
+                const record = found.record;
+                const cancelAt = advNow();
+                const atCancel = {
+                    sinceAskedMs: advRound(cancelAt - found.askedAt),
+                    progressReports: found.progress.length, lastProgress: found.progress.at(-1).p,
+                    answeredRecognitions: advAnswered(record, 'recognize').length, askedRecognitions: advAsked(record, 'recognize').length,
+                    phase: t.store.getSnapshot().operation?.phase ?? null, browser: await browserOcr(),
+                    regionBitmaps: advBitmaps(advCanvasesSince(canvas0)).filter((b) => b.width * b.height > 0),
+                };
+                watch.seen.cancelAt = cancelAt;
+                t.store.cancelExtraction();
+                const { report } = await run;
+                const returnedAt = advNow();
+                const gone = await advBrowserGone(cancelAt);
+                const regionCanvases = advCanvasesSince(canvas0);
+                const afterUnlock = {
+                    unlockMs: watch.seen.unlockedAt === null ? null : advRound(watch.seen.unlockedAt - cancelAt), returnedMs: advRound(returnedAt - cancelAt),
+                    workerEndedMs: watch.seen.endedAt[record.channel] ? advRound(watch.seen.endedAt[record.channel].at - cancelAt) : null, workerEnded: watch.seen.endedAt[record.channel]?.ended ?? null,
+                    browserGoneMs: gone.ms, browserAfter: gone.count,
+                    // The lock let go only once every Worker was known ended.
+                    endedBeforeUnlock: watch.seen.endedAt[record.channel] !== undefined && watch.seen.unlockedAt !== null && watch.seen.endedAt[record.channel].at <= watch.seen.unlockedAt,
+                    report: advReport(report), sheet: advSheetState(t.s, t.raster), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
+                    counts: t.counts(), records: t.records(), regionBitmaps: advBitmaps(regionCanvases),
+                };
+                const version0 = t.store.getSnapshot().version;
+                const made0 = ocrStart.made.length;
+                // Afterwards: anything the abandoned recognition still does.
+                const waitMs = which === 'R1L' ? LATE_MS + 2000 : 2000;
+                await new Promise((resolve) => setTimeout(resolve, waitMs));
+                const later = {
+                    waitedMs: waitMs, recognitionAnswered: advAnswered(record, 'recognize').length > atCancel.answeredRecognitions,
+                    newWorkers: ocrStart.made.length - made0, versionMoved: t.store.getSnapshot().version !== version0,
+                    sheet: advSheetState(t.s, t.raster), regionBitmaps: advBitmaps(regionCanvases),
+                    faults: { errors: window.__faults.errors.slice(faults0.errors), rejections: window.__faults.rejections.slice(faults0.rejections) },
+                    counts: t.counts(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null,
+                };
+                const fired = t.clock.fireAll();
+                await tick();
+                const afterDeadlines = { fired, versionMoved: t.store.getSnapshot().version !== version0, counts: t.counts() };
+                const next = await t.store.startExtraction([t.raster]);
+                out[which] = { atCancel, afterUnlock, later, afterDeadlines, next: next.outcome ?? next.refusal?.code ?? null, log: logFrom(t.mark) };
+                watch.stop();
+                await t.done();
+            }
+
+            // R2P. Cancelled between two pages of one Source, each read by OCR: the first page's recognition answered,
+            //      the next not yet asked. R2S. Cancelled between two Sources: the first (OCR) read to its end.
+            if (which === 'R2P' || which === 'R2S') {
+                const t = await setup();
+                const watch = advWatch(t);
+                const n0 = ocrStart.made.length;
+                const stamp = advSheetOnPage(t.s, 3);
+                const geometry = t.s.geometrySheets[0];
+                if (which === 'R2P') {
+                    const assigned = t.store.assignProfile([stamp], t.s.profile.id, { replace: true });
+                    if (!assigned.ok) throw new Error(`assign: ${assigned.refusal.code}`);
+                }
+                const targets = which === 'R2P' ? [t.raster, stamp] : [t.raster, geometry];
+                const roles = which === 'R2P' ? ['page2', 'page3'] : ['firstSource', 'secondSource'];
+                const before = Object.fromEntries(targets.map((id, k) => [roles[k], advSheetState(t.s, id)]));
+                let atCancel = null;
+                const onProgress = (event) => {
+                    if (atCancel) return;
+                    const records = advMadeSince(n0);
+                    const asked = records.reduce((n, r) => n + advAsked(r, 'recognize').length, 0);
+                    const answered = records.reduce((n, r) => n + advAnswered(r, 'recognize').length, 0);
+                    const between = which === 'R2P' ? (event.phase === 'page' && answered >= 1) : (event.phase === 'source' && event.sourceIndex === 1);
+                    if (!between) return;
+                    atCancel = { event: plainly(event), askedRecognitions: asked, answeredRecognitions: answered, workers: records.length, at: advNow() };
+                    watch.seen.cancelAt = atCancel.at;
+                    t.store.cancelExtraction();
+                };
+                const { report } = await t.store.extract({ sheetIds: targets }, { onProgress });
+                const gone = atCancel ? await advBrowserGone(atCancel.at) : null;
+                const record = advMadeSince(n0)[0] ?? null;
+                const version0 = t.store.getSnapshot().version;
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+                out[which] = {
+                    atCancel, report: advReport(report),
+                    unlockMs: atCancel && watch.seen.unlockedAt !== null ? advRound(watch.seen.unlockedAt - atCancel.at) : null,
+                    workerEnded: record ? watch.seen.endedAt[record.channel]?.ended ?? null : null, browserGoneMs: gone?.ms ?? null, browserAfter: gone?.count ?? null,
+                    before, after: Object.fromEntries(targets.map((id, k) => [roles[k], advSheetState(t.s, id)])),
+                    laterAsked: advMadeSince(n0).reduce((n, r) => n + advAsked(r, 'recognize').length, 0), versionMovedLater: t.store.getSnapshot().version !== version0,
+                    counts: t.counts(), records: t.records(), gate: gateOf(t), operation: plainly(t.store.getSnapshot().operation),
+                };
+                watch.stop();
+                await t.done();
+            }
+
+            // R3T. Cancelled during a real recognition, and terminate() throws (through the registry's seam): the
+            //      Worker is asked on its channel instead, and can answer "closed" only once its recognition is done.
+            // R3N. The same with terminate() never settling and the Worker's "closed" withheld: the lock is held until
+            //      the close deadline; then the page's OCR fails closed, and a late end restores nothing.
+            if (which === 'R3T' || which === 'R3N') {
+                const late = defer();
+                const t = await setup(which === 'R3T'
+                    ? { terminate: () => { throw new Error('simulated: terminate() threw'); } }
+                    : { terminate: (end) => late.promise.then(() => end()) });
+                const plan = which === 'R3N' ? planNext({ holdClosed: true }) : null;
+                const watch = advWatch(t);
+                const n0 = ocrStart.made.length;
+                const run = t.store.extract({ sheetIds: [t.raster] });
+                let found = null;
+                await until(() => { found = advInRecognition(n0); return Boolean(found); }, 'a recognition under way', 120000);
+                const record = found.record;
+                const cancelAt = advNow();
+                watch.seen.cancelAt = cancelAt;
+                const atCancel = { sinceAskedMs: advRound(cancelAt - found.askedAt), lastProgress: found.progress.at(-1).p, answeredRecognitions: advAnswered(record, 'recognize').length };
+                t.store.cancelExtraction();
+                if (which === 'R3T') {
+                    const ended = await within(run, 60000);
+                    const closedHeardAt = ocrStart.log.slice(t.mark).includes(`${record.n}:closed-heard`);
+                    out.R3T = {
+                        atCancel, settled: ended.settled, report: advReport(ended.value?.report),
+                        unlockMs: watch.seen.unlockedAt === null ? null : advRound(watch.seen.unlockedAt - cancelAt),
+                        workerEnded: watch.seen.endedAt[record.channel]?.ended ?? null,
+                        workerEndedMs: watch.seen.endedAt[record.channel] ? advRound(watch.seen.endedAt[record.channel].at - cancelAt) : null,
+                        recognitionAnsweredAfterCancel: advAnswered(record, 'recognize').filter((a) => a.at > cancelAt).map((a) => ({ status: a.status, ms: advRound(a.at - cancelAt) })),
+                        closedHeard: closedHeardAt, browser: await browserSettles(0), counts: t.counts(), records: t.records(),
+                        unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, gate: gateOf(t), sheet: advSheetState(t.s, t.raster),
+                    };
+                } else {
+                    const heardClosed = await until(() => (plan.record?.heldAcks?.length ?? 0) > 0, 'the Worker said closed (withheld)', 60000).then(() => true, () => false);
+                    await tick();
+                    const tooSoon = await t.store.startExtraction([t.raster]);
+                    const whileUnknown = { heardClosedAfterMs: heardClosed ? advRound(advNow() - cancelAt) : null, phase: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), next: tooSoon.refusal?.code ?? tooSoon.outcome };
+                    const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
+                    const ended = await within(run, 30000);
+                    const afterDeadline = { fired, settled: ended.settled, report: advReport(ended.value?.report), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(), sheet: advSheetState(t.s, t.raster) };
+                    late.resolve();
+                    await tick();
+                    await tick();
+                    const afterLate = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, next: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
+                    out.R3N = { atCancel, whileUnknown, afterDeadline, afterLate };
+                    plan.record?.worker.terminate();
+                }
+                watch.stop();
+                await t.done();
+            }
+
+            // ST:<action>. Cancelled at a stage of the recogniser's start, as soon as the page has asked the Worker for
+            //     that job and before it answers: 'load' (the core), 'loadLanguage' (the language data), 'initialize'.
+            //     And ST:recognize: during a real recognition (the R1 trigger). Correctness here; times are recorded.
+            if (typeof which === 'string' && which.startsWith('ST:')) {
+                const stage = which.slice(3);
+                const t = await setup();
+                const watch = advWatch(t);
+                const n0 = ocrStart.made.length;
+                const run = t.store.extract({ sheetIds: [t.raster] });
+                let record = null;
+                let caught = null;
+                await until(() => {
+                    if (stage === 'recognize') {
+                        const f = advInRecognition(n0);
+                        if (f) { record = f.record; caught = { askedAt: f.askedAt, lastProgress: f.progress.at(-1).p }; }
+                        return Boolean(f);
+                    }
+                    for (const r of advMadeSince(n0)) {
+                        const asked = advAsked(r, stage);
+                        if (asked.length > 0 && advAnswered(r, stage).length < asked.length) { record = r; caught = { askedAt: asked.at(-1).at }; return true; }
+                        // The stage already passed (it answered before the poll saw it): too late to cancel inside it.
+                        if (advAnswered(r, stage).length > 0) { record = r; caught = { missed: true }; return true; }
+                    }
+                    return false;
+                }, `the recogniser at ${stage}`, 120000);
+                const cancelAt = advNow();
+                watch.seen.cancelAt = cancelAt;
+                const answeredAtCancel = record ? (record.answered ?? []).map((a) => `${a.action}:${a.status}`) : [];
+                t.store.cancelExtraction();
+                const { report } = await run;
+                const gone = await advBrowserGone(cancelAt);
+                out[which] = {
+                    stage, caught: caught ? { ...caught, sinceAskedMs: caught.askedAt === undefined ? null : advRound(cancelAt - caught.askedAt) } : null,
+                    answeredAtCancel, unlockMs: watch.seen.unlockedAt === null ? null : advRound(watch.seen.unlockedAt - cancelAt),
+                    workerEnded: record ? watch.seen.endedAt[record.channel]?.ended ?? null : null,
+                    workerEndedMs: record && watch.seen.endedAt[record.channel] ? advRound(watch.seen.endedAt[record.channel].at - cancelAt) : null,
+                    browserGoneMs: gone.ms, browserAfter: gone.count, report: advReport(report), sheet: advSheetState(t.s, t.raster),
+                    recognizeAskedAfterCancel: record ? advAsked(record, 'recognize').filter((a) => a.at > cancelAt).length : 0,
+                    counts: t.counts(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, gate: gateOf(t),
+                    // The start's own timeline (ms from the Worker's first job asked): how long each stage took here.
+                    timeline: record ? (() => {
+                        const t0 = (record.asked ?? [])[0]?.at ?? cancelAt;
+                        return [
+                            ...(record.asked ?? []).map((a) => ({ job: a.action, event: 'asked', ms: advRound(a.at - t0) })),
+                            ...(record.answered ?? []).map((a) => ({ job: a.action, event: a.status, ms: advRound(a.at - t0) })),
+                            { job: 'cancel', event: 'asked', ms: advRound(cancelAt - t0) },
+                        ].sort((x, y) => x.ms - y.ms);
+                    })() : null,
+                };
+                watch.stop();
+                await t.done();
+            }
             // The recogniser's own input: each recognition hands tesseract.js one data URL of the region (the existing
             // OCR engine). Counted so the privacy check can tell them from any other export.
             out.recogniser = {
@@ -2131,7 +2441,53 @@
             };
         }
 
-        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, summaries, ocrInit, pointer, storage };
+        // M7-ADV-VERIFY-01: what a confirmation keeps through readings after it (T-REREAD-SAME-BASIS / T-REREAD-FAIL-KEEPS).
+        // A native Sheet (register p.1) confirmed with a corrected value, then read again: under the same profile
+        // revision to its end; read again and cancelled; read again and failed (its File not handed over). Test only.
+        async function advRetention() {
+            const s = await observedStore();
+            const id = s.register1;
+            const state = () => {
+                const sh = s.sheet(id);
+                const c = s.store.currencyOf(sh);
+                return {
+                    confirmation: sh.confirmation ? JSON.stringify(sh.confirmation) : null, history: sh.confirmationHistory.length,
+                    observationRunId: sh.observation?.runId ?? null, observation: sh.observation ? JSON.stringify(sh.observation) : null,
+                    confirmationCurrency: c ? currencyLabel(c.confirmation) : null, observationCurrency: c ? currencyLabel(c.observation) : null,
+                    runs: s.store.currentSet().analysisRuns.length,
+                };
+            };
+            const report = (r) => (r?.kind === 'finished' ? { outcome: r.outcome, committed: r.committedSheetIds.length, excluded: r.excluded.map((e) => e.code) } : plainly(r));
+            const out = {};
+            const prepared = await s.prepare(id);
+            if (!prepared.ok) throw new Error(`prepare: ${prepared.refusal.code}`);
+            const values = { ...s.valuesOf(id), drawingTitle: `${s.valuesOf(id).drawingTitle}（改）` };
+            out.confirmed = s.confirm(id, prepared.handle, values);
+            out.afterConfirm = state();
+            // A handle drawn now, and kept, as a screen that was left open would keep it.
+            const kept = await s.prepare(id);
+            out.keptHandle = kept.ok;
+
+            // A. The same Sheet read again, under the same profile revision, to its end.
+            const same = await s.store.extract({ sheetIds: [id] });
+            out.sameBasis = { report: report(same.report), after: state() };
+            out.keptHandleAfter = kept.ok ? s.confirm(id, kept.handle, values) : { ok: false, code: 'NOT_DRAWN' };
+            out.afterKeptHandle = state();
+
+            // B. Read again and cancelled as soon as it starts its Source: nothing of it may land.
+            const beforeCancel = state();
+            const cancelled = await s.store.extract({ sheetIds: [id] }, { onProgress: (e) => { if (e.phase === 'source') s.store.cancelExtraction(); } });
+            out.cancelled = { report: report(cancelled.report), before: beforeCancel, after: state() };
+
+            // C. Read again and failed: the File is not handed over (SOURCE_MISSING).
+            const beforeFail = state();
+            const failed = await s.store.extract({ sheetIds: [id] }, { fileFor: () => null });
+            out.failed = { report: report(failed.report), before: beforeFail, after: state() };
+            await s.dispose();
+            return out;
+        }
+
+        window.__m7p2b2 = { ownerRelease, baseline, viewerAndCrop, evidence, sessions, lock, summaries, ocrInit, pointer, storage, advRetention };
         window.__m7p2b2Ready = true;
         document.getElementById('state').textContent = 'ready';
     </script>
