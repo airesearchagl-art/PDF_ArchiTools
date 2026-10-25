@@ -1,0 +1,516 @@
+{
+  "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. The structural (run-independent) fields of the benchmark results. Times and memory are deliberately absent.",
+  "scale": {
+    "nodeAndBrowserAgree": true,
+    "rows": [
+      {
+        "label": "50 sheets",
+        "sheets": 50,
+        "sources": 2,
+        "findings": 23,
+        "activeFindings": 23,
+        "decisions": 15,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 92693,
+        "prettyBytes": 143363,
+        "jsonValues": 3423,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 7
+        }
+      },
+      {
+        "label": "200 sheets",
+        "sheets": 200,
+        "sources": 8,
+        "findings": 96,
+        "activeFindings": 96,
+        "decisions": 43,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 364094,
+        "prettyBytes": 564376,
+        "jsonValues": 13444,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 8
+        }
+      },
+      {
+        "label": "500 sheets",
+        "sheets": 500,
+        "sources": 20,
+        "findings": 280,
+        "activeFindings": 280,
+        "decisions": 155,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 938133,
+        "prettyBytes": 1447167,
+        "jsonValues": 34421,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 8
+        }
+      },
+      {
+        "label": "1000 sheets",
+        "sheets": 1000,
+        "sources": 40,
+        "findings": 519,
+        "activeFindings": 519,
+        "decisions": 282,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 1850745,
+        "prettyBytes": 2860360,
+        "jsonValues": 68013,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 10
+        }
+      },
+      {
+        "label": "5000 sheets",
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 2534,
+        "activeFindings": 2534,
+        "decisions": 1282,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 9176842,
+        "prettyBytes": 14198070,
+        "jsonValues": 337634,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 9
+        }
+      },
+      {
+        "label": "5000 sheets, one PDF per sheet",
+        "sheets": 5000,
+        "sources": 5000,
+        "findings": 2534,
+        "activeFindings": 2534,
+        "decisions": 1282,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 10951732,
+        "prettyBytes": 16692910,
+        "jsonValues": 397247,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 1,
+          "staleFindings": 0
+        }
+      },
+      {
+        "label": "5000 sheets, nothing confirmed or decided",
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 5607,
+        "activeFindings": 5607,
+        "decisions": 0,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 10110518,
+        "prettyBytes": 15472711,
+        "jsonValues": 370400,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 25
+        }
+      },
+      {
+        "label": "5000 sheets, with a declared register",
+        "sheets": 5000,
+        "sources": 200,
+        "findings": 2641,
+        "activeFindings": 2641,
+        "decisions": 1337,
+        "runs": 2,
+        "registerReferences": 5,
+        "registerEntries": 4898,
+        "qa09Findings": 107,
+        "compactBytes": 10168897,
+        "prettyBytes": 15888117,
+        "jsonValues": 385041,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 116
+        }
+      },
+      {
+        "label": "10000 sheets (beyond candidate limit)",
+        "sheets": 10000,
+        "sources": 400,
+        "findings": 5253,
+        "activeFindings": 5253,
+        "decisions": 2566,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 18444344,
+        "prettyBytes": 28514354,
+        "jsonValues": 677876,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 12
+        }
+      },
+      {
+        "label": "20000 sheets (beyond candidate limit)",
+        "sheets": 20000,
+        "sources": 800,
+        "findings": 10412,
+        "activeFindings": 10412,
+        "decisions": 5249,
+        "runs": 2,
+        "registerReferences": 0,
+        "registerEntries": 0,
+        "qa09Findings": 0,
+        "compactBytes": 36883361,
+        "prettyBytes": 57013545,
+        "jsonValues": 1354969,
+        "maxDepth": 7,
+        "afterOneSourceReplaced": {
+          "staleSheets": 25,
+          "staleFindings": 10
+        }
+      }
+    ]
+  },
+  "hostile": {
+    "cases": [
+      {
+        "input": "deep nesting, 1,000,000 levels",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "scan",
+          "code": "NESTING_TOO_DEEP",
+          "reachedJsonParse": false
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "RangeError"
+        }
+      },
+      {
+        "input": "array of 16,000,000 numbers",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "scan",
+          "code": "TOO_MANY_VALUES",
+          "reachedJsonParse": false
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "walked"
+        }
+      },
+      {
+        "input": "array of 10,000,000 empty objects",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "scan",
+          "code": "TOO_MANY_VALUES",
+          "reachedJsonParse": false
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "walked"
+        }
+      },
+      {
+        "input": "one 32 MiB string",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "scan",
+          "code": "STRING_TOO_LONG",
+          "reachedJsonParse": false
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "walked"
+        }
+      },
+      {
+        "input": "object with 2,000,000 distinct keys",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "scan",
+          "code": "TOO_MANY_KEYS",
+          "reachedJsonParse": false
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "walked"
+        }
+      },
+      {
+        "input": "worst case inside the bounds: 3,999,990 empty objects",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "schema",
+          "code": "SCHEMA_REQUIRED",
+          "reachedJsonParse": true
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "walked"
+        }
+      },
+      {
+        "input": "500,000 strings of 100 characters",
+        "bounded": {
+          "status": "REJECTED",
+          "stage": "schema",
+          "code": "SCHEMA_REQUIRED",
+          "reachedJsonParse": true
+        },
+        "unbounded": {
+          "jsonParse": "parsed",
+          "recursiveWalk": "walked"
+        }
+      }
+    ],
+    "largestAccepted": [
+      {
+        "targetMiB": 16,
+        "bytes": 16308681,
+        "decisions": 1865,
+        "status": "ACCEPTED"
+      },
+      {
+        "targetMiB": 32,
+        "bytes": 33080124,
+        "decisions": 3236,
+        "status": "ACCEPTED"
+      },
+      {
+        "targetMiB": 63,
+        "bytes": 65595438,
+        "decisions": 5894,
+        "status": "ACCEPTED"
+      }
+    ]
+  },
+  "fingerprint": {
+    "browserCasesWithVerifiedDigests": [
+      "single 1 MiB subtle-main",
+      "single 1 MiB subtle-worker",
+      "single 1 MiB stream-worker",
+      "single 1 MiB stream-main",
+      "single 10 MiB subtle-main",
+      "single 10 MiB subtle-worker",
+      "single 10 MiB stream-worker",
+      "single 10 MiB stream-main",
+      "single 50 MiB subtle-main",
+      "single 50 MiB subtle-worker",
+      "single 50 MiB stream-worker",
+      "single 50 MiB stream-main",
+      "single 100 MiB subtle-main",
+      "single 100 MiB subtle-worker",
+      "single 100 MiB stream-worker",
+      "single 100 MiB stream-main",
+      "single 250 MiB subtle-main",
+      "single 250 MiB subtle-worker",
+      "single 250 MiB stream-worker",
+      "single 250 MiB stream-main",
+      "chunk 64 KiB stream-worker",
+      "chunk 256 KiB stream-worker",
+      "chunk 1024 KiB stream-worker",
+      "chunk 4096 KiB stream-worker",
+      "chunk 16384 KiB stream-worker",
+      "multi 10x10 MiB subtle-main",
+      "multi 10x10 MiB subtle-worker",
+      "multi 10x10 MiB stream-worker",
+      "multi 20x25 MiB subtle-main",
+      "multi 20x25 MiB subtle-worker",
+      "multi 20x25 MiB stream-worker",
+      "extra single 10 MiB stream-worker",
+      "extra single 10 MiB byob-worker",
+      "extra single 100 MiB stream-worker",
+      "extra single 100 MiB byob-worker",
+      "extra single 250 MiB stream-worker",
+      "extra single 250 MiB byob-worker",
+      "extra multi 20x25 MiB stream-worker",
+      "extra multi 20x25 MiB byob-worker"
+    ],
+    "cancellation": {
+      "streamingOutcomes": [
+        "cancelled"
+      ],
+      "oneShotResultDeliveredAfterTerminate": false
+    },
+    "nodeAllImplementationsAgree": [
+      {
+        "sizeMiB": 1,
+        "agree": true
+      },
+      {
+        "sizeMiB": 10,
+        "agree": true
+      },
+      {
+        "sizeMiB": 50,
+        "agree": true
+      },
+      {
+        "sizeMiB": 100,
+        "agree": true
+      },
+      {
+        "sizeMiB": 250,
+        "agree": true
+      }
+    ]
+  },
+  "probes": {
+    "secureContext": {
+      "isSecureContext": true,
+      "cryptoSubtleDigest": "function",
+      "cryptoRandomUUID": "function",
+      "cryptoGetRandomValues": "function",
+      "worker": "function",
+      "blobStream": "function",
+      "showOpenFilePicker": "function"
+    },
+    "secureContextWorker": {
+      "isSecureContext": true,
+      "subtle": "function",
+      "randomUUID": "function",
+      "getRandomValues": "function"
+    },
+    "insecureContext": {
+      "isSecureContext": false,
+      "cryptoSubtleDigest": "undefined",
+      "cryptoRandomUUID": "undefined",
+      "cryptoGetRandomValues": "function",
+      "worker": "function",
+      "blobStream": "function",
+      "showOpenFilePicker": "undefined"
+    },
+    "insecureContextWorker": {
+      "isSecureContext": false,
+      "subtle": "undefined",
+      "randomUUID": "undefined",
+      "getRandomValues": "function"
+    },
+    "insecureContextFingerprintCorrect": {
+      "subtle-main": false,
+      "subtle-worker": false,
+      "stream-worker": true,
+      "stream-main": true
+    },
+    "facts": {
+      "subtleDigestAcceptsStream": false,
+      "detachedBufferByteLength": 0,
+      "detachedBufferDigestIsEmptyDigest": true,
+      "digestLeavesInputUsable": true,
+      "uuidFromGetRandomValues": true
+    },
+    "fileChangedOnDisk": {
+      "appended": {
+        "slice": "NotReadableError",
+        "whole": "NotReadableError",
+        "streamed": "NotReadableError"
+      },
+      "overwritten same size": {
+        "slice": "NotReadableError",
+        "whole": "NotReadableError",
+        "streamed": "NotReadableError"
+      },
+      "deleted": {
+        "slice": "NotFoundError",
+        "whole": "NotFoundError",
+        "streamed": "NotFoundError"
+      }
+    },
+    "jsonParseWithoutBounds": [
+      {
+        "input": "deep nesting, 1,000,000 levels",
+        "jsonParse": "parsed",
+        "recursiveWalk": "RangeError"
+      },
+      {
+        "input": "array of 3,999,990 empty objects",
+        "jsonParse": "parsed",
+        "recursiveWalk": "walked"
+      },
+      {
+        "input": "array of 10,000,000 empty objects",
+        "jsonParse": "parsed",
+        "recursiveWalk": "walked"
+      }
+    ],
+    "projectOpenOnPageThread": [
+      {
+        "sheets": 200,
+        "bytes": 364094,
+        "status": "ACCEPTED"
+      },
+      {
+        "sheets": 1000,
+        "bytes": 1850745,
+        "status": "ACCEPTED"
+      },
+      {
+        "sheets": 5000,
+        "bytes": 9176842,
+        "status": "ACCEPTED"
+      }
+    ],
+    "sheetListDomNodes": [
+      {
+        "rows": 50,
+        "domNodes": 452
+      },
+      {
+        "rows": 200,
+        "domNodes": 1802
+      },
+      {
+        "rows": 500,
+        "domNodes": 4502
+      },
+      {
+        "rows": 1000,
+        "domNodes": 9002
+      },
+      {
+        "rows": 5000,
+        "domNodes": 45002
+      },
+      {
+        "rows": 20000,
+        "domNodes": 180002
+      }
+    ]
+  }
+}
