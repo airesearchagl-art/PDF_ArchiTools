@@ -51,3 +51,15 @@ const CONFIRMATION: Record<ReturnType<typeof currencyLabel>, CurrencyText> = {
 
 export const observationText = (currency: RecordCurrency): CurrencyText => OBSERVATION[currencyLabel(currency)];
 export const confirmationText = (currency: RecordCurrency): CurrencyText => CONFIRMATION[currencyLabel(currency)];
+
+/**
+ * What the drawing number a Sheet List row keeps from its confirmation is, said as the confirmation's own state:
+ * a confirmation no longer current is not titled as the current one.
+ */
+const CONFIRMED_NUMBER_TITLE: Record<Tone, string> = {
+    none: '確定した図面番号',
+    current: '確定した図面番号',
+    unverified: '確定した図面番号（ファイル未照合）',
+    stale: '以前の確定の図面番号（再確定が必要）',
+};
+export const confirmedNumberTitle = (currency: RecordCurrency): string => CONFIRMED_NUMBER_TITLE[confirmationText(currency).tone];

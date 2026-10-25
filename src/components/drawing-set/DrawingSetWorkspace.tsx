@@ -17,7 +17,7 @@ import type { StoreIntakeResult } from '../../utils/drawing-set/workspace-store'
 import { DrawingSetStore, OCR_RELEASE_UNCONFIRMED_MESSAGE } from '../../utils/drawing-set/workspace-store';
 import { GATE_MESSAGES } from '../../utils/drawing-set/pdf-document-gate';
 import { ConfirmationPanel } from './ConfirmationPanel';
-import { confirmationText } from './title-block-labels';
+import { confirmationText, confirmedNumberTitle } from './title-block-labels';
 import type { DraftFields } from './ProfileEditor';
 import { FieldRectsOverlay, ProfileEditorPanel } from './ProfileEditor';
 import { ReadOnlySheetViewer } from './ReadOnlySheetViewer';
@@ -411,6 +411,7 @@ export const DrawingSetWorkspace: React.FC = () => {
             profile,
             badge: shown ? { ...label, state: currency.state } : null,
             confirmedNumber: sheet.confirmation ? sheet.confirmation.values.drawingNumber : null,
+            confirmedNumberTitle: confirmedNumberTitle(currency),
         };
     };
 

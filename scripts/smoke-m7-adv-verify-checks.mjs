@@ -25,6 +25,9 @@
  * cancelled one, a failed one). The screen's half is in
  * smoke-m7-adv-verify-ui-checks.mjs.
  *
+ * M7-ADV-REPAIR-01 turned the region-canvas FINDING into gates (with the double-release, late-answer,
+ * unconfirmed-end, post-bound and next-run regressions) once ocr-workers.ts let an abandoned recognition go.
+ *
  * Gates are checks: they fail the run. A property an adopted decision does not
  * state, but which this verification set out to establish (the region canvas
  * let go by the time the lock is), is a FINDING: its criterion is fixed here,
@@ -93,11 +96,22 @@ export async function runAdvVerifyChecks(ctx) {
         check(`${which} ...every deadline ever armed, fired late, moves nothing; the next reading completes`,
             !o.afterDeadlines.versionMoved && o.afterDeadlines.counts.unconfirmed === 0 && o.next === 'COMPLETED', j({ afterDeadlines: o.afterDeadlines, next: o.next }));
         note(`${which} cancel → lock let go / → Worker known ended / → browser lists none, ms`, `${u.unlockMs} / ${u.workerEndedMs} / ${u.browserGoneMs} (cancel ${a.sinceAskedMs} ms after the recognition was asked, at progress ${a.lastProgress})`);
-        const heldAtUnlock = u.regionBitmaps.filter((b) => b.width * b.height > 0);
-        const heldLater = l.regionBitmaps.filter((b) => b.width * b.height > 0);
-        finding(`${which} canvas: the region canvas of the abandoned recognition is let go (0×0) by the time the lock is`,
-            a.regionBitmaps.length > 0 && heldAtUnlock.length === 0, j({ atCancel: a.regionBitmaps, atUnlock: u.regionBitmaps }));
-        note(`${which} canvas: region bitmaps ${l.waitedMs} ms after the lock was let go`, j(heldLater));
+        // M7-ADV-REPAIR-01: what was a FINDING (FAIL) in M7-ADV-VERIFY-01 is a gate once repaired.
+        const drawn = (b) => b.width * b.height > 0;
+        check(`${which} canvas and page: the recogniseFields call holding the region and the page is let go as abandoned, only once its Worker was known ended`,
+            u.call?.how === 'rejected:OcrRecognitionAbandonedError' && u.callSettledAfterEnd && u.abandoned === 1, j({ call: u.call, callSettledAfterEnd: u.callSettledAfterEnd, abandoned: u.abandoned }));
+        check(`${which} canvas: the region canvas of the abandoned recognition is let go (0×0) by the time the lock is, exactly once (no double release)`,
+            a.regionBitmaps.length === 1 && drawn(a.regionBitmaps[0]) && u.regionBitmaps.length === 1 && !drawn(u.regionBitmaps[0]) && u.regionBitmaps[0].released === 1 && u.regionBitmaps[0].zeroSets === 1,
+            j({ atCancel: a.regionBitmaps, atUnlock: u.regionBitmaps }));
+        check(`${which} ...and afterwards (${l.waitedMs} ms${which === 'R1L' ? ', past the recognition\'s bound' : ''}, every deadline fired late) nothing releases it again, nothing is thrown, the call stays abandoned`,
+            l.regionBitmaps.every((b) => b.zeroSets === 1 && b.released === 1) && o.afterDeadlines.regionBitmaps.every((b) => b.zeroSets === 1) && l.call?.how === 'rejected:OcrRecognitionAbandonedError' && l.abandoned === 1,
+            j({ later: l.regionBitmaps, afterDeadlines: o.afterDeadlines.regionBitmaps }));
+        const nr = o.nextRun;
+        check(`${which} the next run, at once: it reads to its end, its own region let go once, the old region untouched, the old Worker answers nothing`,
+            nr.report.outcome === 'COMPLETED' && nr.report.committed === 1 && nr.call?.how === 'resolved' && nr.regionBitmaps.length === 1 && nr.regionBitmaps[0].released === 1
+            && nr.regionBitmaps[0].zeroSets === 1 && nr.oldRegionBitmaps.every((b) => b.zeroSets === 1) && !nr.oldRecognitionAnswered && nr.counts.unconfirmed === 0,
+            j(nr));
+        note(`${which} cancel → the held call let go, ms`, String(u.call?.settledMs));
     }
 
     // ------------------------------------------------------------------
@@ -139,6 +153,24 @@ export async function runAdvVerifyChecks(ctx) {
         R3N.afterDeadline.settled && R3N.afterDeadline.report.outcome === 'CANCELLED' && R3N.afterDeadline.sheet.observationRunId === null && R3N.afterDeadline.operation === null
         && !R3N.afterDeadline.gate.extractionActive && R3N.afterDeadline.counts.unconfirmed === 1, j(R3N.afterDeadline));
     check('R3N terminate() completing late restores nothing: still unconfirmed, still refused', R3N.afterLate.counts.unconfirmed === 1 && R3N.afterLate.next === 'OCR_RELEASE_UNCONFIRMED', j(R3N.afterLate));
+    const drawnR = (list) => list.length === 1 && list[0].width * list[0].height > 0;
+    check('R3N the region in use is not let go before the Worker\'s end is known: held at the cancel, while the end is unknown, and after the deadline gave it up as unconfirmed (no recognition abandoned)',
+        R3N.atCancel.heldAnswers >= 1 && drawnR(R3N.atCancel.regionBitmaps) && drawnR(R3N.whileUnknown.regionBitmaps) && R3N.whileUnknown.abandoned === 0
+        && drawnR(R3N.afterDeadline.regionBitmaps) && R3N.afterDeadline.abandoned === 0, j({ atCancel: R3N.atCancel.regionBitmaps, whileUnknown: R3N.whileUnknown.regionBitmaps, afterDeadline: R3N.afterDeadline.regionBitmaps }));
+    check('R3N ...once its end is known (late), the waiting recognition is let go as abandoned and the region released once -- and the page\'s OCR stays refused',
+        R3N.afterLate.abandoned === 1 && R3N.afterLate.regionBitmaps.length === 1 && R3N.afterLate.regionBitmaps[0].released === 1 && R3N.afterLate.regionBitmaps[0].zeroSets === 1
+        && R3N.afterLate.unavailable === true && R3N.afterLate.counts.unconfirmed === 1, j(R3N.afterLate));
+    check('R3N ...and the Worker\'s held answer, given after that, changes nothing (dropped): no observation, no second release',
+        !R3N.afterHeldAnswer.versionMoved && R3N.afterHeldAnswer.sheet.observationRunId === null && R3N.afterHeldAnswer.regionBitmaps.every((b) => b.zeroSets === 1), j(R3N.afterHeldAnswer));
+    const R3L = await ocr('R3L');
+    check('R3L a late answer: terminate() throws, the Worker says closed (its end known), the waiting recognition is let go as abandoned, the region released once; the run CANCELLED with nothing written',
+        R3L.beforeLate.settled && R3L.beforeLate.workerEnded === 'CLOSED' && R3L.beforeLate.call?.how === 'rejected:OcrRecognitionAbandonedError' && R3L.beforeLate.abandoned === 1
+        && R3L.beforeLate.regionBitmaps.length === 1 && R3L.beforeLate.regionBitmaps[0].released === 1 && R3L.beforeLate.report.outcome === 'CANCELLED' && R3L.beforeLate.sheet.observationRunId === null,
+        j(R3L.beforeLate));
+    check('R3L ...the Worker\'s answer, given after that, changes nothing: no observation, no second release, nothing thrown; the next reading completes',
+        !R3L.afterLate.versionMoved && R3L.afterLate.sheet.observationRunId === null && R3L.afterLate.regionBitmaps.every((b) => b.zeroSets === 1)
+        && R3L.afterLate.faults.errors.length === 0 && R3L.afterLate.faults.rejections.length === 0 && R3L.afterLate.call?.how === 'rejected:OcrRecognitionAbandonedError' && R3L.next === 'COMPLETED',
+        j(R3L.afterLate));
 
     // ------------------------------------------------------------------
     section('48. M7-ADV-VERIFY ADV-37-03 -- cancelled at each stage of the recogniser\'s start (ST)');

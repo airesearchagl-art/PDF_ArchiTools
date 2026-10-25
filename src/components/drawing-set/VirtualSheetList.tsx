@@ -28,6 +28,8 @@ export interface SheetRowFacts {
     badge: { text: string; title: string; tone: string; state: string } | null;
     /** The confirmed drawing number, when a person confirmed one. */
     confirmedNumber: string | null;
+    /** What that number is, as the confirmation's state says (a stale one is the previous confirmation's). */
+    confirmedNumberTitle?: string;
 }
 
 interface Props {
@@ -137,7 +139,7 @@ export const VirtualSheetList: React.FC<Props> = ({ sheets, sourceNames, selecte
                     </span>
                     <span className="ds-sheet-facts">
                         {extra && extra.confirmedNumber !== null && (
-                            <span className="ds-sheet-number" title="確定した図面番号" data-ds-sheet-number>{extra.confirmedNumber || '（空欄）'}</span>
+                            <span className="ds-sheet-number" title={extra.confirmedNumberTitle ?? '確定した図面番号'} data-ds-sheet-number>{extra.confirmedNumber || '（空欄）'}</span>
                         )}
                         {facts ? `${paper ? `${paper} ` : ''}${orientation}・${displaySizeMm(facts)}` : '用紙情報なし'}
                     </span>

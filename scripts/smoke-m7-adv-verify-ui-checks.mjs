@@ -233,8 +233,10 @@ export async function runAdvVerifyUiChecks(ctx) {
     const stale = await rowFacts(C2_ROW);
     note('T-STALE-LIST the row of the now stale confirmation, as shown', j(stale));
     check('T-STALE-LIST the row\'s badge is the stale one (以前の確定), not 確定', stale.badge === 'STALE' && stale.badgeText.includes('以前の確定') && stale.badgeText !== '確定', j(stale));
-    finding('T-STALE-LIST the number a stale confirmation keeps in the list is not titled as a current confirmed number (its title is not the bare 確定した図面番号)',
-        stale.number === null || stale.numberTitle !== '確定した図面番号', j({ number: stale.number, numberTitle: stale.numberTitle }));
+    // M7-ADV-REPAIR-01: a FINDING (FAIL) in M7-ADV-VERIFY-01, a gate once repaired.
+    check('T-STALE-LIST the number a stale confirmation keeps in the list is titled as the previous confirmation\'s (以前の確定の図面番号（再確定が必要）), not as a current confirmed number',
+        stale.number === (c2.drawingNumber) && stale.numberTitle === '以前の確定の図面番号（再確定が必要）', j({ number: stale.number, numberTitle: stale.numberTitle }));
+    check('...while a current confirmation\'s number is still titled 確定した図面番号', asReadRow.numberTitle === '確定した図面番号', j({ numberTitle: asReadRow.numberTitle }));
 
     // ------------------------------------------------------------------
     section('9k. M7-ADV-VERIFY: a raster page whose recognition cannot run (T-OCRFAILED-UI)');
