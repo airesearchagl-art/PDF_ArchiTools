@@ -191,6 +191,20 @@
                 return element;
             };
             window.__canvases = canvases;
+            // M7-ADV-REPAIR: per canvas, how often its width is set to 0 (zeroSets) and how often that let go of a
+            // bitmap it had (released). A second release of the same canvas is a double release.
+            const widthOf = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width');
+            Object.defineProperty(HTMLCanvasElement.prototype, 'width', {
+                configurable: true, enumerable: widthOf.enumerable,
+                get() { return widthOf.get.call(this); },
+                set(value) {
+                    if (Number(value) === 0) {
+                        this.__zeroSets = (this.__zeroSets ?? 0) + 1;
+                        if (widthOf.get.call(this) > 0) this.__released = (this.__released ?? 0) + 1;
+                    }
+                    widthOf.set.call(this, value);
+                },
+            });
             const exports = { toDataURL: 0, toBlob: 0 };
             for (const name of ['toDataURL', 'toBlob']) {
                 const original = HTMLCanvasElement.prototype[name];
@@ -2093,7 +2107,22 @@
                 const n = Math.min(window.__canvases.made - made0, window.__canvases.list.length);
                 return n > 0 ? window.__canvases.list.slice(-n) : [];
             };
-            const advBitmaps = (list) => list.map((c) => ({ width: c.width, height: c.height }));
+            const advBitmaps = (list) => list.map((c) => ({ width: c.width, height: c.height, zeroSets: c.__zeroSets ?? 0, released: c.__released ?? 0 }));
+            // The region canvases a recognition drew: the large ones (not crops; extraction draws no crop).
+            const advRegions = (list) => list.filter((c) => (c.__released ?? 0) > 0 || c.width * c.height >= 100000);
+            // A recogniser that records when each recogniseFields call -- which holds the page and the region -- settles.
+            const advTracked = (registry, log, boundMs = null) => class Tracked extends GuardedRegisterOcr {
+                recogniseFields(page, rects, options) {
+                    const first = !this.tracked;
+                    this.tracked = true;
+                    const entry = { askedAt: advNow(), settledAt: null, how: null };
+                    log.push(entry);
+                    return super.recogniseFields(page, rects, boundMs !== null && first ? { ...options, timeoutMs: boundMs } : options).then(
+                        (value) => { entry.settledAt = advNow(); entry.how = 'resolved'; return value; },
+                        (error) => { entry.settledAt = advNow(); entry.how = `rejected:${error?.name ?? 'Error'}`; throw error; },
+                    );
+                }
+            };
             // The store's lock, the registry's Worker states, and the time each first changed. Workers are keyed by
             // their channel: the registry and the page's own list number them apart.
             const advWatch = (t) => {
@@ -2160,14 +2189,10 @@
                 const n0 = ocrStart.made.length;
                 const canvas0 = advCanvasMark();
                 const faults0 = { errors: window.__faults.errors.length, rejections: window.__faults.rejections.length };
-                class Bounded extends GuardedRegisterOcr {
-                    recogniseFields(page, rects, options) {
-                        const first = !this.bounded;
-                        this.bounded = true;
-                        return super.recogniseFields(page, rects, first ? { ...options, timeoutMs: LATE_MS } : options);
-                    }
-                }
-                const run = t.store.extract({ sheetIds: [t.raster] }, which === 'R1L' ? { createOcr: () => new Bounded(t.registry ? { workers: t.registry } : {}) } : {});
+                // R1: the engine's own bound; R1L: the first recognition given a short one, to watch what it does after.
+                const calls = [];
+                const Tracked = advTracked(t.registry, calls, which === 'R1L' ? LATE_MS : null);
+                const run = t.store.extract({ sheetIds: [t.raster] }, { createOcr: () => new Tracked(t.registry ? { workers: t.registry } : {}) });
                 let found = null;
                 await until(() => { found = advInRecognition(n0); return Boolean(found); }, 'a recognition under way', 120000);
                 const record = found.record;
@@ -2177,26 +2202,34 @@
                     progressReports: found.progress.length, lastProgress: found.progress.at(-1).p,
                     answeredRecognitions: advAnswered(record, 'recognize').length, askedRecognitions: advAsked(record, 'recognize').length,
                     phase: t.store.getSnapshot().operation?.phase ?? null, browser: await browserOcr(),
-                    regionBitmaps: advBitmaps(advCanvasesSince(canvas0)).filter((b) => b.width * b.height > 0),
+                    regionBitmaps: advBitmaps(advRegions(advCanvasesSince(canvas0))), callSettled: calls[0]?.settledAt !== null,
                 };
                 watch.seen.cancelAt = cancelAt;
                 t.store.cancelExtraction();
                 const { report } = await run;
                 const returnedAt = advNow();
+                const regionsAtReturn = advBitmaps(advRegions(advCanvasesSince(canvas0)));
                 const gone = await advBrowserGone(cancelAt);
-                const regionCanvases = advCanvasesSince(canvas0);
+                const regionCanvases = advRegions(advCanvasesSince(canvas0));
+                const ownRecord = () => (t.registry ? t.registry.records().find((r) => r.channel === record.channel) ?? null : null);
+                const endedEntry = watch.seen.endedAt[record.channel];
                 const afterUnlock = {
                     unlockMs: watch.seen.unlockedAt === null ? null : advRound(watch.seen.unlockedAt - cancelAt), returnedMs: advRound(returnedAt - cancelAt),
-                    workerEndedMs: watch.seen.endedAt[record.channel] ? advRound(watch.seen.endedAt[record.channel].at - cancelAt) : null, workerEnded: watch.seen.endedAt[record.channel]?.ended ?? null,
+                    workerEndedMs: endedEntry ? advRound(endedEntry.at - cancelAt) : null, workerEnded: endedEntry?.ended ?? null,
                     browserGoneMs: gone.ms, browserAfter: gone.count,
                     // The lock let go only once every Worker was known ended.
-                    endedBeforeUnlock: watch.seen.endedAt[record.channel] !== undefined && watch.seen.unlockedAt !== null && watch.seen.endedAt[record.channel].at <= watch.seen.unlockedAt,
+                    endedBeforeUnlock: endedEntry !== undefined && watch.seen.unlockedAt !== null && endedEntry.at <= watch.seen.unlockedAt,
                     report: advReport(report), sheet: advSheetState(t.s, t.raster), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t),
-                    counts: t.counts(), records: t.records(), regionBitmaps: advBitmaps(regionCanvases),
+                    counts: t.counts(), records: t.records(), regionBitmaps: regionsAtReturn,
+                    // The recogniseFields call (it holds the page and the region): when, and how, it settled.
+                    call: calls[0] ? { how: calls[0].how, settledMs: calls[0].settledAt === null ? null : advRound(calls[0].settledAt - cancelAt) } : null,
+                    // Let go no earlier than the Worker was known ended.
+                    callSettledAfterEnd: calls[0]?.settledAt !== null && endedEntry !== undefined && calls[0].settledAt >= endedEntry.at,
+                    abandoned: ownRecord()?.abandonedRecognitions ?? null,
                 };
                 const version0 = t.store.getSnapshot().version;
                 const made0 = ocrStart.made.length;
-                // Afterwards: anything the abandoned recognition still does.
+                // Afterwards: anything the abandoned recognition still does (R1L: past its short bound).
                 const waitMs = which === 'R1L' ? LATE_MS + 2000 : 2000;
                 await new Promise((resolve) => setTimeout(resolve, waitMs));
                 const later = {
@@ -2205,12 +2238,63 @@
                     sheet: advSheetState(t.s, t.raster), regionBitmaps: advBitmaps(regionCanvases),
                     faults: { errors: window.__faults.errors.slice(faults0.errors), rejections: window.__faults.rejections.slice(faults0.rejections) },
                     counts: t.counts(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null,
+                    call: calls[0] ? { how: calls[0].how } : null, abandoned: ownRecord()?.abandonedRecognitions ?? null,
                 };
                 const fired = t.clock.fireAll();
                 await tick();
-                const afterDeadlines = { fired, versionMoved: t.store.getSnapshot().version !== version0, counts: t.counts() };
+                const afterDeadlines = { fired, versionMoved: t.store.getSnapshot().version !== version0, counts: t.counts(), regionBitmaps: advBitmaps(regionCanvases) };
+                // The next run, at once: it reads to its end, its own region let go once, and the old Worker changes nothing.
+                const canvasNext = advCanvasMark();
+                const nextCalls = [];
+                const NextTracked = advTracked(t.registry, nextCalls);
+                const next = await t.store.extract({ sheetIds: [t.raster] }, { createOcr: () => new NextTracked(t.registry ? { workers: t.registry } : {}) });
+                const nextRun = {
+                    report: advReport(next.report), sheet: advSheetState(t.s, t.raster), call: nextCalls[0] ? { how: nextCalls[0].how } : null,
+                    regionBitmaps: advBitmaps(advRegions(advCanvasesSince(canvasNext))), oldRegionBitmaps: advBitmaps(regionCanvases),
+                    oldRecognitionAnswered: advAnswered(record, 'recognize').length > atCancel.answeredRecognitions, counts: t.counts(),
+                };
+                out[which] = { atCancel, afterUnlock, later, afterDeadlines, nextRun, next: next.report.outcome ?? null, log: logFrom(t.mark) };
+                watch.stop();
+                await t.done();
+            }
+
+            // R3L. A late answer: the recognition's answer held at the page (the Worker has answered it), terminate()
+            //      throws, and the cancel follows; the Worker, asked on its channel, says closed -- its end is known --
+            //      so the waiting recognition is let go as abandoned. Then the held answer is given: it must change nothing.
+            if (which === 'R3L') {
+                const t = await setup({ terminate: () => { throw new Error('simulated: terminate() threw'); } });
+                const watch = advWatch(t);
+                const canvas0 = advCanvasMark();
+                const faults0 = { errors: window.__faults.errors.length, rejections: window.__faults.rejections.length };
+                const plan = planNext({ action: 'recognize' });
+                const calls = [];
+                const Tracked = advTracked(t.registry, calls);
+                const run = t.store.extract({ sheetIds: [t.raster] }, { createOcr: () => new Tracked(t.registry ? { workers: t.registry } : {}) });
+                await heldIn(plan, 'the recognition answered, its answer held at the page');
+                const record = plan.record;
+                const cancelAt = advNow();
+                watch.seen.cancelAt = cancelAt;
+                t.store.cancelExtraction();
+                const ended = await within(run, 60000);
+                const regions = advRegions(advCanvasesSince(canvas0));
+                const ownRecord = () => (t.registry ? t.registry.records().find((r) => r.channel === record.channel) ?? null : null);
+                const beforeLate = {
+                    settled: ended.settled, report: advReport(ended.value?.report), workerEnded: watch.seen.endedAt[record.channel]?.ended ?? null,
+                    call: calls[0] ? { how: calls[0].how } : null, abandoned: ownRecord()?.abandonedRecognitions ?? null,
+                    regionBitmaps: advBitmaps(regions), sheet: advSheetState(t.s, t.raster), operation: plainly(t.store.getSnapshot().operation),
+                };
+                const version0 = t.store.getSnapshot().version;
+                record.release();
+                await tick();
+                await tick();
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                const afterLate = {
+                    versionMoved: t.store.getSnapshot().version !== version0, sheet: advSheetState(t.s, t.raster), regionBitmaps: advBitmaps(regions),
+                    faults: { errors: window.__faults.errors.slice(faults0.errors), rejections: window.__faults.rejections.slice(faults0.rejections) },
+                    call: calls[0] ? { how: calls[0].how } : null, counts: t.counts(), thrownInHandler: record.thrown.length,
+                };
                 const next = await t.store.startExtraction([t.raster]);
-                out[which] = { atCancel, afterUnlock, later, afterDeadlines, next: next.outcome ?? next.refusal?.code ?? null, log: logFrom(t.mark) };
+                out.R3L = { beforeLate, afterLate, next: next.outcome ?? next.refusal?.code ?? null };
                 watch.stop();
                 await t.done();
             }
@@ -2268,16 +2352,24 @@
                 const t = await setup(which === 'R3T'
                     ? { terminate: () => { throw new Error('simulated: terminate() threw'); } }
                     : { terminate: (end) => late.promise.then(() => end()) });
-                const plan = which === 'R3N' ? planNext({ holdClosed: true }) : null;
+                // R3N: the Worker's "closed" withheld, and its answer to the recognition held at the page, so the
+                // recognition stays unanswered for as long as the end is unknown (and after, until the end is known).
+                const plan = which === 'R3N' ? planNext({ holdClosed: true, action: 'recognize' }) : null;
                 const watch = advWatch(t);
                 const n0 = ocrStart.made.length;
+                const canvas0 = advCanvasMark();
+                const regionsNow = () => advBitmaps(advRegions(advCanvasesSince(canvas0)));
+                const abandonedNow = (channel) => (t.registry ? t.registry.records().find((r) => r.channel === channel)?.abandonedRecognitions ?? null : null);
                 const run = t.store.extract({ sheetIds: [t.raster] });
                 let found = null;
-                await until(() => { found = advInRecognition(n0); return Boolean(found); }, 'a recognition under way', 120000);
+                if (which === 'R3N') {
+                    await heldIn(plan, 'the recognition answered by the Worker, its answer held at the page');
+                    found = { record: plan.record, askedAt: advAsked(plan.record, 'recognize').at(-1).at, progress: [{ p: null }] };
+                } else await until(() => { found = advInRecognition(n0); return Boolean(found); }, 'a recognition under way', 120000);
                 const record = found.record;
                 const cancelAt = advNow();
                 watch.seen.cancelAt = cancelAt;
-                const atCancel = { sinceAskedMs: advRound(cancelAt - found.askedAt), lastProgress: found.progress.at(-1).p, answeredRecognitions: advAnswered(record, 'recognize').length };
+                const atCancel = { sinceAskedMs: advRound(cancelAt - found.askedAt), lastProgress: found.progress.at(-1).p, answeredRecognitions: advAnswered(record, 'recognize').length, heldAnswers: plan?.record?.held.length ?? 0, regionBitmaps: regionsNow() };
                 t.store.cancelExtraction();
                 if (which === 'R3T') {
                     const ended = await within(run, 60000);
@@ -2295,15 +2387,22 @@
                     const heardClosed = await until(() => (plan.record?.heldAcks?.length ?? 0) > 0, 'the Worker said closed (withheld)', 60000).then(() => true, () => false);
                     await tick();
                     const tooSoon = await t.store.startExtraction([t.raster]);
-                    const whileUnknown = { heardClosedAfterMs: heardClosed ? advRound(advNow() - cancelAt) : null, phase: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), next: tooSoon.refusal?.code ?? tooSoon.outcome };
+                    const whileUnknown = { heardClosedAfterMs: heardClosed ? advRound(advNow() - cancelAt) : null, phase: t.store.getSnapshot().operation?.phase ?? null, gate: gateOf(t), counts: t.counts(), next: tooSoon.refusal?.code ?? tooSoon.outcome, regionBitmaps: regionsNow(), abandoned: abandonedNow(record.channel) };
                     const fired = CLOSE_MS === null ? 0 : t.clock.fire(CLOSE_MS);
                     const ended = await within(run, 30000);
-                    const afterDeadline = { fired, settled: ended.settled, report: advReport(ended.value?.report), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(), sheet: advSheetState(t.s, t.raster) };
+                    const afterDeadline = { fired, settled: ended.settled, report: advReport(ended.value?.report), operation: plainly(t.store.getSnapshot().operation), gate: gateOf(t), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, counts: t.counts(), records: t.records(), sheet: advSheetState(t.s, t.raster), regionBitmaps: regionsNow(), abandoned: abandonedNow(record.channel) };
                     late.resolve();
                     await tick();
                     await tick();
-                    const afterLate = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, next: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
-                    out.R3N = { atCancel, whileUnknown, afterDeadline, afterLate };
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                    const afterLate = { counts: t.counts(), records: t.records(), unavailable: t.store.getSnapshot().ocr?.unavailable ?? null, regionBitmaps: regionsNow(), abandoned: abandonedNow(record.channel), next: await t.store.startExtraction([t.raster]).then((x) => x.refusal?.code ?? x.outcome) };
+                    // The held answer, given now that the Worker is known ended (late): it must change nothing.
+                    const version1 = t.store.getSnapshot().version;
+                    plan.record.release();
+                    await tick();
+                    await tick();
+                    const afterHeldAnswer = { versionMoved: t.store.getSnapshot().version !== version1, sheet: advSheetState(t.s, t.raster), regionBitmaps: regionsNow(), counts: t.counts() };
+                    out.R3N = { atCancel, whileUnknown, afterDeadline, afterLate, afterHeldAnswer };
                     plan.record?.worker.terminate();
                 }
                 watch.stop();

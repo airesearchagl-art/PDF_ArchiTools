@@ -91,6 +91,11 @@ export interface OcrWorkerRecord {
     startAnswered: 'STARTED' | 'FAILED' | 'CLOSED' | null;
     /** Given up as unconfirmed, and heard from or ended afterwards. Restores nothing. */
     lateEnd: 'TERMINATED' | 'CLOSED' | null;
+    /**
+     * Recognitions still waiting on this Worker when its end became known, answered then as abandoned so their
+     * caller lets go of the region it drew (ADV-37-03). Never while the end is unknown.
+     */
+    abandonedRecognitions: number;
 }
 
 export interface OcrWorkerCounts {
@@ -107,6 +112,17 @@ export interface OcrWorkerCounts {
     slowestStartMs: number;
     live: number;
     releaseUnconfirmed: boolean;
+}
+
+/**
+ * A recognition asked of a Worker that is now known ended, and which the Worker will therefore never answer.
+ * tesseract.js does not settle a job whose Worker is terminated; this is how its caller hears it.
+ */
+export class OcrRecognitionAbandonedError extends Error {
+    constructor() {
+        super('OCR recognition abandoned: its Worker has ended');
+        this.name = 'OcrRecognitionAbandonedError';
+    }
 }
 
 export class OcrUnavailableError extends Error {
@@ -146,12 +162,15 @@ class OwnedWorker {
     private abandonStart: (() => void) | null = null;
     private terminateAsked = false;
     private readonly madeAt = now();
+    /** Recognitions asked of this Worker and not yet answered: each settles exactly once. */
+    private readonly inFlight = new Set<(error: Error) => void>();
 
     constructor(registry: OcrWorkerRegistry, n: number) {
         this.registry = registry;
         this.record = {
             n, channel: `m7-ocr-${globalThis.crypto.randomUUID()}`, state: 'starting', alive: false,
             startFailure: null, ended: null, terminateFailure: null, startMs: null, startAnswered: null, lateEnd: null,
+            abandonedRecognitions: 0,
         };
         this.settled = new Promise((resolve) => { this.markSettled = resolve; });
     }
@@ -216,12 +235,53 @@ class OwnedWorker {
         });
     }
 
-    /** Keep the worker object's own terminate(), and route the caller's through close(). */
+    /**
+     * Keep the worker object's own terminate(), and route the caller's through close(). Its recognize() is kept
+     * too, and each job it starts is watched: answered as the Worker answers it, or -- once the Worker is known
+     * ended and so will never answer -- as abandoned (abandonInFlight). An answer that comes after that is dropped.
+     */
     private adopt(worker: TesseractWorker): void {
         if (this.terminateHandle) return;
         const own = worker.terminate.bind(worker);
         this.terminateHandle = () => own();
         (worker as unknown as { terminate: () => Promise<void> }).terminate = () => this.close();
+        const recognise = worker.recognize.bind(worker) as (...args: unknown[]) => Promise<unknown>;
+        (worker as unknown as { recognize: (...args: unknown[]) => Promise<unknown> }).recognize = (...args) => this.watch(recognise(...args));
+    }
+
+    /** A job of this Worker, settled once: by the Worker's answer, or as abandoned once its end is known. */
+    private watch<T>(job: Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            let settled = false;
+            const abandon = (error: Error): void => {
+                if (settled) return;
+                settled = true;
+                this.inFlight.delete(abandon);
+                reject(error);
+            };
+            this.inFlight.add(abandon);
+            job.then((value) => {
+                if (settled) return; // answered after it was abandoned: dropped
+                settled = true;
+                this.inFlight.delete(abandon);
+                resolve(value);
+            }, (error: unknown) => {
+                if (settled) return;
+                settled = true;
+                this.inFlight.delete(abandon);
+                reject(error);
+            });
+            // Asked of a Worker already known ended: it will never answer.
+            if (this.record.state === 'ended' || this.record.lateEnd !== null) this.abandonInFlight();
+        });
+    }
+
+    /** The Worker is known ended: every job still waiting on it is answered as abandoned. Only ever called then. */
+    private abandonInFlight(): void {
+        for (const abandon of [...this.inFlight]) {
+            this.record.abandonedRecognitions += 1;
+            abandon(new OcrRecognitionAbandonedError());
+        }
     }
 
     /** End the Worker. Resolves once it is known ended, or given up as unconfirmed. Never rejects. */
@@ -313,9 +373,11 @@ class OwnedWorker {
         this.disarmStart?.();
         this.disarmClose?.();
         if (this.record.state === 'unconfirmed') {
-            // Too late to count: the page stays unconfirmed until it is reloaded.
+            // Too late to count: the page stays unconfirmed until it is reloaded. The Worker is ended now, though,
+            // so what still waits on it is let go -- that restores nothing either.
             if (!this.record.lateEnd) this.record.lateEnd = how;
             this.channel?.close();
+            this.abandonInFlight();
             this.registry.changed();
             return;
         }
@@ -325,6 +387,8 @@ class OwnedWorker {
         this.heardEnd?.();
         this.registry.noteEnded(this);
         this.markSettled();
+        // Known ended: a recognition it was running will never be answered. Not before (unconfirmed() never does this).
+        this.abandonInFlight();
     }
 
     private unconfirm(): void {
