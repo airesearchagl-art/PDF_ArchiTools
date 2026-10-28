@@ -37,6 +37,36 @@ executable S/R/W validator, `schemaVersion` and pre-release safety bounds
 remain unchanged. Independent **Focused Contract Re-review** of the repair
 head and a separate Human Ready/merge gate are still required.
 
+## M7-CAN-03 — Human-adopted QA D rules (2026-10-28)
+
+**Human adopted CAN-03 R4.1 on 2026-10-28**, through the explicit approval
+`M7-CAN03-R41-CONTRACT-PUBLISH-01` in the PDF ArchiTools ChatGPT conversation.
+The adopted artifact is `M7-CAN03-R4.1-LIMIT-ATOMICITY.zip`, SHA-256
+`c6bf864db66ecc0797ef3220a4be893dc0eb661b8f91cdff492db51c99c311cb`.
+Its independent design re-review is PASS, RF-01 CLOSED, Required Fix 0. That review
+is bound to the ZIP, **not to a Git commit**; no design-review commit is asserted.
+
+The adoption covers R4-A through R4-I and R4.1-L. All are human-readable
+runtime/writer **D** rules. New byte derivations, validity/currency detail,
+QA evaluation/closure, Decision guards, QA coverage, atomic limit refusal and
+partial-QA readiness are specified in the sections below. Changes to previously
+adopted wording are distinguished explicitly:
+
+| Decision | Adopted meaning | Kind |
+|---|---|---|
+| MD-1 | One `LISTED_BUT_MISSING` Finding per comparison number, citing **all live Entries** with that number across all live References | changes the former §K Subject of one Register Entry |
+| MD-2, **option A** | Withdrawing all References resolves `REGISTER_NOT_CURRENT`; existing QA09 Findings become STALE until the next QA run closes them `NOT_REPRODUCED` | changes the former §K requirement to redeclare before clearing the blocker |
+| MD-3 | Add `QA_RESULT_NOT_CURRENT` to the six existing §J blockers | new normative D policy |
+| MD-4 | Add a Decision only to an `ACTIVE`, `CURRENT` Finding | new normative D policy |
+
+The approval authorizes publication in a **Draft PR only**, followed by independent
+Contract Review. It does **not** authorize P3/P4 implementation, Ready, merge,
+manual CI, Production operations, deploy, or Notion/Vault updates. Schema,
+executable S/R/W validator, `schemaVersion` and resource-bound values/statuses
+are unchanged. The reviewed proposal generator is a test oracle, not Production
+code or an implementation authorization. The adopted rules do not freeze QA01B
+or the other deferred QA parameters.
+
 ## How to read it — where each rule lives
 
 | Mark | Enforced by | When | On violation |
@@ -181,6 +211,31 @@ save (D).
   person retires them (D).
 - A live Sheet is not assigned to a retired profile (R `REL_RETIRED_STATE`).
 
+### CAN-03 R4-A — QA input has separate validity and binding axes (D)
+
+Validity reads the stored basis, independently of session binding. A record is
+valid only if the Sheet's Source exists and is live and its current fingerprint
+equals the record's `sourceSha256`. For a profile-based record, all of the following
+also hold: the Sheet has a profile assignment; its `profileId` equals the record's
+`profile.profileId`; that Profile exists and is live; its `revision` equals the
+record's `profileRevision`. Comparing revision alone is insufficient. A manual
+confirmation with `profile: null` is unaffected by assigning, changing or removing
+a Profile. This is the validity axis of the existing product currency functions;
+`CURRENT` or `UNVERIFIED` there means valid, while binding remains a separate axis.
+
+Choose one QA input for each live Sheet, in this order:
+
+| `origin` | Condition | Values, in canonical order |
+|---|---|---|
+| `CONFIRMED` | valid confirmation | `confirmation.values`: `drawingNumber`, `drawingTitle`, `revision`, `issueDate` |
+| `OBSERVED` | no valid confirmation, valid observation with status `READ` | the same four `observation.fields[field].value` values |
+| `NONE` | otherwise | `null` |
+
+QA01/QA09 compare only `drawingNumber`; QA02 evidence includes all four values.
+Binding does not select the input: it affects Finding currency. `editedFields`,
+OCR score, extraction method, `rawText` and timestamps select neither input nor
+evidence. A score never constitutes confirmation.
+
 ## D. Title Block Profile
 
 - Geometry in the existing M2-5 Drawing Register's own semantics: **upright page space** (origin top-left of
@@ -234,6 +289,38 @@ save (D).
   page image or any image of the table, the page's extracted text, the tokens the engine read, the cell grid
   as a block, raw OCR text, a file path, PDF bytes, the engine's candidate or score, the column mapping.
 
+### CAN-03 R4-C — one declared register across all live References (D)
+
+A Reference is live exactly when `retiredAt` is null. An Entry is live only when
+both it **and its containing Reference** are live; withdrawing a Reference need
+not individually retire its Entries. A Reference is current only if its Source
+exists, is live and has the Reference's fixed `sourceSha256`. Binding does not
+change that validity test.
+
+| Derived register state | Condition | Evaluation and Final effect |
+|---|---|---|
+| `NONE` | no live Reference, including after withdrawal of all References | no QA09 comparison; `NO_DECLARED_REGISTER`, not PASS; no register blocker |
+| `NOT_CURRENT` | at least one live Reference is not current | evaluate no QA09, including no partial comparison against the remaining References; enumerate non-current References for `REGISTER_NOT_CURRENT` |
+| `EVALUABLE` | at least one live Reference, all current | compare live Sheets with the union of **all live Entries of all live References** |
+
+A current live Reference whose Entries are all retired is still EVALUABLE: it
+contributes no listed numbers. Never select only the first Reference or silently
+ignore another one. Sorting Source/Profile/Sheet/Reference/Entry arrays or
+renumbering rows changes no key or evidence.
+
+Partial withdrawal removes the withdrawn Reference's Entries from the union;
+affected Findings become STALE until a QA run restates or closes them. ANL evidence
+depends on every live Reference; LBM evidence depends only on References containing
+its cited Entries. Therefore withdrawing an unrelated Reference can change ANL
+evidence without changing an LBM's evidence or Decision. A stale live Reference
+blocks QA09 as a whole; an unbound but otherwise current Reference does not stop
+evaluation, but affects currency when it is part of a Finding's basis.
+
+**MD-2 option A, adopted:** when all References are withdrawn, the register is NONE
+immediately. Existing ACTIVE QA09 Findings are STALE before re-run; the next QA run
+closes them NOT_REPRODUCED. Their Decisions remain historical. Withdrawal clears
+REGISTER_NOT_CURRENT without requiring redeclaration.
+
 ## F. Analysis Run
 
 - **Engine / version.** `kind` `EXTRACTION` or `QA`; `engine { name, version }`. An `EXTRACTION` run is
@@ -258,8 +345,9 @@ save (D).
     fingerprint of only `b`. Serialize the two pairs in that ascending ID
     order with no whitespace →
     `8fdeea72a821499e08e043456eff0e02008b83fce8bad8905a34535e4727fed0`.
-- **Coverage** `{ sheetsEvaluated, sheetsExcluded }`: a run that left sheets out cannot close a finding about
-  them (D).
+- **Coverage** `{ sheetsEvaluated, sheetsExcluded }` records the run scope. A rule cannot close a Finding
+  whose question it could not evaluate (D); the CAN-03 QA coverage counts below do not replace the rule-specific
+  closure conditions in §G. EXTRACTION coverage retains its CAN-02 meaning.
 - **Derived evidence provenance.** Each observation names the run and the `sourceSha256` it read; each finding
   names its run and the `basis` of every Source it cites. Observations come only from `EXTRACTION` runs;
   findings, and their closing, only from `QA` runs (R `REL_RUN_KIND`).
@@ -283,6 +371,72 @@ save (D).
   `runId` refers to it. A zero-observation terminal run may remain in a
   browser-local P2 session, and the P2 runtime never uses save-time pruning.
 
+### CAN-03 R4-G — completed QA runs and coverage (D)
+
+A QA run uses `kind: "QA"`, engine name `drawing-set-qa` and the QA engine version,
+`startedAt`, `completedAt`, `outcome: "COMPLETED"`, and the unchanged §F
+`manifestDigest` over all live Sources. QA coverage counts live Sheets whose QA
+input origin is not NONE as `sheetsEvaluated`; the remaining live Sheets are
+`sheetsExcluded`. These counts describe value-reading QA01/QA09. QA02 still
+evaluates every live Sheet, including those excluded from value-reading rules.
+
+Append the run, its new Findings, supersessions and closures **atomically**.
+An interrupted operation publishes nothing. The initial P3 QA scope writes no
+CANCELLED or FAILED QA run. This does not change CAN-02 terminal EXTRACTION rules.
+Each new Finding's `createdAt` equals this QA run's `completedAt`; its `runId`
+names this run. For a supersession, the old Finding becomes SUPERSEDED with the
+new Finding's id, this run's id and this run's time. A closure becomes
+NOT_REPRODUCED, with null `supersededByFindingId` and this run's id/time.
+
+### CAN-03 R4.1-L — plan, check all bounds, then publish (D)
+
+Before any write, compute the full planned output: one AnalysisRun with coverage,
+every new or superseding Finding, every supersession and every NOT_REPRODUCED
+closure. Check all the following against the existing schema bounds:
+
+| Check | Planned value | Existing `x-limit` and candidate value |
+|---|---|---|
+| AnalysisRun count | all existing EXTRACTION and QA runs + 1 | `maxAnalysisRuns` 2000 |
+| Finding count | all existing Findings, in every lifecycle state, + all new Findings | `maxFindings` 50000 |
+| Each statement's subjects | `sheetIds.length` and `registerEntryIds.length`, separately | `maxSubjectsPerFinding` 5000 |
+| Each statement's Sources | `sourceIds.length` and `basis.length`, separately | `maxSources` 5000 |
+| Coverage | `sheetsEvaluated` and `sheetsExcluded`, separately | `maxSheets` 5000 |
+
+Measure every statement, including one whose key/evidence would retain an existing
+Finding. Closures do not consume another Finding slot: at the Finding bound, a
+run that only closes or retains Findings is allowed if its other bounds fit.
+The run bound is shared with EXTRACTION.
+
+If **any** planned value exceeds a bound, return runtime refusal
+`QA_LIMIT_EXCEEDED` and write **nothing**: no AnalysisRun (not even FAILED),
+Finding, lifecycle, Decision, Sheet, Reference or Source change. In the reference
+model even the clock, id counters, bindings and diagnostics are unchanged. Report
+all exceeded bounds in fixed order: run count, Finding count, coverage evaluated,
+coverage excluded, then statements in the §G canonical order and, within each,
+sheetIds, registerEntryIds, sourceIds, basis. Each report gives the bound name,
+maximum, planned count and location; for a statement also rule, reason,
+comparisonKey and findingKey. The report is runtime-only, not stored.
+
+Do not truncate or omit Entries, split an LBM, partially publish a run, delete
+history to free capacity, or raise a bound. A schema-valid declaration with 5001
+rows bearing one number remains a valid declaration; refuse the QA **output** if
+it would require an oversized Finding, not the declaration itself. When a Sheet
+carries that number there is no LBM to write and that Subject bound need not be
+exceeded. The anticipated refusal can be derived before execution for display.
+
+On refusal the latest completed QA run and all readiness inputs are unchanged;
+existing blockers remain. Never present refusal as completed QA or use it as a
+new completed run. Explain the actual exceeded bound, rather than repeatedly
+prompting an impossible re-run. After reducing live cited Entries to the bound,
+an unchanged question/evidence retains its old Finding and Decision. At the run
+bound no QA or EXTRACTION run can be appended; history is not deleted.
+
+If all checks fit, construct the complete next DrawingSet before replacing the
+current one, publishing the run/Findings/lifecycle changes together. Perform the
+same all-or-nothing check for Decision appends (§H). These refusal rules belong
+to P3; they are not deferred to save/import in P4. Numeric bounds and their
+candidate/freeze statuses remain unchanged; P4 decides their eventual values.
+
 ## G. QA Finding
 
 - **Immutable statement / evidence.** One statement by one rule about its subjects. Immutable apart from
@@ -297,8 +451,8 @@ save (D).
   Register Entry's reference (R resolves; D content).
 - **`findingKey`** — SHA-256 naming the question (the rule and its subject). **`evidenceDigest`** — SHA-256
   over the grounds: the rule version, the cited sheets with their fingerprints, the cited register entries,
-  and the values that make it true. Their exact byte derivations belong to the QA engine and are fixed with it
-  in M7-P3; this contract fixes their roles and the invariants below.
+  and the values that make it true. CAN-03 fixes the exact QA01/QA02/QA09 byte derivations below as D rules
+  before dependent P3 implementation; the machine S/R/W contract remains unchanged.
 - **Lifecycle** (stored), each state with consistent fields (R `REL_FINDING_LIFECYCLE`):
 
   | State | Meaning | `supersededByFindingId` | `closedByRunId` / `closedAt` |
@@ -342,6 +496,175 @@ For QA04–QA06 a blank value is unknown, not different. QA05 / QA06 mean differ
 number** (Human decision), not a difference from an expected revision or date. The existing engine's
 `revision_date` is M7's `issueDate`, mapped in an adapter (Human decision).
 
+### CAN-03 R4-B — exact QA key and evidence bytes (D)
+
+For the three rules below, `ruleVersion` is 1 and `determinism` is DETERMINISTIC.
+`comparisonKey = value.trim()` using ECMAScript `String.prototype.trim` (including
+U+3000): trim edges only; keep internal spaces; do not fold width, case or dashes.
+Encode the following arrays with `JSON.stringify`, no additional whitespace,
+UTF-8, SHA-256, lower-case 64-character hex:
+
+```text
+["m7.findingKey",1,ruleId,keyReason,...keyParts]
+["m7.evidenceDigest",1,ruleId,ruleVersion,reasonOrNull,basis,sheets,entries,extra]
+```
+
+| Rule/reason | `keyReason` | `keyParts` |
+|---|---|---|
+| QA01_DUPLICATE_NUMBER | null | `[comparisonKey]` |
+| QA02_METADATA_UNCONFIRMED | null (reason belongs in evidence, not identity) | `[sheetId]` |
+| QA09_REGISTER_SHEET_MISMATCH / ACTUAL_NOT_LISTED | ACTUAL_NOT_LISTED | `[sheetId]` |
+| QA09_REGISTER_SHEET_MISMATCH / LISTED_BUT_MISSING | LISTED_BUT_MISSING | `[comparisonKey]` |
+
+Here ANL means ACTUAL_NOT_LISTED and LBM means LISTED_BUT_MISSING.
+
+| Evidence component | QA01 | QA02 | QA09 ANL | QA09 LBM |
+|---|---|---|---|---|
+| reasonOrNull | null | QA02 reason | ACTUAL_NOT_LISTED | LISTED_BUT_MISSING |
+| basis | cited Sheets' Sources | this Sheet's Source | this Sheet's Source and all live References' Sources | Sources of References containing the cited Entries |
+| sheets | `[[sheetId,origin,rawDrawingNumber],...]` | `[[sheetId,origin,[drawingNumber,drawingTitle,revision,issueDate]]]`; values position is null for NONE | `[[sheetId,origin,rawDrawingNumber]]` | `[]` |
+| entries | `[]` | `[]` | `[]` | `[[entryId,referenceId,rawDrawingNumber],...]`, all live matching Entries across all live References |
+| extra | null | null | `[[referenceId,sourceSha256],...]` for all live References | the same pairs for References containing the cited Entries |
+
+`basis` is the **unique** set of `[sourceId,currentFingerprintSha256]` pairs.
+Sort basis by sourceId, sheets by sheetId, entries by entryId and extra by
+referenceId, using lower-case UUID ASCII ascending order. Deduplicate the
+Reference ids in extra. Values in evidence are stored values, **not trimmed**.
+The four-field array always uses the canonical field order above.
+
+Do not hash `confirmedAt`, observation `runId`, `editedFields`, OCR score,
+extraction method, comment, time, row order/number, whether the set is fully
+evaluable, or collection order. Do not hash Reference pageNumber, region, method,
+declaredAt/updatedAt; Entry origin/title/revision/issueDate; record Profile id or
+revision; observation rawText or source. Profile basis determines validity,
+not evidence. QA09 compares numbers only. `extra` is always an array of pairs,
+including when there is only one Reference.
+
+### CAN-03 R4-D — statements, subjects and closing conditions (D)
+
+| Rule | Evaluation and statement | Closing an old Finding no longer stated |
+|---|---|---|
+| QA02 | every live Sheet; first applicable reason below | always evaluated, including closure when the Sheet is retired |
+| QA01 | live Sheets with origin not NONE and non-empty comparisonKey; one group of at least two Sheets per equal key | every cited Sheet was evaluated or is retired |
+| QA09 ANL | register EVALUABLE; a live Sheet has input and non-empty comparisonKey absent from all live Entries | register EVALUABLE and its Sheet evaluated or retired; **MD-2 A:** also when register NONE |
+| QA09 LBM | register EVALUABLE; a non-empty listed comparisonKey occurs on no evaluated Sheet; **MD-1:** one statement per number, citing every live matching Entry | register EVALUABLE and the number was found, or all live Sheets were evaluated, or no live Entry lists it; **MD-2 A:** also when register NONE |
+
+QA02 reason priority: valid confirmation -> no statement; otherwise an existing
+invalid confirmation -> RECONFIRM_REQUIRED; otherwise no observation -> NOT_READ;
+otherwise invalid observation -> READ_IS_STALE; otherwise OCR_FAILED observation
+-> OCR_FAILED; otherwise UNCONFIRMED. QA02 evidence uses the currently selected
+QA input, even when its reason concerns an invalid older confirmation.
+
+A non-EVALUABLE register produces no QA09 statement. NOT_CURRENT never closes
+existing QA09 Findings. A question that could not be evaluated stays ACTIVE;
+derive its currency instead. Do not persist an `incomplete` flag. Derive set
+evaluability from current inputs/bindings each time (§I). Never state a findingKey
+twice in one run. Canonical statement order is QA02 by Sheet id, QA01 by comparisonKey,
+ANL by Sheet id, then LBM by comparisonKey. Use the reference generator's ECMAScript
+string comparison (`<` / `>`); UUID ordering is ascending ASCII.
+
+Store `sourceIds: []` for these three rules. QA01 has scope SHEET_GROUP and all
+cited Sheet ids; QA02 and ANL have scope SHEET and one Sheet id; LBM has scope
+REGISTER_ENTRY, no Sheet ids and all cited Entry ids. Other subject arrays are
+empty; subject arrays and stored `basis` are ascending by id. Store basis as
+`[{sourceId,sha256},...]` for the exact evidence basis. Params are only
+`{comparisonKey}` for QA01, `{reason}` for QA02, and `{reason,comparisonKey}`
+for QA09. No new saved fields are introduced.
+
+Same key and evidence retains the Finding and its Decision. Different evidence
+creates a new Finding, superseding the old one; all old Decisions remain attached
+to the old Finding. Returning to an earlier evidenceDigest does not revive an
+old Finding or Decision. Reconfirmation or re-extraction with the same values
+alone retains evidence; changing OBSERVED to CONFIRMED changes evidence.
+Any of the four QA02 values changing invalidates its prior Decision/exemption.
+
+### CAN-03 reference vectors — complete UTF-8 input strings (D)
+
+These are the six key vectors and four evidence vectors from the adopted R4.1
+artifact. The JSON code blocks contain the complete strings to hash, with no
+abbreviations or expansion symbols; hash the string, excluding the code fence
+and its trailing newline. Existing §F manifestDigest vectors are unchanged.
+
+#### findingKey — A-102
+
+```json
+["m7.findingKey",1,"QA01_DUPLICATE_NUMBER",null,"A-102"]
+```
+
+SHA-256: `5f6ca6605b3f4fd84ec56ddff2edf746ae44d310f4b6e5f09158a968b3874c34`.
+
+#### findingKey — " A-102 " (trimmed)
+
+```json
+["m7.findingKey",1,"QA01_DUPLICATE_NUMBER",null,"A-102"]
+```
+
+SHA-256: `5f6ca6605b3f4fd84ec56ddff2edf746ae44d310f4b6e5f09158a968b3874c34`.
+
+#### findingKey — "A-102\u3000" (ideographic space trimmed)
+
+```json
+["m7.findingKey",1,"QA01_DUPLICATE_NUMBER",null,"A-102"]
+```
+
+SHA-256: `5f6ca6605b3f4fd84ec56ddff2edf746ae44d310f4b6e5f09158a968b3874c34`.
+
+#### findingKey — A 102 (internal space kept)
+
+```json
+["m7.findingKey",1,"QA01_DUPLICATE_NUMBER",null,"A 102"]
+```
+
+SHA-256: `d11c3bad16b1b19898cd823bd423451e9e069991367be34c64b88d313f362da1`.
+
+#### findingKey — A102
+
+```json
+["m7.findingKey",1,"QA01_DUPLICATE_NUMBER",null,"A102"]
+```
+
+SHA-256: `5f7da822b161170d39ed0f18f24128e83eaf917c1aec45b802995e9485ce8709`.
+
+#### findingKey — Ａ－１０２ (full width: hint only, never the same key)
+
+```json
+["m7.findingKey",1,"QA01_DUPLICATE_NUMBER",null,"Ａ－１０２"]
+```
+
+SHA-256: `e7d38b4243757fd030350223b0177a47c8c7cc1a8d332043ecc6da57950c0a26`.
+
+#### evidenceDigest — QA02 OBSERVED, four values
+
+```json
+["m7.evidenceDigest",1,"QA02_METADATA_UNCONFIRMED",1,"UNCONFIRMED",[["00000000-0000-4000-8000-000000000002","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]],[["00000000-0000-4000-8000-000000000012","OBSERVED",[" A-102","平面図","A","2026/10/01"]]],[],null]
+```
+
+SHA-256: `b85873368b721aa91aed8ced5d9b2fd0fbea637139cec4047d0b21e1d49e102d`.
+
+#### evidenceDigest — QA02 NONE
+
+```json
+["m7.evidenceDigest",1,"QA02_METADATA_UNCONFIRMED",1,"NOT_READ",[["00000000-0000-4000-8000-000000000002","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]],[["00000000-0000-4000-8000-000000000013","NONE",null]],[],null]
+```
+
+SHA-256: `1aa5f43726e07830485bde434599d936ccc1d91ffb9ed315cb8793d75cd3454b`.
+
+#### evidenceDigest — QA09 ANL, two References
+
+```json
+["m7.evidenceDigest",1,"QA09_REGISTER_SHEET_MISMATCH",1,"ACTUAL_NOT_LISTED",[["00000000-0000-4000-8000-000000000001","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],["00000000-0000-4000-8000-000000000002","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],["00000000-0000-4000-8000-000000000003","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]],[["00000000-0000-4000-8000-000000000014","OBSERVED","A-105"]],[],[["00000000-0000-4000-8000-000000000020","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],["00000000-0000-4000-8000-000000000040","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]]]
+```
+
+SHA-256: `a158a2121d049e3ce53a4c37c5c36321eecf19a8ff54eb8f0a2c8c61eed47fa2`.
+
+#### evidenceDigest — QA09 LBM, same number in two References
+
+```json
+["m7.evidenceDigest",1,"QA09_REGISTER_SHEET_MISMATCH",1,"LISTED_BUT_MISSING",[["00000000-0000-4000-8000-000000000001","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],["00000000-0000-4000-8000-000000000003","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]],[],[["00000000-0000-4000-8000-000000000023","00000000-0000-4000-8000-000000000020","A-104"],["00000000-0000-4000-8000-000000000042","00000000-0000-4000-8000-000000000040","A-104 "]],[["00000000-0000-4000-8000-000000000020","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],["00000000-0000-4000-8000-000000000040","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]]]
+```
+
+SHA-256: `3527e8bde89d2e9abf07e20c509ef8241c64e9008acbd8db7aa3ffb738438478`.
+
 ## H. Review Decision
 
 - `findingId` resolves (R `REL_DANGLING_FINDING`); a Decision belongs to one Finding for life.
@@ -355,6 +678,23 @@ number** (Human decision), not a difference from an expected revision or date. T
   **`HOLD` is reviewed but blocks the Final QA Report** (Human decision; §J).
 - `comment`: bounded multi-line text, inert (rendered as text only).
 - **The author of a Decision is not persisted in M7 MVP** (Human decision); there is no property for it.
+
+### CAN-03 R4-F and R4.1-L — Decision writer guards (D)
+
+**MD-4, adopted:** append only to an ACTIVE Finding whose derived currency is
+CURRENT. Refuse a missing Finding (`NO_SUCH_FINDING`), an inactive one
+(`FINDING_NOT_ACTIVE`), or STALE/UNVERIFIED (`FINDING_NOT_CURRENT`), without writing.
+Then check existing Decision count + 1 against `maxDecisions` (100000). Overflow
+returns runtime `DECISION_LIMIT_EXCEEDED` and writes nothing, including no id
+allocation or clock tick in the reference model. Check the collection total,
+not just this Finding's next sequence. Refusal remains required independently
+of the MD-4 guard. Do not truncate or delete Decision history to free capacity.
+
+A new Decision has an app-minted UUID, its Finding id, next contiguous per-Finding
+sequence, outcome and inert comment, `decidedAt` at or after the Finding's
+`createdAt`, and a copy of that Finding's evidenceDigest. No author is saved.
+For Final readiness only ACTIVE Findings' effective Decisions are considered;
+HOLD on a closed/superseded Finding is history and does not block Final.
 
 ## I. Currency / stale
 
@@ -376,9 +716,9 @@ number** (Human decision), not a difference from an expected revision or date. T
 
   | Currency | Meaning |
   |---|---|
-  | `CURRENT` | `ACTIVE`, its basis equals the manifest, its Sources are `MATCHED` this session, and (for a set-wide rule) the whole set could be evaluated |
-  | `UNVERIFIED` | `ACTIVE` and consistent with the manifest, but a cited Source is not bound, or the set is not fully evaluable |
-  | `STALE` | `ACTIVE`, but stated about bytes the Source no longer has, about a retired Sheet or Register Entry, or (QA09) against a declared register no longer current or withdrawn |
+  | `CURRENT` | `ACTIVE`, the current state restates the same question on the same evidence, cited Sources are MATCHED, and the LBM whole-set condition below holds |
+  | `UNVERIFIED` | ACTIVE, not STALE, but a cited Source is not MATCHED or the LBM set is not fully evaluable |
+  | `STALE` | ACTIVE, but its subject/basis moved, QA09 register is not EVALUABLE, or the current state would not restate the same key and evidence |
   | `HISTORICAL` | not `ACTIVE` |
 
 - **A changed Source invalidates only what depends on it**: its Sheets' page facts, observations and
@@ -386,6 +726,28 @@ number** (Human decision), not a difference from an expected revision or date. T
   missing file makes nothing stale — what depends on it is `UNVERIFIED`.
 - **Human history remains.** Old confirmations become re-confirmation candidates; old decisions remain
   attached to the exact Finding evidence they concerned; old fingerprints stay in `fingerprintHistory`.
+
+### CAN-03 R4-E — Finding currency precedence (D)
+
+Use only stored Finding lifecycle, ruleId, sheetIds, registerEntryIds, basis,
+findingKey, evidenceDigest and params.reason/comparisonKey, plus the current
+DrawingSet and runtime bindings. Never parse diagnostic input strings or read
+an unsaved comparisonKey. Apply the following in order:
+
+1. Not ACTIVE -> HISTORICAL.
+2. STALE if any cited Source is absent/retired or has a different fingerprint;
+   any cited Sheet is absent/retired; any cited Entry or its Reference is not live;
+   QA09's register state is not EVALUABLE; or a run now would not state the same
+   findingKey with the same evidenceDigest. Reason, validity, origin, raw value
+   and cited-Entry changes participate through the current statement/evidence.
+3. Otherwise UNVERIFIED if any basis Source is not MATCHED, or an LBM's set is not
+   fully evaluable. The LBM set is fully evaluable only when every current live
+   Sheet has origin other than NONE and that Sheet's Source is MATCHED.
+4. Otherwise CURRENT.
+
+Recompute whole-set evaluability: adding/unreading a Sheet or losing binding can
+turn LBM UNVERIFIED; retiring the only unread Sheet can make it CURRENT without
+changing evidence. STALE precedes UNVERIFIED. No derived state is saved.
 
 ## J. Final QA readiness
 
@@ -399,7 +761,8 @@ Report requires all of the following (D; Human-adopted values):
 | a declared Drawing Register, if any, is current | `REGISTER_NOT_CURRENT` |
 | **every `ACTIVE` finding is `CURRENT`** (none `STALE` or `UNVERIFIED`) | `FINDINGS_NOT_CURRENT` |
 | **every `ACTIVE`, `CURRENT` finding has a Human decision** | `FINDINGS_UNREVIEWED` |
-| no effective decision is `HOLD` — **`HOLD` = reviewed but blocks the Final QA Report** | `FINDINGS_ON_HOLD` |
+| no ACTIVE Finding has an effective `HOLD` — **HOLD = reviewed but blocks Final while ACTIVE** | `FINDINGS_ON_HOLD` |
+| **CAN-03 MD-3:** completed QA exists on the current manifest and every current statement has an ACTIVE Finding with the same key/evidence | `QA_RESULT_NOT_CURRENT` |
 
 The QA02 metadata exemption is **`INTENTIONAL` only**:
 
@@ -417,23 +780,54 @@ QA10 `SOURCE_*` finding clears that finding, never `SOURCES_NOT_MATCHED`. Beside
 states what was **not evaluated** — `QA09 / NO_DECLARED_REGISTER` when no register is declared — so a report
 never reads an unevaluated comparison as a pass.
 
+### CAN-03 R4-H — current QA result and partial-rule boundary (D)
+
+Preserve all six pre-existing blockers above. A QA02 exemption requires its
+Finding to be **ACTIVE and CURRENT** and its effective Decision INTENTIONAL.
+No other outcome exempts confirmation; exemption ends when evidence changes.
+
+**MD-3, adopted:** add QA_RESULT_NOT_CURRENT if any of the following holds:
+no completed QA run (`NO_QA_RUN`); the latest appended completed QA run's
+manifestDigest differs from the current §F digest (`MANIFEST_CHANGED`); or a
+statement a run would make now has no ACTIVE Finding with the same findingKey
+and evidenceDigest (`UNSTATED`). A refused run adds no completion or freshness.
+This checks current statement equivalence; it is not a timestamp-only test and
+does not claim a new run is required for every edit that leaves results equal.
+
+Beside blockers always enumerate what was not evaluated: every unimplemented
+rule as NOT_IMPLEMENTED; QA09 with NO_DECLARED_REGISTER or REGISTER_NOT_CURRENT;
+and input-less Sheets for QA01 and, when the register is EVALUABLE, QA09 as
+SHEETS_WITHOUT_QA_INPUT. The latter is information, not another blocker: QA02
+and METADATA_NOT_CONFIRMED handle those Sheets, including any INTENTIONAL
+exemption. Do not portray an unevaluated Sheet as compared.
+
+Derive status in order: **FINAL_UNAVAILABLE** if any rule is unimplemented;
+otherwise **BLOCKED** if blockers exist; otherwise READY. For the initial
+QA01/QA02/QA09 scope, QA01B, QA03–QA08 and QA10 remain unimplemented, so status
+is always FINAL_UNAVAILABLE. A partial QA result is never all-rules PASS, an
+all-rules completion, or a Final QA Report. Defining this boundary does not
+authorize the initial P3 implementation or Final output.
+
 ## K. QA09 — declared Drawing Register vs actual Sheets
 
 - Compares the **Human-declared Drawing Register (図面一覧)** with the live Sheets:
 
   | Reason | Statement | Subject |
   |---|---|---|
-  | `LISTED_BUT_MISSING` | the declared register lists drawing number *X*, and no live Sheet carries it | one Register Entry |
+  | `LISTED_BUT_MISSING` | the declared register lists drawing number *X*, and no evaluated live Sheet carries it | **CAN-03 MD-1:** all live Entries listing X across all live References; one Finding per comparisonKey |
   | `ACTUAL_NOT_LISTED` | a live Sheet carries drawing number *X*, and no entry of the declared register does | one Sheet |
 
 - **The exact drawing number is the canonical comparison** (trimmed, the same key as QA01). A folded or
-  full-width spelling (`Ａ－１０２` against `A-102`) is named as a **hint only** (in the finding's
-  `params.values`) and is never counted as a match (Human decision).
+  full-width spelling (`Ａ－１０２` against `A-102`) is never counted as a match (Human decision).
+  **CAN-03 R4-I:** the initial P3 scope emits no such hints and does not write `params.values`;
+  introducing hints is deferred to a separate QA01B decision, including their evidence dependencies.
 - **No declared register → `NOT_EVALUABLE`, never `PASS`**: no finding, and the result says the set was not
   compared with a drawing list. It does not block Final — the register is optional.
 - A declared register that is **not current** (its Source's bytes were replaced after it was declared) is
-  not evaluated either, and that **does** block Final (`REGISTER_NOT_CURRENT`) until a person declares it
-  again.
+  not evaluated either, and that **does** block Final (`REGISTER_NOT_CURRENT`) until a person redeclares
+  from current bytes **or withdraws the non-current References** (CAN-03 MD-2 option A). Evaluate no
+  partial subset while any live Reference is not current. Withdrawing all References gives NONE; the
+  next QA closes existing QA09 Findings NOT_REPRODUCED, preserving their Decision history.
 - A Sheet with an empty drawing number is outside QA09; a Sheet nobody has read is not evaluated (QA02 reports
   it). QA09 v1 compares drawing numbers only, not titles, revisions or dates.
 - **`PAGE_WITHOUT_SHEET` / `SHEET_WITHOUT_PAGE` belong to QA10** (Project integrity), not to QA09: they compare
@@ -462,6 +856,16 @@ never reads an unevaluated comparison as a pass.
 - **Export is allow-list based**: only schema-declared fields are copied, and the result is validated as
   untrusted input before it is written. Runtime binding state, stale flags, file handles, paths, bytes,
   images, page text and the author of a decision never reach the file.
+
+### CAN-03 R4-I — runtime-only QA data (D)
+
+Key/evidence input strings are diagnostics and test-vector data only: do not save
+them or use them to derive currency, closing or readiness. Do not save derived
+Finding currency, register state, set-wide evaluability, readiness, binding or
+limit-refusal results. Use only existing schema fields, including the specified
+params.reason/comparisonKey; no extra storage field is introduced. The closed
+schema refuses additional saved properties. The initial P3 scope emits no
+params.values hints; a future QA01B decision must settle hints and their evidence.
 
 ## M. Version / migration
 
@@ -512,6 +916,11 @@ bound. **Not Production-frozen:** the numbers. Each value
 below is a **candidate pre-release bound** unless marked otherwise; M7-P4 (and M7-P1, for the PDF intake gate)
 freezes Production values, and a change before then is a reviewed contract change. None is a shipping
 guarantee.
+
+**CAN-03 R4.1-L application (D):** §F and §H apply the already adopted
+fail-closed principle to planned QA output and Decision appends before any write.
+Overflow refuses the entire operation without history deletion or partial output.
+This changes neither the values nor the statuses in the table below.
 
 | `x-limit` (in the schema) | Value | Status |
 |---|---|---|
@@ -566,3 +975,13 @@ and change only through the same review.
   new decision source, **not** part of the 2026-10-09 Architecture adoption or
   PR #33 research evidence. The `manifestDigest` bytes are a clarification
   of an already adopted rule. Adoption does not authorize merge or P2.
+
+- **M7-CAN-03 Human adoption — 2026-10-28:** explicit approval in this PDF ArchiTools
+  conversation under `M7-CAN03-R41-CONTRACT-PUBLISH-01`; CAN-03 R4.1 artifact
+  `M7-CAN03-R4.1-LIMIT-ATOMICITY.zip`, SHA-256
+  `c6bf864db66ecc0797ef3220a4be893dc0eb661b8f91cdff492db51c99c311cb`.
+  Independent design re-review PASS / RF-01 CLOSED / Required Fix 0 binds that ZIP,
+  not a commit. MD-1, MD-2 option A, MD-3 and MD-4 are explicitly adopted.
+  Publication only: independent Contract Review of the publication head remains
+  required before any dependent implementation; P3/P4 and Ready/merge/deploy
+  are not authorized. No approval URL or additional approval id is asserted.

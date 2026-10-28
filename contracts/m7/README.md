@@ -27,7 +27,7 @@
 | `portable-project.schema.json` | the machine-readable **structural** contract (JSON Schema, draft-07 subset) | canonical |
 | `portable-project.semantic.mjs` | the executable **semantic relation / lifecycle** contract: identity uniqueness, referential integrity, lifecycle consistency — what JSON Schema cannot state. It runs only on a value the schema has accepted | canonical |
 | `semantic-contract.md` | the same contract for people, plus the runtime rules (rebinding, currency, QA, Final readiness) the later phases implement | canonical, human-readable |
-| `contract-manifest.json` | the CAN-01 publication snapshot and CAN-02 human-contract digest/clarification scope | provenance record |
+| `contract-manifest.json` | CAN-01 publication snapshot, CAN-02 and CAN-03 adoption provenance, and the current human-contract digest | provenance record |
 
 The two machine-readable files are canonical for S/R/W. The human-readable contract
 also defines the runtime/writer D rules, to be independently reviewed before
@@ -148,6 +148,41 @@ for (const [file, record] of Object.entries(m.files)) {
 }
 '
 ```
+
+## CAN-03 Human adoption — QA D rules (2026-10-28)
+
+CAN-03 R4.1 is **Human adopted**, under the explicit approval
+`M7-CAN03-R41-CONTRACT-PUBLISH-01` in the PDF ArchiTools ChatGPT conversation.
+Source artifact: `M7-CAN03-R4.1-LIMIT-ATOMICITY.zip`, SHA-256
+`c6bf864db66ecc0797ef3220a4be893dc0eb661b8f91cdff492db51c99c311cb`.
+Independent design re-review: PASS, RF-01 CLOSED, Required Fix 0, bound to this
+ZIP rather than an invented Git head. The publication PR still requires a
+separate independent Contract Review of its exact head.
+
+- **New normative D rules and clarifications:** R4-A–I and R4.1-L fix QA inputs,
+  key/evidence bytes, union of live register References, rule-specific evaluation
+  and closure, currency, Decisions, QA coverage, atomic refusal at existing
+  bounds, partial-rule readiness and runtime-only data.
+- **Explicit adopted changes to existing D wording:** MD-1 replaces one Entry
+  per LBM subject with all live matching Entries in one Finding per number;
+  MD-2 **option A** permits register withdrawal to clear REGISTER_NOT_CURRENT and
+  closes QA09 Findings on the next QA run. Old Decision history remains.
+- **New adopted policies:** MD-3 adds QA_RESULT_NOT_CURRENT; MD-4 permits Decision
+  addition only to ACTIVE, CURRENT Findings. Unimplemented rules keep status
+  FINAL_UNAVAILABLE. QA/Decision output past a schema bound is refused with no
+  write; bounds and candidate/freeze statuses are unchanged.
+- The human contract includes **six findingKey and four evidenceDigest vectors**,
+  with complete input strings and hashes; no additional file is published.
+- **Zero machine delta:** schema, executable semantic validator, schemaVersion
+  and bound values are unchanged. The manifest records the current LF UTF-8
+  human-contract digest using the same verification snippet above; CAN-01 and
+  CAN-02 provenance remain historical and are not rewritten as CAN-03 evidence.
+- **No implementation authorization:** this approval is limited to the three
+  publication files and a Draft PR, then independent Contract Review. It does
+  not authorize P3/P4, Ready, merge, manual CI, Production operations or deploy.
+  No Version, product, ADV-37-01/03 status, cacheMethod, Notion or Vault change
+  is made by this publication. P3 requires a separate Human gate after this
+  contract has passed independent review and merged.
 
 ## Changing this contract
 

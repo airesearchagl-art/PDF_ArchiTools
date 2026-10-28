@@ -45,9 +45,9 @@
       "bodyDigestMethod": "SHA-256 (hex) of the UTF-8 text, LF line endings, after the first '*/' (the end of the leading header comment); identical for source and publication"
     },
     "semantic-contract.md": {
-      "sha256": "287676119eeeb7c1ec84359332f521ddced6223499028335fdda5cb013bb96b1",
-      "source": "CAN-01 Architecture v1 plus independently Human-adopted CAN-02 D policies (2026-10-10)",
-      "clarification": "M7-CAN-02",
+      "sha256": "3287173e193e9416b3904efcfff5f00d7b63e657cdc2dd3b6e1b0897a62c3856",
+      "source": "CAN-01 Architecture v1 plus independently Human-adopted CAN-02 (2026-10-10) and CAN-03 R4.1 D policies (2026-10-28)",
+      "clarification": "M7-CAN-03",
       "digestMethod": "SHA-256 (hex) of the full committed UTF-8 file with LF line endings",
       "machineValidationDelta": false
     }
@@ -97,6 +97,76 @@
         "reviewPR": 36,
         "precedingIndependentFullReviewHead": "faf9d08b5d37041a90c40403f72ebb18c99997d9",
         "independentRepairReviewRequired": true
+      }
+    },
+    {
+      "id": "M7-CAN-03",
+      "scope": [
+        "R4-A through R4-I and R4.1-L: QA01, QA02 and QA09 runtime/writer D rules",
+        "findingKey and evidenceDigest byte derivation and ten full-input reference vectors",
+        "MD-1 and MD-2 option A: amendments to previously adopted QA09 D wording",
+        "MD-3 and MD-4: current-QA-result readiness and ACTIVE/CURRENT Decision writer guards",
+        "existing-bound preflight and atomic QA/Decision refusal; no stored-field addition"
+      ],
+      "humanReadableOnly": true,
+      "schemaChanged": false,
+      "executableSemanticChanged": false,
+      "schemaVersionChanged": false,
+      "productionCodeChanged": false,
+      "implementationAuthorizationGranted": false,
+      "humanAdoptedAt": "2026-10-28",
+      "adoptionKind": "NEW_NORMATIVE_D_POLICIES_AND_EXPLICIT_ADOPTED_D_AMENDMENTS",
+      "decisions": [
+        {
+          "id": "MD-1",
+          "adopted": true,
+          "kind": "AMENDS_EXISTING_D",
+          "scope": "one LBM per comparison number citing all live matching Entries across all live References"
+        },
+        {
+          "id": "MD-2",
+          "adopted": true,
+          "option": "A",
+          "kind": "AMENDS_EXISTING_D",
+          "scope": "withdrawing all References clears REGISTER_NOT_CURRENT; next QA closes existing QA09 Findings NOT_REPRODUCED"
+        },
+        {
+          "id": "MD-3",
+          "adopted": true,
+          "kind": "NEW_NORMATIVE_D",
+          "scope": "QA_RESULT_NOT_CURRENT readiness blocker"
+        },
+        {
+          "id": "MD-4",
+          "adopted": true,
+          "kind": "NEW_NORMATIVE_D",
+          "scope": "Decision writer accepts only ACTIVE and CURRENT Findings"
+        }
+      ],
+      "resourceLimitsChanged": false,
+      "resourceLimitsStatusChanged": false,
+      "humanDecisionEvidence": {
+        "source": "Explicit Human approval in this PDF ArchiTools ChatGPT conversation on 2026-10-28",
+        "task": "M7-CAN03-R41-CONTRACT-PUBLISH-01",
+        "authorizationScope": "adopt CAN-03 R4.1; update only semantic-contract.md, README.md and contract-manifest.json; create Draft PR; confirm automatic exact-head Core CI; stop for independent Contract Review",
+        "readyMergeManualCiDeployAuthorized": false,
+        "p3p4ImplementationAuthorized": false
+      },
+      "designReviewEvidence": {
+        "artifact": "M7-CAN03-R4.1-LIMIT-ATOMICITY.zip",
+        "sha256": "c6bf864db66ecc0797ef3220a4be893dc0eb661b8f91cdff492db51c99c311cb",
+        "verdict": "PASS",
+        "rf01": "CLOSED",
+        "requiredFixes": 0,
+        "binding": "artifact SHA-256, not a Git commit; no design-review head asserted"
+      },
+      "publicationBaseSha": "2e33fcf3b80591b3567645f6749e8570e7dbb740",
+      "independentPublicationContractReviewRequired": true,
+      "referenceVectors": {
+        "location": "semantic-contract.md body",
+        "findingKey": 6,
+        "evidenceDigest": 4,
+        "manifestDigestVectorsChanged": false
       }
     }
   ]
