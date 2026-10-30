@@ -57,6 +57,12 @@ export const PLAN_STATUS = {
     UNSUPPORTED_DOCUMENT: 'UNSUPPORTED_DOCUMENT',
     SIGNATURE_UNSAFE: 'SIGNATURE_UNSAFE',
     XFA_UNSAFE: 'XFA_UNSAFE',
+    /**
+     * 半透明レイヤ追加 puts its overlay in a layer of its own, and this
+     * document's existing layer structure cannot be added to without guessing.
+     * It is refused rather than given an overlay that cannot be switched off.
+     */
+    OPTIONAL_CONTENT_UNSAFE: 'OPTIONAL_CONTENT_UNSAFE',
     STRUCTURE_LOSS_REQUIRES_CONFIRMATION: 'STRUCTURE_LOSS_REQUIRES_CONFIRMATION',
     UNSUPPORTED_MARGIN_SEMANTICS: 'UNSUPPORTED_MARGIN_SEMANTICS',
     /**
@@ -137,6 +143,12 @@ export interface SourceFacts {
     hasAppliedSignature: boolean;
     formInspectionState: 'no-form' | 'read' | 'unreadable';
     formError: string | null;
+    /** The layer structure, read without changing it. */
+    optionalContent: {
+        state: 'none' | 'read' | 'unreadable';
+        groupCount: number;
+        reason: string | null;
+    };
     /** Visible page geometry, in points, after /Rotate. */
     pages: { widthPt: number; heightPt: number }[];
 }

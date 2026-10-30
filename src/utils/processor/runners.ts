@@ -23,6 +23,7 @@ import {
 import { RASTER_ENCODING } from './planner';
 import { marginInPlace } from './margin-transform';
 import type { MarginOptions } from './margin-transform';
+import { addOverlayGroup, drawInGroup } from './optional-content';
 
 export interface FlattenSettings {
     dpi: number;
@@ -158,7 +159,7 @@ export async function runFlatten(
 }
 
 /**
- * 半透明レイヤ追加, over the page anyone can see.
+ * 半透明レイヤ追加, over the page anyone can see — and in a layer of its own.
  *
  * H13a: the overlay covers CropBox ∩ MediaBox, in the page's own coordinates.
  * The old code drew at (0,0) with the page's width and height, so a document
@@ -169,6 +170,11 @@ export async function runFlatten(
  * annotation. Making it an annotation to paint it on top would change what the
  * overlay is — selectable, deletable, printable on its own flag — so the tool
  * keeps the honest version and the UI says so.
+ *
+ * The overlay on every page belongs to one new optional content group, which a
+ * viewer's layer list switches on and off; with it off, the page is what it was
+ * before. The group starts ON and is not locked. The existing layers, and the
+ * page's own content, stay outside it (`optional-content.ts`).
  */
 export async function runLayer(
     bytes: Uint8Array,
@@ -177,6 +183,7 @@ export async function runLayer(
 ): Promise<Uint8Array> {
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
     const { r, g, b } = hexToRgb(settings.color);
+    const { ref: group } = addOverlayGroup(doc);
     for (const page of doc.getPages()) {
         check(token);
         const media = page.getMediaBox();
@@ -191,10 +198,11 @@ export async function runLayer(
                 PLAN_STATUS.UNSUPPORTED_DOCUMENT,
             );
         }
-        page.drawRectangle({
+        drawInGroup(doc, page, group, () => page.drawRectangle({
             x, y, width, height, color: rgb(r, g, b), opacity: settings.opacity,
-        });
+        }));
     }
+    check(token);
     return doc.save({ useObjectStreams: false });
 }
 
@@ -241,7 +249,8 @@ export async function runMargin(
  *
  * Composed here rather than in the component so that it cannot drift into a
  * weaker path: the flattening half is the adopted one, and the overlay half is
- * the corrected one.
+ * the corrected one. The overlay is a switchable layer here too, but switching
+ * it off shows the monochrome pages, not the source's colours or structure.
  */
 export async function runBoth(
     bytes: Uint8Array,

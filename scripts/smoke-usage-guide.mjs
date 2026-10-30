@@ -275,6 +275,11 @@ try {
         ['半透明レイヤ追加', 'モノクロ化', '両方実行', '余白生成', '図面サイズ統一', '図枠一括更新', '最適化']
             .every((f) => p.includes(f)), 'seven');
     check('processor: 両方実行 states the order', p.includes('モノクロ化のあとに半透明レイヤ'));
+    check('processor: the overlay is a layer a PDF viewer can switch, and off is the drawing before it',
+        p.includes('PDF ArchiTools 半透明オーバーレイ') && p.includes('対応PDFビューアのレイヤー一覧で表示・非表示を切り替えられます')
+        && p.includes('重ねる前の図面が表示されます'), 'overlay layer');
+    check('processor: 両方実行 does not promise the source back when the layer is off',
+        p.includes('モノクロ化した後の内容で、元の色や構造には戻りません'), 'both: no restore claim');
     check('processor: single file vs ZIP', p.includes('複数ならZIP'));
     check('processor: 図面サイズ統一 target sheets and preservation',
         p.includes('A0 / A1 / A2 / A3 / A4') && p.includes('最初のページに合わせる')

@@ -15,6 +15,7 @@ import {
     FILE_RESULT,
     LOSS_LABEL_JA,
     MEMORY_PRESETS,
+    OVERLAY_LAYER_NAME,
     PLAN_STATUS,
     ProcessorError,
     RunOwnership,
@@ -776,6 +777,13 @@ export function PdfTools() {
                             onChange={e => { supersede(); setLayerColor(e.target.value); }} />
                         <p className="info-text">
                             レイヤは表示領域（CropBox）全体に重ねます。注釈はレイヤより上に表示されます。
+                        </p>
+                        <p className="info-text" data-overlay-layer-note="">
+                            重ねた色は独立したPDFレイヤー「{OVERLAY_LAYER_NAME}」になり、
+                            対応PDFビューアのレイヤー一覧で表示・非表示を切り替えられます（初期状態は表示）。
+                            {activeTool === 'both'
+                                ? 'レイヤーを非表示にして表示されるのはモノクロ化した後の内容で、元の色や構造には戻りません。'
+                                : '非表示にすると、重ねる前の図面が表示されます。'}
                         </p>
                         {activeTool === 'both' && <hr style={{ borderColor: '#444', width: '100%' }} />}
                     </div>

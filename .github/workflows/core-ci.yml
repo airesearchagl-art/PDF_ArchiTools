@@ -108,6 +108,7 @@ jobs:
           node scripts/make-comparator-a1-fixtures.mjs
           node scripts/make-comparator-members-fixtures.mjs
           node scripts/make-processor-fixtures.mjs
+          node scripts/make-processor-ocg-fixtures.mjs
           node scripts/make-processor-optimizer-v2-fixtures.mjs
           node scripts/make-m6-split-merge-fixtures.mjs
           node scripts/make-m6-remediation-fixtures.mjs
@@ -209,6 +210,14 @@ jobs:
       # visible only by driving the built app.
       - name: Processor UI ownership
         run: node scripts/smoke-processor-ui.mjs
+
+      # 半透明レイヤ追加 puts its overlay in a PDF layer of its own. Drawn by
+      # pdf.js with that layer switched: off must be the page before, pixel for
+      # pixel, annotations included; on must be that page with the colour over
+      # every visible pixel. Existing layers keep their names, states, order and
+      # locks, and a layer structure that cannot be added to is refused by name.
+      - name: Processor overlay layer
+        run: node scripts/smoke-processor-ocg-overlay.mjs
 
       # 最適化 v2 (D-028 Stage 1), compact and deterministic: every rewritten
       # image is decoded by pdf.js and compared, structure is read back by

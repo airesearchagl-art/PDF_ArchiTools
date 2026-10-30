@@ -37,6 +37,7 @@
  */
 import { PDFDocument, PDFName, PDFDict, PDFArray, PDFNumber, PDFRef } from 'pdf-lib';
 import type { SourceFacts } from './contracts';
+import { inspectOptionalContent } from './optional-content';
 
 /** How far up a `/Parent` chain, or down a field tree, this walk will go. */
 export const MAX_FIELD_TREE_DEPTH = 32;
@@ -273,6 +274,7 @@ function emptyFacts(sourceBytes: number): SourceFacts {
         hasAppliedSignature: false,
         formInspectionState: 'no-form',
         formError: null,
+        optionalContent: { state: 'none', groupCount: 0, reason: null },
         pages: [],
     };
 }
@@ -312,6 +314,9 @@ function inspectLoaded(doc: PDFDocument, facts: SourceFacts): SourceFacts {
         facts.pageError = String((error as Error)?.message ?? error);
         return derive();
     }
+
+    // ---- the layers, which 半透明レイヤ追加 adds one to ----------------------
+    facts.optionalContent = inspectOptionalContent(doc);
 
     // ---- the form, read rather than created --------------------------------
     let acroForm: PDFDict | undefined;
