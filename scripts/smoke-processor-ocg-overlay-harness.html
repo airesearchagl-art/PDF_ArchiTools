@@ -345,6 +345,15 @@ window.__ocg = {
     return result;
   },
 
+  /** The colour at the centre of each Square annotation, drawn with the layers switched as asked. */
+  async annotationPixels(name, page, visibility = {}) {
+    const r = await render(name, page, { visibility });
+    return r.rects.filter((a) => a.subtype === 'Square').map((a) => {
+      const i = (a.cy * r.width + a.cx) * 4;
+      return [r.data[i], r.data[i + 1], r.data[i + 2]];
+    });
+  },
+
   /** Two documents drawn with the same switches, compared pixel for pixel. */
   async same(nameA, nameB, page, visibilityA = {}, visibilityB = {}, intent = 'display') {
     const a = await render(nameA, page, { visibility: visibilityA, intent });

@@ -10,6 +10,11 @@
  * untouched, and a structure that cannot be added to without guessing must be
  * refused by name before anything is written.
  *
+ * The overlay is page content in the new group, never an annotation: no page
+ * gains an `/Annots` entry, so an annotation tool's select, move and erase have
+ * nothing of it to pick up. That a viewer actually behaves so is not something
+ * pdf.js can show; it is checked by a person in the viewer, not here.
+ *
  * Run:  node scripts/make-processor-ocg-fixtures.mjs
  *       node scripts/smoke-processor-ocg-overlay.mjs
  *
@@ -144,10 +149,24 @@ try {
         && after.pdfjsAnnots[0].some((a) => a.fieldValue === 'OCG-FIELD-VALUE'),
         after.pdfjsAnnots[0].map((a) => a.subtype).join(','));
     check('metadata is unchanged', JSON.stringify(after.info) === JSON.stringify(before.info));
+    // The acceptance condition is about what an annotation tool can pick up:
+    // the rectangle is page content inside the group, and no page gains an
+    // annotation for it — including the four pages that had none at all.
+    check('the overlay is page content, not an annotation: no page gains an /Annots entry',
+        JSON.stringify(after.pages.map((p) => p.annots.length)) === JSON.stringify(before.pages.map((p) => p.annots.length))
+        && after.pages.slice(1).every((p) => p.annots.length === 0)
+        && JSON.stringify(after.pdfjsAnnots.map((list) => list.map((a) => a.subtype)))
+            === JSON.stringify(before.pdfjsAnnots.map((list) => list.map((a) => a.subtype))),
+        after.pages.map((p) => p.annots.length).join(','));
 
     const plainPixels = await call('overlay', src, 'plain-white50', NAME, { color: '#ffffff', opacity: 0.5 });
     check('every page: off is the page before, exactly; on is the page with white at 50% over all of it, annotations on top',
         plainPixels.length === 5 && overlayHolds(plainPixels), summary(plainPixels));
+    const squareOff = await call('annotationPixels', 'plain-white50', 1, { [NAME]: false });
+    const squareOn = await call('annotationPixels', 'plain-white50', 1, { [NAME]: true });
+    check('with the layer off, the check-back annotation is still drawn, in its own colour; on, it is not covered',
+        JSON.stringify(squareOff) === '[[0,0,255]]' && JSON.stringify(squareOn) === '[[0,0,255]]',
+        `off ${JSON.stringify(squareOff)} on ${JSON.stringify(squareOn)}`);
 
     // ---- 3. colour and opacity at their bounds -------------------------------
     console.log('\n=== 3. colour and opacity ===');
@@ -201,6 +220,11 @@ try {
     check('annotations, including the one in layer B, are unchanged',
         JSON.stringify(exAfter.pages.map((p) => p.annots)) === JSON.stringify(exBefore.pages.map((p) => p.annots))
         && JSON.stringify(exAfter.pdfjsAnnots) === JSON.stringify(exBefore.pdfjsAnnots));
+    const magentaOff = await call('annotationPixels', 'existing-white50', 1, { [NEW]: false });
+    const magentaOn = await call('annotationPixels', 'existing-white50', 1, { [NEW]: true });
+    check('existing layers: the annotation outside any layer stays drawn with the new layer off and on',
+        JSON.stringify(magentaOff[0]) === '[204,0,204]' && JSON.stringify(magentaOn[0]) === '[204,0,204]',
+        `off ${JSON.stringify(magentaOff)} on ${JSON.stringify(magentaOn)}`);
     const exPixels = await call('overlay', ex, 'existing-white50', NEW, { color: '#ffffff', opacity: 0.5 });
     check('as opened: off is the page before; on is the overlay', exPixels.length === 2 && overlayHolds(exPixels),
         summary(exPixels));

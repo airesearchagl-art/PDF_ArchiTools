@@ -6,6 +6,14 @@
  * else — belongs to one new optional content group (OCG), which every PDF viewer
  * with a layer list can switch on and off. It starts ON and is not locked.
  *
+ * The overlay is page content, never an annotation. It is drawn into the page's
+ * content stream and nothing is added to `/Annots`, so an annotation tool's
+ * ordinary select, lasso, move and erase have no overlay object to pick up —
+ * and with the group switched off, the check-back annotations a person adds
+ * on top are still shown. What this does not promise is that a mode editing
+ * the page content itself cannot select the rectangle: that is the page's own
+ * content, and such a mode can select any of it.
+ *
  * What a document already has is left as it was. The new group is *appended* to
  * `/OCGs`, to the default configuration's `/Order` and to its `/ON`; nothing in
  * those arrays is removed or reordered, `/OFF`, `/Locked`, `/RBGroups`, `/AS`

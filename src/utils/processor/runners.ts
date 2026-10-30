@@ -174,7 +174,9 @@ export async function runFlatten(
  * The overlay on every page belongs to one new optional content group, which a
  * viewer's layer list switches on and off; with it off, the page is what it was
  * before. The group starts ON and is not locked. The existing layers, and the
- * page's own content, stay outside it (`optional-content.ts`).
+ * page's own content, stay outside it (`optional-content.ts`). It is still page
+ * content, not an annotation, so nothing is added to `/Annots` and annotations
+ * stay shown above it whether the group is on or off.
  */
 export async function runLayer(
     bytes: Uint8Array,
