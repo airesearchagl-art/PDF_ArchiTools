@@ -403,7 +403,23 @@ try {
     clearDownloads();
     await page.reload({ waitUntil: 'networkidle0' });
     await openProcessor();
+
+    // The overlay is a PDF layer now, and the settings say so — and 両方実行
+    // says what switching it off shows, which is not the source.
+    const layerNote = async () => page.evaluate(
+        () => document.querySelector('[data-overlay-layer-note]')?.textContent.replace(/\s+/g, '') ?? '',
+    );
+    await pickTool('両方実行');
+    const bothNote = await layerNote();
     await pickTool('半透明レイヤ追加');
+    const ownNote = await layerNote();
+    check('半透明レイヤ追加 says the overlay is a layer a PDF viewer can switch, and off shows the drawing before it',
+        ownNote.includes('PDFArchiTools半透明オーバーレイ') && ownNote.includes('対応PDFビューアのレイヤー一覧で表示・非表示を切り替えられます')
+        && ownNote.includes('重ねる前の図面が表示されます'), ownNote);
+    check('両方実行 says switching the layer off shows the monochrome pages, not the source back',
+        bothNote.includes('対応PDFビューアのレイヤー一覧') && bothNote.includes('モノクロ化した後の内容で、元の色や構造には戻りません')
+        && !bothNote.includes('重ねる前の図面が表示されます'), bothNote);
+
     await upload(A4, A4b, A4c);
     // Start from a stated zero. The previous version began polling straight
     // after `run()` and read a first 完了 at 60 ms with a handoff at 123 ms on a

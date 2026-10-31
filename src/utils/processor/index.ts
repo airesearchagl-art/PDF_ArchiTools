@@ -56,6 +56,10 @@ export {
     samplesFromCanvas,
 } from './raster-xobject';
 export { marginInPlace } from './margin-transform';
+export { OVERLAY_LAYER_NAME, inspectOptionalContent } from './optional-content';
+export type { OptionalContentFacts } from './optional-content';
+export { MAX_FORM_CHECKS, MAX_FORM_DEPTH, MAX_PAGE_CONTENT_SCAN_BYTES, checkPageMarkedContent } from './marked-content';
+export type { MarkedContentCheck, MarkedContentOptions } from './marked-content';
 export type { MarginOptions } from './margin-transform';
 export {
     runFlatten,

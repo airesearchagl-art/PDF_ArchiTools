@@ -1,0 +1,419 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Processor overlay layer — harness</title>
+<body>
+<p id="state">loading…</p>
+<script type="module">
+/**
+ * Drives the **production** 半透明レイヤ追加 over the optional-content corpus,
+ * and reads every answer back out of the bytes it produced.
+ *
+ * Structure is read with pdf-lib, the way the file is written; what a viewer
+ * shows is read with pdf.js, the way a reader draws it, with each layer switched
+ * on and off through pdf.js's own optional content configuration. Pixels are
+ * compared in the browser and only the numbers leave it.
+ */
+import {
+    OVERLAY_LAYER_NAME,
+    PLAN_STATUS,
+    ProcessorError,
+    checkPageMarkedContent,
+    planOperation,
+    readSourceFacts,
+    readSourceFactsFromDocument,
+    runBoth,
+    runFlatten,
+    runLayer,
+    withConfirmation,
+} from '/src/utils/processor/index.ts';
+import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+import { processLayer } from '/src/utils/pdf-processor.ts';
+import {
+    PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFString, PDFHexString, PDFRawStream, decodePDFRawStream,
+} from 'pdf-lib';
+import * as pdfjsLib from 'pdfjs-dist';
+
+const FIXTURES = '/test-fixtures/processor-ocg';
+configurePdfWorker();
+
+const store = new Map();
+async function bytesOf(name) {
+  if (store.has(name)) return store.get(name).slice();
+  const r = await fetch(`${FIXTURES}/${name}.pdf`);
+  if (!r.ok) throw new Error(`no fixture ${name}`);
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  store.set(name, bytes);
+  return bytes.slice();
+}
+
+const nameOf = (v) => (v instanceof PDFName ? v.asString() : null);
+const textOf = (v) => (v instanceof PDFString || v instanceof PDFHexString ? v.decodeText() : null);
+
+/**
+ * A serialisation of a PDF object that names groups by their /Name, for
+ * comparing structure. An annotation's /P and a field's /Parent are written as
+ * the reference they hold, not followed: following /P reaches the page, whose
+ * content is exactly what the overlay changes.
+ */
+function describe(doc, value, depth = 0) {
+  if (depth > 8) return '…';
+  if (value instanceof PDFRef) {
+    const target = doc.context.lookup(value);
+    if (target instanceof PDFDict && nameOf(target.get(PDFName.of('Type'))) === '/OCG') {
+      return `OCG(${textOf(doc.context.lookup(target.get(PDFName.of('Name'))))})`;
+    }
+    return describe(doc, target, depth + 1);
+  }
+  if (value instanceof PDFArray) {
+    const items = [];
+    for (let i = 0; i < value.size(); i += 1) items.push(describe(doc, value.get(i), depth + 1));
+    return `[${items.join(', ')}]`;
+  }
+  if (value instanceof PDFDict) {
+    const keys = [...value.entries()].map(([k, v]) => `${k.asString()}: ${
+      k.asString() === '/P' || k.asString() === '/Parent' ? String(v) : describe(doc, v, depth + 1)}`).sort();
+    return `{${keys.join(', ')}}`;
+  }
+  const text = textOf(value);
+  if (text !== null) return JSON.stringify(text);
+  return String(value);
+}
+
+function decodedStreams(doc, page) {
+  const contents = page.node.get(PDFName.of('Contents'));
+  const refs = contents instanceof PDFArray
+    ? Array.from({ length: contents.size() }, (_, i) => contents.get(i))
+    : [contents];
+  return refs.map((ref) => {
+    const stream = doc.context.lookup(ref);
+    if (!(stream instanceof PDFRawStream)) return '';
+    return new TextDecoder('latin1').decode(decodePDFRawStream(stream).decode());
+  });
+}
+
+/** What the file says about layers, pages and the structure the overlay must keep. */
+async function structureOf(bytes) {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const out = {
+    info: { title: doc.getTitle() ?? null, author: doc.getAuthor() ?? null, subject: doc.getSubject() ?? null, creator: doc.getCreator() ?? null },
+    ocPropertiesIndirect: doc.catalog.get(PDFName.of('OCProperties')) instanceof PDFRef,
+    ocPropertiesRef: String(doc.catalog.get(PDFName.of('OCProperties')) ?? ''),
+    oc: null, pages: [], text: [], pdfjsAnnots: [], groups: [], printGroups: [], order: null,
+  };
+  const ocp = doc.catalog.lookup(PDFName.of('OCProperties'));
+  if (ocp instanceof PDFDict) {
+    const ocgsRaw = ocp.get(PDFName.of('OCGs'));
+    const ocgs = doc.context.lookup(ocgsRaw);
+    const d = doc.context.lookup(ocp.get(PDFName.of('D')));
+    const entry = (key) => (d instanceof PDFDict && d.get(PDFName.of(key)) !== undefined ? describe(doc, d.get(PDFName.of(key))) : null);
+    const groupRefs = [];
+    if (ocgs instanceof PDFArray) for (let i = 0; i < ocgs.size(); i += 1) groupRefs.push(String(ocgs.get(i)));
+    out.oc = {
+      ocgsRef: String(ocgsRaw), dRef: String(ocp.get(PDFName.of('D'))),
+      orderRef: d instanceof PDFDict ? String(d.get(PDFName.of('Order'))) : null,
+      groups: describe(doc, ocgsRaw), groupRefs,
+      groupDicts: groupRefs.map((r, i) => describe(doc, doc.context.lookup(ocgs.get(i)))),
+      d: d instanceof PDFDict ? {
+        Name: entry('Name'), BaseState: entry('BaseState'), Order: entry('Order'), ON: entry('ON'), OFF: entry('OFF'),
+        Locked: entry('Locked'), AS: entry('AS'), RBGroups: entry('RBGroups'), Intent: entry('Intent'),
+        keys: [...d.entries()].map(([k]) => k.asString()).sort(),
+      } : null,
+      configs: ocp.get(PDFName.of('Configs')) !== undefined ? describe(doc, ocp.get(PDFName.of('Configs'))) : null,
+      keys: [...ocp.entries()].map(([k]) => k.asString()).sort(),
+    };
+  }
+  for (const page of doc.getPages()) {
+    const m = page.getMediaBox();
+    const c = page.getCropBox();
+    const resources = doc.context.lookup(page.node.getInheritableAttribute(PDFName.of('Resources')));
+    const props = resources instanceof PDFDict ? doc.context.lookup(resources.get(PDFName.of('Properties'))) : null;
+    const properties = {};
+    if (props instanceof PDFDict) for (const [k, v] of props.entries()) properties[k.asString()] = { ref: String(v), is: describe(doc, v) };
+    const annots = [];
+    const arr = page.node.lookup(PDFName.of('Annots'));
+    if (arr instanceof PDFArray) {
+      for (let i = 0; i < arr.size(); i += 1) {
+        const a = doc.context.lookup(arr.get(i));
+        if (!(a instanceof PDFDict)) continue;
+        annots.push(describe(doc, a));
+      }
+    }
+    const streams = decodedStreams(doc, page);
+    out.pages.push({
+      media: [m.x, m.y, m.width, m.height], crop: [c.x, c.y, c.width, c.height],
+      rotate: page.getRotation().angle, properties, annots, streams,
+      resourcesShared: page.node.get(PDFName.of('Resources')) === undefined,
+    });
+  }
+
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+  try {
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      out.text.push(content.items.map((it) => it.str).join(' '));
+      const annotations = await page.getAnnotations();
+      out.pdfjsAnnots.push(annotations.map((a) => ({
+        subtype: a.subtype, url: a.url ?? null, rect: a.rect.map((n) => Math.round(n * 100) / 100),
+        fieldValue: a.fieldValue ?? null, oc: a.optionalContent ? true : false,
+      })));
+      page.cleanup();
+    }
+    for (const [intent, target] of [['display', out.groups], ['print', out.printGroups]]) {
+      const config = await pdf.getOptionalContentConfig({ intent });
+      // `group.visible` is the state this configuration starts in for its
+      // intent; `config.isVisible` answers for marked content, not for a group.
+      for (const [id, group] of config) target.push({ id, name: group.name, visible: group.visible });
+      if (intent === 'display') {
+        const order = config.getOrder();
+        const nameFor = (id) => config.getGroup(id)?.name ?? id;
+        const walk = (o) => (Array.isArray(o) ? o.map(walk) : (typeof o === 'object' && o !== null && 'order' in o
+          ? { name: o.name, order: walk(o.order) } : nameFor(o)));
+        out.order = order === null ? null : walk(order);
+      }
+    }
+  } finally {
+    await pdf.destroy();
+  }
+  return out;
+}
+
+/** Draw one page as a reader would, with the named layers switched as asked. */
+async function render(name, pageNo, { visibility = {}, intent = 'display', scale = 1 } = {}) {
+  const pdf = await pdfjsLib.getDocument({ data: (await bytesOf(name)).slice() }).promise;
+  try {
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale });
+    const config = await pdf.getOptionalContentConfig({ intent });
+    const unknown = [];
+    for (const wanted of Object.keys(visibility)) {
+      let found = false;
+      for (const [id, group] of config) {
+        if (group.name === wanted) { config.setVisibility(id, visibility[wanted]); found = true; }
+      }
+      if (!found) unknown.push(wanted);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    await page.render({
+      canvasContext: ctx, viewport, intent,
+      annotationMode: pdfjsLib.AnnotationMode.ENABLE,
+      optionalContentConfigPromise: Promise.resolve(config),
+    }).promise;
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const annotations = await page.getAnnotations({ intent });
+    const rects = annotations.map((a) => {
+      const [x0, y0, x1, y1] = viewport.convertToViewportRectangle(a.rect);
+      return {
+        subtype: a.subtype,
+        x0: Math.floor(Math.min(x0, x1)) - 2, y0: Math.floor(Math.min(y0, y1)) - 2,
+        x1: Math.ceil(Math.max(x0, x1)) + 2, y1: Math.ceil(Math.max(y0, y1)) + 2,
+        cx: Math.round((x0 + x1) / 2), cy: Math.round((y0 + y1) / 2),
+      };
+    });
+    page.cleanup();
+    canvas.width = 0; canvas.height = 0;
+    return { width: image.width, height: image.height, data: image.data, rects, unknown };
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+function exact(a, b) {
+  if (a.width !== b.width || a.height !== b.height) return { sameSize: false, maxDiff: 255, diffPixels: -1 };
+  let maxDiff = 0; let diffPixels = 0;
+  for (let i = 0; i < a.data.length; i += 4) {
+    const d = Math.max(Math.abs(a.data[i] - b.data[i]), Math.abs(a.data[i + 1] - b.data[i + 1]), Math.abs(a.data[i + 2] - b.data[i + 2]));
+    if (d > 0) diffPixels += 1;
+    if (d > maxDiff) maxDiff = d;
+  }
+  return { sameSize: true, maxDiff, diffPixels };
+}
+
+const hexRgb = (hex) => {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [255, 255, 255];
+};
+
+/**
+ * Is `over` exactly `base` with the colour laid over every visible pixel at the
+ * opacity — except where an annotation draws, which sits above the overlay?
+ */
+function blend(base, over, color, opacity) {
+  if (base.width !== over.width || base.height !== over.height) return { sameSize: false };
+  const rgb = hexRgb(color);
+  const inAnnot = (x, y) => base.rects.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
+  let maxDev = 0; let compared = 0; let outside = 0;
+  for (let y = 1; y < base.height - 1; y += 1) {
+    for (let x = 1; x < base.width - 1; x += 1) {
+      if (inAnnot(x, y)) continue;
+      const i = (y * base.width + x) * 4;
+      compared += 1;
+      let dev = 0;
+      for (let k = 0; k < 3; k += 1) {
+        const expected = base.data[i + k] * (1 - opacity) + rgb[k] * opacity;
+        dev = Math.max(dev, Math.abs(over.data[i + k] - expected));
+      }
+      if (dev > 2) outside += 1;
+      if (dev > maxDev) maxDev = dev;
+    }
+  }
+  // Where an opaque annotation draws, the overlay must not show: the pixel at
+  // its centre is the same with the overlay on as without it.
+  const centres = base.rects.filter((r) => r.subtype === 'Square').map((r) => {
+    const i = (r.cy * base.width + r.cx) * 4;
+    return Math.max(...[0, 1, 2].map((k) => Math.abs(over.data[i + k] - base.data[i + k])));
+  });
+  return {
+    sameSize: true, maxDev: Math.round(maxDev * 100) / 100, compared, outside,
+    total: (base.width - 2) * (base.height - 2), annotationCentreMaxDiff: centres.length ? Math.max(...centres) : null,
+    squares: centres.length,
+  };
+}
+
+window.__ocg = {
+  overlayName: OVERLAY_LAYER_NAME,
+
+  async corpus() {
+    return (await fetch(`${FIXTURES}/corpus.json`)).json();
+  },
+
+  async plan(name, operation) {
+    const facts = await readSourceFacts(await bytesOf(name));
+    const plan = planOperation(facts, operation, { dpi: 150, contrast: 1 });
+    return { status: plan.status, code: plan.code, reason: plan.reason, optionalContent: facts.optionalContent };
+  },
+
+  /** Plan, then run as the UI does; the output is kept under `key`. */
+  async run(name, operation, settings, key) {
+    const bytes = await bytesOf(name);
+    const facts = await readSourceFacts(bytes.slice());
+    let plan = planOperation(facts, operation, { dpi: 150, contrast: 1 });
+    // The flattening ones are confirmed here as the person would confirm them.
+    if (operation === 'both' || operation === 'monochrome') plan = withConfirmation(plan, true);
+    if (plan.status !== PLAN_STATUS.READY) return { ran: false, code: plan.code, reason: plan.reason };
+    try {
+      const out = operation === 'layer'
+        ? await runLayer(bytes.slice(), settings)
+        : operation === 'both'
+          ? await runBoth(bytes.slice(), { dpi: 150, contrast: 1 }, settings)
+          : await runFlatten(bytes.slice(), 'monochrome', { dpi: 150, contrast: 1 });
+      store.set(key, out);
+      return { ran: true, bytes: out.length };
+    } catch (e) {
+      return { ran: false, code: e instanceof ProcessorError ? e.code : null, reason: String(e?.message ?? e) };
+    }
+  },
+
+  /**
+   * The page-content check on its own: a smaller decode limit, and a
+   * cancellation raised before the `n`th stream, which must come out as itself.
+   */
+  async scan(name, { limit, cancelBefore, maxFormDepth, maxFormChecks } = {}) {
+    const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+    let streams = 0;
+    try {
+      const result = checkPageMarkedContent(doc, {
+        maxDecodedBytes: limit,
+        maxFormDepth,
+        maxFormChecks,
+        beforeStream: () => {
+          streams += 1;
+          if (cancelBefore !== undefined && streams >= cancelBefore) {
+            throw new ProcessorError('cancelled by the gate', PLAN_STATUS.CANCELLED);
+          }
+        },
+      });
+      return { ...result, streams };
+    } catch (e) {
+      return { threw: true, code: e instanceof ProcessorError ? e.code : null, message: String(e?.message ?? e), streams };
+    }
+  },
+
+  /** Facts as Optimizer v2 reads them: from a parsed document, without the page content. */
+  async planFromDocument(name, operation) {
+    const bytes = await bytesOf(name);
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    const facts = readSourceFactsFromDocument(doc, bytes.length);
+    const plan = planOperation(facts, operation, { dpi: 150, contrast: 1 });
+    return { status: plan.status, reason: plan.reason, pageContent: facts.optionalContent.pageContent };
+  },
+
+  /** The legacy facade, `processLayer`: facts, plan and runner, as old call sites reach them. */
+  async facade(name, settings, key) {
+    try {
+      const out = await processLayer(await bytesOf(name), settings);
+      store.set(key, out);
+      return { ran: true, bytes: out.length };
+    } catch (e) {
+      return { ran: false, code: e instanceof ProcessorError ? e.code : null, reason: String(e?.message ?? e) };
+    }
+  },
+
+  /** The runner on its own, with no plan in front of it: its own check must refuse. */
+  async runUnplanned(name, settings) {
+    try {
+      const out = await runLayer(await bytesOf(name), settings);
+      return { ran: true, bytes: out.length };
+    } catch (e) {
+      return { ran: false, code: e instanceof ProcessorError ? e.code : null, reason: String(e?.message ?? e) };
+    }
+  },
+
+  /** Open and save again, as another program saving the file would. */
+  async resave(key, newKey) {
+    const doc = await PDFDocument.load(await bytesOf(key), { updateMetadata: false });
+    store.set(newKey, await doc.save());
+    return { bytes: store.get(newKey).length };
+  },
+
+  async structure(name) {
+    return structureOf(await bytesOf(name));
+  },
+
+  /** Every page: the layer off against the source, the layer on against the source with the colour laid over it. */
+  async overlay(sourceName, outKey, layerName, { color, opacity, visibility = {}, intent = 'display', pages = null }) {
+    const pdf = await pdfjsLib.getDocument({ data: await bytesOf(outKey) }).promise;
+    const count = pdf.numPages;
+    await pdf.destroy();
+    const result = [];
+    for (let p = 1; p <= count; p += 1) {
+      if (pages && !pages.includes(p)) continue;
+      const source = await render(sourceName, p, { visibility, intent });
+      const off = await render(outKey, p, { visibility: { ...visibility, [layerName]: false }, intent });
+      const on = await render(outKey, p, { visibility: { ...visibility, [layerName]: true }, intent });
+      result.push({
+        page: p, size: [source.width, source.height],
+        unknown: [...new Set([...source.unknown.filter((n) => n !== layerName), ...off.unknown, ...on.unknown])],
+        off: exact(source, off), on: blend(source, on, color, opacity),
+      });
+    }
+    return result;
+  },
+
+  /** The colour at the centre of each Square annotation, drawn with the layers switched as asked. */
+  async annotationPixels(name, page, visibility = {}) {
+    const r = await render(name, page, { visibility });
+    return r.rects.filter((a) => a.subtype === 'Square').map((a) => {
+      const i = (a.cy * r.width + a.cx) * 4;
+      return [r.data[i], r.data[i + 1], r.data[i + 2]];
+    });
+  },
+
+  /** Two documents drawn with the same switches, compared pixel for pixel. */
+  async same(nameA, nameB, page, visibilityA = {}, visibilityB = {}, intent = 'display') {
+    const a = await render(nameA, page, { visibility: visibilityA, intent });
+    const b = await render(nameB, page, { visibility: visibilityB, intent });
+    return { ...exact(a, b), unknown: [...a.unknown, ...b.unknown] };
+  },
+
+  bytes(key) {
+    return Array.from(store.get(key));
+  },
+};
+window.__ocgReady = true;
+document.getElementById('state').textContent = 'ready';
+</script>
+</body>

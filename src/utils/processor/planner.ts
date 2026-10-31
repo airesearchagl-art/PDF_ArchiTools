@@ -86,6 +86,8 @@ const REASON = {
         + '確認できない状態では処理しません。',
     signed: '電子署名が適用されたPDFです。処理すると署名が無効になるため、処理できません。',
     xfa: 'このPDFにはXFAフォームが含まれており、この操作では保持できません。処理を中止しました。',
+    optionalContent: (detail: string | null) => '既存のレイヤー設定を安全に扱えないため、'
+        + `表示を切り替えられる半透明レイヤーを追加できません。処理を中止しました。${detail ? `（${detail}）` : ''}`,
     raster: (mpx: number, limit: number) => `この解像度では1ページあたり${mpx.toFixed(1)}メガピクセルとなり、`
         + `上限の${(limit / 1e6).toFixed(1)}メガピクセルを超えます。解像度を下げて実行してください。`,
     memory: (needMiB: number, budgetMiB: number) => `この処理には約${needMiB.toFixed(0)} MiBが必要で、`
@@ -140,6 +142,21 @@ export function planOperation(
     }
     if (facts.hasXfa && DROPS_XFA[operation]) {
         return refuse(operation, facts, PLAN_STATUS.XFA_UNSAFE, REASON.xfa);
+    }
+
+    // ---- 半透明レイヤ追加 adds a layer to the document's own ----------------
+    // 両方実行 is not asked: its overlay goes onto the monochrome rebuild, which
+    // carries no layers of its own.
+    // The overlay is appended after the page's own content, so a page that
+    // leaves marked content open would take it inside; facts that did not read
+    // the content cannot say it is closed, and are refused the same way.
+    if (operation === 'layer' && facts.optionalContent.state === 'unreadable') {
+        return refuse(operation, facts, PLAN_STATUS.OPTIONAL_CONTENT_UNSAFE,
+            REASON.optionalContent(facts.optionalContent.reason));
+    }
+    if (operation === 'layer' && facts.optionalContent.pageContent !== 'closed') {
+        return refuse(operation, facts, PLAN_STATUS.OPTIONAL_CONTENT_UNSAFE,
+            REASON.optionalContent('ページ内容のマーク付きコンテンツを確認していません。'));
     }
 
     // ---- the budget, for the operations that rasterise ----------------------
