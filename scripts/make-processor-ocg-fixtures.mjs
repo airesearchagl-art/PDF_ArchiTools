@@ -527,6 +527,240 @@ await handWritten('mc-inline-ei-in-data-ok', 'MC inline image holding EI in its 
     note: 'an 8-byte gray image whose data reads " EI BDC ", with no /L, followed by a closed BMC',
 });
 
+// ---------------------------------------------------------------------------
+// RF-IR01-R2-01: the page's own content is closed, but a Form XObject it paints
+// leaves a BDC open. Readers that carry marked content across `Do` (MuPDF and
+// Poppler, per the independent review) then draw the overlay inside it.
+// ---------------------------------------------------------------------------
+/** The form-chain depth and form count the check allows (src/utils/processor/marked-content.ts). */
+const MAX_FORM_DEPTH = 12;
+const MAX_FORM_CHECKS = 2000;
+
+/**
+ * A document whose pages paint Form XObjects. `forms` maps a key to
+ * { content, resources: { xobjects: {Name: key}, props: [group key] } | null, flate, subtype };
+ * `resources: null` writes a form with no /Resources of its own.
+ */
+async function formFixture(name, title, { forms, pages, groups = {}, ocProperties = null, note, expect = 'ready', reason = null }) {
+    const doc = await PDFDocument.create({ updateMetadata: false });
+    doc.setTitle(title);
+    doc.setCreationDate(FIXED_DATE);
+    doc.setModificationDate(FIXED_DATE);
+    const g = {};
+    for (const [key, label] of Object.entries(groups)) g[key] = newGroup(doc, label);
+    const refs = {};
+    for (const key of Object.keys(forms)) refs[key] = doc.context.nextRef();
+    const resourcesOf = (spec = {}) => {
+        const r = { Font: { F1: doc.context.obj(HELVETICA) } };
+        if (spec.xobjects) r.XObject = Object.fromEntries(Object.entries(spec.xobjects).map(([n, k]) => [n, refs[k]]));
+        if (spec.props) r.Properties = Object.fromEntries(spec.props.map((k) => [k, g[k]]));
+        return r;
+    };
+    const stream = (content, dict, flate) => doc.context.stream(
+        flate ? zlib.deflateSync(Buffer.from(content, 'latin1')) : content,
+        flate ? { ...dict, Filter: 'FlateDecode' } : dict,
+    );
+    for (const [key, f] of Object.entries(forms)) {
+        const subtype = f.subtype ?? 'Form';
+        const dict = subtype === 'Image'
+            ? { Type: 'XObject', Subtype: 'Image', Width: 1, Height: 1, ColorSpace: 'DeviceGray', BitsPerComponent: 8 }
+            : { Type: 'XObject', Subtype: subtype, BBox: [0, 0, A4.w, A4.h] };
+        if (subtype === 'Form' && f.resources !== null) dict.Resources = doc.context.obj(resourcesOf(f.resources));
+        doc.context.assign(refs[key], stream(f.content, dict, f.flate));
+    }
+    for (const p of pages) {
+        const page = doc.addPage([A4.w, A4.h]);
+        page.node.set(PDFName.of('Contents'), doc.context.obj([doc.context.register(stream(p.content, {}, p.flate))]));
+        page.node.set(PDFName.of('Resources'), doc.context.obj(p.noResources ? {} : resourcesOf(p.resources)));
+    }
+    if (ocProperties) doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj(ocProperties(g)));
+    await write(name, doc, note, expect, reason);
+}
+
+const BLUE_BOX = 'q 0.1 0.1 0.9 rg 300 600 200 100 re f Q';
+const paint = (...names) => `${BASE_DRAWING}\n${names.map((n) => `q /${n} Do Q`).join('\n')}\n`;
+
+// The R2 counterexample: page content closed, the form it paints is not.
+await formFixture('form-unclosed-bdc-off', 'Form leaves an OFF layer open', {
+    groups: OLD_LAYER, ocProperties: oldOff,
+    forms: { Fm0: { content: `/OC /Old BDC\n${BLUE_BOX}\n`, resources: { props: ['Old'] } } },
+    pages: [{ content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'the R2 counterexample: the page is closed; the Form XObject it paints opens an OFF layer and never closes it',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: 'Form XObject /Fm0',
+});
+await formFixture('form-unclosed-bmc', 'Form leaves a BMC open', {
+    forms: { Fm0: { content: `/Span BMC\n${BLUE_BOX}\n`, resources: {} } },
+    pages: [{ content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'a Form XObject with a BMC it never closes',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '閉じていない',
+});
+await formFixture('form-extra-emc', 'Form closes more than it opened', {
+    forms: { Fm0: { content: `${BLUE_BOX}\nEMC\n`, resources: {} } },
+    pages: [{ content: `${BASE_DRAWING}\n/Span BMC q /Fm0 Do Q EMC\n`, resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'a Form XObject with an EMC of its own, painted inside a BMC the page opened',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '対応する開始のないEMC',
+});
+await formFixture('form-nested-ok', 'Nested forms, all closed', {
+    groups: { A: 'フォーム内レイヤ A（表示）', B: 'フォーム内レイヤ B（非表示）' },
+    ocProperties: (g) => ({ OCGs: [g.A, g.B], D: { Order: [g.A, g.B], OFF: [g.B] } }),
+    forms: {
+        Fm0: {
+            content: '/OC /A BDC q 0.9 0.1 0.1 rg 60 600 200 100 re f Q EMC\n/Fm1 Do\n',
+            resources: { xobjects: { Fm1: 'Fm1' }, props: ['A'] },
+        },
+        Fm1: { content: '/OC /B BDC q 0.1 0.1 0.9 rg 300 600 200 100 re f Q EMC\n', resources: { props: ['B'] }, flate: true },
+    },
+    pages: [{ content: paint('Fm0', 'Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'a page painting a form twice; that form paints a compressed form; each closes its own layers',
+});
+await formFixture('form-nested-bad', 'A nested form leaves a layer open', {
+    groups: OLD_LAYER, ocProperties: oldOff,
+    forms: {
+        Fm0: { content: 'q 0 0.5 0 rg 60 600 100 100 re f Q\n/Fm1 Do\n', resources: { xobjects: { Fm1: 'Fm1' } } },
+        Fm1: { content: `/OC /Old BDC\n${BLUE_BOX}\n`, resources: { props: ['Old'] } },
+    },
+    pages: [{ content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'page and first form closed; the form that form paints opens an OFF layer',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: 'Form XObject /Fm1',
+});
+await formFixture('form-shared-ok', 'One form shared by pages', {
+    groups: { A: '共有フォームのレイヤ（表示）' },
+    ocProperties: (g) => ({ OCGs: [g.A], D: { Order: [g.A] } }),
+    forms: { Fm0: { content: '/OC /A BDC q 0.9 0.1 0.1 rg 60 600 200 100 re f Q EMC\n', resources: { props: ['A'] } } },
+    pages: [
+        { content: paint('Fm0', 'Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } },
+        { content: paint('Fm0', 'Fm0', 'Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } },
+    ],
+    note: 'one closed form painted twice on page 1 and three times on page 2',
+});
+await formFixture('form-shared-bad', 'One open form shared by pages', {
+    groups: OLD_LAYER, ocProperties: oldOff,
+    forms: { Fm0: { content: `/OC /Old BDC\n${BLUE_BOX}\n`, resources: { props: ['Old'] } } },
+    pages: [
+        { content: paint('Fm0', 'Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } },
+        { content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } },
+    ],
+    note: 'one open form painted from two pages',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: 'Form XObject /Fm0',
+});
+await formFixture('form-cycle', 'Forms painting each other', {
+    forms: {
+        Fm0: { content: 'q 0 0.5 0 rg 60 600 100 100 re f Q\n/Fm1 Do\n', resources: { xobjects: { Fm1: 'Fm1' } } },
+        Fm1: { content: 'q 0.5 0 0 rg 200 600 100 100 re f Q\n/Fm0 Do\n', resources: { xobjects: { Fm0: 'Fm0' } } },
+    },
+    pages: [{ content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'Fm0 paints Fm1, which paints Fm0',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '循環',
+});
+await formFixture('form-self-cycle', 'A form painting itself', {
+    forms: { Fm0: { content: 'q 0 0.5 0 rg 60 600 100 100 re f Q\n/Fm0 Do\n', resources: { xobjects: { Fm0: 'Fm0' } } } },
+    pages: [{ content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: 'a form that paints itself',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '循環',
+});
+/** A chain page → F1 → F2 → … → Fn. */
+const chain = (n) => {
+    const forms = {};
+    for (let i = 1; i <= n; i += 1) {
+        forms[`F${i}`] = i < n
+            ? { content: `q 0 0 0 rg ${20 + i * 10} 400 8 8 re f Q\n/F${i + 1} Do\n`, resources: { xobjects: { [`F${i + 1}`]: `F${i + 1}` } } }
+            : { content: `/Span BMC q 0 0 0 rg ${20 + i * 10} 400 8 8 re f Q EMC\n`, resources: {} };
+    }
+    return { forms, pages: [{ content: paint('F1'), resources: { xobjects: { F1: 'F1' } } }] };
+};
+await formFixture('form-depth-at-limit-ok', 'Forms nested to the limit', {
+    ...chain(MAX_FORM_DEPTH), note: `forms nested ${MAX_FORM_DEPTH} deep, the most the check follows`,
+});
+await formFixture('form-depth-over', 'Forms nested past the limit', {
+    ...chain(MAX_FORM_DEPTH + 1), note: `forms nested ${MAX_FORM_DEPTH + 1} deep`,
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '深さ',
+});
+/** A page painting `n` different closed forms. */
+const many = (n) => {
+    const forms = {};
+    const xobjects = {};
+    for (let i = 0; i < n; i += 1) {
+        forms[`G${i}`] = { content: `q 0 0 0 rg ${20 + (i % 50) * 10} ${100 + Math.floor(i / 50) * 10} 4 4 re f Q\n`, resources: {} };
+        xobjects[`G${i}`] = `G${i}`;
+    }
+    return { forms, pages: [{ content: `${BASE_DRAWING}\n${Object.keys(forms).map((k) => `/${k} Do`).join('\n')}\n`, resources: { xobjects } }] };
+};
+await formFixture('form-count-at-limit-ok', 'As many forms as the check reads', {
+    ...many(MAX_FORM_CHECKS), note: `${MAX_FORM_CHECKS} different forms on one page, the most the check reads`,
+});
+await formFixture('form-count-over', 'More forms than the check reads', {
+    ...many(MAX_FORM_CHECKS + 1), note: `${MAX_FORM_CHECKS + 1} different forms`,
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '件数',
+});
+await formFixture('form-unresolved', 'A name the resources do not have', {
+    forms: { Fm0: { content: `${BLUE_BOX}\n`, resources: {} } },
+    pages: [{ content: paint('Missing'), resources: { xobjects: { Fm0: 'Fm0' } } }],
+    note: '/Missing Do with no /Missing in the page /XObject',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '解決できません',
+});
+await formFixture('form-no-xobject-dict', 'Do with no /XObject at all', {
+    forms: {},
+    pages: [{ content: paint('Fm0'), resources: {} }],
+    note: '/Fm0 Do on a page whose resources have no /XObject',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '解決できません',
+});
+await formFixture('form-do-no-name', 'Do with no operand', {
+    forms: {},
+    pages: [{ content: `${BASE_DRAWING}\nq Do Q\n`, resources: {} }],
+    note: 'a Do operator with no name before it',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: 'Do',
+});
+// A form with no /Resources of its own takes them from where it is painted
+// (the deprecated inheritance). The form it then paints must be the one that
+// environment names — and the same form painted from two environments is two
+// different questions.
+await formFixture('form-inherited-bad', 'A form without resources paints an open one', {
+    groups: OLD_LAYER, ocProperties: oldOff,
+    forms: {
+        Fm0: { content: 'q 0 0.5 0 rg 60 600 100 100 re f Q\n/Inner Do\n', resources: null },
+        Inner: { content: `/OC /Old BDC\n${BLUE_BOX}\n`, resources: { props: ['Old'] } },
+    },
+    pages: [{ content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0', Inner: 'Inner' } } }],
+    note: 'Fm0 has no /Resources; /Inner resolves through the page, and leaves an OFF layer open',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: 'Form XObject /Inner',
+});
+await formFixture('form-env-differs', 'One form, two environments', {
+    groups: OLD_LAYER, ocProperties: oldOff,
+    forms: {
+        Fm0: { content: 'q 0 0.5 0 rg 60 600 100 100 re f Q\n/Inner Do\n', resources: null },
+        InnerOk: { content: '/Span BMC q 0 0 0.6 rg 200 600 50 50 re f Q EMC\n', resources: {} },
+        InnerBad: { content: `/OC /Old BDC\n${BLUE_BOX}\n`, resources: { props: ['Old'] } },
+    },
+    pages: [
+        { content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0', Inner: 'InnerOk' } } },
+        { content: paint('Fm0'), resources: { xobjects: { Fm0: 'Fm0', Inner: 'InnerBad' } } },
+    ],
+    note: 'the same resource-less Fm0 on two pages: /Inner is a closed form on page 1 and an open one on page 2',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '2ページ目',
+});
+await formFixture('form-image-ok', 'An image XObject', {
+    forms: { Im0: { content: '\u0080', subtype: 'Image' } },
+    pages: [{ content: `${BASE_DRAWING}\nq 50 0 0 50 300 300 cm /Im0 Do Q\n`, resources: { xobjects: { Im0: 'Im0' } } }],
+    note: 'an image XObject, which has no content to read',
+});
+await formFixture('form-ps-unsupported', 'A PostScript XObject', {
+    forms: { Ps0: { content: '% nothing', subtype: 'PS' } },
+    pages: [{ content: `${BASE_DRAWING}\n/Ps0 Do\n`, resources: { xobjects: { Ps0: 'Ps0' } } }],
+    note: 'an XObject of a kind the check does not read',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '種類',
+});
+{
+    // The page decodes to 150 MiB and the form it paints to another 150: each
+    // is under the document's 256 MiB, together they are not.
+    const half = ' '.repeat(150 * 1024 * 1024);
+    await formFixture('form-cumulative-over', 'Page and form together past the limit', {
+        forms: { Fm0: { content: `${half}${BLUE_BOX}\n`, resources: {}, flate: true } },
+        pages: [{ content: `${BASE_DRAWING}\n${half}\nq /Fm0 Do Q\n`, resources: { xobjects: { Fm0: 'Fm0' } }, flate: true }],
+        note: 'page content and the form it paints decode to 150 MiB each',
+        expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '上限',
+    });
+}
+
 fs.writeFileSync(path.join(OUT, 'corpus.json'), `${JSON.stringify({ overlayName: OVERLAY_NAME, files: corpus }, null, 2)}\n`);
 console.log(`wrote ${corpus.length} fixtures to ${path.relative(ROOT, OUT)}`);
 for (const f of corpus) console.log(`  ${f.name.padEnd(26)} ${String(f.bytes).padStart(7)}  ${f.expect.padEnd(24)} ${f.note}`);

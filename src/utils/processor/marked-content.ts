@@ -29,8 +29,19 @@
  * never at the first "EI" found in it; a dictionary that states a length is
  * refused.
  *
- * Nothing is repaired. A page that leaves a sequence open is refused, not given
- * the `EMC` it is missing.
+ * The Form XObjects a page paints with `Do` are read too (RF-IR01-R2-01): a
+ * BDC a form leaves open is still open, in readers that carry marked content
+ * across `Do`, when the overlay is drawn after the page. Each form is its own
+ * unit and must close what it opens; names resolve through the form's own
+ * `/Resources`, or, for a form without them, through the resources of where it
+ * is painted. Forms that paint forms are followed to MAX_FORM_DEPTH, a
+ * document's form checks are capped at MAX_FORM_CHECKS, and a form on its own
+ * calling path is a cycle; each of those, and a name that resolves to nothing
+ * or to an XObject that is neither an image nor a form, is a refusal. Forms
+ * count toward the same decode limit as the pages.
+ *
+ * Nothing is repaired. A page or form that leaves a sequence open is refused,
+ * not given the `EMC` it is missing.
  */
 import { Inflate } from 'pako';
 import { PDFArray, PDFDict, PDFName, PDFNumber, PDFRawStream, PDFRef } from 'pdf-lib';
@@ -38,18 +49,26 @@ import type { PDFDocument } from 'pdf-lib';
 import { ProcessorError } from './contracts';
 import { PAKO2 } from './optimize-budget';
 
-/** The most decoded page content this check reads in one document. */
+/** The most decoded content — pages and the forms they paint — this check reads in one document. */
 export const MAX_PAGE_CONTENT_SCAN_BYTES = 256 * 1024 * 1024;
+
+/** How deep a chain of Form XObjects painting Form XObjects this check follows from a page. */
+export const MAX_FORM_DEPTH = 12;
+
+/** How many form checks (one form, in one resource environment) one document may need. */
+export const MAX_FORM_CHECKS = 2000;
 
 /** A regular-character token longer than this is not a PDF token. */
 const MAX_TOKEN_BYTES = 128;
 
 export type MarkedContentCheck =
-    | { ok: true; pages: number; scannedBytes: number }
+    | { ok: true; pages: number; forms: number; scannedBytes: number }
     | { ok: false; page: number; reason: string };
 
 export interface MarkedContentOptions {
     maxDecodedBytes?: number;
+    maxFormDepth?: number;
+    maxFormChecks?: number;
     /** Called before each content stream; the runner passes its cancellation check. */
     beforeStream?: () => void;
 }
@@ -175,10 +194,13 @@ function imageExtent(tokens: ImageToken[]): { kind: 'bytes'; length: number } | 
 
 /**
  * The token reader. `feed` takes the decoded content a chunk at a time; a
- * stream ends with `endStream`, a page with `endPage`.
+ * stream ends with `endStream`, and the unit — a page's content, or one Form
+ * XObject's — with `endUnit`.
  */
 class MarkedContentReader {
     depth = 0;
+    /** The XObject names this unit paints with `Do`, in order. */
+    readonly calls: string[] = [];
     private state: State = State.Normal;
     private token = '';
     private stringDepth = 0;
@@ -187,6 +209,15 @@ class MarkedContentReader {
     private imageRemaining = 0;
     /** An inline image's data has ended; the next token must be `EI`. */
     private expectEI = false;
+    /** The name operand just before the current position, for `Do`. */
+    private lastName: string | null = null;
+
+    /** What this unit is, in a refusal: "ページ内容", or the form it is. */
+    private readonly label: string;
+
+    constructor(label: string) {
+        this.label = label;
+    }
 
     feed(chunk: Uint8Array): void {
         for (let i = 0; i < chunk.length; i += 1) {
@@ -255,9 +286,7 @@ class MarkedContentReader {
                     break;
                 case State.Name:
                     if (isWhite(b) || isDelimiter(b)) {
-                        this.imageToken({ k: 'name', v: this.token });
-                        this.token = '';
-                        this.state = State.Normal;
+                        this.nameEnded();
                         i -= 1;
                     } else {
                         this.append(b);
@@ -278,7 +307,17 @@ class MarkedContentReader {
     /** A dictionary token of an inline image; outside one, nothing to keep. */
     private imageToken(t: ImageToken): void {
         if (this.expectEI) throw inlineImage('画像データの後に「EI」がありません');
+        if (t.k !== 'name') this.lastName = null;
         if (this.image) this.image.push(t);
+    }
+
+    /** A name has ended: an inline image's key or value, or an operand. */
+    private nameEnded(): void {
+        const name = this.token;
+        this.token = '';
+        this.state = State.Normal;
+        this.imageToken({ k: 'name', v: name });
+        this.lastName = this.image ? null : name;
     }
 
     private normal(b: number): void {
@@ -335,14 +374,20 @@ class MarkedContentReader {
             return;
         }
 
+        const name = this.lastName;
+        this.lastName = null;
         if (NUMBER.test(word) || word === 'true' || word === 'false' || word === 'null') return;
         if (word === 'BMC' || word === 'BDC') {
             this.depth += 1;
         } else if (word === 'EMC') {
             if (this.depth === 0) {
-                throw new ContentRefusal('ページ内容に、対応する開始のないEMCがあります。');
+                throw new ContentRefusal(`${this.label}に、対応する開始のないEMCがあります。`);
             }
             this.depth -= 1;
+        } else if (word === 'Do') {
+            // `Do` paints the XObject its one operand names.
+            if (name === null) throw unreadable('「Do」の前に名前がありません');
+            this.calls.push(name);
         } else if (word === 'BI') {
             this.image = [];
         } else if (word === 'ID' || word === 'EI') {
@@ -352,11 +397,7 @@ class MarkedContentReader {
 
     /** A stream boundary ends a token; nothing else may be left half-read. */
     endStream(): void {
-        if (this.state === State.Name) {
-            this.imageToken({ k: 'name', v: this.token });
-            this.token = '';
-            this.state = State.Normal;
-        }
+        if (this.state === State.Name) this.nameEnded();
         if (this.state === State.Comment) this.state = State.Normal;
         if (this.state !== State.Normal) {
             throw unreadable('文字列・16進文字列・インライン画像のいずれかが、内容ストリームの途中で終わっています');
@@ -367,10 +408,10 @@ class MarkedContentReader {
         }
     }
 
-    endPage(): void {
+    endUnit(): void {
         if (this.depth !== 0) {
             throw new ContentRefusal(
-                `ページ内容に、閉じていないマーク付きコンテンツ（BMC／BDC）が${this.depth}個あります。`
+                `${this.label}に、閉じていないマーク付きコンテンツ（BMC／BDC）が${this.depth}個あります。`
                 + '追加するレイヤーがその内側に入ってしまうため、処理できません。',
             );
         }
@@ -419,13 +460,142 @@ function decodingOf(doc: PDFDocument, stream: PDFRawStream): 'none' | 'flate' {
             return 'flate';
         }
     }
-    throw new ContentRefusal(`圧縮形式（${filters.join(' ')}）のページ内容は確認できません。`);
+    throw new ContentRefusal(`圧縮形式（${filters.join(' ')}）の内容は確認できません。`);
+}
+
+/** One document's walk: the decode budget, the form limits, and what is already proven. */
+interface Walk {
+    doc: PDFDocument;
+    limit: number;
+    scanned: number;
+    maxDepth: number;
+    maxChecks: number;
+    checks: number;
+    beforeStream?: () => void;
+    /** Forms proven closed, with every form they paint, keyed by form and resource environment. */
+    proven: Set<string>;
+    /** An identity for each resource dictionary a resource-less form was painted from. */
+    environments: Map<PDFDict, number>;
+}
+
+/** Read one unit — a page's streams in order, or one form's — and return the names it paints. */
+function readUnit(walk: Walk, streams: PDFRawStream[], label: string): string[] {
+    const reader = new MarkedContentReader(label);
+    for (const stream of streams) {
+        walk.beforeStream?.();
+        const bytes = stream.getContents();
+        if (decodingOf(walk.doc, stream) === 'none') {
+            walk.scanned += bytes.length;
+            if (walk.scanned > walk.limit) throw new OverLimit();
+            reader.feed(bytes);
+        } else {
+            const inflator = new Inflate({ chunkSize: PAKO2.inflateChunkBytes });
+            inflator.onData = (chunk: Uint8Array) => {
+                walk.scanned += chunk.length;
+                if (walk.scanned > walk.limit) throw new OverLimit();
+                reader.feed(chunk);
+            };
+            inflator.push(bytes, true);
+            if (!inflator.ended || inflator.err) {
+                throw new ContentRefusal(`${label}を展開できません。`);
+            }
+        }
+        reader.endStream();
+    }
+    reader.endUnit();
+    return reader.calls;
+}
+
+function resourcesOf(doc: PDFDocument, raw: unknown, what: string): PDFDict | undefined {
+    if (raw === undefined) return undefined;
+    const resolved = raw instanceof PDFRef ? doc.context.lookup(raw) : raw;
+    if (!(resolved instanceof PDFDict)) throw new ContentRefusal(`${what}のリソース（/Resources）が辞書ではありません。`);
+    return resolved;
 }
 
 /**
- * Read every page's content and answer whether its marked content is closed.
+ * The XObjects a unit paints, resolved in the resources it is painted with.
  *
- * Never returns `ok` for a page it could not read to the end. The caller's
+ * Images have no content to read. A form is read as a unit of its own and,
+ * through its own resources, the forms it paints in turn. Anything that cannot
+ * be resolved to one of those two is refused, not skipped.
+ */
+function readPainted(walk: Walk, names: string[], resources: PDFDict | undefined, path: string[], depth: number): void {
+    for (const name of new Set(names)) {
+        const xobjects = resources ? walk.doc.context.lookup(resources.get(PDFName.of('XObject'))) : undefined;
+        if (!(xobjects instanceof PDFDict)) {
+            throw new ContentRefusal(`呼び出される外部オブジェクト（/${name}）を解決できません（/XObject がありません）。`);
+        }
+        const ref = xobjects.get(PDFName.of(name));
+        const target = ref instanceof PDFRef ? walk.doc.context.lookup(ref) : undefined;
+        if (!(ref instanceof PDFRef) || !(target instanceof PDFRawStream)) {
+            throw new ContentRefusal(`呼び出される外部オブジェクト（/${name}）を解決できません。`);
+        }
+        const subtype = walk.doc.context.lookup(target.dict.get(PDFName.of('Subtype')));
+        const kind = subtype instanceof PDFName ? subtype.asString() : null;
+        if (kind === '/Image') continue;
+        if (kind !== '/Form') {
+            throw new ContentRefusal(`呼び出される外部オブジェクト（/${name}）の種類（${kind ?? '不明'}）は確認できません。`);
+        }
+        readForm(walk, ref, target, name, resources, path, depth + 1);
+    }
+}
+
+/**
+ * One Form XObject as a unit of its own: its marked content must close inside
+ * it, whatever its caller has open.
+ *
+ * A form with `/Resources` resolves names through them, so one proof covers
+ * every place it is painted. A form without them takes the resources of where
+ * it is painted (the deprecated inheritance), so what it paints depends on its
+ * caller; it is proven per environment, never once for all. A form on the
+ * current path again is a cycle, not a shared form, and is refused.
+ */
+function readForm(
+    walk: Walk,
+    ref: PDFRef,
+    stream: PDFRawStream,
+    name: string,
+    callerResources: PDFDict | undefined,
+    path: string[],
+    depth: number,
+): void {
+    const tag = ref.toString();
+    if (path.includes(tag)) {
+        throw new ContentRefusal(`図形（Form XObject /${name}）の呼び出しに循環参照があります。`);
+    }
+    if (depth > walk.maxDepth) {
+        throw new ContentRefusal(`図形（Form XObject）の呼び出しの深さが、確認できる上限（${walk.maxDepth}段）を超えます。`);
+    }
+    const label = `ページから呼び出される図形（Form XObject /${name}）の内容`;
+    const own = resourcesOf(walk.doc, stream.dict.get(PDFName.of('Resources')), label);
+    let key = tag;
+    if (!own) {
+        let id = 0;
+        if (callerResources) {
+            id = walk.environments.get(callerResources) ?? walk.environments.size + 1;
+            walk.environments.set(callerResources, id);
+        }
+        key = `${tag}@${id}`;
+    }
+    if (walk.proven.has(key)) return;
+    walk.checks += 1;
+    if (walk.checks > walk.maxChecks) {
+        throw new ContentRefusal(`確認する図形（Form XObject）の件数が、確認できる上限（${walk.maxChecks}件）を超えます。`);
+    }
+    const painted = readUnit(walk, [stream], label);
+    readPainted(walk, painted, own ?? callerResources, [...path, tag], depth);
+    walk.proven.add(key);
+}
+
+/**
+ * Read every page's content, and every Form XObject it paints, and answer
+ * whether all of it closes its marked content (RF-IR01-01, RF-IR01-R2-01).
+ *
+ * The page and each form are separate units: a form must close what it opens
+ * inside itself. The decode limit covers pages and forms together.
+ *
+ * Never returns `ok` for anything it could not read to the end. The caller's
  * cancellation check (`beforeStream`) is the only exception it lets through.
  */
 export function checkPageMarkedContent(
@@ -433,40 +603,31 @@ export function checkPageMarkedContent(
     options: MarkedContentOptions = {},
 ): MarkedContentCheck {
     const limit = options.maxDecodedBytes ?? MAX_PAGE_CONTENT_SCAN_BYTES;
-    let scanned = 0;
+    const walk: Walk = {
+        doc,
+        limit,
+        scanned: 0,
+        maxDepth: options.maxFormDepth ?? MAX_FORM_DEPTH,
+        maxChecks: options.maxFormChecks ?? MAX_FORM_CHECKS,
+        checks: 0,
+        beforeStream: options.beforeStream,
+        proven: new Set(),
+        environments: new Map(),
+    };
     const pages = doc.getPages();
     for (let p = 0; p < pages.length; p += 1) {
-        const reader = new MarkedContentReader();
         try {
-            for (const stream of contentStreams(doc, pages[p].node.get(PDFName.of('Contents')))) {
-                options.beforeStream?.();
-                const bytes = stream.getContents();
-                if (decodingOf(doc, stream) === 'none') {
-                    scanned += bytes.length;
-                    if (scanned > limit) throw new OverLimit();
-                    reader.feed(bytes);
-                } else {
-                    const inflator = new Inflate({ chunkSize: PAKO2.inflateChunkBytes });
-                    inflator.onData = (chunk: Uint8Array) => {
-                        scanned += chunk.length;
-                        if (scanned > limit) throw new OverLimit();
-                        reader.feed(chunk);
-                    };
-                    inflator.push(bytes, true);
-                    if (!inflator.ended || inflator.err) {
-                        throw new ContentRefusal('ページ内容を展開できません。');
-                    }
-                }
-                reader.endStream();
-            }
-            reader.endPage();
+            const page = pages[p];
+            const painted = readUnit(walk, contentStreams(doc, page.node.get(PDFName.of('Contents'))), 'ページ内容');
+            const resources = resourcesOf(doc, page.node.getInheritableAttribute(PDFName.of('Resources')), 'ページ');
+            readPainted(walk, painted, resources, [], 0);
         } catch (error) {
             if (error instanceof OverLimit) {
                 return {
                     ok: false,
                     page: p + 1,
-                    reason: `${p + 1}ページ目: ページ内容の展開後の大きさが、確認できる上限`
-                        + `（${Math.round(limit / 1024 / 1024)} MiB）を超えます。`,
+                    reason: `${p + 1}ページ目: ページ内容と、ページから呼び出される図形の内容の展開後の大きさが、`
+                        + `確認できる上限（${Math.round(limit / 1024 / 1024)} MiB）を超えます。`,
                 };
             }
             if (error instanceof ContentRefusal) return { ok: false, page: p + 1, reason: `${p + 1}ページ目: ${error.message}` };
@@ -477,5 +638,5 @@ export function checkPageMarkedContent(
             return { ok: false, page: p + 1, reason: `${p + 1}ページ目: ページ内容を読み取れません。` };
         }
     }
-    return { ok: true, pages: pages.length, scannedBytes: scanned };
+    return { ok: true, pages: pages.length, forms: walk.checks, scannedBytes: walk.scanned };
 }

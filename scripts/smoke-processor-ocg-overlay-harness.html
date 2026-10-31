@@ -311,12 +311,14 @@ window.__ocg = {
    * The page-content check on its own: a smaller decode limit, and a
    * cancellation raised before the `n`th stream, which must come out as itself.
    */
-  async scan(name, { limit, cancelBefore } = {}) {
+  async scan(name, { limit, cancelBefore, maxFormDepth, maxFormChecks } = {}) {
     const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
     let streams = 0;
     try {
       const result = checkPageMarkedContent(doc, {
         maxDecodedBytes: limit,
+        maxFormDepth,
+        maxFormChecks,
         beforeStream: () => {
           streams += 1;
           if (cancelBefore !== undefined && streams >= cancelBefore) {

@@ -33,8 +33,9 @@
  *   /D /ON or /OFF present but not an array   → refuse
  *   /D /Intent that excludes /View            → refuse (the new layer would be ignored, always visible)
  *   a page's /Resources or /Properties not a dictionary → refuse
- *   a page's content leaving BMC/BDC open, an EMC with nothing open,
- *   or content that cannot be read to the end → refuse (`marked-content.ts`)
+ *   a page's content, or a Form XObject it paints, leaving BMC/BDC open, an
+ *   EMC with nothing open, or content that cannot be read to the end
+ *                                             → refuse (`marked-content.ts`)
  */
 import {
     PDFArray, PDFDict, PDFHexString, PDFName, PDFOperator, PDFOperatorNames, PDFRef, PDFString,

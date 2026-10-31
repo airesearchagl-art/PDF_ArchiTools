@@ -119,7 +119,7 @@ try {
 
     // ---- 1b. the page's own marked content (RF-IR01-01) ----------------------
     console.log('\n=== 1b. page content left open (RF-IR01-01) ===');
-    const mcRefused = corpus.files.filter((f) => f.name.startsWith('mc-') && f.expect !== 'ready');
+    const mcRefused = corpus.files.filter((f) => (f.name.startsWith('mc-') || f.name.startsWith('form-')) && f.expect !== 'ready');
     for (const f of mcRefused) {
         const unplanned = await call('runUnplanned', f.name, { color: '#ffffff', opacity: 0.5 });
         check(`${f.name}: the runner on its own refuses with ${f.expect} and returns no PDF`,
@@ -146,6 +146,37 @@ try {
     check('any /L or /Length is refused, whatever its value and whichever name is used (planner and the check alone)',
         lengthResults.length === 7 && lengthResults.every((r) => r.ok),
         lengthResults.map((r) => `${r.name}:${r.ok ? 'refused' : 'NOT'}`).join(' '));
+    // RF-IR01-R2-01: the Form XObjects a page paints are read as units of their own.
+    const formCounter = await call('plan', 'form-unclosed-bdc-off', 'layer');
+    check('the R2 counterexample (page closed, the form it paints opens an OFF layer) is refused, naming the form',
+        formCounter.status === 'OPTIONAL_CONTENT_UNSAFE'
+        && formCounter.reason.includes('Form XObject /Fm0') && formCounter.reason.includes('閉じていない'), formCounter.reason);
+    const nested = await call('scan', 'form-nested-ok');
+    check('nested forms are each read once, as their own units', nested.ok === true && nested.forms === 2,
+        `forms ${nested.forms}`);
+    const shared = await call('scan', 'form-shared-ok');
+    check('a form painted five times from two pages, with its own resources, is proven once and reused',
+        shared.ok === true && shared.forms === 1, `forms ${shared.forms}`);
+    const envs = await call('scan', 'form-env-differs');
+    check('a resource-less form is proven per environment: page 1\'s proof does not cover page 2',
+        envs.ok === false && envs.page === 2 && envs.reason.includes('Form XObject /Inner'), envs.reason);
+    const shallow = await call('scan', 'form-nested-ok', { maxFormDepth: 1 });
+    check('the depth limit is applied (a limit of 1 refuses a form inside a form)',
+        shallow.ok === false && shallow.reason.includes('深さ'), shallow.reason);
+    const fewChecks = await call('scan', 'form-nested-ok', { maxFormChecks: 1 });
+    check('the form-check count is applied (a limit of 1 refuses a second form)',
+        fewChecks.ok === false && fewChecks.reason.includes('件数'), fewChecks.reason);
+    const exactBudget = await call('scan', 'form-nested-ok', { limit: nested.scannedBytes });
+    const shortBudget = await call('scan', 'form-nested-ok', { limit: nested.scannedBytes - 1 });
+    // The total must include the two forms that were read, or "fits exactly"
+    // would hold just as well for a check that never opened them.
+    check('forms count toward the decode limit: the total of page and forms fits exactly, one byte less does not',
+        exactBudget.ok === true && exactBudget.forms === 2
+        && shortBudget.ok === false && shortBudget.reason.includes('上限'),
+        `${nested.scannedBytes} B over ${exactBudget.forms} forms`);
+    const formCancel = await call('scan', 'form-nested-ok', { cancelBefore: 2 });
+    check('a cancellation before a form\'s stream comes out as a cancellation, not a refusal',
+        formCancel.threw === true && formCancel.code === 'CANCELLED' && formCancel.streams === 2, JSON.stringify(formCancel));
     const optimizerFacts = await call('planFromDocument', 'mc-nested-ok', 'layer');
     probe('facts that did not read the page content cannot approve 半透明レイヤ追加',
         optimizerFacts.pageContent === 'unchecked' && optimizerFacts.status === 'OPTIONAL_CONTENT_UNSAFE',
@@ -159,7 +190,10 @@ try {
     check('a cancellation between content streams comes out as a cancellation, not a refusal',
         cancelled.threw === true && cancelled.code === 'CANCELLED' && cancelled.streams === 2,
         JSON.stringify(cancelled));
-    for (const name of ['mc-nested-ok', 'mc-split-contents-ok', 'mc-decoys-ok', 'mc-decoys-flate-ok', 'mc-inline-ei-in-data-ok']) {
+    for (const name of [
+        'mc-nested-ok', 'mc-split-contents-ok', 'mc-decoys-ok', 'mc-decoys-flate-ok', 'mc-inline-ei-in-data-ok',
+        'form-nested-ok', 'form-shared-ok', 'form-depth-at-limit-ok', 'form-count-at-limit-ok', 'form-image-ok',
+    ]) {
         const scanned = await call('scan', name);
         check(`${name}: the check reads every byte and finds the content closed`,
             scanned.ok === true && scanned.scannedBytes > 0, `${scanned.scannedBytes ?? scanned.reason} B`);
