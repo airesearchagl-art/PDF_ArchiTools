@@ -478,6 +478,55 @@ await handWritten('mc-unsupported-filter', 'MC ASCIIHex content', [
     });
 }
 
+// ---------------------------------------------------------------------------
+// RF-IR01-01, review R1: an inline image's /L (or /Length) claimed more bytes
+// than its data, and the reader skipped them as image data — the EI, and a BDC
+// left open after it. A reader that ends the data at the first EI opens that
+// BDC; the check never saw it. Any /L or /Length is refused now, whatever its
+// value: the image's real extent is not something /L can be trusted to say.
+// ---------------------------------------------------------------------------
+const OLD_LAYER = { Old: '既存レイヤ Old（非表示）' };
+const oldOff = (g) => ({ OCGs: [g.Old], D: { Order: [g.Old], OFF: [g.Old] } });
+/** 1×1 RGB 8-bit: three data bytes, then whatever `afterData` says. */
+const lengthCase = (dict, afterData) => [
+    `${BASE_DRAWING}\nq 40 0 0 40 300 640 cm BI /W 1 /H 1 /BPC 8 /CS /RGB ${dict} ID xyz${afterData}`,
+];
+// The reviewer's shape: /L 21 is the three data bytes and the eighteen after
+// them — " EI", then "/OC /Old BDC" — so a reader trusting /L lands on the
+// second EI and believes the page is closed.
+const SKIPPED = ' EI\n/OC /Old BDC \n';
+if (Buffer.byteLength(`xyz${SKIPPED}`, 'latin1') !== 21) throw new Error('the /L 21 counterexample is not 21 bytes');
+const AFTER_SKIP = 'EI\nq 0.1 0.1 0.9 rg 300 600 200 100 re f Q\n';
+for (const [name, dict, note] of [
+    ['mc-inline-L-skip', '/L 21', 'the R1 counterexample: /L 21 over 3 data bytes hides an EI and an open BDC of an OFF layer'],
+    ['mc-inline-Length-skip', '/Length 21', 'the same with /Length'],
+    ['mc-inline-L-exact', '/L 3', '/L equal to the real data length'],
+    ['mc-inline-L-zero', '/L 0', '/L 0'],
+    ['mc-inline-Length-odd', '/Length 3.0', '/Length written as a real number'],
+    ['mc-inline-L-negative', '/L -1', 'a negative /L'],
+]) {
+    const exact = dict === '/L 3' || dict === '/Length 3.0';
+    await handWritten(name, `MC inline ${dict}`, lengthCase(dict, exact ? ' EI Q\n' : `${SKIPPED}${AFTER_SKIP} Q\n`), {
+        groups: OLD_LAYER, ocProperties: oldOff,
+        note, expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '/L・/Length',
+    });
+}
+await handWritten('mc-inline-L-flate', 'MC inline /L with a filter', [
+    `${BASE_DRAWING}\nq 40 0 0 40 300 640 cm BI /W 1 /H 1 /BPC 8 /CS /RGB /F /Fl /L 11 ID ${'x'.repeat(11)} EI Q\n`,
+], {
+    groups: OLD_LAYER, ocProperties: oldOff,
+    note: 'a compressed inline image accepted on its /L alone before R1',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '/L・/Length',
+});
+// No /L: the data's end comes from its dictionary, and an "EI" or "BDC" among
+// the data bytes is data, not an operator.
+await handWritten('mc-inline-ei-in-data-ok', 'MC inline image holding EI in its data', [
+    `${BASE_DRAWING}\nq 80 0 0 10 300 640 cm BI /W 8 /H 1 /BPC 8 /CS /G ID  EI BDC  EI Q\n`
+    + '/Span BMC q 0 0.5 0 rg 60 600 120 60 re f Q EMC\n',
+], {
+    note: 'an 8-byte gray image whose data reads " EI BDC ", with no /L, followed by a closed BMC',
+});
+
 fs.writeFileSync(path.join(OUT, 'corpus.json'), `${JSON.stringify({ overlayName: OVERLAY_NAME, files: corpus }, null, 2)}\n`);
 console.log(`wrote ${corpus.length} fixtures to ${path.relative(ROOT, OUT)}`);
 for (const f of corpus) console.log(`  ${f.name.padEnd(26)} ${String(f.bytes).padStart(7)}  ${f.expect.padEnd(24)} ${f.note}`);

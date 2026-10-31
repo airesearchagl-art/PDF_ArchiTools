@@ -133,6 +133,19 @@ try {
     check('the counterexample (an OFF layer left open) is refused before anything is written, saying what is open',
         counter.status === 'OPTIONAL_CONTENT_UNSAFE' && counter.reason.includes('閉じていないマーク付きコンテンツ（BMC／BDC）が1個')
         && counter.reason.includes('1ページ目'), counter.reason);
+    // Review R1: an inline image's /L or /Length is never trusted. The
+    // counterexample (/L 21 over three data bytes) hid an EI and an open BDC.
+    const lengthStated = corpus.files.filter((f) => f.name.startsWith('mc-inline-L') || f.name.startsWith('mc-inline-Length'));
+    const lengthResults = [];
+    for (const f of lengthStated) {
+        const plan = await call('plan', f.name, 'layer');
+        const scan = await call('scan', f.name);
+        lengthResults.push({ name: f.name, ok: plan.status === 'OPTIONAL_CONTENT_UNSAFE' && plan.reason.includes('/L・/Length')
+            && scan.ok === false && scan.reason.includes('/L・/Length') });
+    }
+    check('any /L or /Length is refused, whatever its value and whichever name is used (planner and the check alone)',
+        lengthResults.length === 7 && lengthResults.every((r) => r.ok),
+        lengthResults.map((r) => `${r.name}:${r.ok ? 'refused' : 'NOT'}`).join(' '));
     const optimizerFacts = await call('planFromDocument', 'mc-nested-ok', 'layer');
     probe('facts that did not read the page content cannot approve 半透明レイヤ追加',
         optimizerFacts.pageContent === 'unchecked' && optimizerFacts.status === 'OPTIONAL_CONTENT_UNSAFE',
@@ -146,7 +159,7 @@ try {
     check('a cancellation between content streams comes out as a cancellation, not a refusal',
         cancelled.threw === true && cancelled.code === 'CANCELLED' && cancelled.streams === 2,
         JSON.stringify(cancelled));
-    for (const name of ['mc-nested-ok', 'mc-split-contents-ok', 'mc-decoys-ok', 'mc-decoys-flate-ok']) {
+    for (const name of ['mc-nested-ok', 'mc-split-contents-ok', 'mc-decoys-ok', 'mc-decoys-flate-ok', 'mc-inline-ei-in-data-ok']) {
         const scanned = await call('scan', name);
         check(`${name}: the check reads every byte and finds the content closed`,
             scanned.ok === true && scanned.scannedBytes > 0, `${scanned.scannedBytes ?? scanned.reason} B`);

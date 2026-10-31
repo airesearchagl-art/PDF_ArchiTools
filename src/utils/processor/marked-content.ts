@@ -23,7 +23,11 @@
  * document is capped, and passing the cap is a refusal, not a partial answer.
  * Only unfiltered and FlateDecode content is decoded. Any other filter, and an
  * inline image whose end cannot be found without decoding it, are refused by
- * name: this check answers "closed" only when it has read every byte.
+ * name: this check answers "closed" only when it has read every byte. An
+ * inline image's data ends where its dimensions put it, or at its ASCIIHex /
+ * ASCII85 end-of-data marker — never where a stated /L or /Length says, and
+ * never at the first "EI" found in it; a dictionary that states a length is
+ * refused.
  *
  * Nothing is repaired. A page that leaves a sequence open is refused, not given
  * the `EMC` it is missing.
@@ -127,8 +131,15 @@ function imageExtent(tokens: ImageToken[]): { kind: 'bytes'; length: number } | 
         return Number(v[0].v);
     };
 
-    const explicit = integer('L', 'Length');
-    if (explicit !== null) return { kind: 'bytes', length: explicit };
+    // RF-IR01-01, review R1: /L (PDF 2.0) or /Length states the data's length,
+    // but nothing makes a reader honour it. Skipping that many bytes would read
+    // as image data whatever lies there — an EI, and a BDC a reader that ends
+    // the data at that EI opens. The extent is taken only from what fixes it
+    // (dimensions, or an ASCII end-of-data marker); a dictionary that states
+    // its own length is refused, whatever the value, rather than trusted.
+    if (entries.has('L') || entries.has('Length')) {
+        throw inlineImage('長さの指定（/L・/Length）があるインライン画像は、データの終わりを確かめられないため受け付けません');
+    }
 
     const filter = one('F', 'Filter');
     if (filter) {
