@@ -23,7 +23,7 @@ import {
 import { RASTER_ENCODING } from './planner';
 import { marginInPlace } from './margin-transform';
 import type { MarginOptions } from './margin-transform';
-import { addOverlayGroup, drawInGroup } from './optional-content';
+import { addOverlayGroup, assertPageContentClosed, drawInGroup } from './optional-content';
 
 export interface FlattenSettings {
     dpi: number;
@@ -185,6 +185,9 @@ export async function runLayer(
 ): Promise<Uint8Array> {
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
     const { r, g, b } = hexToRgb(settings.color);
+    // Read before anything is written: a page that leaves marked content open
+    // would take the overlay inside it, whatever layer that is (RF-IR01-01).
+    assertPageContentClosed(doc, () => check(token));
     const { ref: group } = addOverlayGroup(doc);
     for (const page of doc.getPages()) {
         check(token);

@@ -147,9 +147,16 @@ export function planOperation(
     // ---- 半透明レイヤ追加 adds a layer to the document's own ----------------
     // 両方実行 is not asked: its overlay goes onto the monochrome rebuild, which
     // carries no layers of its own.
+    // The overlay is appended after the page's own content, so a page that
+    // leaves marked content open would take it inside; facts that did not read
+    // the content cannot say it is closed, and are refused the same way.
     if (operation === 'layer' && facts.optionalContent.state === 'unreadable') {
         return refuse(operation, facts, PLAN_STATUS.OPTIONAL_CONTENT_UNSAFE,
             REASON.optionalContent(facts.optionalContent.reason));
+    }
+    if (operation === 'layer' && facts.optionalContent.pageContent !== 'closed') {
+        return refuse(operation, facts, PLAN_STATUS.OPTIONAL_CONTENT_UNSAFE,
+            REASON.optionalContent('ページ内容のマーク付きコンテンツを確認していません。'));
     }
 
     // ---- the budget, for the operations that rasterise ----------------------

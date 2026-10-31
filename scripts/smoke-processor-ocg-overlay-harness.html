@@ -17,14 +17,17 @@ import {
     OVERLAY_LAYER_NAME,
     PLAN_STATUS,
     ProcessorError,
+    checkPageMarkedContent,
     planOperation,
     readSourceFacts,
+    readSourceFactsFromDocument,
     runBoth,
     runFlatten,
     runLayer,
     withConfirmation,
 } from '/src/utils/processor/index.ts';
 import { configurePdfWorker } from '/src/utils/pdf-worker-source.ts';
+import { processLayer } from '/src/utils/pdf-processor.ts';
 import {
     PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFString, PDFHexString, PDFRawStream, decodePDFRawStream,
 } from 'pdf-lib';
@@ -297,6 +300,49 @@ window.__ocg = {
         : operation === 'both'
           ? await runBoth(bytes.slice(), { dpi: 150, contrast: 1 }, settings)
           : await runFlatten(bytes.slice(), 'monochrome', { dpi: 150, contrast: 1 });
+      store.set(key, out);
+      return { ran: true, bytes: out.length };
+    } catch (e) {
+      return { ran: false, code: e instanceof ProcessorError ? e.code : null, reason: String(e?.message ?? e) };
+    }
+  },
+
+  /**
+   * The page-content check on its own: a smaller decode limit, and a
+   * cancellation raised before the `n`th stream, which must come out as itself.
+   */
+  async scan(name, { limit, cancelBefore } = {}) {
+    const doc = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+    let streams = 0;
+    try {
+      const result = checkPageMarkedContent(doc, {
+        maxDecodedBytes: limit,
+        beforeStream: () => {
+          streams += 1;
+          if (cancelBefore !== undefined && streams >= cancelBefore) {
+            throw new ProcessorError('cancelled by the gate', PLAN_STATUS.CANCELLED);
+          }
+        },
+      });
+      return { ...result, streams };
+    } catch (e) {
+      return { threw: true, code: e instanceof ProcessorError ? e.code : null, message: String(e?.message ?? e), streams };
+    }
+  },
+
+  /** Facts as Optimizer v2 reads them: from a parsed document, without the page content. */
+  async planFromDocument(name, operation) {
+    const bytes = await bytesOf(name);
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    const facts = readSourceFactsFromDocument(doc, bytes.length);
+    const plan = planOperation(facts, operation, { dpi: 150, contrast: 1 });
+    return { status: plan.status, reason: plan.reason, pageContent: facts.optionalContent.pageContent };
+  },
+
+  /** The legacy facade, `processLayer`: facts, plan and runner, as old call sites reach them. */
+  async facade(name, settings, key) {
+    try {
+      const out = await processLayer(await bytesOf(name), settings);
       store.set(key, out);
       return { ran: true, bytes: out.length };
     } catch (e) {

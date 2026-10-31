@@ -10,6 +10,15 @@
  * untouched, and a structure that cannot be added to without guessing must be
  * refused by name before anything is written.
  *
+ * The overlay is appended after the page's own content, so a page that leaves
+ * marked content open (BMC/BDC without EMC) would take it inside — inside an
+ * OFF layer, the new layer would show nothing when ON (RF-IR01-01). Every such
+ * page, an EMC with nothing open, and content the check cannot read to the end
+ * are refused by the planner, by the runner on its own and by `processLayer`;
+ * operator names inside strings, comments, names, hex strings, property lists
+ * and inline image data are not operators, and a sequence may open in one
+ * `/Contents` stream and close in the next.
+ *
  * The overlay is page content in the new group, never an annotation: no page
  * gains an `/Annots` entry, so an annotation tool's select, move and erase have
  * nothing of it to pick up. That a viewer actually behaves so is not something
@@ -106,6 +115,58 @@ try {
         const unplanned = await call('runUnplanned', name, { color: '#ffffff', opacity: 0.5 });
         probe(`${name}: the runner refuses on its own, without a plan in front of it`,
             unplanned.ran === false && unplanned.code === 'OPTIONAL_CONTENT_UNSAFE', unplanned.reason);
+    }
+
+    // ---- 1b. the page's own marked content (RF-IR01-01) ----------------------
+    console.log('\n=== 1b. page content left open (RF-IR01-01) ===');
+    const mcRefused = corpus.files.filter((f) => f.name.startsWith('mc-') && f.expect !== 'ready');
+    for (const f of mcRefused) {
+        const unplanned = await call('runUnplanned', f.name, { color: '#ffffff', opacity: 0.5 });
+        check(`${f.name}: the runner on its own refuses with ${f.expect} and returns no PDF`,
+            unplanned.ran === false && unplanned.code === f.expect && unplanned.reason.includes(f.reason),
+            unplanned.reason);
+        const facade = await call('facade', f.name, { color: '#ffffff', opacity: 0.5 }, `facade:${f.name}`);
+        check(`${f.name}: processLayer refuses with ${f.expect} and returns no PDF`,
+            facade.ran === false && facade.code === f.expect, facade.reason);
+    }
+    const counter = await call('plan', 'mc-unclosed-bdc-off', 'layer');
+    check('the counterexample (an OFF layer left open) is refused before anything is written, saying what is open',
+        counter.status === 'OPTIONAL_CONTENT_UNSAFE' && counter.reason.includes('閉じていないマーク付きコンテンツ（BMC／BDC）が1個')
+        && counter.reason.includes('1ページ目'), counter.reason);
+    const optimizerFacts = await call('planFromDocument', 'mc-nested-ok', 'layer');
+    probe('facts that did not read the page content cannot approve 半透明レイヤ追加',
+        optimizerFacts.pageContent === 'unchecked' && optimizerFacts.status === 'OPTIONAL_CONTENT_UNSAFE',
+        `${optimizerFacts.pageContent} ${optimizerFacts.status}`);
+    const fullFacts = await call('plan', 'mc-nested-ok', 'layer');
+    check('facts that read it say closed', fullFacts.optionalContent.pageContent === 'closed');
+    const bounded = await call('scan', 'mc-decoys-flate-ok', { limit: 512 });
+    check('the decode is bounded: past a smaller limit the check refuses instead of reading on',
+        bounded.ok === false && bounded.reason.includes('上限'), bounded.reason);
+    const cancelled = await call('scan', 'mc-split-contents-ok', { cancelBefore: 2 });
+    check('a cancellation between content streams comes out as a cancellation, not a refusal',
+        cancelled.threw === true && cancelled.code === 'CANCELLED' && cancelled.streams === 2,
+        JSON.stringify(cancelled));
+    for (const name of ['mc-nested-ok', 'mc-split-contents-ok', 'mc-decoys-ok', 'mc-decoys-flate-ok']) {
+        const scanned = await call('scan', name);
+        check(`${name}: the check reads every byte and finds the content closed`,
+            scanned.ok === true && scanned.scannedBytes > 0, `${scanned.scannedBytes ?? scanned.reason} B`);
+        const key = `${name}-out`;
+        const ran = await call('run', name, 'layer', { color: '#ffffff', opacity: 0.5 }, key);
+        const s0 = await call('structure', name);
+        const s1 = await call('structure', key);
+        const kept = JSON.stringify(s1.groups.slice(0, s0.groups.length)) === JSON.stringify(s0.groups)
+            && s1.groups.length === s0.groups.length + 1 && s1.groups.at(-1).name === NAME && s1.groups.at(-1).visible
+            && JSON.stringify(s1.text) === JSON.stringify(s0.text);
+        check(`${name}: runs; existing layers, their states and the text are unchanged`, ran.ran && kept,
+            s1.groups.map((g) => `${g.name}:${g.visible}`).join(' | '));
+        const pixels = await call('overlay', name, key, NAME, { color: '#ffffff', opacity: 0.5 });
+        check(`${name}: off is the page before; on is the overlay`, overlayHolds(pixels), summary(pixels));
+        if (s0.groups.length > 0) {
+            const flipped = Object.fromEntries(s0.groups.map((g) => [g.name, !g.visible]));
+            const pixelsFlipped = await call('overlay', name, key, NAME, { color: '#ffffff', opacity: 0.5, visibility: flipped });
+            check(`${name}: every existing layer switched the other way, the new layer still only adds the overlay`,
+                overlayHolds(pixelsFlipped), summary(pixelsFlipped));
+        }
     }
 
     // ---- 2. a document without layers, five kinds of page --------------------

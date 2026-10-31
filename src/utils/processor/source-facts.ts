@@ -233,7 +233,7 @@ export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
     } catch (error) {
         return unreadableFacts(bytes.length, error);
     }
-    return inspectLoaded(doc, facts);
+    return inspectLoaded(doc, facts, { scanPageContent: true });
 }
 
 /**
@@ -244,7 +244,10 @@ export async function readSourceFacts(bytes: Uint8Array): Promise<SourceFacts> {
  * are the ones `readSourceFacts` gives for the same file.
  */
 export function readSourceFactsFromDocument(doc: PDFDocument, sourceBytes: number): SourceFacts {
-    return inspectLoaded(doc, emptyFacts(sourceBytes));
+    // Optimizer v2 budgets its memory around this call and never adds a layer,
+    // so the page content is not decoded here; 半透明レイヤ追加 is refused on
+    // facts that did not read it.
+    return inspectLoaded(doc, emptyFacts(sourceBytes), { scanPageContent: false });
 }
 
 /** What `readSourceFacts` reports when pdf-lib could not parse the file. */
@@ -274,12 +277,16 @@ function emptyFacts(sourceBytes: number): SourceFacts {
         hasAppliedSignature: false,
         formInspectionState: 'no-form',
         formError: null,
-        optionalContent: { state: 'none', groupCount: 0, reason: null },
+        optionalContent: { state: 'none', groupCount: 0, reason: null, pageContent: 'unchecked' },
         pages: [],
     };
 }
 
-function inspectLoaded(doc: PDFDocument, facts: SourceFacts): SourceFacts {
+function inspectLoaded(
+    doc: PDFDocument,
+    facts: SourceFacts,
+    { scanPageContent }: { scanPageContent: boolean },
+): SourceFacts {
     const derive = (): SourceFacts => {
         facts.hasSignatureField = facts.signatureFields.length > 0;
         facts.hasAppliedSignature = facts.signatureFields.some((f) => f.signed);
@@ -316,7 +323,7 @@ function inspectLoaded(doc: PDFDocument, facts: SourceFacts): SourceFacts {
     }
 
     // ---- the layers, which 半透明レイヤ追加 adds one to ----------------------
-    facts.optionalContent = inspectOptionalContent(doc);
+    facts.optionalContent = inspectOptionalContent(doc, { scanPageContent });
 
     // ---- the form, read rather than created --------------------------------
     let acroForm: PDFDict | undefined;

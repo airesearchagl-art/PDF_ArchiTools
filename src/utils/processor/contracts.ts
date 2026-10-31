@@ -148,6 +148,8 @@ export interface SourceFacts {
         state: 'none' | 'read' | 'unreadable';
         groupCount: number;
         reason: string | null;
+        /** Every page's content read, and no marked content left open (RF-IR01-01). */
+        pageContent: 'closed' | 'unchecked';
     };
     /** Visible page geometry, in points, after /Rotate. */
     pages: { widthPt: number; heightPt: number }[];

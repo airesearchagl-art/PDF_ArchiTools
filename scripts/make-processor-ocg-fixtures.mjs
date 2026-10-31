@@ -15,6 +15,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import {
     PDFDocument, PDFName, PDFString, PDFHexString, PDFOperator, PDFOperatorNames,
@@ -343,6 +344,139 @@ await refusal('ocg-properties-not-dict', 'a page /Properties that is an array', 
     doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({ OCGs: [a], D: { Order: [a] } }));
     p.node.normalizedEntries().Resources.set(PDFName.of('Properties'), doc.context.obj([a]));
 });
+
+// ---------------------------------------------------------------------------
+// The page's own marked content (RF-IR01-01). The overlay is appended after the
+// page's content, so a BDC/BMC the page leaves open would take the overlay
+// inside it: with an OFF layer left open, the new layer shows nothing when ON.
+// Each content stream here is written by hand, so what the reader sees is
+// exactly the bytes below.
+// ---------------------------------------------------------------------------
+const HELVETICA = { Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica', Encoding: 'WinAnsiEncoding' };
+const BASE_DRAWING = [
+    'q 0 0 0 RG 2 w 30 30 535.28 781.89 re S Q',
+    'q 0.85 0.1 0.1 RG 6 w 90 300 m 505 300 l S Q',
+    'BT /F1 14 Tf 72 100 Td (OCG-MC-BASE) Tj ET',
+].join('\n');
+
+/** A page whose /Contents are exactly `streams` (strings, or {data, filter} for an encoded one). */
+async function handWritten(name, title, streams, { groups = {}, ocProperties = null, note, expect = 'ready', reason = null }) {
+    const doc = await PDFDocument.create({ updateMetadata: false });
+    doc.setTitle(title);
+    doc.setCreationDate(FIXED_DATE);
+    doc.setModificationDate(FIXED_DATE);
+    const page = doc.addPage([A4.w, A4.h]);
+    const refs = {};
+    for (const [key, label] of Object.entries(groups)) refs[key] = newGroup(doc, label);
+    const contents = streams.map((s) => {
+        if (typeof s === 'string') return doc.context.register(doc.context.stream(s, {}));
+        return doc.context.register(doc.context.stream(s.data, { Filter: s.filter }));
+    });
+    page.node.set(PDFName.of('Contents'), doc.context.obj(contents));
+    page.node.set(PDFName.of('Resources'), doc.context.obj({
+        Font: { F1: doc.context.obj(HELVETICA) },
+        ...(Object.keys(refs).length ? { Properties: refs } : {}),
+    }));
+    if (ocProperties) doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj(ocProperties(refs)));
+    await write(name, doc, note, expect, reason);
+}
+
+/** The reviewer's counterexample, rebuilt here: an OFF layer the page leaves open. */
+await handWritten('mc-unclosed-bdc-off', 'MC unclosed BDC (OFF layer)', [
+    `${BASE_DRAWING}\n/OC /OCA BDC\nq 0.1 0.1 0.9 rg 300 600 200 100 re f Q\n`,
+], {
+    groups: { OCA: '既存レイヤ（非表示・未閉鎖）' },
+    ocProperties: (g) => ({ OCGs: [g.OCA], D: { Order: [g.OCA], OFF: [g.OCA] } }),
+    note: 'an existing OFF layer opened with BDC and never closed: the counterexample of RF-IR01-01',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '閉じていない',
+});
+await handWritten('mc-unclosed-bmc', 'MC unclosed BMC', [
+    `${BASE_DRAWING}\n/Span BMC\nq 0 0.5 0 rg 300 600 200 100 re f Q\n`,
+], {
+    note: 'a BMC that is never closed, in a document with no layers',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '閉じていない',
+});
+await handWritten('mc-extra-emc', 'MC extra EMC', [
+    `${BASE_DRAWING}\n/Span BMC q 0 0.5 0 rg 300 600 200 100 re f Q EMC\nEMC\n`,
+], {
+    note: 'one EMC more than was opened',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '対応する開始のないEMC',
+});
+await handWritten('mc-nested-ok', 'MC nested', [
+    [
+        BASE_DRAWING,
+        '/OC /OCA BDC',
+        '  q 0.9 0.1 0.1 rg 60 600 200 100 re f Q',
+        '  /Span << /MCID 0 >> BDC',
+        '    /Artifact BMC q 0 0.6 0 rg 60 480 80 80 re f Q EMC',
+        '    /OC /OCB BDC q 0.1 0.1 0.9 rg 160 480 80 80 re f Q EMC',
+        '  EMC',
+        'EMC',
+    ].join('\n'),
+], {
+    groups: { OCA: '入れ子レイヤ A（表示）', OCB: '入れ子レイヤ B（非表示）' },
+    ocProperties: (g) => ({ OCGs: [g.OCA, g.OCB], D: { Order: [g.OCA, g.OCB], OFF: [g.OCB] } }),
+    note: 'BDC, BMC and an OC BDC nested three deep and all closed',
+});
+await handWritten('mc-split-contents-ok', 'MC across streams', [
+    `${BASE_DRAWING}\n/OC /OCA BDC\nq 0.9 0.1 0.1 rg 60 600 200 100 re f Q\n`,
+    'q 0.1 0.1 0.9 rg 300 600 200 100 re f Q\nEMC\n',
+], {
+    groups: { OCA: '分割レイヤ（表示）' },
+    ocProperties: (g) => ({ OCGs: [g.OCA], D: { Order: [g.OCA] } }),
+    note: 'a BDC opened in the first /Contents stream and closed in the second',
+});
+// Every byte sequence that looks like a marked-content operator but is not one.
+const DECOYS = [
+    BASE_DRAWING,
+    '% EMC BDC BMC in a comment\n',
+    'BT /F1 12 Tf 72 700 Td (BDC \\) EMC \\( BMC) Tj ((EMC) nested (BDC)) Tj <454D43> Tj [(EMC) -20 (BDC)] TJ ET',
+    '/EMC BMC q 0.2 0.2 0.2 rg 72 640 40 40 re f Q EMC',
+    '/Span << /ActualText (EMC BDC) /Alt <424443> /Tag /BDC /N [/EMC 1 2] >> BDC q 0 0.5 0 rg 130 640 40 40 re f Q EMC',
+    // An uncompressed inline image whose eight data bytes spell " EMC BDC".
+    'q 80 0 0 10 200 640 cm BI /W 8 /H 1 /BPC 8 /CS /G ID  EMC BDC EI Q',
+    'q 40 0 0 40 300 640 cm BI /W 2 /H 2 /BPC 1 /IM true /D [1 0] ID À\u0000 EI Q',
+].join('\n');
+await handWritten('mc-decoys-ok', 'MC decoys', [DECOYS], {
+    note: 'operator names inside strings, a comment, names, hex strings, a property list and inline image data',
+});
+await handWritten('mc-decoys-flate-ok', 'MC decoys, compressed', [
+    { data: zlib.deflateSync(Buffer.from(DECOYS, 'latin1')), filter: 'FlateDecode' },
+], {
+    note: 'the same decoys in a FlateDecode stream',
+});
+await handWritten('mc-split-string', 'MC string across streams', [
+    `${BASE_DRAWING}\nBT /F1 12 Tf 72 700 Td (abc`,
+    'def) Tj ET\n',
+], {
+    note: 'a string opened in one /Contents stream and closed in the next',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '読み取れません',
+});
+await handWritten('mc-inline-flate', 'MC inline image of unknown length', [
+    `${BASE_DRAWING}\nq 40 0 0 40 300 640 cm BI /W 2 /H 2 /BPC 8 /CS /G /F /Fl ID ${'x'.repeat(12)} EI Q\n`,
+], {
+    note: 'a compressed inline image, whose end cannot be found without decoding it',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: 'インライン画像',
+});
+await handWritten('mc-unsupported-filter', 'MC ASCIIHex content', [
+    { data: Buffer.from(`${Buffer.from(BASE_DRAWING, 'latin1').toString('hex')}>`, 'latin1'), filter: 'ASCIIHexDecode' },
+], {
+    note: 'page content encoded with a filter the check does not decode',
+    expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '圧縮形式',
+});
+{
+    // 260 MiB of spaces deflates to about a quarter of a megabyte: the decoded
+    // size is what the check is bounded by, not the file's.
+    const spaces = Buffer.alloc(260 * 1024 * 1024, 0x20);
+    const bomb = zlib.deflateSync(spaces, { level: 9 });
+    await handWritten('mc-over-limit', 'MC over the decode limit', [
+        BASE_DRAWING,
+        { data: bomb, filter: 'FlateDecode' },
+    ], {
+        note: 'page content that decodes to 260 MiB',
+        expect: 'OPTIONAL_CONTENT_UNSAFE', reason: '上限',
+    });
+}
 
 fs.writeFileSync(path.join(OUT, 'corpus.json'), `${JSON.stringify({ overlayName: OVERLAY_NAME, files: corpus }, null, 2)}\n`);
 console.log(`wrote ${corpus.length} fixtures to ${path.relative(ROOT, OUT)}`);

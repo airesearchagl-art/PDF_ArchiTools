@@ -33,12 +33,15 @@
  *   /D /ON or /OFF present but not an array   → refuse
  *   /D /Intent that excludes /View            → refuse (the new layer would be ignored, always visible)
  *   a page's /Resources or /Properties not a dictionary → refuse
+ *   a page's content leaving BMC/BDC open, an EMC with nothing open,
+ *   or content that cannot be read to the end → refuse (`marked-content.ts`)
  */
 import {
     PDFArray, PDFDict, PDFHexString, PDFName, PDFOperator, PDFOperatorNames, PDFRef, PDFString,
 } from 'pdf-lib';
 import type { PDFDocument, PDFPage } from 'pdf-lib';
 import { PLAN_STATUS, ProcessorError } from './contracts';
+import { checkPageMarkedContent } from './marked-content';
 
 /** What the new layer is called in a viewer's layer list. */
 export const OVERLAY_LAYER_NAME = 'PDF ArchiTools 半透明オーバーレイ';
@@ -53,6 +56,12 @@ export interface OptionalContentFacts {
     groupCount: number;
     /** Why it could not be read, in the user's language. */
     reason: string | null;
+    /**
+     * Whether every page's content was read and leaves no marked content open.
+     * `unchecked` when the caller did not ask (Optimizer v2 reads facts from a
+     * document it has already parsed, and never adds a layer).
+     */
+    pageContent: 'closed' | 'unchecked';
 }
 
 interface Readable {
@@ -177,19 +186,44 @@ function checkPageProperties(doc: PDFDocument): void {
     }
 }
 
-/** The facts the planner decides on. Never throws. */
-export function inspectOptionalContent(doc: PDFDocument): OptionalContentFacts {
+/**
+ * The facts the planner decides on. Never throws.
+ *
+ * `scanPageContent` reads every page's content for open marked content; the
+ * planner refuses 半透明レイヤ追加 unless it was read and found closed.
+ */
+export function inspectOptionalContent(
+    doc: PDFDocument,
+    { scanPageContent }: { scanPageContent: boolean },
+): OptionalContentFacts {
     try {
         const readable = readOptionalContent(doc);
         checkPageProperties(doc);
-        if (!readable) return { state: 'none', groupCount: 0, reason: null };
-        return { state: 'read', groupCount: readable.ocgs.size(), reason: null };
+        let pageContent: OptionalContentFacts['pageContent'] = 'unchecked';
+        if (scanPageContent) {
+            const content = checkPageMarkedContent(doc);
+            if (!content.ok) throw new OptionalContentUnreadable(content.reason);
+            pageContent = 'closed';
+        }
+        if (!readable) return { state: 'none', groupCount: 0, reason: null, pageContent };
+        return { state: 'read', groupCount: readable.ocgs.size(), reason: null, pageContent };
     } catch (error) {
         const reason = error instanceof OptionalContentUnreadable
             ? error.message
             : 'レイヤー設定を読み取れませんでした。';
-        return { state: 'unreadable', groupCount: 0, reason };
+        return { state: 'unreadable', groupCount: 0, reason, pageContent: 'unchecked' };
     }
+}
+
+/**
+ * The runner's own check of the page content, before anything is drawn.
+ *
+ * `beforeStream` is the run's cancellation check; a cancellation comes out of
+ * here as itself, not as a refusal.
+ */
+export function assertPageContentClosed(doc: PDFDocument, beforeStream?: () => void): void {
+    const content = checkPageMarkedContent(doc, { beforeStream });
+    if (!content.ok) throw unsafe(content.reason);
 }
 
 /** A name no existing layer has, so the two can be told apart in a layer list. */
@@ -280,9 +314,12 @@ function propertiesKeyFor(doc: PDFDocument, page: PDFPage, ref: PDFRef): PDFName
 /**
  * Wrap what `draw` puts on the page in the group's marked content.
  *
- * pdf-lib has already closed the page's own content in `q … Q` by the time
- * anything is appended, so the marked content sits at the top level after it,
- * and annotations — which are not page content — still draw above it.
+ * pdf-lib wraps the page's own content in `q … Q` before anything is appended.
+ * That restores the graphics state and nothing else: it does **not** close
+ * marked content. The marked content here sits at the top level only because
+ * `assertPageContentClosed` has already read the page's content and found
+ * every `BMC`/`BDC` closed (RF-IR01-01). Annotations — which are not page
+ * content — still draw above it.
  */
 export function drawInGroup(doc: PDFDocument, page: PDFPage, ref: PDFRef, draw: () => void): void {
     const key = propertiesKeyFor(doc, page, ref);
