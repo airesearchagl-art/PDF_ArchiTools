@@ -29,7 +29,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { preview } from 'vite';
 import puppeteer from 'puppeteer';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5187;
@@ -54,6 +54,8 @@ if (!fs.existsSync(FIXTURES)) {
 
 const downloads = fs.mkdtempSync(path.join(os.tmpdir(), 'm6-ui-'));
 const fixture = (name) => path.join(FIXTURES, `${name}.pdf`);
+/** Sources this gate makes for itself, kept apart from the downloads it counts. */
+const generated = fs.mkdtempSync(path.join(os.tmpdir(), 'm6-ui-gen-'));
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -100,6 +102,41 @@ try {
             return new Promise((resolve, reject) => {
                 setTimeout(() => result.then(resolve, reject), delay);
             });
+        };
+    });
+
+    /**
+     * Hold back what the Split / Merge worker answers, and record its end.
+     *
+     * With `window.__m6WorkerDelay` set, every message from that worker reaches
+     * the app that many milliseconds late, so an export is still in flight when
+     * the selection changes. Other workers (PDF.js) pass through untouched.
+     */
+    await page.evaluateOnNewDocument(() => {
+        const NativeWorker = window.Worker;
+        window.__m6Workers = [];
+        window.Worker = class extends NativeWorker {
+            constructor(url, options) {
+                super(url, options);
+                this.__m6 = { url: String(url), terminated: false };
+                window.__m6Workers.push(this.__m6);
+            }
+
+            terminate() {
+                this.__m6.terminated = true;
+                return super.terminate();
+            }
+
+            addEventListener(type, listener, options) {
+                if (type !== 'message' || !this.__m6.url.includes('split-merge.worker')) {
+                    return super.addEventListener(type, listener, options);
+                }
+                return super.addEventListener(type, (event) => {
+                    const delay = window.__m6WorkerDelay ?? 0;
+                    if (delay > 0) setTimeout(() => listener.call(this, event), delay);
+                    else listener.call(this, event);
+                }, options);
+            }
         };
     });
 
@@ -821,6 +858,201 @@ try {
     check('r12-x-next-array-17-att: and once agreed to, the merge is written',
         downloadedNames().length === beforeList + 1, `${downloadedNames().length - beforeList} new file(s)`);
 
+    // ---- 13. the preview outlives a selection change ----------------------------
+    //
+    // Choosing a page cancels an export in flight, which is right: an export
+    // started for another selection must not be written. It also used to release
+    // the preview — every thumbnail went back to '…' and the PDF.js document was
+    // destroyed, so nothing could draw them again. The same happened on a trip to
+    // the Merge tab and back. The run is cancelled now; the preview is not.
+    console.log('\n=== 13. thumbnails outlive a selection change ===');
+
+    /** Page n of every made source is (400 + 10n) x (560 + 10n) pt, so a written page says which page it was. */
+    const sizeOf = (n) => ({ width: 400 + 10 * n, height: 560 + 10 * n });
+    const makeSource = async (name, pages) => {
+        const doc = await PDFDocument.create({ updateMetadata: false });
+        const font = await doc.embedFont(StandardFonts.Helvetica);
+        for (let n = 1; n <= pages; n += 1) {
+            const { width, height } = sizeOf(n);
+            const sheet = doc.addPage([width, height]);
+            sheet.drawText(`${name} page ${n}`, { x: 40, y: height - 80, size: 28, font });
+            sheet.drawRectangle({ x: 40, y: 40, width: width - 80, height: height - 160, borderWidth: 2 });
+        }
+        const file = path.join(generated, `${name}.pdf`);
+        fs.writeFileSync(file, await doc.save());
+        return file;
+    };
+    const sourceA = await makeSource('thumbs-a', 18);
+    const sourceB = await makeSource('thumbs-b', 18);
+
+    const cells = () => page.$$eval('[data-usage-target="extract-pages"] > div', (els) => els.map((el) => ({
+        page: Number((el.querySelector('div')?.textContent ?? '').replace(/\D/g, '')),
+        src: el.querySelector('img')?.getAttribute('src') ?? null,
+        checked: el.querySelector('input[type="checkbox"]')?.checked ?? false,
+    })));
+    const drawn = async () => (await cells()).filter((c) => c.src !== null).map((c) => c.page);
+    const waitForDrawn = async (pages, timeout = 15000) => {
+        const started = Date.now();
+        for (;;) {
+            const now = await drawn();
+            if (pages.every((n) => now.includes(n))) return now;
+            if (Date.now() - started > timeout) return now;
+            await settle(200);
+        }
+    };
+    /** Every drawn thumbnail's Blob URL still answers: a released one does not. */
+    const liveImages = () => page.evaluate(async () => {
+        const urls = [...document.querySelectorAll('[data-usage-target="extract-pages"] img')].map((img) => img.src);
+        const answers = await Promise.all(urls.map((u) => fetch(u).then((r) => r.ok, () => false)));
+        return { total: urls.length, live: answers.filter(Boolean).length };
+    });
+    const clickCell = (n) => page.evaluate((pageNum) => {
+        [...document.querySelectorAll('[data-usage-target="extract-pages"] > div')]
+            .find((el) => el.querySelector('div')?.textContent === `Page ${pageNum}`)?.click();
+    }, n);
+    const scrollToEnd = () => page.evaluate(() => {
+        const list = document.querySelector('[data-usage-target="extract-pages"]')?.parentElement;
+        if (list) list.scrollTop = list.scrollHeight;
+    });
+    const allPages = Array.from({ length: 18 }, (_v, i) => i + 1);
+
+    // 13a. The report as written: 18 pages, all drawn, then one page chosen.
+    await openSplitMerge();
+    let thumbsInput = await page.$('input[type="file"]');
+    await thumbsInput.uploadFile(sourceA);
+    await waitForText('Page 18');
+    const drawnBefore = await waitForDrawn(allPages);
+    check('13a: all 18 pages are drawn before anything is chosen',
+        drawnBefore.length === 18, `${drawnBefore.length} drawn`);
+    await clickCell(5);
+    await settle(1500);
+    const afterPick = await cells();
+    check('13a: choosing page 5 ticks it',
+        afterPick.find((c) => c.page === 5)?.checked === true && afterPick.filter((c) => c.checked).length === 1,
+        afterPick.filter((c) => c.checked).map((c) => c.page).join(',') || 'nothing ticked');
+    check('13a: and all 18 thumbnails are still drawn — none back to …',
+        afterPick.filter((c) => c.src !== null).length === 18,
+        `${afterPick.filter((c) => c.src !== null).length} drawn, '…' on ${afterPick.filter((c) => c.src === null).map((c) => c.page).join(',') || 'none'}`);
+    const live13a = await liveImages();
+    check('13a: and their images were not released',
+        live13a.total === 18 && live13a.live === 18, `${live13a.live}/${live13a.total} answer`);
+    await clickCell(5);
+    await clickCell(9);
+    await clickCell(12);
+    await settle(1500);
+    const afterMore = await cells();
+    check('13a: unticking and ticking more pages leaves them drawn too',
+        afterMore.filter((c) => c.src !== null).length === 18
+            && afterMore.filter((c) => c.checked).map((c) => c.page).join(',') === '9,12',
+        `${afterMore.filter((c) => c.src !== null).length} drawn, ticked ${afterMore.filter((c) => c.checked).map((c) => c.page).join(',')}`);
+
+    // 13b. The document stays open: pages first seen after the change still draw.
+    await page.evaluate(() => {
+        const range = document.querySelector('input[type="range"]');
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setValue.call(range, '1000');
+        range.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle(500);
+    thumbsInput = await page.$('input[type="file"]');
+    await thumbsInput.uploadFile(sourceB);
+    await waitForText('thumbs-b.pdf');
+    await waitForDrawn([1]);
+    await settle(1500);
+    const unseen = await drawn();
+    check('13b: at one page per row, the last pages are not drawn yet',
+        unseen.includes(1) && !unseen.includes(18), `drawn: ${unseen.join(',')}`);
+    await clickCell(1);
+    await settle(800);
+    await scrollToEnd();
+    const lateDrawn = await waitForDrawn([17, 18]);
+    check('13b: after choosing page 1, scrolling to the end still draws pages 17 and 18',
+        lateDrawn.includes(17) && lateDrawn.includes(18), `drawn: ${lateDrawn.join(',')}`);
+
+    // 13c. A selection change still cancels the export in flight, and only that.
+    await clickCell(3);
+    await settle(300);
+    const workersBefore = await page.evaluate(() => window.__m6Workers.length);
+    await page.evaluate(() => { window.__m6WorkerDelay = 4000; });
+    const startedC = Date.now();
+    const writtenSince = (t) => downloadedNames()
+        .filter((f) => fs.statSync(path.join(downloads, f)).mtimeMs >= t - 1000);
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="extract-export"]')?.click();
+    });
+    await settle(500);
+    const busyAtChange = await working();
+    await clickCell(5);
+    await settle(5500);
+    const exportWorkers = await page.evaluate((from) => window.__m6Workers.slice(from)
+        .filter((w) => w.url.includes('split-merge.worker')), workersBefore);
+    check('13c: the export was still running when page 5 was chosen',
+        busyAtChange && exportWorkers.length === 1, `busy=${busyAtChange}, ${exportWorkers.length} worker(s) started`);
+    check('13c: and choosing it cancelled that export: its worker was stopped and nothing was written',
+        exportWorkers.every((w) => w.terminated) && writtenSince(startedC).length === 0 && !(await working()),
+        `terminated=${exportWorkers.map((w) => w.terminated).join(',')}, written=${writtenSince(startedC).join(',') || 'none'}`);
+    const afterCancel = await cells();
+    check('13c: and the thumbnails drawn before it are still there',
+        [17, 18].every((n) => afterCancel.find((c) => c.page === n)?.src)
+            && afterCancel.filter((c) => c.checked).map((c) => c.page).join(',') === '1,3,5',
+        `drawn: ${afterCancel.filter((c) => c.src).map((c) => c.page).join(',')}, ticked ${afterCancel.filter((c) => c.checked).map((c) => c.page).join(',')}`);
+
+    await page.evaluate(() => { window.__m6WorkerDelay = 0; });
+    const startedC2 = Date.now();
+    await page.evaluate(() => {
+        document.querySelector('[data-usage-target="extract-export"]')?.click();
+    });
+    let writtenC = [];
+    for (let i = 0; i < 40 && writtenC.length === 0; i += 1) {
+        await settle(250);
+        writtenC = writtenSince(startedC2);
+    }
+    check('13c: exporting again writes one file', writtenC.length === 1, writtenC.join(',') || 'no file');
+    if (writtenC.length === 1) {
+        const out = await PDFDocument.load(new Uint8Array(fs.readFileSync(path.join(downloads, writtenC[0]))),
+            { updateMetadata: false });
+        const sizes = out.getPages().map((p) => {
+            const { width, height } = p.getSize();
+            return `${Math.round(width)}x${Math.round(height)}`;
+        });
+        const expected = [1, 3, 5].map((n) => `${sizeOf(n).width}x${sizeOf(n).height}`);
+        check('13c: and it holds pages 1, 3 and 5 of the shown file, in order',
+            sizes.join(',') === expected.join(','), `${sizes.join(',')} (expected ${expected.join(',')})`);
+    } else {
+        check('13c: and it holds pages 1, 3 and 5 of the shown file, in order', false, 'no file to read');
+    }
+
+    // 13d. The Merge tab and back, and the Extract tab clicked while on it.
+    const neverDrawn = allPages.filter((n) => !afterCancel.some((c) => c.page === n && c.src));
+    const target = neverDrawn[Math.floor(neverDrawn.length / 2)];
+    check('13d: (control) some page has not been drawn yet, to look for after coming back',
+        target !== undefined, `never drawn: ${neverDrawn.join(',') || 'none'}`);
+    await openMergeTab();
+    await settle(600);
+    await page.evaluate(() => {
+        document.querySelectorAll('[data-usage-target="split-tabs"] button')[0]?.click();
+    });
+    await settle(600);
+    await page.evaluate((pageNum) => {
+        [...document.querySelectorAll('[data-usage-target="extract-pages"] > div')]
+            .find((el) => el.querySelector('div')?.textContent === `Page ${pageNum}`)
+            ?.scrollIntoView({ block: 'center' });
+    }, target);
+    const afterReturn = await waitForDrawn([target]);
+    const back = await cells();
+    check('13d: back from the Merge tab, the same file is shown with its pages ticked',
+        back.length === 18 && back.filter((c) => c.checked).map((c) => c.page).join(',') === '1,3,5',
+        `${back.length} cells, ticked ${back.filter((c) => c.checked).map((c) => c.page).join(',')}`);
+    check(`13d: and page ${target}, first scrolled to after coming back, is drawn`,
+        afterReturn.includes(target), `drawn: ${afterReturn.join(',')}`);
+    await page.evaluate(() => {
+        document.querySelectorAll('[data-usage-target="split-tabs"] button')[0]?.click();
+    });
+    await settle(1000);
+    const live13d = await liveImages();
+    check('13d: clicking the Extract tab while on it releases nothing',
+        live13d.total > 0 && live13d.live === live13d.total, `${live13d.live}/${live13d.total} answer`);
+
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));
 
@@ -835,5 +1067,6 @@ try {
     await browser.close();
     await server.httpServer.close();
     fs.rmSync(downloads, { recursive: true, force: true });
+    fs.rmSync(generated, { recursive: true, force: true });
 }
 process.exit(exitCode);

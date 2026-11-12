@@ -10,8 +10,10 @@
  *     owned by the run.
  *   - Nothing decided which run owned the screen, so the last writer won.
  *     M6-H13 adopts RunOwnership: a superseded run neither publishes nor
- *     downloads, revokes its Blob URLs, releases its thumbnails and destroys its
- *     PDF.js document.
+ *     downloads, and revokes its Blob URLs. The Extract preview — its
+ *     thumbnails and its PDF.js document — belongs to the file on screen: a
+ *     selection change or a tab switch supersedes the run but keeps the
+ *     preview, and another file or leaving the tool releases it.
  *   - A merge input whose MIME type was not `application/pdf` was skipped with a
  *     bare `continue`, and a failed load was swallowed into the console. Five
  *     files chosen, four merged, reported as success. M6-H10 adopts an explicit
@@ -177,15 +179,25 @@ export const PdfSplitMerge: React.FC = () => {
     const inFlight = useRef<{ cancel: () => void } | null>(null);
 
     /**
-     * Invalidate whatever is running and release what it owned.
+     * Invalidate whatever is running: an export, a merge or an intake that is no
+     * longer current neither publishes nor downloads.
      *
-     * Everything H13 names happens here and nowhere else, so there is one place
-     * to read and one place to get wrong.
+     * It does not touch the preview. The thumbnails and the PDF.js document they
+     * are drawn from belong to the file on screen, not to the run, and nothing
+     * would draw them again: a selection change that released them left every
+     * page at '…' for good.
      */
-    const supersede = useCallback(() => {
+    const cancelRun = useCallback(() => {
         ownership.current.supersede();
         inFlight.current?.cancel();
         inFlight.current = null;
+    }, []);
+
+    /**
+     * Release the Extract preview: revoke its thumbnails and destroy its PDF.js
+     * document. Only another file replacing it, or leaving the tool, ends it.
+     */
+    const releasePreview = useCallback(() => {
         thumbnails.current.clear();
         if (pdfDoc.current) {
             void pdfDoc.current.destroy();
@@ -193,7 +205,10 @@ export const PdfSplitMerge: React.FC = () => {
         }
     }, []);
 
-    useEffect(() => supersede, [supersede]);
+    useEffect(() => () => {
+        cancelRun();
+        releasePreview();
+    }, [cancelRun, releasePreview]);
     const snapshot = useMemo<M6Snapshot>(() => ({
         operation: activeTab,
         fileIds: activeTab === 'extract'
@@ -272,7 +287,9 @@ export const PdfSplitMerge: React.FC = () => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        supersede();
+        // A new file ends the old one's preview as well as any run in flight.
+        cancelRun();
+        releasePreview();
         setExtractNotice(null);
         setPendingLosses(null);
         setSelected(new Set());
@@ -343,8 +360,8 @@ export const PdfSplitMerge: React.FC = () => {
 
     const togglePage = (pageNum: number) => {
         // A selection change supersedes the run in flight: an export started
-        // against a different selection must not publish.
-        supersede();
+        // against a different selection must not publish. The preview stays.
+        cancelRun();
         setPendingLosses(null);
         setSelected((prev) => {
             const next = new Set(prev);
@@ -439,7 +456,7 @@ export const PdfSplitMerge: React.FC = () => {
     const handleMergeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files ?? []);
         if (files.length === 0) return;
-        supersede();
+        cancelRun();
         setMergeNotice(null);
         // A new file makes a new plan, and a confirmation belongs to the plan
         // it was given for.
@@ -597,7 +614,7 @@ export const PdfSplitMerge: React.FC = () => {
     };
 
     const moveFile = (index: number, direction: 'up' | 'down') => {
-        supersede();
+        cancelRun();
         setMergeConfirmation(null);
         setMergeFiles((prev) => {
             const next = [...prev];
@@ -609,7 +626,7 @@ export const PdfSplitMerge: React.FC = () => {
     };
 
     const removeFile = (id: string) => {
-        supersede();
+        cancelRun();
         setMergeConfirmation(null);
         setMergeFiles((prev) => prev.filter((f) => f.id !== id));
     };
@@ -829,7 +846,7 @@ export const PdfSplitMerge: React.FC = () => {
         <div style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div data-usage-target="split-tabs" style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                 <button
-                    onClick={() => { supersede(); setActiveTab('extract'); }}
+                    onClick={() => { cancelRun(); setActiveTab('extract'); }}
                     style={{
                         padding: '10px 20px', border: 'none', borderRadius: '5px',
                         backgroundColor: activeTab === 'extract' ? '#4a90e2' : '#eee',
@@ -841,7 +858,7 @@ export const PdfSplitMerge: React.FC = () => {
                     PDF抽出 (Extract)
                 </button>
                 <button
-                    onClick={() => { supersede(); setActiveTab('merge'); }}
+                    onClick={() => { cancelRun(); setActiveTab('merge'); }}
                     style={{
                         padding: '10px 20px', border: 'none', borderRadius: '5px',
                         backgroundColor: activeTab === 'merge' ? '#4a90e2' : '#eee',
