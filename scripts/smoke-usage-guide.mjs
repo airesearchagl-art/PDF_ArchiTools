@@ -196,9 +196,9 @@ try {
         return out;
     });
     console.log(`  ${JSON.stringify(versions)}`);
-    check('PDF加工 shows v1.5.0', versions.processor === '1.5.0', JSON.stringify(versions));
+    check('PDF加工 shows v1.5.1', versions.processor === '1.5.1', JSON.stringify(versions));
     check('PDFテキスト化 shows v1.7.0', versions.textifier === '1.7.0', JSON.stringify(versions));
-    check('図面管理 shows v0.2.0', versions['drawing-set'] === '0.2.0', JSON.stringify(versions));
+    check('図面管理 shows v0.3.0', versions['drawing-set'] === '0.3.0', JSON.stringify(versions));
     check('every tool header shows a version', TOOLS.every((t) => versions[t]), JSON.stringify(versions));
 
     // ---- content, read from the panel it belongs to ---------------------------
@@ -422,55 +422,48 @@ try {
         historyDates.length >= 4
         && historyDates.every((d, i) => i === 0 || historyDates[i - 1] >= d),
         `${historyDates.length} entries, ${historyDates[0]} first`);
-    check('and the newest entries are the ones just added',
-        historyDates[0] === '20261031' && historyDates[1] === '20261020' && historyDates[2] === '20261010'
-        && historyDates[3] === '20261003',
-        historyText.slice(0, 90).replace(/\n/g, ' | '));
-    // The banner above the guide is written by hand, so it can fall behind the
-    // history. Tie it, the newest entry and the PDF加工 header to one release.
-    const releaseHeads = await page.evaluate(() => [...document.querySelectorAll('#release-history h4')]
-        .map((h) => (h.innerText || '').replace(/\s+/g, ' ').trim()));
-    // Each entry read as its own card, so a sentence is checked in the release it belongs to.
     const releaseCards = await page.evaluate(() => [...document.querySelectorAll('#release-history h4')]
         .map((h) => ({
             head: (h.innerText || '').replace(/\s+/g, ' ').trim(),
             items: [...(h.parentElement?.querySelectorAll('li') ?? [])].map((li) => (li.innerText || '').trim()),
         })));
+    const releaseHeads = releaseCards.map((card) => card.head);
     const cardOf = (head) => releaseCards.find((c) => c.head === head) ?? { head: '', items: [] };
-    const processor150 = releaseHeads.filter((h) => h.includes('PDF加工') && h.includes('1.5.0'));
-    check('exactly one PDF加工 1.5.0 entry, dated 2026/10/31, and it is the newest',
-        processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[0] === processor150[0], releaseHeads[0]);
-    const processor140 = releaseHeads.filter((h) => h.includes('PDF加工') && h.includes('1.4.0'));
-    check('exactly one PDF加工 1.4.0 entry, dated 2026/10/03',
-        processor140.length === 1 && processor140[0].startsWith('2026/10/03'), JSON.stringify(processor140));
-    const drawingSet020 = releaseHeads.filter((h) => h.includes('図面管理') && h.includes('0.2.0'));
-    check('exactly one 図面管理 0.2.0 entry, dated 2026/10/20, and it comes right after PDF加工 1.5.0',
-        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[1] === drawingSet020[0], releaseHeads[1]);
-    const drawingSet010 = releaseHeads.filter((h) => h.includes('図面管理') && h.includes('0.1.0'));
-    check('exactly one 図面管理 0.1.0 entry, dated 2026/10/10, and it comes right after 0.2.0',
-        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[2] === drawingSet010[0], releaseHeads[2]);
-    check('and PDF加工 1.4.0 comes right after it', releaseHeads[3] === processor140[0], releaseHeads[3]);
-    // The version, the date and the history are written in two files; read the
-    // source of truth so neither can move without the other.
+    const entryOf = (tool, version) => releaseHeads.filter((h) => h.includes(tool) && h.endsWith(`v${version}`));
+    const latest = [
+        { tool: '図面管理', version: '0.3.0', key: 'drawingSet', heading: '図面一式のチェックと判断記録を追加', phrase: '図面番号の重複、表題欄の未確定項目', header: 'drawing-set' },
+        { tool: 'PDF加工', version: '1.5.1', key: 'tools', heading: '高さの低いウィンドウでも「実行開始」まで操作可能に', phrase: '高さの低いウィンドウでも「実行開始」', header: 'processor' },
+        { tool: 'PDF比較', version: '1.2.1', key: 'comparator', heading: '回転設定がそろった図面を本来の向きで表示', phrase: '回転設定だけの違いは差分として数えません', header: 'comparator' },
+    ];
     const versionsSource = fs.readFileSync(path.join(ROOT, 'src', 'config', 'versions.ts'), 'utf8');
-    const toolsVersion = /tools:\s*\{\s*version:\s*'([^']+)',\s*lastUpdate:\s*'([^']+)'/.exec(versionsSource);
-    check('versions.ts gives PDF加工 1.5.0 dated 2026/10/31, the date of its newest entry',
-        toolsVersion?.[1] === '1.5.0' && toolsVersion?.[2] === '2026/10/31'
-        && (processor150[0] ?? '').startsWith(toolsVersion[2]), JSON.stringify(toolsVersion?.slice(1)));
-    const drawingSetVersion = /drawingSet:\s*\{\s*version:\s*'([^']+)',\s*lastUpdate:\s*'([^']+)'/.exec(versionsSource);
-    check('versions.ts gives 図面管理 0.2.0 dated 2026/10/20, the date of its newest entry',
-        drawingSetVersion?.[1] === '0.2.0' && drawingSetVersion?.[2] === '2026/10/20'
-        && (drawingSet020[0] ?? '').startsWith(drawingSetVersion[2]), JSON.stringify(drawingSetVersion?.slice(1)));
-    check('versions.ts gives the app 1.3.0', /export const APP_VERSION = '1\.3\.0';/.test(versionsSource), 'APP_VERSION');
     const banners = await page.evaluate(() => [...document.querySelectorAll('p')]
         .map((p) => (p.textContent || '').replace(/\s+/g, ' ').trim())
         .filter((s) => s.includes('最近の更新')));
     const banner = banners[0] ?? '';
-    console.log(`  banner: ${banner}`);
     check('there is one 最近の更新 banner', banners.length === 1, `${banners.length}`);
-    check('the banner names PDF加工 v1.5.0 and the switchable layer, and no longer 図面管理 v0.2.0',
-        banner.includes('PDF加工') && banner.includes('v1.5.0') && banner.includes('表示・非表示を切り替えられるレイヤー')
-        && !banner.includes('図面管理') && !banner.includes('v0.2.0'), banner);
+    for (const [index, entry] of latest.entries()) {
+        const heads = entryOf(entry.tool, entry.version);
+        const declared = new RegExp(`${entry.key}:\\s*\\{\\s*version:\\s*'([^']+)',\\s*lastUpdate:\\s*'([^']+)'`).exec(versionsSource);
+        check(`${entry.tool}: header, current version and latest history agree`,
+            heads.length === 1 && releaseHeads[index] === heads[0] && heads[0].startsWith('2026/11/13')
+            && versions[entry.header] === entry.version && declared?.[1] === entry.version && declared?.[2] === '2026/11/13', heads[0]);
+        check(`${entry.tool}: its change is described in both the banner and its release entry`,
+            banner.includes(`${entry.tool}：${entry.heading}（v${entry.version}）`)
+            && cardOf(heads[0]).items.some((item) => item.includes(entry.phrase)), banner);
+    }
+    const processor150 = entryOf('PDF加工', '1.5.0');
+    check('the earlier PDF加工 1.5.0 entry is dated 2026/10/31',
+        processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[3] === processor150[0], releaseHeads[3]);
+    const processor140 = entryOf('PDF加工', '1.4.0');
+    check('the earlier PDF加工 1.4.0 entry is dated 2026/10/03',
+        processor140.length === 1 && processor140[0].startsWith('2026/10/03') && releaseHeads[6] === processor140[0], releaseHeads[6]);
+    const drawingSet020 = entryOf('図面管理', '0.2.0');
+    check('the earlier 図面管理 0.2.0 entry is dated 2026/10/20',
+        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[4] === drawingSet020[0], releaseHeads[4]);
+    const drawingSet010 = entryOf('図面管理', '0.1.0');
+    check('the earlier 図面管理 0.1.0 entry is dated 2026/10/10',
+        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[5] === drawingSet010[0], releaseHeads[5]);
+    check('versions.ts gives the app 1.3.0', /export const APP_VERSION = '1\.3\.0';/.test(versionsSource), 'APP_VERSION');
     // 1.5.0: the layer, what it is not, what 両方実行 shows with it off, and when it stops.
     const p150 = cardOf(processor150[0]).items.join('\n');
     check('the PDF加工 1.5.0 entry: the overlay is its own layer, switched in a viewer\'s layer list, and off is the drawing before it',
@@ -519,11 +512,8 @@ try {
         && ds010[5] === '表題欄の読み取り、図面一式のチェック、作業内容の保存・再開には、まだ対応していません。', `${ds010.length} items`);
     check('the 図面管理 0.1.0 entry says what is not available yet',
         historyText.includes('表題欄の読み取り、図面一式のチェック、作業内容の保存・再開には、まだ対応していません'));
-    // PDF加工 has now reached 1.5.0 too, so the version alone no longer tells
-    // the two apart: a v1.5.0 in the banner has to be PDF加工's.
-    check('the banner no longer names Word / PDFテキスト化 v1.5.0 as the latest update',
-        !banner.includes('Word') && !banner.includes('PDFテキスト化')
-        && (!banner.includes('v1.5.0') || banner.includes('PDF加工')), banner);
+    check('the banner lists only releases from the newest date',
+        !banner.includes('PDFテキスト化') && !banner.includes('v1.5.0') && !banner.includes('v0.2.0'), banner);
     check('the banner stays out of implementation detail',
         !/Hybrid|Policy R|RF-?\d|pako|\/Size|Worker|IR-\d|HG-|M7|P2/.test(banner), banner);
     check('the PDF加工 1.4.0 entry says lossless, one file at a time, the original under 1%, and 1 GiB for ~250 MiB',

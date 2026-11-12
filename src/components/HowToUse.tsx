@@ -20,10 +20,41 @@ interface ReleaseNote {
     date: string;
     tool: string;
     version: string;
+    headline?: string;
     changes: string[];
 }
 
 const releaseHistory: ReleaseNote[] = [
+    {
+        date: '2026/11/13',
+        tool: '図面管理',
+        version: '0.3.0',
+        headline: '図面一式のチェックと判断記録を追加',
+        changes: [
+            '図面番号の重複、表題欄の未確定項目、手入力した図面一覧との照合ができます。',
+            '指摘ごとに判断とコメントを記録し、履歴を確認できます。',
+            '作業の保存・再開と最終レポートには、まだ対応していません。',
+        ],
+    },
+    {
+        date: '2026/11/13',
+        tool: 'PDF加工',
+        version: '1.5.1',
+        headline: '高さの低いウィンドウでも「実行開始」まで操作可能に',
+        changes: [
+            '右側の設定欄を縦にスクロールできるようになりました。高さの低いウィンドウでも「実行開始」まで移動できます。',
+        ],
+    },
+    {
+        date: '2026/11/13',
+        tool: 'PDF比較',
+        version: '1.2.1',
+        headline: '回転設定がそろった図面を本来の向きで表示',
+        changes: [
+            '対応するページの回転設定が同じ場合、比較画面と書き出しを図面本来の向きにそろえます。',
+            '回転設定が混在する場合は用紙の向きで表示します。回転設定だけの違いは差分として数えません。',
+        ],
+    },
     {
         date: '2026/10/31',
         tool: 'PDF加工',
@@ -282,6 +313,9 @@ function scrollToHash(): void {
     });
 }
 
+const latestReleaseDate = releaseHistory[0]?.date;
+const latestReleases = releaseHistory.filter((release) => release.date === latestReleaseDate);
+
 export function HowToUse() {
     // Everything starts closed, so opening the guide shows the six tools
     // rather than the first tool's manual. A link straight to one tool is the
@@ -318,7 +352,12 @@ export function HowToUse() {
                 </p>
                 <p style={{ margin: 0, fontSize: '0.85em', color: '#9fd3ff' }}>
                     <History size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                    最近の更新: <b>PDF加工</b>の半透明レイヤ追加を、表示・非表示を切り替えられるレイヤーに変更（v1.5.0）
+                    最近の更新: {latestReleases.map((release, index) => (
+                        <span key={`${release.tool}:${release.version}`}>
+                            {index > 0 && ' ／ '}
+                            <b>{release.tool}</b>：{release.headline ?? release.changes[0]}（v{release.version}）
+                        </span>
+                    ))}
                     — <a href="#release-history" style={{ color: '#9fd3ff' }}>更新履歴</a>
                 </p>
             </div>
