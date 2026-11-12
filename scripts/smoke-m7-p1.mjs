@@ -29,7 +29,11 @@
  *    store and its one page gate for intake, preview and extraction,
  *    re-presenting a Source's bytes (HD-B-05), the profile mutation probes
  *    F1-F7 (ADV-37-02), and P1 intake and preview with M7's PDF.js data files,
- *    before and after (HD-B-04).
+ *    before and after (HD-B-04);
+ *  - M7-P3 (scripts/smoke-m7-p3-checks.mjs, last): QA, Review Decisions and
+ *    typed registers through the session store, the session they leave
+ *    against the contract, a refused QA run on the QA screen, and the QA
+ *    screen at 5000 Sheets. The oracle comparison is smoke-m7-p3-qa.mjs.
  *
  * Run:
  *   node scripts/make-m7-p1-fixtures.mjs        (also builds the P2-A fixtures)
@@ -47,6 +51,9 @@ import { runP2aChecks } from './smoke-m7-p2a-checks.mjs';
 import { runP2b1Checks } from './smoke-m7-p2b1-checks.mjs';
 import { runP2b2Checks } from './smoke-m7-p2b2-checks.mjs';
 import { runAdvVerifyChecks } from './smoke-m7-adv-verify-checks.mjs';
+import { runP3Checks } from './smoke-m7-p3-checks.mjs';
+// The draft-07 subset interpreter (unchanged; shared with the M7-P3 gate).
+import { unsupportedKeywords, validate } from './m7-schema-subset.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5214;
@@ -79,86 +86,6 @@ function payload(length, seed) {
         out[i] = x & 0xff;
     }
     return out;
-}
-
-// ---------------------------------------------------------------------------
-// A small draft-07 subset interpreter, for this test only. It refuses to run
-// against a schema that uses a keyword it does not implement, so it cannot
-// pass something by not understanding it.
-// ---------------------------------------------------------------------------
-const SUPPORTED = new Set([
-    '$schema', '$id', 'title', 'description', 'x-limit', '$defs', '$ref', 'type', 'const', 'enum', 'anyOf',
-    'properties', 'required', 'additionalProperties', 'items', 'minItems', 'maxItems',
-    'minLength', 'maxLength', 'pattern', 'minimum', 'maximum',
-]);
-
-function unsupportedKeywords(schema) {
-    const found = new Set();
-    const walk = (node) => {
-        if (Array.isArray(node)) return node.forEach(walk);
-        if (!node || typeof node !== 'object') return;
-        for (const [key, value] of Object.entries(node)) {
-            if (!SUPPORTED.has(key)) found.add(key);
-            if (key === 'properties' || key === '$defs') Object.values(value).forEach(walk);
-            else walk(value);
-        }
-    };
-    walk(schema);
-    return [...found];
-}
-
-function validate(root, value) {
-    const errors = [];
-    const typeOk = (type, v) => ({
-        object: v !== null && typeof v === 'object' && !Array.isArray(v),
-        array: Array.isArray(v),
-        string: typeof v === 'string',
-        integer: Number.isInteger(v),
-        number: typeof v === 'number' && Number.isFinite(v),
-        null: v === null,
-        boolean: typeof v === 'boolean',
-    })[type] ?? false;
-    const walk = (schema, v, at) => {
-        if (schema.$ref) return walk(root.$defs[schema.$ref.replace('#/$defs/', '')], v, at);
-        if (schema.anyOf) {
-            const passes = schema.anyOf.some((sub) => {
-                const mark = errors.length;
-                walk(sub, v, at);
-                const ok = errors.length === mark;
-                errors.length = mark;
-                return ok;
-            });
-            if (!passes) errors.push(`${at}: matches no anyOf branch`);
-            return;
-        }
-        if (schema.type && !typeOk(schema.type, v)) return void errors.push(`${at}: not ${schema.type}`);
-        if ('const' in schema && v !== schema.const) errors.push(`${at}: not const ${schema.const}`);
-        if (schema.enum && !schema.enum.includes(v)) errors.push(`${at}: not in enum`);
-        if (typeof v === 'string') {
-            const length = [...v].length;
-            if (schema.minLength !== undefined && length < schema.minLength) errors.push(`${at}: shorter than ${schema.minLength}`);
-            if (schema.maxLength !== undefined && length > schema.maxLength) errors.push(`${at}: longer than ${schema.maxLength}`);
-            if (schema.pattern && !new RegExp(schema.pattern, 'u').test(v)) errors.push(`${at}: pattern`);
-        }
-        if (typeof v === 'number') {
-            if (schema.minimum !== undefined && v < schema.minimum) errors.push(`${at}: < ${schema.minimum}`);
-            if (schema.maximum !== undefined && v > schema.maximum) errors.push(`${at}: > ${schema.maximum}`);
-        }
-        if (Array.isArray(v)) {
-            if (schema.minItems !== undefined && v.length < schema.minItems) errors.push(`${at}: fewer than ${schema.minItems} items`);
-            if (schema.maxItems !== undefined && v.length > schema.maxItems) errors.push(`${at}: more than ${schema.maxItems} items`);
-            if (schema.items) v.forEach((item, i) => walk(schema.items, item, `${at}/${i}`));
-        }
-        if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-            for (const key of schema.required ?? []) if (!(key in v)) errors.push(`${at}: missing ${key}`);
-            for (const [key, item] of Object.entries(v)) {
-                if (schema.properties?.[key]) walk(schema.properties[key], item, `${at}/${key}`);
-                else if (schema.additionalProperties === false) errors.push(`${at}: unknown property ${key}`);
-            }
-        }
-    };
-    walk(root, value, '#');
-    return errors;
 }
 
 /** TEST ONLY: the minimum file envelope the schema requires around a model. Not a save format. */
@@ -599,7 +526,9 @@ async function main() {
         // M7-ADV-VERIFY-01: the ADV-37-01 / 03 verification (test only). Its FINDINGs are reported, not gates.
         await runAdvVerifyChecks({ page, ROOT, ORIGIN, check, probe, note, section });
 
-        section('43. The whole run, P1, P2-A, P2-B1 and P2-B2');
+        await runP3Checks({ page, ROOT, ORIGIN, check, probe, note, section, validate, envelope, schema, checkRelations });
+
+        section('43. The whole run, P1, P2-A, P2-B1, P2-B2 and P3');
         check('no request left the machine', external.length === 0, external.join(', '));
         check('no uncaught page error', pageErrors.length === 0, pageErrors.join(' | '));
 

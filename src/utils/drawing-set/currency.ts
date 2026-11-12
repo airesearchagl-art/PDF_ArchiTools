@@ -446,11 +446,16 @@ export function currencyLabel(currency: RecordCurrency): 'NONE' | 'CURRENT' | 'U
     return source && profile ? 'STALE_SOURCE_AND_PROFILE' : source ? 'STALE_SOURCE' : 'STALE_PROFILE';
 }
 
-function currencyOf(
-    set: DrawingSet, sheet: Sheet, record: { sourceSha256: Sha256Hex; profile: ProfileBasis | null } | null, ledger: RuntimeBindingLedger,
-): RecordCurrency {
-    const binding = verifiedBinding(ledger, set, sheet.sourceId);
-    if (!record) return { state: 'NONE', staleReasons: [], binding };
+/**
+ * The validity axis alone: why a record's basis no longer equals the Drawing
+ * Set now, binding aside. Empty when it still stands. Currency below adds the
+ * binding to this; QA (qa-engine.ts) chooses its input by this, because which
+ * value a Sheet carries does not depend on whether this session can vouch for
+ * the File (CAN-03 R4-A).
+ */
+export function staleReasonsOf(
+    set: DrawingSet, sheet: Sheet, record: { sourceSha256: Sha256Hex; profile: ProfileBasis | null },
+): StaleReason[] {
     const staleReasons: StaleReason[] = [];
     const source = set.sources.find((s) => s.id === sheet.sourceId);
     if (!source || source.fingerprint.sha256 !== record.sourceSha256) staleReasons.push('STALE_SOURCE');
@@ -462,6 +467,15 @@ function currencyOf(
             staleReasons.push('STALE_PROFILE');
         }
     }
+    return staleReasons;
+}
+
+function currencyOf(
+    set: DrawingSet, sheet: Sheet, record: { sourceSha256: Sha256Hex; profile: ProfileBasis | null } | null, ledger: RuntimeBindingLedger,
+): RecordCurrency {
+    const binding = verifiedBinding(ledger, set, sheet.sourceId);
+    if (!record) return { state: 'NONE', staleReasons: [], binding };
+    const staleReasons = staleReasonsOf(set, sheet, record);
     if (staleReasons.length > 0) return { state: 'STALE', staleReasons, binding };
     if (binding !== 'MATCHED') return { state: 'UNVERIFIED', staleReasons, binding };
     return { state: 'CURRENT', staleReasons, binding };

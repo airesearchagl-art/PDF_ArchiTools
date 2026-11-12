@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8" />
+    <title>M7-P3 harness</title>
+</head>
+<body>
+    <p id="state">loading</p>
+    <!--
+        Drives the Production M7-P3 pieces -- the session store's QA, Review
+        Decision and typed-register commands, and the QA screen (QaPanel) --
+        in a real browser, through the Vite dev server, for
+        scripts/smoke-m7-p1.mjs (scripts/smoke-m7-p3-checks.mjs). Every
+        function returns plain data; the Node side decides what passes.
+        Synthetic fixtures only. A harness may seed a store with update();
+        the screen never does (N-C6).
+    -->
+    <script type="module">
+        import React, { useSyncExternalStore } from 'react';
+        import { flushSync } from 'react-dom';
+        import { createRoot } from 'react-dom/client';
+        import '/src/components/drawing-set/DrawingSetWorkspace.css';
+        import { QaPanel } from '/src/components/drawing-set/QaPanel.tsx';
+        import { DraftBook } from '/src/components/drawing-set/drafts.ts';
+        import { FIELD_NAMES } from '/src/utils/drawing-set/model.ts';
+        import { sha256Hex } from '/src/utils/drawing-set/incremental-sha256.ts';
+        import { PdfDocumentGate } from '/src/utils/drawing-set/pdf-document-gate.ts';
+        import { PreviewDocumentOwner } from '/src/utils/drawing-set/preview-document.ts';
+        import { DrawingSetStore } from '/src/utils/drawing-set/workspace-store.ts';
+
+        const P2A = '/test-fixtures/m7-p2a';
+        const plainly = (value) => JSON.parse(JSON.stringify(value ?? null));
+        const defer = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+        const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+        async function fixtureBytes(name) {
+            const response = await fetch(`${P2A}/${name}.pdf`);
+            const type = response.headers.get('content-type') || '';
+            if (!response.ok || type.includes('text/html')) throw new Error(`fixture ${name} missing (the dev server fell back to HTML)`);
+            return new Uint8Array(await response.arrayBuffer());
+        }
+
+        /** A File that can go missing after it was chosen, as a file on disk can. */
+        class MutableFile extends File {
+            constructor(bytes, name) {
+                super([bytes], name, { type: '' });
+                this.current = bytes;
+                this.gone = false;
+            }
+            slice(from = 0, to = this.size) {
+                const bytes = this.current;
+                return {
+                    arrayBuffer: async () => {
+                        if (this.gone) throw new DOMException('The requested file could not be read.', 'NotReadableError');
+                        return bytes.slice(from, to).buffer;
+                    },
+                };
+            }
+        }
+
+        function newStore() {
+            const gate = new PdfDocumentGate();
+            const owner = new PreviewDocumentOwner({ gate });
+            const store = new DrawingSetStore({ gate, owner });
+            store.enter();
+            return { gate, owner, store, dispose: async () => { store.leave(); await owner.close(); } };
+        }
+
+        /** The next extraction held at the gate's door until released: the lock is held with nothing timed. */
+        function holdNextExtraction(gate) {
+            const asked = defer();
+            const held = defer();
+            gate.beginExtraction = function heldOnce() {
+                delete gate.beginExtraction;
+                asked.resolve();
+                return held.promise.then(() => gate.beginExtraction());
+            };
+            return { asked: asked.promise, release: () => held.resolve() };
+        }
+
+        /** Typed confirmations (no profile) on some Sheets: a test seed, as a person typing them would leave them. */
+        function seedConfirmations(store, values) {
+            const now = new Date().toISOString();
+            store.update((set) => ({
+                ...set,
+                sheets: set.sheets.map((sheet) => {
+                    const v = values[sheet.id];
+                    if (!v) return sheet;
+                    const source = set.sources.find((s) => s.id === sheet.sourceId);
+                    return {
+                        ...sheet,
+                        confirmation: { confirmedAt: now, sourceSha256: source.fingerprint.sha256, profile: null, values: { ...v }, editedFields: [...FIELD_NAMES] },
+                        confirmationHistory: sheet.confirmation ? [...sheet.confirmationHistory, { confirmation: sheet.confirmation, retiredAt: now, reason: 'RECONFIRMED' }] : sheet.confirmationHistory,
+                    };
+                }),
+            }));
+        }
+
+        const V4 = (n) => ({ drawingNumber: n, drawingTitle: '', revision: '', issueDate: '' });
+        const ROW = (n, t = '') => ({ drawingNumber: n, drawingTitle: t, revision: '', issueDate: '' });
+
+        /** What the store says about QA now, as plain data. */
+        function qaView(store) {
+            const a = store.qaAssessment();
+            const set = store.currentSet();
+            const active = set.findings.filter((f) => f.lifecycle.state === 'ACTIVE');
+            return {
+                status: a.readiness.status,
+                blockers: a.readiness.blockers.map((b) => ({ code: b.code, count: b.subjects.length, subjects: b.code === 'QA_RESULT_NOT_CURRENT' ? b.subjects.map((s) => s.split(':')[0]) : [] })),
+                notEvaluated: a.readiness.notEvaluated.map((n) => `${n.ruleId}:${n.why}`),
+                register: a.evaluation.register.state,
+                refusal: a.refusal.map((e) => e.limit),
+                runs: set.analysisRuns.filter((r) => r.kind === 'QA').length,
+                findings: set.findings.length,
+                decisions: set.decisions.length,
+                active: active.map((f) => ({ id: f.id, rule: f.ruleId, reason: f.params.reason ?? null, key: f.params.comparisonKey ?? null, sheets: f.sheetIds, entries: f.registerEntryIds.length, currency: a.currency.get(f.id), effective: a.effective.get(f.id) })),
+            };
+        }
+
+        // ================================================================ the store's QA commands
+        async function flow() {
+            const out = {};
+            const s = newStore();
+            const { store, gate } = s;
+            const register = await store.intake(new File([await fixtureBytes('p2a-register')], 'p2a-register.pdf', { type: '' }));
+            const geometryFile = new MutableFile(await fixtureBytes('p2a-geometry'), 'p2a-geometry.pdf');
+            const geometry = await store.intake(geometryFile);
+            if (register.kind !== 'accepted' || geometry.kind !== 'accepted') throw new Error(`intake: ${register.kind} / ${geometry.kind}`);
+            const cells = { drawingNumber: { left: 560, top: 440, right: 780, bottom: 480 }, drawingTitle: { left: 560, top: 480, right: 780, bottom: 520 }, revision: { left: 560, top: 520, right: 660, bottom: 560 }, issueDate: { left: 660, top: 520, right: 780, bottom: 560 } };
+            const profile = store.createProfile({ name: 'P', transferModel: 'normalised', referencePage: { uprightWidthPt: 800, uprightHeightPt: 580 }, fields: cells });
+            const register1 = register.sheets[0].id;
+            const geometrySheets = geometry.sheets.map((sh) => sh.id);
+            store.assignProfile([register1, ...geometrySheets], profile.profile.id);
+            const read = await store.extract({ sheetIds: [register1, ...geometrySheets] });
+            out.extraction = read.report.kind === 'finished' ? read.report.outcome : read.report.kind;
+            out.sheets = store.currentSet().sheets.length;
+
+            out.before = qaView(store);
+            out.memoSame = store.qaAssessment() === store.qaAssessment();
+            const first = store.runQa();
+            out.first = first.ok ? { ok: true, created: first.created, engine: first.run.engine, coverage: first.run.coverage } : { ok: false, code: first.refusal.code };
+            out.afterFirst = qaView(store);
+
+            // Decisions on a CURRENT QA02 Finding: two, in sequence; the comment's CRLF made LF, its tab kept.
+            // The first geometry Sheet's: it is confirmed below, so this Finding closes and the Decisions stay with it.
+            const qa02 = out.afterFirst.active.find((f) => f.rule === 'QA02_METADATA_UNCONFIRMED' && f.sheets[0] === geometrySheets[0]);
+            out.qa02Currency = qa02?.currency ?? null;
+            const d1 = store.decide(qa02.id, 'HOLD', '一行目\r\n二行目\tタブ');
+            const d2 = store.decide(qa02.id, 'ACTION_REQUIRED', '');
+            const versionBefore = store.getSnapshot().version;
+            const bad = store.decide(qa02.id, 'HOLD', 'a\u0000b');
+            const badOutcome = store.decide(qa02.id, 'PASS', '');
+            out.decisions = {
+                d1: d1.ok ? { sequence: d1.decision.sequence, comment: d1.decision.comment, evidence: d1.decision.evidenceDigest === store.currentSet().findings.find((f) => f.id === qa02.id).evidenceDigest } : d1.refusal.code,
+                d2: d2.ok ? { sequence: d2.decision.sequence } : d2.refusal.code,
+                bad: bad.ok ? 'accepted' : bad.refusal.code,
+                badOutcome: badOutcome.ok ? 'accepted' : badOutcome.refusal.code,
+                unchangedByRefusals: store.getSnapshot().version === versionBefore,
+                effective: qaView(store).active.find((f) => f.id === qa02.id).effective,
+            };
+
+            // QA01: two geometry Sheets confirmed with one number; the QA02 Findings of both close.
+            seedConfirmations(store, { [geometrySheets[0]]: V4('Z-001'), [geometrySheets[1]]: V4(' Z-001') });
+            out.qa01Before = qaView(store).blockers.find((b) => b.code === 'QA_RESULT_NOT_CURRENT')?.subjects ?? [];
+            const second = store.runQa();
+            out.second = second.ok ? { created: second.created, superseded: second.superseded, closed: second.closed } : second.refusal.code;
+            out.afterSecond = qaView(store);
+            const qa02Then = store.currentSet().findings.find((f) => f.id === qa02.id);
+            out.decidedQa02Now = { lifecycle: qa02Then.lifecycle.state, decisionsKept: store.currentSet().decisions.filter((d) => d.findingId === qa02.id).length };
+            const superseded = store.decide(qa02.id, 'INTENTIONAL', '');
+            out.decideOnClosed = superseded.ok ? 'accepted' : superseded.refusal.code;
+
+            // A typed register on page 1 of p2a-register.pdf: Z-001 listed, Z-404 listed and on no Sheet.
+            const declared = store.declareRegister(register.source.id, 1, [ROW('Z-001', '平面図'), ROW('Z-404')]);
+            out.declared = declared.ok ? 'ok' : declared.refusal.code;
+            out.afterDeclare = qaView(store);
+            const third = store.runQa();
+            out.third = third.ok ? { created: third.created } : third.refusal.code;
+            out.afterThird = qaView(store);
+            const reference = store.currentSet().drawingRegisterReferences[0];
+            const z404 = reference.entries[1];
+            const edited = store.editRegisterEntry(reference.id, z404.id, ROW('Z-405', '詳細図'));
+            const afterEdit = store.currentSet().drawingRegisterReferences[0].entries[1];
+            out.edit = { ok: edited.ok, id: afterEdit.id === z404.id, row: afterEdit.row, number: afterEdit.drawingNumber, title: afterEdit.drawingTitle, origin: afterEdit.origin };
+            out.editBlank = (() => { const r = store.editRegisterEntry(reference.id, z404.id, ROW('   ')); return r.ok ? 'accepted' : r.refusal.code; })();
+            out.declareBad = (() => { const r = store.declareRegister(register.source.id, 99, [ROW('Q-1')]); return r.ok ? 'accepted' : r.refusal.code; })();
+            out.afterEditView = qaView(store);
+
+            // While extraction holds the lock, every QA command is refused and nothing moves.
+            const hold = holdNextExtraction(gate);
+            const running = store.startExtraction([register1]);
+            await hold.asked;
+            const lockedSet = store.currentSet();
+            const lockedVersion = store.getSnapshot().version;
+            const code = (r) => (r.ok ? 'accepted' : r.refusal.code);
+            const activeNow = lockedSet.findings.find((f) => f.lifecycle.state === 'ACTIVE');
+            out.locked = {
+                operation: store.getSnapshot().operation?.kind ?? null,
+                runQa: code(store.runQa()),
+                decide: code(store.decide(activeNow.id, 'HOLD', '')),
+                declare: code(store.declareRegister(register.source.id, 1, [ROW('L-1')])),
+                edit: code(store.editRegisterEntry(reference.id, z404.id, ROW('L-2'))),
+                retireRow: code(store.retireRegisterEntry(reference.id, z404.id)),
+                retireRef: code(store.retireRegisterReference(reference.id)),
+                unchanged: store.currentSet() === lockedSet && store.getSnapshot().version === lockedVersion,
+            };
+            store.cancelExtraction();
+            hold.release();
+            await running;
+            out.unlocked = store.getSnapshot().operation === null;
+
+            // A File gone missing: its Findings are UNVERIFIED and the Source blocks; back again, CURRENT again.
+            const geometrySource = geometry.source.id;
+            const onGeometry = (view) => view.active.filter((f) => f.sheets.some((id) => geometrySheets.includes(id))).map((f) => f.currency);
+            geometryFile.gone = true;
+            await store.verifyFile(geometrySource);
+            const missing = qaView(store);
+            const missingBinding = store.bindingOf(geometrySource);
+            geometryFile.gone = false;
+            await store.verifyFile(geometrySource);
+            const back = qaView(store);
+            out.binding = {
+                missing: { binding: missingBinding, currencies: onGeometry(missing), sourcesBlocker: missing.blockers.find((b) => b.code === 'SOURCES_NOT_MATCHED')?.count ?? 0 },
+                back: { binding: store.bindingOf(geometrySource), currencies: onGeometry(back), sourcesBlocker: back.blockers.find((b) => b.code === 'SOURCES_NOT_MATCHED')?.count ?? 0 },
+            };
+
+            // Retiring a row, then the register's Source: the register goes with it; the next run closes QA09 (MD-2 A).
+            out.retireRow = code(store.retireRegisterEntry(reference.id, z404.id));
+            const removed = store.removeSource(register.source.id);
+            const after = store.currentSet();
+            const ref = after.drawingRegisterReferences[0];
+            const src = after.sources.find((x) => x.id === register.source.id);
+            out.removed = { ok: removed.ok, referenceRetired: ref.retiredAt !== null && ref.retiredAt === src.retiredAt, register: qaView(store).register };
+            const qa09Before = after.findings.filter((f) => f.ruleId === 'QA09_REGISTER_SHEET_MISMATCH' && f.lifecycle.state === 'ACTIVE').map((f) => f.id);
+            const fourth = store.runQa();
+            const afterFourth = store.currentSet();
+            out.fourth = { ok: fourth.ok, qa09Closed: qa09Before.length > 0 && qa09Before.every((id) => afterFourth.findings.find((f) => f.id === id).lifecycle.state === 'NOT_REPRODUCED'), closed: qa09Before.length };
+
+            // The Decision bound: the collection at 99999, one more fits, the next is refused and nothing moves.
+            const target = qaView(store).active.find((f) => f.currency === 'CURRENT');
+            const other = store.currentSet().findings.find((f) => f.id !== target.id);
+            const at = new Date().toISOString();
+            const existing = store.currentSet().decisions.length;
+            store.update((set) => ({
+                ...set,
+                decisions: [...set.decisions, ...Array.from({ length: 99999 - existing }, (_, i) => ({
+                    id: crypto.randomUUID(), findingId: other.id, sequence: set.decisions.filter((d) => d.findingId === other.id).length + i + 1,
+                    outcome: 'HOLD', comment: '', decidedAt: at < other.createdAt ? other.createdAt : at, evidenceDigest: other.evidenceDigest,
+                }))],
+            }));
+            const atBound = store.decide(target.id, 'HOLD', '');
+            const versionAtBound = store.getSnapshot().version;
+            const past = store.decide(target.id, 'HOLD', '');
+            out.decisionBound = {
+                atBound: atBound.ok ? `ok:${store.currentSet().decisions.length}` : atBound.refusal.code,
+                past: past.ok ? 'accepted' : { code: past.refusal.code, exceeded: past.refusal.exceeded, message: past.refusal.message },
+                unchanged: store.getSnapshot().version === versionAtBound && store.currentSet().decisions.length === 100000,
+            };
+            out.session = plainly(store.getSnapshot().state.session);
+            await s.dispose();
+            return plainly(out);
+        }
+
+        // ================================================================ the QA screen
+        /** A store seeded with `sheets` typed Sheets over `sources` Sources (no File held: bindings stay UNBOUND). */
+        function seeded({ sources, pages, number }) {
+            const s = newStore();
+            const now = new Date().toISOString();
+            const list = Array.from({ length: sources }, (_, i) => ({
+                id: crypto.randomUUID(), displayName: `perf-${String(i + 1).padStart(2, '0')}.pdf`, addedAt: now, retiredAt: null,
+                fingerprint: { algorithm: 'SHA-256', sha256: sha256Hex(new TextEncoder().encode(`m7-p3 perf ${i}`)), byteLength: 1, pageCount: pages, recordedAt: now },
+                fingerprintHistory: [],
+            }));
+            const sheets = [];
+            list.forEach((source, i) => {
+                for (let p = 1; p <= pages; p += 1) {
+                    const n = i * pages + p;
+                    const value = number(n);
+                    sheets.push({
+                        id: crypto.randomUUID(), sourceId: source.id, pageNumber: p, createdAt: now, retiredAt: null, pageFacts: null, profileAssignment: null, observation: null,
+                        confirmation: value === null ? null : { confirmedAt: now, sourceSha256: source.fingerprint.sha256, profile: null, values: V4(value), editedFields: [...FIELD_NAMES] },
+                        confirmationHistory: [],
+                    });
+                }
+            });
+            s.store.update((set) => ({ ...set, sources: list, sheets }));
+            return { ...s, sources: list };
+        }
+
+        function mount(store) {
+            const host = document.createElement('div');
+            host.style.cssText = 'width: 1100px; height: 900px; display: flex; flex-direction: column;';
+            host.className = 'ds-workspace';
+            document.body.append(host);
+            const root = createRoot(host);
+            // The workspace's drafts (drafts.ts), one book per mounted screen as in the workspace.
+            const drafts = new DraftBook();
+            const View = () => {
+                const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+                if (!snapshot.state.ok) return null;
+                return React.createElement(QaPanel, {
+                    store, drafts, drawingSet: snapshot.state.session.drawingSet, locked: snapshot.operation !== null, selectedSheet: null, onDeclare() {}, onNotice() {},
+                });
+            };
+            return { host, root, View, unmount: () => { root.unmount(); host.remove(); } };
+        }
+
+        const panelText = (host) => host.querySelector('[data-ds-qa]')?.textContent ?? '';
+
+        async function refusalScreen() {
+            const s = seeded({ sources: 1, pages: 10, number: (n) => (n === 1 ? 'A-101' : null) });
+            const { store } = s;
+            const source = s.sources[0];
+            for (let r = 0; r < 5; r += 1) store.declareRegister(source.id, r + 2, Array.from({ length: 1000 }, () => ROW('A-900')));
+            const sixth = store.declareRegister(source.id, 7, [ROW('A-900')]);
+            const m = mount(store);
+            flushSync(() => m.root.render(React.createElement(m.View)));
+            await frame();
+            const before = {
+                prediction: m.host.querySelector('[data-ds-qa-prediction]')?.textContent ?? null,
+                status: m.host.querySelector('[data-ds-qa-readiness]')?.dataset.dsReadinessStatus,
+                readiness: m.host.querySelector('[data-ds-qa-readiness]')?.textContent ?? '',
+            };
+            const version = store.getSnapshot().version;
+            const runs = store.currentSet().analysisRuns.length;
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            await frame();
+            const result = m.host.querySelector('[data-ds-qa-result]');
+            const refused = {
+                kind: result?.dataset.dsQaResult ?? null,
+                text: result?.textContent ?? '',
+                exceeded: [...(result?.querySelectorAll('[data-ds-qa-exceeded]') ?? [])].map((li) => li.dataset.dsQaExceeded),
+                unchanged: store.getSnapshot().version === version && store.currentSet().analysisRuns.length === runs && store.currentSet().findings.length === 0,
+                panel: panelText(m.host),
+            };
+            // Withdraw the sixth register: 5000 rows fit, the run is accepted.
+            store.retireRegisterReference(sixth.referenceId);
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            await frame();
+            const accepted = {
+                kind: m.host.querySelector('[data-ds-qa-result]')?.dataset.dsQaResult ?? null,
+                lbmRows: store.currentSet().findings.find((f) => f.params.reason === 'LISTED_BUT_MISSING')?.registerEntryIds.length ?? null,
+                prediction: m.host.querySelector('[data-ds-qa-prediction]')?.textContent ?? null,
+            };
+            m.unmount();
+            await s.dispose();
+            return plainly({ sixth: sixth.ok, before, refused, accepted });
+        }
+
+        /** 5000 Sheets on the QA screen: the first render, a run and its render, a re-run. Times only, no threshold. */
+        async function screen5000() {
+            // Every 10th Sheet unread (QA02 NOT_READ); every 50th repeats its read neighbour's number (QA01).
+            const s = seeded({ sources: 50, pages: 100, number: (n) => (n % 10 === 0 ? null : `A-${String(n % 50 === 7 ? n - 1 : n).padStart(4, '0')}`) });
+            const { store } = s;
+            const t = performance.now();
+            for (let r = 0; r < 5; r += 1) store.declareRegister(s.sources[0].id, r + 1, Array.from({ length: 1000 }, (_, j) => ROW(`A-${String(r * 1000 + j + 4).padStart(4, '0')}`)));
+            const declareMs = performance.now() - t;
+            const m = mount(store);
+            let t0 = performance.now();
+            flushSync(() => m.root.render(React.createElement(m.View)));
+            const firstRenderMs = performance.now() - t0;
+            await frame();
+            t0 = performance.now();
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            const runRenderMs = performance.now() - t0;
+            await frame();
+            const runPaintMs = performance.now() - t0;
+            const afterRun = {
+                result: m.host.querySelector('[data-ds-qa-result]')?.dataset.dsQaResult ?? null,
+                active: Number(m.host.querySelector('[data-ds-findings]')?.dataset.dsFindingsActive ?? 0),
+                cards: m.host.querySelectorAll('[data-ds-finding]').length,
+                findings: store.currentSet().findings.length,
+                status: m.host.querySelector('[data-ds-qa-readiness]')?.dataset.dsReadinessStatus,
+                readiness: m.host.querySelector('[data-ds-qa-readiness]')?.textContent ?? '',
+            };
+            t0 = performance.now();
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            const rerunRenderMs = performance.now() - t0;
+            const findingsAfterRerun = store.currentSet().findings.length;
+            // "さらに表示" on the largest group.
+            const more = m.host.querySelector('[data-ds-finding-more]');
+            t0 = performance.now();
+            if (more) flushSync(() => more.click());
+            const moreMs = performance.now() - t0;
+            const cardsAfterMore = m.host.querySelectorAll('[data-ds-finding]').length;
+            m.unmount();
+            await s.dispose();
+            return plainly({ sheets: 5000, declareMs, firstRenderMs, runRenderMs, runPaintMs, rerunRenderMs, moreMs, afterRun, findingsAfterRerun, cardsAfterMore });
+        }
+
+        /**
+         * Part of a large register withdrawn, on the QA screen: 1000 Sheets carry L-00001..L-01000; 24 registers list
+         * L-00001..L-24000 and 24 more M-00001..M-24000. After a first run (47000 LISTED_BUT_MISSING), withdraw the M
+         * registers -- one, then the other 23 -- and run QA again. Each step is drawn synchronously (flushSync), so its
+         * time includes the assessment the screen makes. Times only, no threshold.
+         */
+        async function screenWithdraw() {
+            const pad = (i) => String(i).padStart(5, '0');
+            const s = seeded({ sources: 10, pages: 100, number: (n) => `L-${pad(n)}` });
+            const { store } = s;
+            const on = s.sources[0].id;
+            for (let r = 0; r < 24; r += 1) store.declareRegister(on, r + 1, Array.from({ length: 1000 }, (_, j) => ROW(`L-${pad(r * 1000 + j + 1)}`)));
+            const withdraw = [];
+            for (let r = 0; r < 24; r += 1) withdraw.push(store.declareRegister(on, 25 + r, Array.from({ length: 1000 }, (_, j) => ROW(`M-${pad(r * 1000 + j + 1)}`))).referenceId);
+            const m = mount(store);
+            flushSync(() => m.root.render(React.createElement(m.View)));
+            await frame();
+            let t0 = performance.now();
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            const firstRunMs = performance.now() - t0;
+            const before = Number(m.host.querySelector('[data-ds-findings]')?.dataset.dsFindingsActive ?? 0);
+            await frame();
+            // Each withdrawal step in three parts: the store command, the assessment the screen asks for (kept, so
+            // the render that follows reuses it), and the render.
+            const step = async (ids) => {
+                let t = performance.now();
+                for (const id of ids) store.retireRegisterReference(id);
+                const commandMs = performance.now() - t;
+                t = performance.now();
+                store.qaAssessment();
+                const assessMs = performance.now() - t;
+                t = performance.now();
+                flushSync(() => {});
+                const renderMs = performance.now() - t;
+                await frame();
+                return { commandMs, assessMs, renderMs, paintMs: performance.now() - t };
+            };
+            const one = await step(withdraw.slice(0, 1));
+            const rest = await step(withdraw.slice(1));
+            const rowsShown = m.host.querySelectorAll('[data-ds-register-row]').length;
+            const set = store.currentSet();
+            const activeBefore = new Set(set.findings.filter((f) => f.lifecycle.state === 'ACTIVE').map((f) => f.id));
+            t0 = performance.now();
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            const runMs = performance.now() - t0;
+            await frame();
+            const after = store.currentSet().findings;
+            const closed = after.filter((f) => activeBefore.has(f.id) && f.lifecycle.state === 'NOT_REPRODUCED');
+            const open = after.filter((f) => f.lifecycle.state === 'ACTIVE');
+            const out = {
+                firstRunMs, one, rest, rowsShown, runMs, before,
+                result: m.host.querySelector('[data-ds-qa-result]')?.dataset.dsQaResult ?? null,
+                shownActive: Number(m.host.querySelector('[data-ds-findings]')?.dataset.dsFindingsActive ?? 0),
+                closed: closed.length,
+                closedAllM: closed.every((f) => f.params.comparisonKey.startsWith('M-')),
+                open: open.length,
+                openAllKeptL: open.every((f) => f.params.comparisonKey.startsWith('L-') && activeBefore.has(f.id)),
+            };
+            m.unmount();
+            await s.dispose();
+            return plainly(out);
+        }
+
+        window.__m7p3 = { flow, refusalScreen, screen5000, screenWithdraw };
+        window.__m7p3Ready = true;
+        document.getElementById('state').textContent = 'ready';
+    </script>
+</body>
+</html>

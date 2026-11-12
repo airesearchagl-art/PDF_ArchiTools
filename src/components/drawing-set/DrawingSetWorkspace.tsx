@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Copy, FilePlus2, FolderOpen, Layers, RotateCcw, Square, X } from 'lucide-react';
+import { Copy, FilePlus2, FolderOpen, Layers, ListChecks, RotateCcw, Square, X } from 'lucide-react';
 import { VersionFooter } from '../VersionFooter';
 import { TOOL_VERSIONS } from '../../config/versions';
 import type { SourceBinding } from '../../utils/drawing-set/currency';
@@ -17,10 +17,13 @@ import type { StoreIntakeResult } from '../../utils/drawing-set/workspace-store'
 import { DrawingSetStore, OCR_RELEASE_UNCONFIRMED_MESSAGE } from '../../utils/drawing-set/workspace-store';
 import { GATE_MESSAGES } from '../../utils/drawing-set/pdf-document-gate';
 import { ConfirmationPanel } from './ConfirmationPanel';
+import { DECLARE_DRAFT, DraftBook } from './drafts';
 import { confirmationText, confirmedNumberTitle } from './title-block-labels';
 import type { DraftFields } from './ProfileEditor';
 import { FieldRectsOverlay, ProfileEditorPanel } from './ProfileEditor';
+import { QaPanel } from './QaPanel';
 import { ReadOnlySheetViewer } from './ReadOnlySheetViewer';
+import { RegisterDeclarePanel } from './RegisterDeclarePanel';
 import { TitleBlockPanel } from './TitleBlockPanel';
 import type { SheetRowFacts } from './VirtualSheetList';
 import { VirtualSheetList } from './VirtualSheetList';
@@ -63,6 +66,12 @@ import './DrawingSetWorkspace.css';
  * drawing (ConfirmationPanel). Every change goes through the store's
  * commands, which answer with a refusal the screen shows; nothing here calls
  * update(). While a reading runs the store is locked, and the screen says so.
+ *
+ * QA (M7-P3). The centre has a second view, QA・図面一覧 (QaPanel): run QA01 /
+ * QA02 / QA09, what is left before a final check -- which is not available,
+ * as most rules are not implemented -- the Findings and the Review Decisions
+ * recorded on them, and the drawing registers typed in. A register is typed
+ * on the page view, under the page it is on (RegisterDeclarePanel).
  */
 
 type Editor = { mode: 'create'; sheetId: string } | { mode: 'revise'; sheetId: string; profile: TitleBlockProfile } | null;
@@ -150,6 +159,19 @@ export const DrawingSetWorkspace: React.FC = () => {
     const [transferModel, setTransferModel] = useState<TransferModel | null>(null);
     const [profileName, setProfileName] = useState('');
     const [editorMessage, setEditorMessage] = useState<string | null>(null);
+    /** The centre's view: the page and its panels, or QA and the drawing registers. */
+    const [view, setView] = useState<'pages' | 'qa'>('pages');
+    /** The Sheet a drawing register is being typed in on, if any. */
+    const [declaring, setDeclaring] = useState<string | null>(null);
+    /**
+     * What is typed and not yet recorded in the panels of either view (drafts.ts). Switching the view keeps it.
+     * Ending a declaration drops its rows; a new Drawing Set drops everything.
+     */
+    const [drafts] = useState(() => new DraftBook());
+    const endDeclare = (): void => {
+        drafts.discard(DECLARE_DRAFT);
+        setDeclaring(null);
+    };
     /** Where the viewer last drew the selected page, for the profile editor. */
     const geometryRef = useRef<{ sheetId: string; geometry: ViewerGeometry } | null>(null);
     const owner = store.owner;
@@ -299,6 +321,9 @@ export const DrawingSetWorkspace: React.FC = () => {
         setShowFullSha(false);
         setChecked(new Set());
         closeEditor();
+        drafts.clear();
+        setDeclaring(null);
+        setView('pages');
         setNotice('新しい図面一式を始めました。前の図面一式の内容は破棄されました。');
     };
 
@@ -342,8 +367,22 @@ export const DrawingSetWorkspace: React.FC = () => {
                 closeEditor();
                 setNotice('別のページを選んだため、範囲の指定をやめました。');
             }
+            // A register is typed in on the page it is on; choosing another ends the typing.
+            if (declaring) {
+                endDeclare();
+                setNotice('別のページを選んだため、図面一覧の宣言をやめました。入力した内容は記録されていません。');
+            }
         }
         setSelectedSheetId(sheetId);
+    };
+
+    /** Type a drawing register in on the selected page, under the page itself. */
+    const startDeclare = (): void => {
+        if (!selectedSheet || editor) return;
+        setView('pages');
+        // The rows typed so far stay with the declaration on this page; a declaration on another page starts empty.
+        if (declaring !== selectedSheet.id) drafts.discard(DECLARE_DRAFT);
+        setDeclaring(selectedSheet.id);
     };
 
     const toggleCheck = (sheetId: string): void => {
@@ -359,6 +398,7 @@ export const DrawingSetWorkspace: React.FC = () => {
     const startEditor = (profile: TitleBlockProfile | null): void => {
         const shown = geometryRef.current;
         if (!selectedSheet || !shown || shown.sheetId !== selectedSheet.id) return;
+        endDeclare();
         setEditorMessage(null);
         setDrawingField(FIELD_NAMES[0]);
         if (profile) {
@@ -655,7 +695,23 @@ export const DrawingSetWorkspace: React.FC = () => {
                         />
                     </aside>
 
-                    <section className="ds-center" aria-label="プレビュー（読み取り専用）">
+                    <section className="ds-center" aria-label={view === 'qa' ? 'QA・図面一覧' : 'プレビュー（読み取り専用）'} data-ds-view={view}>
+                        <div className="ds-center-tabs" role="tablist" aria-label="表示の切り替え" data-ds-center-tabs>
+                            <button type="button" role="tab" aria-selected={view === 'pages'} className={`ds-tab${view === 'pages' ? ' is-active' : ''}`} onClick={() => setView('pages')} data-ds-view-tab="pages">
+                                ページ表示
+                            </button>
+                            <button type="button" role="tab" aria-selected={view === 'qa'} className={`ds-tab${view === 'qa' ? ' is-active' : ''}`} onClick={() => setView('qa')} data-ds-view-tab="qa">
+                                <ListChecks size={14} /> QA・図面一覧
+                            </button>
+                            {view === 'pages' && selectedSheet && selectedSource && !editor && declaring !== selectedSheet.id && (
+                                <button type="button" className="ds-link-button ds-tabs-action" onClick={startDeclare} disabled={locked} data-ds-register-declare-here>
+                                    このページから図面一覧を宣言
+                                </button>
+                            )}
+                        </div>
+                        {view === 'qa' && drawingSet ? (
+                            <QaPanel store={store} drafts={drafts} drawingSet={drawingSet} locked={locked} selectedSheet={selectedSheet} onDeclare={startDeclare} onNotice={setNotice} />
+                        ) : <>
                         {selectedSheet && selectedSource && selectedFile ? (
                             <ReadOnlySheetViewer
                                 key={selectedSource.id}
@@ -688,6 +744,20 @@ export const DrawingSetWorkspace: React.FC = () => {
                                 onDone={finishEditor}
                                 onCancel={closeEditor}
                             />
+                        ) : declaring && selectedSheet && selectedSource && declaring === selectedSheet.id ? (
+                            <RegisterDeclarePanel
+                                key={selectedSheet.id}
+                                store={store}
+                                drafts={drafts}
+                                sheet={selectedSheet}
+                                source={selectedSource}
+                                locked={locked}
+                                onDone={(message) => {
+                                    endDeclare();
+                                    setNotice(message);
+                                }}
+                                onCancel={endDeclare}
+                            />
                         ) : selectedSheet && (
                             <ConfirmationPanel
                                 key={`${selectedSheet.id}:${selectedSheet.observation?.runId ?? ''}:${selectedSheet.confirmation?.confirmedAt ?? ''}`}
@@ -699,6 +769,7 @@ export const DrawingSetWorkspace: React.FC = () => {
                                 onNotice={setNotice}
                             />
                         )}
+                        </>}
                     </section>
 
                     <aside className="ds-right" aria-label="ページとファイルの情報" data-ds-info>

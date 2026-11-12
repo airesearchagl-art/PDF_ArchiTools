@@ -7,10 +7,12 @@
  * facts (M7-P1), and the title-block metadata of M7-P2 -- profiles, their
  * assignment to Sheets, what the machine read (observation), what a person
  * stands behind (confirmation and its history), and the EXTRACTION runs that
- * observations name. There is no second representation to reconcile later.
- * What later phases own is present in the shape the app can honestly give it
- * -- empty collections -- and is never filled in:
- *  - drawingRegisterReferences, findings, decisions, QA runs (M7-P3)
+ * observations name. M7-P3 adds the drawing registers a person types in
+ * (MANUAL references and their rows), the QA runs of QA01 / QA02 / QA09, the
+ * Findings they state and the Review Decisions people record on them. There
+ * is no second representation to reconcile later. What later phases own is
+ * not here:
+ *  - registers read from a table (TABLE_NATIVE), the other QA rules
  *  - the file envelope, save and resume (M7-P4)
  *
  * Everything here is plain data. A File, its bytes, a PDF.js document, a
@@ -18,8 +20,9 @@
  * held next to it (see DrawingSetWorkspace), and gone with the session.
  *
  * Nothing a person removes is deleted (semantic contract, "Delete behaviour"):
- * removing a Source retires it, and with it every Sheet of it, so the lists
- * keep their entries and only the live ones are shown.
+ * removing a Source retires it, and with it every Sheet of it and every
+ * register declared from it, so the lists keep their entries and only the
+ * live ones are shown.
  */
 import type { HeldCounts, IntakeRefusal } from './intake-policy';
 import { IntakeStop, MAX_SHEETS, MAX_SOURCES, refusal } from './intake-policy';
@@ -196,6 +199,103 @@ export interface Sheet {
     confirmationHistory: RetiredConfirmation[];
 }
 
+/**
+ * One row of a declared drawing register. `origin` says how the row came to
+ * be: typed by a person (MANUAL) -- and a typed row a person corrects is still
+ * a typed row -- read from a table (EXTRACTED), or read and then corrected
+ * (EDITED). M7-P3 writes MANUAL rows only. A row is retired, never deleted.
+ */
+export interface RegisterEntry {
+    id: Uuid;
+    /** 1-based, unique within its reference. */
+    row: number;
+    /** Required, and not blank once trimmed. Stored as typed. */
+    drawingNumber: string;
+    drawingTitle: string | null;
+    revision: string | null;
+    issueDate: string | null;
+    origin: 'EXTRACTED' | 'EDITED' | 'MANUAL';
+    retiredAt: Timestamp | null;
+}
+
+/**
+ * A drawing register a person declared: on which page of which Source the list
+ * is, from which bytes, and the rows they accepted. Its basis is fixed -- a
+ * register declared again is a new reference and the old one is retired.
+ */
+export interface DrawingRegisterReference {
+    id: Uuid;
+    sourceId: Uuid;
+    pageNumber: number;
+    /** The table engine's grid. Always null for a typed (MANUAL) register. */
+    region: Rect | null;
+    sourceSha256: Sha256Hex;
+    method: 'TABLE_NATIVE' | 'MANUAL';
+    declaredAt: Timestamp;
+    updatedAt: Timestamp;
+    retiredAt: Timestamp | null;
+    /** At least one. */
+    entries: RegisterEntry[];
+}
+
+/** The schema's ruleId enum, in its order. */
+export const QA_RULE_IDS = [
+    'QA01_DUPLICATE_NUMBER', 'QA01B_DUPLICATE_NUMBER_VARIANT', 'QA02_METADATA_UNCONFIRMED', 'QA03_NUMBER_GAP',
+    'QA04_SAME_NUMBER_DIFFERENT_TITLE', 'QA05_REVISION_MISMATCH', 'QA06_ISSUE_DATE_MISMATCH', 'QA07_SHEET_SIZE_OUTLIER',
+    'QA08_ORIENTATION_OUTLIER', 'QA09_REGISTER_SHEET_MISMATCH', 'QA10_INTEGRITY',
+] as const;
+export type QaRuleId = (typeof QA_RULE_IDS)[number];
+
+export type FindingScope = 'SHEET' | 'SHEET_GROUP' | 'SET' | 'SOURCE' | 'REGISTER_ENTRY' | 'PROJECT';
+
+/** The facts a QA01 / QA02 / QA09 Finding states. The schema's closed set has more, for rules not built. */
+export interface FindingParams {
+    reason?: string;
+    comparisonKey?: string;
+}
+
+export interface FindingLifecycle {
+    state: 'ACTIVE' | 'SUPERSEDED' | 'NOT_REPRODUCED';
+    supersededByFindingId: Uuid | null;
+    closedByRunId: Uuid | null;
+    closedAt: Timestamp | null;
+}
+
+/** One statement by one rule about its subjects, from one QA run. Immutable apart from its lifecycle. */
+export interface Finding {
+    id: Uuid;
+    runId: Uuid;
+    ruleId: QaRuleId;
+    ruleVersion: number;
+    determinism: 'DETERMINISTIC' | 'CANDIDATE';
+    scope: FindingScope;
+    sheetIds: Uuid[];
+    sourceIds: Uuid[];
+    registerEntryIds: Uuid[];
+    findingKey: Sha256Hex;
+    evidenceDigest: Sha256Hex;
+    basis: { sourceId: Uuid; sha256: Sha256Hex }[];
+    params: FindingParams;
+    createdAt: Timestamp;
+    lifecycle: FindingLifecycle;
+}
+
+export const REVIEW_OUTCOMES = ['ACTION_REQUIRED', 'INTENTIONAL', 'FALSE_POSITIVE', 'HOLD'] as const;
+export type ReviewOutcome = (typeof REVIEW_OUTCOMES)[number];
+
+/** What a person decided about one exact Finding. Append-only; no author is kept. */
+export interface ReviewDecision {
+    id: Uuid;
+    findingId: Uuid;
+    /** 1..n within its Finding, no gap. */
+    sequence: number;
+    outcome: ReviewOutcome;
+    comment: string;
+    decidedAt: Timestamp;
+    /** A copy of the Finding's. */
+    evidenceDigest: Sha256Hex;
+}
+
 export interface DrawingSet {
     id: Uuid;
     name: string;
@@ -203,14 +303,14 @@ export interface DrawingSet {
     sources: Source[];
     titleBlockProfiles: TitleBlockProfile[];
     sheets: Sheet[];
-    /** M7-P3. Always empty. */
-    drawingRegisterReferences: never[];
-    /** EXTRACTION runs from M7-P2; QA runs are M7-P3. */
+    /** Registers a person typed in (M7-P3), retired ones included. */
+    drawingRegisterReferences: DrawingRegisterReference[];
+    /** EXTRACTION runs from M7-P2 and QA runs from M7-P3, in the order they were appended. */
     analysisRuns: AnalysisRun[];
-    /** M7-P3. Always empty. */
-    findings: never[];
-    /** M7-P3. Always empty. */
-    decisions: never[];
+    /** Every Finding a QA run wrote, in every lifecycle state: none is deleted. */
+    findings: Finding[];
+    /** Append-only. */
+    decisions: ReviewDecision[];
 }
 
 /** One new, unsaved working session: a Project and its one Drawing Set. */
@@ -385,9 +485,10 @@ export function commitSourceCandidate(set: DrawingSet, candidate: SourceCandidat
 }
 
 /**
- * Retire a live Source and every live Sheet of it, at one instant. A retired
- * Source with a live Sheet is a state the contract refuses (REL_RETIRED_STATE),
- * so the two never happen apart. No other Source or Sheet is touched.
+ * Retire a live Source, every live Sheet of it and every live register
+ * declared from it, at one instant. A retired Source with a live Sheet or a
+ * live register is a state the contract refuses (REL_RETIRED_STATE), so they
+ * never happen apart. No other Source, Sheet or register is touched.
  */
 export function retireSource(set: DrawingSet, sourceId: Uuid): DrawingSet {
     const target = set.sources.find((source) => source.id === sourceId);
@@ -398,6 +499,9 @@ export function retireSource(set: DrawingSet, sourceId: Uuid): DrawingSet {
         sources: set.sources.map((source) => (source.id === sourceId ? { ...source, retiredAt } : source)),
         sheets: set.sheets.map((sheet) =>
             sheet.sourceId === sourceId && isLive(sheet) ? { ...sheet, retiredAt } : sheet,
+        ),
+        drawingRegisterReferences: set.drawingRegisterReferences.map((reference) =>
+            reference.sourceId === sourceId && isLive(reference) ? { ...reference, retiredAt } : reference,
         ),
     };
 }

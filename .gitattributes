@@ -8,3 +8,7 @@ public/ocr/fonts/*.ttf     binary
 # The PDF.js data files 図面管理 (M7) serves are copies of the installed
 # pdfjs-dist, checked byte for byte against it (scripts/setup-pdfjs-assets.mjs).
 public/pdfjs/**            -text
+
+# The CAN-03 R4.1 test oracle is the Human-adopted pack's files, unchanged, and
+# smoke-m7-p3-qa.mjs checks each one against the pack's SHA-256 before using it.
+scripts/m7-p3-oracle/**    -text
