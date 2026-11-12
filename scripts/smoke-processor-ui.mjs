@@ -608,6 +608,91 @@ try {
         !downloadStarted() && !s8e.some((s) => s.includes('完了')) && s8e.some((s) => s.includes('中止')),
         `${s8e.join(',')} / ${fs.readdirSync(downloads).join(',')}`);
 
+    // ---- 9. A low window: the settings panel scrolls to 実行開始 ---------------
+    console.log('\n=== 9. A low window: the settings panel scrolls to 実行開始 ===');
+    /** Where the settings panel, 実行開始 and the version footer are, and whether a click at the button's centre lands on it. */
+    const layout = () => page.evaluate(() => {
+        const panel = document.querySelector('[data-usage-target="processor-settings"]');
+        const button = document.querySelector('[data-usage-target="processor-run"]');
+        const range = panel.querySelector('input[type="range"]');
+        const footer = [...document.querySelectorAll('footer')].pop();
+        const p = panel.getBoundingClientRect();
+        const b = button.getBoundingClientRect();
+        const lands = (el) => {
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return Boolean(hit && (hit === el || el.contains(hit)));
+        };
+        return {
+            viewport: { width: innerWidth, height: innerHeight },
+            panel: { left: p.left, right: p.right, top: p.top, bottom: p.bottom, scrollTop: panel.scrollTop, scrollHeight: panel.scrollHeight, clientHeight: panel.clientHeight, overflowY: getComputedStyle(panel).overflowY },
+            button: { top: b.top, bottom: b.bottom, cx: b.left + b.width / 2, cy: b.top + b.height / 2, disabled: button.disabled },
+            footerTop: footer ? footer.getBoundingClientRect().top : null,
+            buttonLands: lands(button),
+            rangeLands: lands(range),
+        };
+    });
+    await page.setViewport({ width: 1280, height: 560 });
+    await page.goto(ORIGIN, { waitUntil: 'networkidle0' });
+    await openProcessor();
+    await pickTool('半透明レイヤ');
+    clearDownloads();
+    await upload(path.join(FIXTURES, 'text-a4.pdf'));
+    const low0 = await layout();
+    check('precondition: in a 1280x560 window, with 半透明レイヤ追加 and a file, the settings are taller than the panel and 実行開始 cannot be clicked where it starts',
+        low0.panel.scrollHeight > low0.panel.clientHeight && !low0.buttonLands && !low0.button.disabled, JSON.stringify({ panel: low0.panel, button: low0.button, footerTop: low0.footerTop }));
+    check('...the settings at its top are usable (the opacity slider can be clicked)', low0.rangeLands);
+    await page.mouse.move((low0.panel.left + low0.panel.right) / 2, (low0.panel.top + low0.panel.bottom) / 2);
+    await page.mouse.wheel({ deltaY: 3000 });
+    await settle(400);
+    const low1 = await layout();
+    check('the settings panel scrolls on its own (overflow-y auto), and the page does not need to be taller',
+        low1.panel.overflowY === 'auto' && low1.panel.scrollTop > 0 && low1.viewport.height === 560, JSON.stringify(low1.panel));
+    check('scrolled to its end, 実行開始 is wholly inside the panel, above the version footer, and a click at its centre lands on it',
+        low1.button.top >= low1.panel.top && low1.button.bottom <= low1.panel.bottom && (low1.footerTop === null || low1.button.bottom <= low1.footerTop) && low1.buttonLands,
+        JSON.stringify({ button: low1.button, panelBottom: low1.panel.bottom, footerTop: low1.footerTop }));
+    await page.mouse.click(low1.button.cx, low1.button.cy);
+    const got9 = await waitForDownload();
+    check('clicked where it is, 実行開始 runs 半透明レイヤ追加: one PDF is saved', got9.length === 1 && got9[0].endsWith('.pdf'), got9.join(','));
+    await page.mouse.wheel({ deltaY: -3000 });
+    await settle(400);
+    const low2 = await layout();
+    check('scrolled back, the settings at the top are usable again', low2.panel.scrollTop === 0 && low2.rangeLands);
+
+    // A normal window. 半透明レイヤ追加's settings run past 1000 px as well (they did before this fix too, with
+    // 実行開始 cut off at the foot), so the panel is scrolled there too; the preview sits beside it.
+    await page.setViewport({ width: 1400, height: 1000 });
+    await page.goto(ORIGIN, { waitUntil: 'networkidle0' });
+    await openProcessor();
+    await pickTool('半透明レイヤ');
+    await upload(path.join(FIXTURES, 'text-a4.pdf'));
+    const normal = await layout();
+    check('at 1400x1000 the settings at the top can be used as they open', normal.panel.scrollTop === 0 && normal.rangeLands, JSON.stringify(normal.panel));
+    await page.mouse.move((normal.panel.left + normal.panel.right) / 2, (normal.panel.top + normal.panel.bottom) / 2);
+    await page.mouse.wheel({ deltaY: 3000 });
+    await settle(400);
+    const normalEnd = await layout();
+    check('...and scrolled to the panel\'s end, 実行開始 is inside it, above the version footer, where a click lands',
+        normalEnd.button.bottom <= normalEnd.panel.bottom && (normalEnd.footerTop === null || normalEnd.button.bottom <= normalEnd.footerTop) && normalEnd.buttonLands,
+        JSON.stringify({ panel: normalEnd.panel, button: normalEnd.button, footerTop: normalEnd.footerTop }));
+    await pickTool('図枠一括更新');
+    await page.waitForFunction(() => {
+        const canvas = document.querySelector('.tb-canvas');
+        return canvas && canvas.width > 0 && canvas.getBoundingClientRect().height > 0;
+    }, { timeout: 60_000, polling: 100 });
+    const previewNow = await page.evaluate(() => {
+        const canvas = document.querySelector('.tb-canvas');
+        const r = canvas.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        const panel = document.querySelector('[data-usage-target="processor-settings"]').getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, onCanvas: Boolean(hit && (hit === canvas || canvas.parentElement?.contains(hit))), panelLeft: panel.left, viewport: innerHeight };
+    });
+    const normalTb = await layout();
+    check('at 1400x1000 the 図枠一括更新 preview is drawn on screen, beside the settings panel, and can be pointed at',
+        previewNow.top >= 0 && previewNow.bottom <= previewNow.viewport && previewNow.right <= previewNow.panelLeft && previewNow.onCanvas, JSON.stringify(previewNow));
+    check('...and with it, 実行開始 is on screen where a click would land (disabled until the regions are set)', normalTb.buttonLands, JSON.stringify(normalTb.button));
+
     check('no page error during any of it', pageErrors.length === 0, pageErrors.join(' | '));
 
     const failed = checks.filter((c) => !c.ok);
