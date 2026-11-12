@@ -202,6 +202,8 @@ window.__artifacts = {
     await pdf.destroy();
     return {
       coloured,
+      x: maxX >= minX ? minX : null,
+      y: maxY >= minY ? minY : null,
       width: maxX >= minX ? maxX - minX + 1 : 0,
       height: maxY >= minY ? maxY - minY + 1 : 0,
       pageWidth: shot.width,

@@ -6,6 +6,7 @@
  */
 export * from './contract';
 export * from './geometry';
+export * from './orientation';
 export * from './mask';
 export * from './png';
 export * from './budget';
