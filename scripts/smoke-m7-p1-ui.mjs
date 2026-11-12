@@ -12,8 +12,9 @@
  * tools still reachable. Since M7-P2-B1 it also drives what the session
  * knows about each File (the binding shown in the Source list), a chosen
  * file taken away and the same bytes chosen again to reconnect the same
- * Source, and P1 intake and preview with M7's PDF.js data files. Every request is recorded: nothing may leave the
- * machine, and the PDF.js worker must be the local one.
+ * Source, and P1 intake and preview with M7's PDF.js data files. Since M7-P3 it also drives the QA view
+ * (smoke-m7-p3-ui-checks.mjs): QA, Review Decisions and a drawing register typed on its page. Every request is
+ * recorded: nothing may leave the machine, and the PDF.js worker must be the local one.
  *
  * Target browsers: by default this runs puppeteer's bundled Chromium (CI). For
  * the M7-P1 target-browser evidence, point it at an installed browser:
@@ -34,6 +35,7 @@ import puppeteer from 'puppeteer';
 import { preview } from 'vite';
 import { runP2b2UiChecks } from './smoke-m7-p2b2-ui-checks.mjs';
 import { runAdvVerifyUiChecks } from './smoke-m7-adv-verify-ui-checks.mjs';
+import { runP3UiChecks } from './smoke-m7-p3-ui-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5215;
@@ -248,9 +250,16 @@ async function main() {
         check('a rotated page shows the orientation it is seen in', list[2].text.includes('横'), list[2].text);
         check('native text and no-text pages are told apart',
             list.filter((r) => r.text.includes('テキストあり')).length === 7 && list.filter((r) => r.text.includes('テキストなし')).length === 2);
-        const rootText = await page.evaluate(() => document.querySelector('[data-ds-root]').textContent);
-        probe('no drawing number, revision, issue date, QA or review in the workspace',
-            !/図面番号|版数|改訂|発行日|QA|レビュー|保留|要対応/.test(rootText));
+        // M7-P3 puts QA behind its own view: the page view says none of it, the switch to that view aside.
+        const pageView = await page.evaluate(() => {
+            const el = document.querySelector('[data-ds-root]');
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll('[data-ds-center-tabs]').forEach((tabs) => tabs.remove());
+            return { text: clone.textContent, view: el.querySelector('[data-ds-view]')?.dataset.dsView ?? null, qaShown: Boolean(el.querySelector('[data-ds-qa]')) };
+        });
+        check('the centre opens on the page view; QA is not shown until its view is chosen', pageView.view === 'pages' && !pageView.qaShown, JSON.stringify({ view: pageView.view, qaShown: pageView.qaShown }));
+        probe('no drawing number, revision, issue date, QA or review in the page view (the QA view switch aside)',
+            !/図面番号|版数|改訂|発行日|QA|レビュー|保留|要対応/.test(pageView.text));
 
         section('4. Read-only viewer');
         await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 60_000 }).catch(() => { });
@@ -561,6 +570,10 @@ async function main() {
         // M7-ADV-VERIFY-01: the screen's half of the ADV-37-01 verification (test only). Its FINDINGs are reported, not gates.
         await runAdvVerifyUiChecks({ page, ROOT, check, probe, note, section, settle, upload, waitIdle, root, viewer, p2aFixture, external });
         check('M7-ADV-VERIFY: no PDF.js document left once the Drawing Set is new again', await pdfDocumentsSettle(0) === 0, String(pdfDocuments()));
+
+        // M7-P3: the QA view -- QA, Review Decisions, typed registers.
+        await runP3UiChecks({ page, ROOT, check, probe, note, section, settle, upload, waitIdle, root, viewer, fixture, external });
+        check('M7-P3: no PDF.js document left once the Drawing Set is new again', await pdfDocumentsSettle(0) === 0, String(pdfDocuments()));
 
         section('10. The other tools');
         await upload(fixture('p1-second-c'));

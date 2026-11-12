@@ -364,10 +364,13 @@ export async function runP2b2UiChecks(ctx) {
             downloads: el.querySelectorAll('a[download], a[href^="blob:"]').length,
             stray: inputs.filter((i) => !allowed(i)).map((i) => i.outerHTML.slice(0, 80)),
             textLayer: el.querySelectorAll('.textLayer, .annotationLayer').length,
-            qa: /QA|レビュー|保留|要対応/.test(el.textContent),
+            // M7-P3 sits behind its own view: the page view says nothing of QA or review, the view switch aside.
+            qa: (() => { const clone = el.cloneNode(true); clone.querySelectorAll('[data-ds-center-tabs]').forEach((t) => t.remove()); return /QA|レビュー|保留|要対応/.test(clone.textContent); })(),
+            pageView: el.querySelector('[data-ds-view]')?.dataset.dsView === 'pages' && !el.querySelector('[data-ds-qa]'),
         };
     });
-    probe('still no save, download or export (P4), and no QA or review (P3)', controls.saving.length === 0 && controls.downloads === 0 && !controls.qa, controls.saving.join(' | '));
+    probe('still no save, download or export (P4), and no QA or review in the page view (P3 is behind the QA・図面一覧 view)',
+        controls.saving.length === 0 && controls.downloads === 0 && !controls.qa && controls.pageView, controls.saving.join(' | '));
     probe('inputs only where a person draws a profile, confirms a Sheet, renames a profile, or ticks Sheets; no text or annotation layer',
         controls.stray.length === 0 && controls.textLayer === 0, controls.stray.join(' | '));
     const counts = await page.evaluate(() => {
