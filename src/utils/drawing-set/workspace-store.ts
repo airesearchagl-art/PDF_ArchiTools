@@ -48,6 +48,14 @@
  *    corrected (editedFields, HDR-36-01). This store never confirms with
  *    `basis: 'manual'`: a confirmation made here always names its profile.
  *
+ * QA (M7-P3). Running QA (QA01 / QA02 / QA09), recording a Review Decision
+ * and typing, correcting or withdrawing a drawing register are commands too,
+ * locked out while extraction runs. A QA run or a Decision past a contract
+ * bound is refused whole and nothing is written (CAN-03 R4.1-L). What the
+ * screen shows of QA -- each Finding's currency, readiness, whether a run
+ * would be refused -- is derived from the session as it is and the ledger
+ * (qaAssessment), kept only until either changes, and never stored.
+ *
  * Nothing here is stored or sent anywhere. Files, the ledger, the epochs,
  * evidence and crops are runtime only and never enter the model.
  */
@@ -55,15 +63,19 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { CROP_MESSAGES, CropError, cropShown, mountCrop, planCrop, releaseCrop, renderCrop } from './crop-service';
 import type { BindingCheck, BindingSettlement, RecordCurrency, RuntimeBindings, SourceFileCheck } from './currency';
 import { RuntimeBindingLedger, confirmationCurrency, observationCurrency, verifiedBinding, verifyHeldFile } from './currency';
+import type { RegisterRefusalCode, RegisterRowInput } from './drawing-register';
+import { declareManualRegister, editRegisterEntry as editRegisterRow, retireRegisterEntry as retireRegisterRow, retireRegisterReference as retireRegister } from './drawing-register';
 import type { FieldProblem } from './field-bounds';
+import { normaliseLineEndings } from './field-bounds';
 import type { FileDigest } from './file-evidence';
 import type { IntakeRefusal } from './intake-policy';
 import { IntakeStop, refusal } from './intake-policy';
 import { confirmSheet as confirmSheetValues, withdrawConfirmation as withdrawSheetConfirmation } from './metadata-confirmation';
 import type {
-    AnalysisRunOutcome, DrawingSet, DrawingSetSession, FieldName, FieldValues, PageRotation, Rect, Sheet, Source, TitleBlockProfile, TransferModel, Uuid,
+    AnalysisRun, AnalysisRunOutcome, DrawingSet, DrawingSetSession, FieldName, FieldValues, PageRotation, Rect, ReviewDecision, ReviewOutcome, Sheet, Source,
+    TitleBlockProfile, TransferModel, Uuid,
 } from './model';
-import { FIELD_NAMES, commitSourceCandidate, createSession, isLive, liveSourceWithContent, retireSource } from './model';
+import { FIELD_NAMES, commitSourceCandidate, createSession, isLive, liveSourceWithContent, mintUuid, nowTimestamp, retireSource } from './model';
 import type { PdfDocumentGate } from './pdf-document-gate';
 import { GATE_MESSAGES } from './pdf-document-gate';
 import type { ExpectedContent, PreviewDocumentOwner } from './preview-document';
@@ -72,6 +84,8 @@ import type { OcrWorkerRegistry } from './ocr-workers';
 import { PAGE_OCR_WORKERS } from './ocr-workers';
 import type { ExclusionCode, ExtractionContext, ExtractionProgress, ExtractionReport } from './register-extraction';
 import { GuardedRegisterOcr, extractTitleBlocks } from './register-extraction';
+import type { DecisionRefusalCode, LimitExcess, QaAssessment, QaEvaluation, QaSeams } from './qa-engine';
+import { addDecision, assessQa, evaluateQa, runQa as runQaOver } from './qa-engine';
 import type { IntakeOutcome, IntakeProgress } from './source-intake';
 import { intakeSource } from './source-intake';
 import type { ProfileGeometry, ProfileRefusalCode } from './title-block-profiles';
@@ -170,7 +184,11 @@ export type StoreRefusalCode =
     /** The evidence is not this store's, was taken back, or something it was drawn against has moved. */
     | 'EVIDENCE_STALE'
     | 'VERIFY_IN_PROGRESS'
-    | 'SOURCE_NOT_LIVE';
+    | 'SOURCE_NOT_LIVE'
+    /** A QA run would write past a contract bound: refused, nothing written (R4.1-L). */
+    | 'QA_LIMIT_EXCEEDED'
+    | DecisionRefusalCode
+    | RegisterRefusalCode;
 
 export interface StoreRefusal {
     code: StoreRefusalCode;
@@ -178,6 +196,10 @@ export interface StoreRefusal {
     field?: FieldName;
     sheetIds?: Uuid[];
     problems?: FieldProblem[];
+    /** Every bound a QA run or a Decision would have gone past, in the contract's order. */
+    exceeded?: LimitExcess[];
+    /** The register row a refusal is about (1-based). */
+    row?: number;
 }
 
 export type Refused = { ok: false; refusal: StoreRefusal };
@@ -196,6 +218,13 @@ const MESSAGES = {
     EVIDENCE_STALE: '表示した原図が最新ではありません。原図を表示し直してから確定してください。',
     VERIFY_IN_PROGRESS: 'このファイルは照合中です。',
     SOURCE_NOT_LIVE: 'ファイルが見つかりません。',
+    QA_LIMIT_EXCEEDED: 'QA の結果を反映できませんでした。記録の上限を超えるためです。結果は変わっていません。',
+    NO_SUCH_FINDING: '指摘が見つかりません。',
+    FINDING_NOT_ACTIVE: 'この指摘は、その後の QA で置き換えられたか終了しています。判断は最新の指摘に記録してください。',
+    FINDING_NOT_CURRENT: 'この指摘の根拠が現在の内容と一致しないか、ファイルを照合できていません。QA を実行し直すか、ファイルを照合してから判断を記録してください。',
+    OUTCOME_INVALID: '判断の種類を選んでください。',
+    COMMENT_INVALID: 'コメントに使用できない文字が含まれているか、4000文字を超えています。',
+    DECISION_LIMIT_EXCEEDED: '判断を記録できませんでした。判断の記録が上限（100000 件）に達しています。',
 } as const;
 
 const refuse = (code: StoreRefusalCode, message: string, extra: Partial<StoreRefusal> = {}): Refused =>
@@ -327,6 +356,10 @@ export class DrawingSetStore {
     /** At most one Sheet's crops are held at a time. */
     private standing: EvidenceRecord | null = null;
     private readonly verifying = new Set<Uuid>();
+    /** What a QA run would state of one Drawing Set: kept while that set is the session's. */
+    private qaEvaluationMemo: { set: DrawingSet; evaluation: QaEvaluation } | null = null;
+    /** Currency, readiness and refusal: kept while the set and every live Source's binding are as they were. */
+    private qaAssessmentMemo: { set: DrawingSet; bindings: string; assessment: QaAssessment } | null = null;
 
     constructor(options: { gate: PdfDocumentGate; owner: PreviewDocumentOwner; ocrWorkers?: OcrWorkerRegistry }) {
         this.gate = options.gate;
@@ -1107,6 +1140,110 @@ export class DrawingSetStore {
         if (!result.ok) return { ok: false as const, refusal: { ...result.refusal } };
         this.write(result.drawingSet);
         return result;
+    }
+
+    // ------------------------------------------------------------------- QA
+
+    private qaEvaluation(set: DrawingSet): QaEvaluation {
+        if (this.qaEvaluationMemo?.set !== set) this.qaEvaluationMemo = { set, evaluation: evaluateQa(set) };
+        return this.qaEvaluationMemo.evaluation;
+    }
+
+    /** What the ledger knows about each Source's File, as QA asks it. */
+    private qaBindingOf(set: DrawingSet, ledger: RuntimeBindingLedger) {
+        return (sourceId: Uuid) => verifiedBinding(ledger, set, sourceId);
+    }
+
+    private static readonly qaSeams: QaSeams = { now: () => nowTimestamp(), newId: () => mintUuid() };
+
+    /**
+     * QA as the session stands now, for the screen: what a run would state, each Finding's currency and
+     * Decisions, readiness, and whether a run would be refused. Derived, never stored; null with no session.
+     */
+    qaAssessment(): QaAssessment | null {
+        const set = this.currentSet();
+        if (!this.ledger || set === NO_SESSION_SET) return null;
+        const bindingOf = this.qaBindingOf(set, this.ledger);
+        const bindings = set.sources.filter(isLive).map((source) => `${source.id}:${bindingOf(source.id)}`).join('|');
+        const memo = this.qaAssessmentMemo;
+        if (memo && memo.set === set && memo.bindings === bindings) return memo.assessment;
+        const assessment = assessQa(set, bindingOf, this.qaEvaluation(set));
+        this.qaAssessmentMemo = { set, bindings, assessment };
+        return assessment;
+    }
+
+    /**
+     * Run QA (QA01 / QA02 / QA09) over the session as it is, and write the run, its new Findings and the
+     * lifecycle changes in one step -- or, past any contract bound, refuse with every bound it would have gone
+     * past and write nothing (R4.1-L).
+     */
+    runQa(): { ok: true; run: AnalysisRun; created: number; superseded: number; closed: number } | Refused {
+        const at = this.commandable();
+        if ('ok' in at) return at;
+        let result;
+        try {
+            result = runQaOver(at.set, DrawingSetStore.qaSeams, this.qaEvaluation(at.set));
+        } catch (error) {
+            return refuse('UNAVAILABLE', startMessage(error));
+        }
+        if (!result.ok) return refuse('QA_LIMIT_EXCEEDED', MESSAGES.QA_LIMIT_EXCEEDED, { exceeded: result.exceeded });
+        this.write(result.drawingSet);
+        return { ok: true, run: result.run, created: result.created.length, superseded: result.superseded.length, closed: result.closed.length };
+    }
+
+    /**
+     * Record a Review Decision on an ACTIVE Finding whose currency is CURRENT (MD-4), appended with the next
+     * sequence; the comment is kept with its line feeds made LF. Refused, with nothing written, otherwise.
+     */
+    decide(findingId: Uuid, outcome: ReviewOutcome, comment: string): { ok: true; decision: ReviewDecision } | Refused {
+        const at = this.commandable();
+        if ('ok' in at) return at;
+        let result;
+        try {
+            result = addDecision(at.set, { findingId, outcome, comment: normaliseLineEndings(comment) },
+                this.qaBindingOf(at.set, at.ledger), DrawingSetStore.qaSeams, this.qaEvaluation(at.set));
+        } catch (error) {
+            return refuse('UNAVAILABLE', startMessage(error));
+        }
+        if (!result.ok) return refuse(result.refusal, MESSAGES[result.refusal], result.exceeded ? { exceeded: result.exceeded } : {});
+        this.write(result.drawingSet);
+        return { ok: true, decision: result.decision };
+    }
+
+    private applyRegister(run: (set: DrawingSet) => ReturnType<typeof declareManualRegister>) {
+        const at = this.commandable();
+        if ('ok' in at) return at;
+        let result;
+        try {
+            result = run(at.set);
+        } catch (error) {
+            return refuse('UNAVAILABLE', startMessage(error));
+        }
+        if (!result.ok) return refuse(result.refusal.code, result.refusal.message, { row: result.refusal.row, problems: result.refusal.problems });
+        this.write(result.drawingSet);
+        return { ok: true as const, referenceId: result.referenceId, entryId: result.entryId };
+    }
+
+    private static readonly registerSeams = { now: () => nowTimestamp(), newId: () => mintUuid() };
+
+    /** Declare a typed drawing register on one page of a live Source, from the rows a person typed. */
+    declareRegister(sourceId: Uuid, pageNumber: number, rows: readonly RegisterRowInput[]) {
+        return this.applyRegister((set) => declareManualRegister(set, { sourceId, pageNumber, rows }, DrawingSetStore.registerSeams));
+    }
+
+    /** Correct one row of a live register in place; it keeps its id and stays a typed row. */
+    editRegisterEntry(referenceId: Uuid, entryId: Uuid, values: RegisterRowInput) {
+        return this.applyRegister((set) => editRegisterRow(set, { referenceId, entryId, values }, DrawingSetStore.registerSeams));
+    }
+
+    /** Retire one row of a live register. It is kept, retired. */
+    retireRegisterEntry(referenceId: Uuid, entryId: Uuid) {
+        return this.applyRegister((set) => retireRegisterRow(set, { referenceId, entryId }, DrawingSetStore.registerSeams));
+    }
+
+    /** Withdraw a live register. It is kept, retired, with its rows. */
+    retireRegisterReference(referenceId: Uuid) {
+        return this.applyRegister((set) => retireRegister(set, referenceId, DrawingSetStore.registerSeams));
     }
 }
 

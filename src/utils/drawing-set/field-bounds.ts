@@ -15,6 +15,7 @@
  * it does not survive being written as UTF-8 and so could not be recorded
  * faithfully.
  */
+import { P1_INTAKE_LIMITS } from './intake-policy';
 import type { FieldName } from './model';
 
 type LimitStatus = 'HUMAN_ADOPTED' | 'CANONICAL_PRE_RELEASE_CANDIDATE';
@@ -56,6 +57,45 @@ export const MAX_CONFIRMATION_HISTORY = P2_METADATA_LIMITS.maxConfirmationHistor
 export const MAX_PROFILE_REVISION = 1_000_000;
 
 /**
+ * The bounds on what M7-P3 writes: a QA run with its Findings, a Review
+ * Decision, a typed drawing register (CAN-03 R4.1-L). Past any of them the
+ * whole operation is refused and nothing is written; nothing is cut short,
+ * left out or deleted to make room, and none is raised here. Each equals the
+ * canonical schema (the contract gate checks it); all are pre-release
+ * candidates. The ones another phase already enforces are that phase's own
+ * entries, so the two can never differ.
+ */
+export const P3_QA_LIMITS = {
+    /** DrawingSet.analysisRuns.maxItems: EXTRACTION and QA runs together. */
+    maxAnalysisRuns: P2_METADATA_LIMITS.maxAnalysisRuns,
+    /** DrawingSet.findings.maxItems, every lifecycle state: Findings are never deleted. */
+    maxFindings: { value: 50000, xLimit: 'maxFindings', status: 'CANONICAL_PRE_RELEASE_CANDIDATE' },
+    /** DrawingSet.decisions.maxItems (ReviewDecision.sequence.maximum follows). */
+    maxDecisions: { value: 100000, xLimit: 'maxDecisions', status: 'CANONICAL_PRE_RELEASE_CANDIDATE' },
+    /** Finding.sheetIds / Finding.registerEntryIds .maxItems. */
+    maxSubjectsPerFinding: { value: 5000, xLimit: 'maxSubjectsPerFinding', status: 'CANONICAL_PRE_RELEASE_CANDIDATE' },
+    /** Finding.sourceIds / Finding.basis .maxItems; also DrawingSet.sources. */
+    maxSources: P1_INTAKE_LIMITS.maxSources,
+    /** AnalysisRun.coverage.sheetsEvaluated / sheetsExcluded .maximum; also DrawingSet.sheets. */
+    maxSheets: P1_INTAKE_LIMITS.maxSheets,
+    /** DrawingSet.drawingRegisterReferences.maxItems, retired references included. */
+    maxRegisterReferences: { value: 64, xLimit: 'maxRegisterReferences', status: 'CANONICAL_PRE_RELEASE_CANDIDATE' },
+    /** DrawingRegisterReference.entries.maxItems and RegisterEntry.row.maximum. */
+    maxRegisterEntriesPerReference: { value: 1000, xLimit: 'maxRegisterEntriesPerReference', status: 'CANONICAL_PRE_RELEASE_CANDIDATE' },
+    /** DrawingRegisterReference.pageNumber.maximum. */
+    maxPagesPerSource: P1_INTAKE_LIMITS.maxPagesPerSource,
+    /** Comment.maxLength: a Review Decision's comment. */
+    maxCommentLength: { value: 4000, xLimit: 'maxCommentLength', status: 'CANONICAL_PRE_RELEASE_CANDIDATE' },
+} as const;
+
+export const MAX_FINDINGS = P3_QA_LIMITS.maxFindings.value;
+export const MAX_DECISIONS = P3_QA_LIMITS.maxDecisions.value;
+export const MAX_SUBJECTS_PER_FINDING = P3_QA_LIMITS.maxSubjectsPerFinding.value;
+export const MAX_REGISTER_REFERENCES = P3_QA_LIMITS.maxRegisterReferences.value;
+export const MAX_REGISTER_ENTRIES = P3_QA_LIMITS.maxRegisterEntriesPerReference.value;
+export const MAX_COMMENT_LENGTH = P3_QA_LIMITS.maxCommentLength.value;
+
+/**
  * The schema's character classes, as the text of a regular-expression class.
  * The contract gate rebuilds each schema pattern from these and compares.
  * Single-line text (FieldValue, Name) refuses every control character; a raw
@@ -63,6 +103,8 @@ export const MAX_PROFILE_REVISION = 1_000_000;
  */
 export const SINGLE_LINE_FORBIDDEN_CLASS = '\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069';
 export const RAW_TEXT_FORBIDDEN_CLASS = '\\u0000-\\u0009\\u000B-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069';
+/** A Review Decision's comment (Comment): line feeds and tabs kept. */
+export const COMMENT_FORBIDDEN_CLASS = '\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069';
 
 export type CharacterClass = 'CONTROL' | 'LINE_SEPARATOR' | 'BIDI_CONTROL' | 'UNPAIRED_SURROGATE';
 
@@ -74,8 +116,9 @@ export type TextProblem =
 /** Characters, as JSON Schema counts them. */
 export const codePointLength = (text: string): number => Array.from(text).length;
 
-function classOf(codePoint: number, allowLineFeed: boolean): CharacterClass | null {
+function classOf(codePoint: number, allowLineFeed: boolean, allowTab = false): CharacterClass | null {
     if (codePoint === 0x0a && allowLineFeed) return null;
+    if (codePoint === 0x09 && allowTab) return null;
     if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) return 'CONTROL';
     if (codePoint === 0x2028 || codePoint === 0x2029) return 'LINE_SEPARATOR';
     if ((codePoint >= 0x202a && codePoint <= 0x202e) || (codePoint >= 0x2066 && codePoint <= 0x2069)) return 'BIDI_CONTROL';
@@ -87,18 +130,18 @@ function classOf(codePoint: number, allowLineFeed: boolean): CharacterClass | nu
 
 /** The first character that cannot be recorded, or null. */
 export function firstForbiddenCharacter(
-    text: string, options: { allowLineFeed: boolean },
+    text: string, options: { allowLineFeed: boolean; allowTab?: boolean },
 ): { codePoint: number; characterClass: CharacterClass } | null {
     for (const character of text) {
         const codePoint = character.codePointAt(0)!;
-        const characterClass = classOf(codePoint, options.allowLineFeed);
+        const characterClass = classOf(codePoint, options.allowLineFeed, options.allowTab);
         if (characterClass) return { codePoint, characterClass };
     }
     return null;
 }
 
-function check(text: string, limit: number, allowLineFeed: boolean): TextProblem | null {
-    const forbidden = firstForbiddenCharacter(text, { allowLineFeed });
+function check(text: string, limit: number, allowLineFeed: boolean, allowTab = false): TextProblem | null {
+    const forbidden = firstForbiddenCharacter(text, { allowLineFeed, allowTab });
     if (forbidden) return { kind: 'INVALID_CHARACTER', ...forbidden };
     const length = codePointLength(text);
     if (length > limit) return { kind: 'TOO_LONG', length, limit };
@@ -112,6 +155,14 @@ export const checkFieldValue = (value: string): TextProblem | null =>
 /** What was read inside one field rectangle: line feeds kept, at most 1000 characters. */
 export const checkFieldRawText = (rawText: string): TextProblem | null =>
     check(rawText, MAX_FIELD_RAW_TEXT_LENGTH, true);
+
+/**
+ * A Review Decision's comment: line feeds and tabs kept, at most 4000
+ * characters, may be empty. Call it on text whose line endings were already
+ * made LF (normaliseLineEndings): a CR is a control character here.
+ */
+export const checkComment = (comment: string): TextProblem | null =>
+    check(comment, MAX_COMMENT_LENGTH, true, true);
 
 /** A profile's name: one line, 1 to 200 characters, not blank. */
 export function checkName(name: string): TextProblem | null {
