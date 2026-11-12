@@ -381,9 +381,13 @@ try {
         !/Worker|worker|Tesseract|tesseract|BroadcastChannel|PDF\.js|lease|Lock|B2-D\d|RF-?\d|IR-\d|HG-|RV-?\d|M7|P2/.test(d), 'no internals');
     check('drawing-set: neither a reading nor a confirmation is stated as vouching for the drawing',
         d.includes('図面の内容を保証するものではありません') && !/確認済み|正しい値|承認|検証済み/.test(d), 'no overclaim on confirmation');
-    check('drawing-set: checking and save/resume are still stated as not yet available',
-        d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
+    // M7-P3-QA-CORE-01: the checks it has now are stated, and save/resume and the final report are still not available.
+    check('drawing-set: the checks it has (duplicates, unconfirmed values, the typed register) are stated; save/resume and the final report are still not available',
+        d.includes('図面番号の重複・表題欄の未確定項目・手入力で宣言した図面一覧との照合')
+        && d.includes('図面一式のチェックは、図面番号の重複・表題欄の未確定項目・手入力の図面一覧との照合に対応しています')
+        && d.includes('最終レポート（Final QA Report）には、まだ対応していません')
         && d.includes('作業内容の保存・再開には、まだ対応していません')
+        && !d.includes('図面一式のチェック（番号の重複や抜けなど）には、まだ対応していません')
         && !d.includes('表題欄（図面番号・図面名・版・日付）の読み取りには、まだ対応していません'), 'not yet');
     check('drawing-set: profiles, readings and confirmations are not saved either', d.includes('プロファイル・読み取り値・確定した値も保存されず'), 'not saved');
     check('drawing-set: the bounds are stated as current, not permanent',

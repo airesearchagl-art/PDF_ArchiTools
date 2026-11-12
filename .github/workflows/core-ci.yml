@@ -274,6 +274,10 @@ jobs:
       # for intake, preview and extraction, a failed destruction that stops
       # every open, re-presenting a Source's bytes, the profile mutation probes
       # F1-F7, and P1 intake and preview with the data files, before and after.
+      # Since M7-P3 (scripts/smoke-m7-p3-checks.mjs, last): QA, Review
+      # Decisions and typed drawing registers through the session store, the
+      # session they leave against the contract, a refused QA run on the QA
+      # screen, and the QA screen at 5000 Sheets (times recorded, no threshold).
       - name: M7 foundation (P1 + P2-A + P2-B1)
         run: node scripts/smoke-m7-p1.mjs
 
@@ -284,6 +288,19 @@ jobs:
       # started while a file is still being read, and no request leaving the
       # machine. Since M7-P2-B1 also the binding shown for each Source, a file
       # taken away from disk and the same bytes chosen again to reconnect it,
-      # and the PDF.js data files fetched from this origin.
+      # and the PDF.js data files fetched from this origin. Since M7-P3 also the
+      # QA view (scripts/smoke-m7-p3-ui-checks.mjs): QA, Review Decisions and
+      # their history, a drawing register typed on its page, corrected and
+      # withdrawn, and nothing that reads as a pass or a final check.
       - name: M7 P1 UI
         run: node scripts/smoke-m7-p1-ui.mjs
+
+      # 図面管理 QA (M7-P3, QA01 / QA02 / QA09): the Production QA engine held to
+      # the Human-adopted CAN-03 R4.1 artifact, whose generator and
+      # counterexamples sit unchanged in scripts/m7-p3-oracle/ and are checked
+      # against the pack's SHA-256 first. The contract's key and evidence
+      # vectors, both scenarios step for step, the 35 counterexamples (every
+      # bound of R4.1-L at and one past), every resulting state against the
+      # canonical schema and semantic contract, and a 5000-Sheet run.
+      - name: M7 P3 QA core
+        run: node scripts/smoke-m7-p3-qa.mjs
