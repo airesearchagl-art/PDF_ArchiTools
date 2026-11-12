@@ -514,6 +514,117 @@ try {
         + `${claimedAspect.toFixed(2)}`);
     clearDownloads();
 
+    // ---- a sheet issued turned ------------------------------------------------
+    //
+    // A3 paper at /Rotate 270, as the MLIT standard details are issued, against
+    // its revision at the same /Rotate. The screen and both files show it the
+    // way it is read, and the change sits in one place on all three.
+    console.log('\n=== a sheet issued turned (/Rotate 270) ===');
+    const turnedNames = ['rotsame-a3-270-a', 'rotsame-a3-270-b'];
+    /** What the screen shows once the preview has painted its pair (it starts 300 ms after the files land). */
+    const screenOf = async (p) => {
+        await p.waitForFunction(() => document.querySelector('[data-testid^="pair-tab-"]') !== null
+            && (document.querySelector('[data-testid="comparator-canvas"]')?.width ?? 0) > 1, { timeout: 120000 });
+        await settle(p);
+        return screenNow(p);
+    };
+    const screenNow = (p) => p.evaluate(() => {
+        const canvas = document.querySelector('[data-testid="comparator-canvas"]');
+        const note = document.querySelector('[data-testid="comparator-orientation"]');
+        const { width, height } = canvas;
+        const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+        let minX = width; let minY = height; let maxX = -1; let maxY = -1;
+        for (let y = 0; y < height; y += 1) {
+            for (let x = 0; x < width; x += 1) {
+                const i = (y * width + x) * 4;
+                if (Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]) <= 30) continue;
+                if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+            }
+        }
+        const tabs = [...document.querySelectorAll('[data-testid^="pair-tab-"]')].map((t) => t.textContent);
+        return {
+            width, height, note: note?.textContent ?? null, noteRotate: note?.dataset.rotate ?? null, tabs,
+            coloured: maxX < 0 ? null : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 },
+        };
+    });
+    const turnedExpected = await (await inspectorPage()).evaluate(
+        (names) => window.__artifacts.expected(names, [1], 150, 0), turnedNames,
+    );
+    const turnedPair = turnedExpected.pages[0].pairs[0];
+    const tb = turnedPair.bounds;
+    console.log(`  engine: ${turnedPair.width}x${turnedPair.height}  bounds x=${tb.x} y=${tb.y} w=${tb.width} h=${tb.height}`);
+    const turnedApp = await openComparator();
+    await upload(turnedApp, turnedNames);
+    const turnedScreen = await screenOf(turnedApp);
+    console.log(`  screen: ${turnedScreen.width}x${turnedScreen.height}  "${turnedScreen.note}"`);
+    check('the screen shows the A3 sheet the way it is read: landscape, at the comparison\'s size',
+        turnedScreen.width === turnedPair.width && turnedScreen.height === turnedPair.height && turnedScreen.width > turnedScreen.height,
+        `${turnedScreen.width}x${turnedScreen.height}`);
+    check('and says so: shown at the sheets\' /Rotate 270, compared on the paper',
+        turnedScreen.noteRotate === '270' && turnedScreen.note?.includes('270°') && turnedScreen.note.includes('用紙の向きで判定'), turnedScreen.note ?? '');
+    check('the change painted on the screen is exactly the comparison\'s box', JSON.stringify(turnedScreen.coloured) === JSON.stringify(tb),
+        JSON.stringify(turnedScreen.coloured));
+    check('the verdict is unchanged by the turn: CHANGE', turnedScreen.tabs.some((t) => t.includes('CHANGE')), turnedScreen.tabs.join(' | '));
+    await turnedApp.click('[data-testid="export-pdf"]');
+    const turnedPdfFile = await download();
+    // Set aside, so the report's download is the next one to arrive.
+    const turnedPdfName = keep(turnedPdfFile.name);
+    const turnedReporter = await openComparator();
+    await upload(turnedReporter, turnedNames);
+    await turnedReporter.click('[data-testid="change-report"]');
+    const turnedReportFile = await download();
+    await turnedApp.close();
+    await turnedReporter.close();
+    const turnedPdf = await inspect(turnedPdfName);
+    const scale150 = 150 / 72;
+    const turnedPdfBox = await (await inspectorPage()).evaluate(
+        (url, s) => window.__artifacts.colouredBox(url, 1, s),
+        `/test-fixtures/comparator-downloads/${turnedPdfName}`, scale150,
+    );
+    console.log(`  Comparison PDF: ${turnedPdf.pages[0].widthPt}x${turnedPdf.pages[0].heightPt}pt  coloured box ${JSON.stringify(turnedPdfBox)}`);
+    check('the Comparison PDF page is landscape, the size of the turned A3 sheet',
+        turnedPdf.numPages === 1 && turnedPdf.pages[0].landscape && turnedPdf.pages[0].rotation === 0
+        && Math.abs(turnedPdf.pages[0].widthPt - turnedPair.width / scale150) < 0.5 && Math.abs(turnedPdf.pages[0].heightPt - turnedPair.height / scale150) < 0.5,
+        `${turnedPdf.pages[0].widthPt}x${turnedPdf.pages[0].heightPt}pt`);
+    check('and the change is painted where the screen paints it (the same box, within 1 px)',
+        turnedPdfBox.x !== null && Math.abs(turnedPdfBox.x - tb.x) <= 1 && Math.abs(turnedPdfBox.y - tb.y) <= 1
+        && Math.abs(turnedPdfBox.width - tb.width) <= 1 && Math.abs(turnedPdfBox.height - tb.height) <= 1,
+        JSON.stringify(turnedPdfBox));
+    const turnedReport = await inspect(turnedReportFile.name);
+    const turnedCaption = turnedReport.pages[0]?.text ?? '';
+    console.log(`  "${turnedCaption}"`);
+    check('the Change Report captions the same box, in the shown sheet\'s coordinates',
+        turnedReport.numPages === 1 && turnedCaption.includes(`x=${tb.x} y=${tb.y} w=${tb.width} h=${tb.height}`), turnedCaption);
+    const turnedCrop = await (await inspectorPage()).evaluate(
+        (url) => window.__artifacts.colouredBox(url, 1),
+        `/test-fixtures/comparator-downloads/${turnedReportFile.name}`,
+    );
+    check('and its picture is that box, turned the same way (the drawn aspect within 10% of the box\'s)',
+        turnedCrop.coloured > 500 && Math.abs(turnedCrop.width / turnedCrop.height - tb.width / tb.height) / (tb.width / tb.height) < 0.1,
+        `drawn ${(turnedCrop.width / turnedCrop.height).toFixed(2)} against ${(tb.width / tb.height).toFixed(2)}`);
+    clearDownloads();
+
+    // Rotations that differ: shown on the paper, and a /Rotate alone is not a change.
+    const mixedApp = await openComparator();
+    await upload(mixedApp, ['rotsame-0-a', 'rotsame-270-a']);
+    const mixedScreen = await screenOf(mixedApp);
+    check('rotations that differ are shown on the paper (portrait), said so, and match',
+        mixedScreen.height > mixedScreen.width && mixedScreen.noteRotate === '0' && mixedScreen.note?.includes('用紙の向きで表示')
+        && mixedScreen.tabs.some((t) => t.includes('MATCH')) && mixedScreen.coloured === null,
+        `${mixedScreen.width}x${mixedScreen.height} "${mixedScreen.note}" ${mixedScreen.tabs.join(' | ')}`);
+    await mixedApp.close();
+    // One document is shown at its own /Rotate.
+    const singleApp = await openComparator();
+    await upload(singleApp, ['rotsame-a3-270-a']);
+    await singleApp.waitForFunction(() => (document.querySelector('[data-testid="comparator-canvas"]')?.width ?? 0) > 1, { timeout: 60000 });
+    const singleScreen = await singleApp.evaluate(() => {
+        const canvas = document.querySelector('[data-testid="comparator-canvas"]');
+        return { width: canvas.width, height: canvas.height, note: document.querySelector('[data-testid="comparator-orientation"]')?.textContent ?? null };
+    });
+    check('a single document turned 270 is shown turned (landscape), and says so',
+        singleScreen.width > singleScreen.height && singleScreen.note?.includes('270°'), `${singleScreen.width}x${singleScreen.height} "${singleScreen.note}"`);
+    await singleApp.close();
+
     // ---- a page one document does not have ------------------------------------
     //
     // The missing page has to reach the file, in its place, in words the reader

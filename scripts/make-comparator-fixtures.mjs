@@ -332,6 +332,43 @@ for (const angle of [90, 180, 270]) {
 }
 
 // ---------------------------------------------------------------------------
+// The same rotation on both sides: shown the way the sheets are turned
+// ---------------------------------------------------------------------------
+//
+// A revision of a sheet that is issued turned, compared with its predecessor --
+// the MLIT standard details, for one, are A3 paper at /Rotate 270. Both sides
+// carry the same /Rotate, so the comparison is shown turned. `-b` adds one
+// filled block where nothing else is drawn, so the change and its box have one
+// place to be; the `-0-` pair is the same paper unturned, so the verdict and
+// the counts can be held equal across the turn.
+
+const addedBlock = (page, size) => page.drawRectangle({
+    x: size.w * 0.12, y: size.h * 0.72, width: size.w * 0.18, height: size.h * 0.06, color: rgb(0, 0, 0),
+});
+for (const angle of [0, 90, 180, 270]) {
+    for (const [suffix, block] of [['a', false], ['b', true]]) {
+        await make(`rotsame-${angle}-${suffix}`,
+            `the A4 drawing at /Rotate ${angle}${block ? ', one block added' : ''}`,
+            async (doc, font) => {
+                const page = doc.addPage([SHEET.A4.w, SHEET.A4.h]);
+                drawPlan(page, SHEET.A4, font);
+                if (block) addedBlock(page, SHEET.A4);
+                page.setRotation(degrees(angle));
+            });
+    }
+}
+for (const [suffix, block] of [['a', false], ['b', true]]) {
+    await make(`rotsame-a3-270-${suffix}`,
+        `A3 paper at /Rotate 270, as the MLIT standard details are${block ? ', one block added' : ''}`,
+        async (doc, font) => {
+            const page = doc.addPage([SHEET.A3.w, SHEET.A3.h]);
+            drawPlan(page, SHEET.A3, font);
+            if (block) addedBlock(page, SHEET.A3);
+            page.setRotation(degrees(270));
+        });
+}
+
+// ---------------------------------------------------------------------------
 // Changes small enough for a ratio floor to swallow
 // ---------------------------------------------------------------------------
 //

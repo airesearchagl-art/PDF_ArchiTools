@@ -32,6 +32,9 @@ import {
     type ChangeMask,
 } from './mask';
 import { planArtifact, preflightArtifact, type Preflight } from './budget';
+import {
+    displayRotationOf, orientRect, orientedPlacement, orientedSize, type DisplayRotation,
+} from './orientation';
 
 export interface MemberSource {
     slot: number;
@@ -82,8 +85,15 @@ export interface PagePlan {
     status: PlanStatus;
     /** One line per thing the user needs to know, in their language. */
     reported: string[];
+    /** The size of the visual as it is shown: the frame, turned by `rotate`. */
     width: number;
     height: number;
+    /**
+     * How the page is shown (orientation.ts): the `/Rotate` every member's
+     * sheet shares, or 0 when they differ. The comparison is made upright in
+     * `frame` either way.
+     */
+    rotate: DisplayRotation;
     /** Present exactly when the page is READY_TO_COMPARE. */
     frame: RasterFrame | null;
     mappings: CanonicalMapping[];
@@ -113,18 +123,21 @@ export interface PairResult {
     /** "p3: A.pdf vs C.pdf" — deterministic, and carried into every artifact. */
     title: string;
     verdict: ResultStatus;
+    /** Counted on the upright masks: the same whichever way the page is shown. */
     changePixels: number;
     inkPixels: number;
+    /** The page's shown orientation; `width`, `height`, `pixels` and `bounds` are all in it. */
+    rotate: DisplayRotation;
     width: number;
     height: number;
     /**
-     * The painted visual — full-resolution RGBA, and the largest thing a pair
-     * produces. Null once it has been handed to a sink and released: an export
-     * that kept every page's would be holding the whole job in RAM, which is
-     * not what the budget was computed against.
+     * The painted visual, as it is shown — full-resolution RGBA, and the
+     * largest thing a pair produces. Null once it has been handed to a sink and
+     * released: an export that kept every page's would be holding the whole
+     * job in RAM, which is not what the budget was computed against.
      */
     pixels: Uint8ClampedArray<ArrayBuffer> | null;
-    /** The bounding box of what changed, or null when nothing did. */
+    /** The bounding box of what changed, in the shown raster, or null when nothing did. */
     bounds: { x: number; y: number; width: number; height: number } | null;
 }
 
@@ -159,6 +172,10 @@ export interface JobResult {
  * Two members only, because that is the rule that is coherent. Painting a
  * reference-pairs result with an any-other-member rule would show a
  * two-against-two disagreement as a clean sheet under a status saying CHANGE.
+ *
+ * The masks are upright; `rotate` turns the picture as it is painted
+ * (orientation.ts), so a page shown turned costs no second raster. The result
+ * is `width` x `height` turned by `rotate`.
  */
 export function paintPair(
     reference: Uint8Array,
@@ -171,6 +188,7 @@ export function paintPair(
     height: number,
     matchColor: [number, number, number],
     matchOpacity: number,
+    rotate: DisplayRotation = 0,
 ): Uint8ClampedArray<ArrayBuffer> {
     assertRaster(reference, width, height, 1, 'paintPair');
     assertSameFrame([reference, other, dilatedReference, dilatedOther], 'paintPair');
@@ -178,29 +196,34 @@ export function paintPair(
     const masks = [reference, other];
     const dilated = [dilatedReference, dilatedOther];
     const colors = [referenceColor, otherColor];
-    for (let p = 0; p < width * height; p += 1) {
-        let r = 255;
-        let g = 255;
-        let b = 255;
-        for (let l = 0; l < 2; l += 1) {
-            if (!masks[l][p]) continue;
-            const isMatch = dilated[1 - l][p] === 1;
-            const ink = isMatch ? matchColor : colors[l];
-            if (isMatch && matchOpacity < 1) {
-                r = r * (1 - matchOpacity) + r * ink[0] * matchOpacity;
-                g = g * (1 - matchOpacity) + g * ink[1] * matchOpacity;
-                b = b * (1 - matchOpacity) + b * ink[2] * matchOpacity;
-            } else {
-                r *= ink[0];
-                g *= ink[1];
-                b *= ink[2];
+    const place = orientedPlacement(width, height, rotate);
+    for (let y = 0, p = 0; y < height; y += 1) {
+        // Where this upright row's first pixel lands; each next pixel is one step on.
+        let q = place.start + y * place.stepY;
+        for (let x = 0; x < width; x += 1, p += 1, q += place.stepX) {
+            let r = 255;
+            let g = 255;
+            let b = 255;
+            for (let l = 0; l < 2; l += 1) {
+                if (!masks[l][p]) continue;
+                const isMatch = dilated[1 - l][p] === 1;
+                const ink = isMatch ? matchColor : colors[l];
+                if (isMatch && matchOpacity < 1) {
+                    r = r * (1 - matchOpacity) + r * ink[0] * matchOpacity;
+                    g = g * (1 - matchOpacity) + g * ink[1] * matchOpacity;
+                    b = b * (1 - matchOpacity) + b * ink[2] * matchOpacity;
+                } else {
+                    r *= ink[0];
+                    g *= ink[1];
+                    b *= ink[2];
+                }
             }
+            const i = q * 4;
+            out[i] = r;
+            out[i + 1] = g;
+            out[i + 2] = b;
+            out[i + 3] = 255;
         }
-        const i = p * 4;
-        out[i] = r;
-        out[i + 1] = g;
-        out[i + 2] = b;
-        out[i + 3] = 255;
     }
     return out;
 }
@@ -254,8 +277,31 @@ export async function renderUprightCanvas(
     pageNumber: number,
     scale: number,
 ): Promise<HTMLCanvasElement> {
+    return renderPageCanvas(pdf, pageNumber, scale, 0);
+}
+
+/**
+ * One page on its own, shown the way its `/Rotate` says: with a single sheet,
+ * every sheet "taking part" shares that rotation (orientation.ts), so this is
+ * the orientation a comparison of such sheets is shown in.
+ */
+export async function renderDisplayCanvas(
+    pdf: PDFDocumentProxy,
+    pageNumber: number,
+    scale: number,
+): Promise<HTMLCanvasElement> {
     const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale, rotation: 0 });
+    return renderPageCanvas(pdf, pageNumber, scale, displayRotationOf([page.rotate]));
+}
+
+async function renderPageCanvas(
+    pdf: PDFDocumentProxy,
+    pageNumber: number,
+    scale: number,
+    rotation: DisplayRotation,
+): Promise<HTMLCanvasElement> {
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale, rotation });
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
@@ -447,6 +493,7 @@ export async function planComparison(
                 ),
                 width: 0,
                 height: 0,
+                rotate: 0,
                 frame: null,
                 mappings: [],
                 missing,
@@ -477,6 +524,7 @@ export async function planComparison(
                 reported: unitless,
                 width: 0,
                 height: 0,
+                rotate: 0,
                 frame: null,
                 mappings: [],
                 missing: [],
@@ -512,6 +560,7 @@ export async function planComparison(
                 ],
                 width: 0,
                 height: 0,
+                rotate: 0,
                 frame: null,
                 mappings: [],
                 missing: [],
@@ -526,12 +575,16 @@ export async function planComparison(
             heightPt: reference.physical.height,
             scale: renderScale,
         };
+        // Compared upright in `frame`; shown the way every sheet here is turned, if they agree.
+        const rotate = displayRotationOf(geometries.map((g) => g.rotate));
+        const shown = orientedSize(frame.width, frame.height, rotate);
         pages.push({
             page: pageNumber,
             status: PLAN.READY_TO_COMPARE,
             reported: [],
-            width: frame.width,
-            height: frame.height,
+            width: shown.width,
+            height: shown.height,
+            rotate,
             frame,
             mappings,
             missing: [],
@@ -728,6 +781,14 @@ export async function runComparison(
             }
 
             const dilatedOther = dilateMask(otherMask, width, height, plan.radiusPx);
+            // The verdict, the counts and the box are the upright comparison's; the
+            // picture and the box are then turned together into the page's shown orientation.
+            const rotate = pagePlan.rotate;
+            const shown = orientedSize(width, height, rotate);
+            const uprightBounds = changeBounds(
+                referenceMask, otherMask, dilatedReference, dilatedOther,
+                width, height,
+            );
             const pair: PairResult = {
                 page: pagePlan.page,
                 slot: members[i].slot,
@@ -737,17 +798,15 @@ export async function runComparison(
                 verdict: verdictFor(run.result),
                 changePixels: run.result.changePixels,
                 inkPixels: run.result.inkPixels,
-                width,
-                height,
+                rotate,
+                width: shown.width,
+                height: shown.height,
                 pixels: paintPair(
                     referenceMask, otherMask, dilatedReference, dilatedOther,
                     members[0].color, members[i].color, width, height,
-                    plan.requested.matchColor, plan.requested.matchOpacity,
+                    plan.requested.matchColor, plan.requested.matchOpacity, rotate,
                 ),
-                bounds: changeBounds(
-                    referenceMask, otherMask, dilatedReference, dilatedOther,
-                    width, height,
-                ),
+                bounds: uprightBounds ? orientRect(uprightBounds, width, height, rotate) : null,
             };
 
             // Painting, bounds and encoding are the expensive stretch after the

@@ -15,7 +15,9 @@ import {
     createComparisonPdf,
     formatBytes,
     planComparison,
-    renderUprightCanvas,
+    renderDisplayCanvas,
+    displayRotationOf,
+    type DisplayRotation,
     runComparison,
     taskBoundary,
     type ArtifactKind,
@@ -87,6 +89,8 @@ export const PdfComparator: React.FC = () => {
     // automatically -- a budget that grows to fit the job is not a budget.
     const [memoryBudgetBytes, setMemoryBudgetBytes] = useState(DEFAULT_MEMORY_BUDGET_BYTES);
     const [result, setResult] = useState<JobResult | null>(null);
+    /** A single document's own /Rotate, which it is shown at. */
+    const [singleRotate, setSingleRotate] = useState<DisplayRotation>(0);
     const [activePair, setActivePair] = useState(0);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -196,13 +200,21 @@ export const PdfComparator: React.FC = () => {
         if (validIndex === undefined || !pdfs[validIndex]) return;
 
         try {
-            const page = await pdfs[validIndex]!.getPage(pageNumber);
-            const viewport = page.getViewport({ scale: 1.0 });
+            // The width of what is on screen: a compared pair as it is shown (turned
+            // or on the paper), or a single document the way its /Rotate turns it.
+            const pairs = activeIndices.length > 1 ? result?.pages[0]?.pairs ?? [] : [];
+            let shownWidthPt: number;
+            if (pairs.length > 0) {
+                shownWidthPt = pairs[Math.min(activePair, pairs.length - 1)].width / (dpi / 72);
+            } else {
+                const page = await pdfs[validIndex]!.getPage(pageNumber);
+                shownWidthPt = page.getViewport({ scale: 1.0 }).width;
+            }
 
             // Available width in container (minus padding)
             const availableWidth = canvasContainerRef.current.clientWidth - 40; // 20px padding * 2
 
-            const newScale = availableWidth / viewport.width;
+            const newScale = availableWidth / shownWidthPt;
             setScale(newScale);
         } catch (e) {
             console.error(e);
@@ -297,10 +309,13 @@ export const PdfComparator: React.FC = () => {
                 void (async () => {
                     try {
                         if (pageNumber > only.numPages) { clear(); return; }
-                        const rendered = await renderUprightCanvas(
+                        // One document shares its own /Rotate with itself: shown that way up.
+                        const rendered = await renderDisplayCanvas(
                             only, pageNumber, dpi / 72,
                         );
+                        const turned = displayRotationOf([(await only.getPage(pageNumber)).rotate]);
                         if (token !== generationRef.current) return;
+                        setSingleRotate(turned);
                         const canvas = canvasRef.current;
                         if (!canvas) return;
                         canvas.width = rendered.width;
@@ -460,7 +475,11 @@ export const PdfComparator: React.FC = () => {
             let area = 0;
             for (const p of plan.pages) {
                 if (!p.frame) continue;
-                const mm: [number, number] = [p.frame.widthPt * 25.4 / 72, p.frame.heightPt * 25.4 / 72];
+                // The sheet as the artifact shows it: turned when its sheets share a /Rotate.
+                const quarter = p.rotate === 90 || p.rotate === 270;
+                const mm: [number, number] = quarter
+                    ? [p.frame.heightPt * 25.4 / 72, p.frame.widthPt * 25.4 / 72]
+                    : [p.frame.widthPt * 25.4 / 72, p.frame.heightPt * 25.4 / 72];
                 if (mm[0] * mm[1] > area) {
                     area = mm[0] * mm[1];
                     sheet = mm;
@@ -597,6 +616,33 @@ export const PdfComparator: React.FC = () => {
             setBusy(false);
         }
     };
+
+    /**
+     * Which way up the page on screen is, said in words whenever it is not
+     * simply the paper: turned to the /Rotate its sheets share, or on the
+     * paper because their rotations differ. Never a setting.
+     */
+    const orientationNote = ((): { rotate: number; text: string } | null => {
+        if (refusal) return null;
+        if (activeIndices.length === 1) {
+            return singleRotate !== 0
+                ? { rotate: singleRotate, text: `図面の回転設定（${singleRotate}°）の向きで表示しています。` }
+                : null;
+        }
+        const shownPage = result?.pages[0];
+        const planned = shownPage ? result!.plan.pages.find((p) => p.page === shownPage.page) : undefined;
+        if (!shownPage || shownPage.pairs.length === 0 || !planned) return null;
+        if (planned.rotate !== 0) {
+            return {
+                rotate: planned.rotate,
+                text: `図面の回転設定（${planned.rotate}°）の向きで表示しています。差分は用紙の向きで判定しています。`,
+            };
+        }
+        const mixed = planned.mappings.some((m) => m.sourceRotate.reference !== m.sourceRotate.other);
+        return mixed
+            ? { rotate: 0, text: '回転設定がファイルによって異なるため、用紙の向きで表示しています。' }
+            : null;
+    })();
 
     return (
         <div className="pdf-comparator" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -1107,6 +1153,15 @@ export const PdfComparator: React.FC = () => {
                                 </span>
                             </button>
                         ))}
+                    </div>
+                )}
+
+                {/* Which way up the page is shown, when that is not simply the paper. */}
+                {orientationNote && (
+                    <div data-testid="comparator-orientation" data-rotate={orientationNote.rotate} style={{
+                        fontSize: '0.8em', color: '#555', marginBottom: '6px',
+                    }}>
+                        {orientationNote.text}
                     </div>
                 )}
 

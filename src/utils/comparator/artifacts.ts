@@ -398,14 +398,20 @@ export function createChangeReport(): ArtifactSink {
         const png = cropPng(pair, pair.pixels, bounds, alias);
 
         newPage();
-        const pdfWidth = doc.internal.pageSize.getWidth() - 20;
-        const pdfHeight = pdfWidth * (bounds.height / bounds.width);
+        // The crop at the page's width -- or, for a tall one, at the height left
+        // above the caption, so the whole of it is on the page. A change that is
+        // wide on the paper is tall once a page turned 90 or 270 is shown turned.
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const fit = Math.min((pageWidth - 20) / bounds.width, (pageHeight - 24 - 18) / bounds.height);
+        const pdfWidth = bounds.width * fit;
+        const pdfHeight = bounds.height * fit;
         doc.addImage(png, 'PNG', 10, 24, pdfWidth, pdfHeight, alias);
         doc.setFontSize(10);
         doc.text(`${pair.title} — CHANGE`, 10, 16);
         doc.text(
             `x=${bounds.x} y=${bounds.y} w=${bounds.width} h=${bounds.height}`,
-            10, Math.min(pdfHeight + 34, doc.internal.pageSize.getHeight() - 8),
+            10, Math.min(pdfHeight + 34, pageHeight - 8),
         );
         appended.push({
             kind: ARTIFACT_ITEM.PAIR_VISUAL, page: pair.page, slot: pair.slot,

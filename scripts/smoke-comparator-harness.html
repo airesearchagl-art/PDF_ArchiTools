@@ -29,6 +29,7 @@ import {
   jsPdfFileBytes, JSPDF_CONTAINER, MEMORY_TERMS, COMPARISON_PDF_CONTAINER,
   estimateWork, estimatePhaseMemory,
   createComparisonPdf, createChangeReport, containerVersion,
+  cropRgba, orientRect,
 } from '/src/utils/comparator/index.ts';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -256,6 +257,151 @@ window.__comparator = {
   }),
 
   compare,
+
+  /**
+   * Sheets that share a /Rotate are shown turned; sheets that do not, on the paper.
+   *
+   * The oracle is PDF.js itself, asked to draw each sheet the way its /Rotate turns it -- code the comparator
+   * does not use for the comparison -- so "shown the right way up" is measured against the viewer's own idea of
+   * the right way up, not against the transform under test. The verdict and the counts are held to the same
+   * paper compared unturned (the `-0-` pair), and both artifacts are reopened and held to the shown picture.
+   */
+  async orientation() {
+    const cases = {
+      'rotate 0': ['rotsame-0-a', 'rotsame-0-b'],
+      'rotate 90': ['rotsame-90-a', 'rotsame-90-b'],
+      'rotate 180': ['rotsame-180-a', 'rotsame-180-b'],
+      'rotate 270': ['rotsame-270-a', 'rotsame-270-b'],
+      'A3 rotate 270': ['rotsame-a3-270-a', 'rotsame-a3-270-b'],
+      'same 270, nothing changed': ['rotate-270', 'rotsame-270-a'],
+      'mixed 0 / 270, same drawing': ['rotsame-0-a', 'rotsame-270-a'],
+      'mixed 90 / 270, same drawing': ['rotsame-90-a', 'rotsame-270-a'],
+      'mixed 0 / 270, one block added': ['rotsame-0-a', 'rotsame-270-b'],
+    };
+    const twinOf = (names) => (names[0].startsWith('rotsame-a3') ? null : ['rotsame-0-a', names[1].endsWith('-b') ? 'rotsame-0-b' : 'rotsame-0-a']);
+    const runOf = async (names, artifact, sink) => {
+      const set = await members(names);
+      const s = settings({ artifact });
+      const plan = await planComparison(set, s);
+      const theSink = sink ? sink(set, s) : null;
+      const run = await runComparison(plan, set, alwaysOwner, theSink ? { onPair: theSink.onPair, onPage: theSink.onPage } : {});
+      return { set, s, plan, run, sink: theSink };
+    };
+    /** One sheet drawn by PDF.js turned by its own /Rotate, as an ink mask. */
+    const turned = async (name, scale) => {
+      const page = await (await open(name)).getPage(1);
+      const viewport = page.getViewport({ scale, rotation: page.rotate });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+      const { width, height } = canvas;
+      const mask = inkMask(ctx.getImageData(0, 0, width, height).data, width, height);
+      canvas.width = 1;
+      canvas.height = 1;
+      return { mask, width, height };
+    };
+    const bbox = (test, width, height) => {
+      let minX = width; let minY = height; let maxX = -1; let maxY = -1;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          if (!test(y * width + x)) continue;
+          if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      return maxX < 0 ? null : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+    };
+    const out = {};
+    for (const [label, names] of Object.entries(cases)) {
+      const preview = await runOf(names, ARTIFACT.PREVIEW);
+      const pagePlan = preview.plan.pages[0];
+      const pair = preview.run.pages[0].pairs[0];
+      const frame = pagePlan.frame;
+      const entry = {
+        sheets: [],
+        rotate: pagePlan.rotate,
+        frame: { width: frame.width, height: frame.height },
+        plan: { width: pagePlan.width, height: pagePlan.height },
+        pair: { rotate: pair.rotate, width: pair.width, height: pair.height, verdict: pair.verdict, changePixels: pair.changePixels, inkPixels: pair.inkPixels, bounds: pair.bounds },
+      };
+      for (const n of names) entry.sheets.push((await (await open(n)).getPage(1)).rotate);
+
+      // The picture against PDF.js's own turned drawing: the shown ink is both sheets' ink, the right way up.
+      const [a, b] = await Promise.all(names.map((n) => turned(n, preview.plan.renderScale)));
+      entry.oracle = { width: a.width, height: a.height };
+      const shared = entry.sheets.every((r) => r === entry.sheets[0]);
+      if (shared && a.width === pair.width && a.height === pair.height && b.width === a.width && b.height === a.height) {
+        // The frame is the sheet's size rounded up to whole pixels, so its last
+        // part-pixel row and column sit on the far side of the paper; turned,
+        // they sit on the near side, where a sheet PDF.js draws turned does not
+        // have them. Ink can therefore lie up to one pixel from where PDF.js puts
+        // it. "Right way up" is judged with that pixel allowed, both ways; the
+        // exact disagreement is reported too.
+        const n = pair.width * pair.height;
+        const shownMask = new Uint8Array(n);
+        const inkedMask = new Uint8Array(n);
+        const flippedMask = new Uint8Array(n);
+        for (let p = 0; p < n; p += 1) {
+          shownMask[p] = pair.pixels[p * 4] === 255 && pair.pixels[p * 4 + 1] === 255 && pair.pixels[p * 4 + 2] === 255 ? 0 : 1;
+          inkedMask[p] = a.mask[p] === 1 || b.mask[p] === 1 ? 1 : 0;
+          flippedMask[n - 1 - p] = inkedMask[p]; // the picture turned half a turn
+        }
+        const near = (m) => dilateMask(m, pair.width, pair.height, 1);
+        const shownNear = near(shownMask);
+        const inkedNear = near(inkedMask);
+        const flippedNear = near(flippedMask);
+        let expected = 0; let exact = 0; let off = 0; let offFlipped = 0;
+        for (let p = 0; p < n; p += 1) {
+          if (inkedMask[p]) expected += 1;
+          if (shownMask[p] !== inkedMask[p]) exact += 1;
+          if ((shownMask[p] && !inkedNear[p]) || (inkedMask[p] && !shownNear[p])) off += 1;
+          if ((shownMask[p] && !flippedNear[p]) || (flippedMask[p] && !shownNear[p])) offFlipped += 1;
+        }
+        entry.ink = { expected, exactRatio: exact / expected, wrongRatio: off / expected, wrongFlippedRatio: offFlipped / expected };
+        // Where the change is, from the turned drawings with the comparison's own tolerance rule.
+        const da = dilateMask(a.mask, a.width, a.height, preview.plan.radiusPx);
+        const db = dilateMask(b.mask, b.width, b.height, preview.plan.radiusPx);
+        entry.oracleBounds = bbox((p) => (a.mask[p] && !db[p]) || (b.mask[p] && !da[p]), a.width, a.height);
+      }
+
+      // The same paper, compared unturned: the verdict, the counts and the box are that comparison's.
+      const twinNames = twinOf(names);
+      if (twinNames && entry.sheets[0] === entry.sheets[1]) {
+        const twin = await runOf(twinNames, ARTIFACT.PREVIEW);
+        const t = twin.run.pages[0].pairs[0];
+        entry.twin = {
+          verdict: t.verdict, changePixels: t.changePixels, inkPixels: t.inkPixels,
+          orientedBounds: t.bounds ? orientRect(t.bounds, frame.width, frame.height, pagePlan.rotate) : null,
+        };
+      }
+
+      // The Comparison PDF and the Change Report, reopened, against the shown picture.
+      const shownHash = await rgbHash(pair.pixels);
+      const pdf = await runOf(names, ARTIFACT.COMPARISON_PDF, (set, s) => comparisonSink(set, s));
+      const file = await reopen(pdf.sink.finish());
+      const pdfPage = file.pages[0];
+      entry.pdf = {
+        pages: file.pages.length, widthPt: pdfPage.width, heightPt: pdfPage.height,
+        imageWidth: pdfPage.imageWidth, imageHeight: pdfPage.imageHeight, sameAsShown: pdfPage.rgbHash === shownHash,
+        expectedPt: { width: +(pair.width / preview.plan.renderScale).toFixed(3), height: +(pair.height / preview.plan.renderScale).toFixed(3) },
+      };
+      if (pair.bounds) {
+        const report = await runOf(names, ARTIFACT.CHANGE_REPORT, () => createChangeReport());
+        const reportFile = await reopen(report.sink.doc.output('blob'));
+        const cropHash = await rgbHash(cropRgba(pair.pixels, pair.width, pair.height, pair.bounds));
+        entry.report = {
+          pages: reportFile.pages.length, text: reportFile.pages[0]?.text ?? '',
+          imageWidth: reportFile.pages[0]?.imageWidth, imageHeight: reportFile.pages[0]?.imageHeight,
+          sameAsShownCrop: reportFile.pages[0]?.rgbHash === cropHash,
+        };
+      }
+      out[label] = entry;
+    }
+    return out;
+  },
 
   /** The geometry cases, as plan statuses. */
   async geometry() {

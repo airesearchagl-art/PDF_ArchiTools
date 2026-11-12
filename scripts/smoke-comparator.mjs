@@ -157,6 +157,89 @@ try {
         && geometry['same aspect 1.4x'].plan === 'GEOMETRY_MISMATCH',
         'proportions do not make it the same paper');
 
+    // ---- shown the way the sheets are turned ------------------------------------
+    //
+    // When every sheet compared carries one /Rotate, the comparison is shown
+    // that way up -- the picture, the change box and its coordinates, on the
+    // screen and in both artifacts -- while the comparison itself stays the
+    // upright one. When the rotations differ, the page is shown on the paper.
+    console.log('\n=== shown the way the sheets are turned ===');
+    const turnedCases = await page.evaluate(() => window.__comparator.orientation());
+    for (const [label, r] of Object.entries(turnedCases)) {
+        console.log(`  ${label.padEnd(30)} sheets ${r.sheets.join('/')}  shown ${r.rotate}  `
+            + `${r.pair.width}x${r.pair.height} (frame ${r.frame.width}x${r.frame.height})  ${r.pair.verdict} ${r.pair.changePixels}px`
+            + `${r.ink ? `  ink off ${(r.ink.wrongRatio * 100).toFixed(2)}% within 1 px, ${(r.ink.exactRatio * 100).toFixed(2)}% exactly (half-turned ${(r.ink.wrongFlippedRatio * 100).toFixed(0)}%)` : ''}`);
+    }
+    const sharedTurns = ['rotate 0', 'rotate 90', 'rotate 180', 'rotate 270', 'A3 rotate 270'];
+    check('sheets that share a /Rotate are shown at it; the plan and the pair say so',
+        sharedTurns.every((k) => turnedCases[k].rotate === turnedCases[k].sheets[0] && turnedCases[k].pair.rotate === turnedCases[k].sheets[0]),
+        sharedTurns.map((k) => `${k}: ${turnedCases[k].rotate}`).join(', '));
+    check('a quarter turn swaps width and height; half a turn and none do not',
+        sharedTurns.every((k) => {
+            const r = turnedCases[k];
+            const quarter = r.rotate === 90 || r.rotate === 270;
+            return quarter
+                ? r.pair.width === r.frame.height && r.pair.height === r.frame.width && r.plan.width === r.frame.height
+                : r.pair.width === r.frame.width && r.pair.height === r.frame.height;
+        }),
+        sharedTurns.map((k) => `${k}: ${turnedCases[k].pair.width}x${turnedCases[k].pair.height}`).join(', '));
+    // The frame rounds the sheet up to whole pixels, so turned ink can sit up to a pixel from where PDF.js puts it.
+    check('the picture is the right way up: its ink is both sheets\' ink as PDF.js draws them turned (within 1 px; under 0.5% of ink off)',
+        sharedTurns.every((k) => turnedCases[k].ink && turnedCases[k].ink.wrongRatio < 0.005),
+        sharedTurns.map((k) => `${k}: ${turnedCases[k].ink ? (turnedCases[k].ink.wrongRatio * 100).toFixed(2) : '-'}%`).join(', '));
+    probe('...and the same check sees a picture the wrong way up (half-turned, over 30% differ)',
+        sharedTurns.every((k) => turnedCases[k].ink && turnedCases[k].ink.wrongFlippedRatio > 0.3),
+        sharedTurns.map((k) => `${k}: ${turnedCases[k].ink ? (turnedCases[k].ink.wrongFlippedRatio * 100).toFixed(0) : '-'}%`).join(', '));
+    const edgeOff = (a, b) => (a && b ? Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y),
+        Math.abs(a.x + a.width - (b.x + b.width)), Math.abs(a.y + a.height - (b.y + b.height))) : Infinity);
+    check('the change box lies where the change is in PDF.js\'s turned drawings (every edge within 2 px)',
+        sharedTurns.every((k) => edgeOff(turnedCases[k].pair.bounds, turnedCases[k].oracleBounds) <= 2),
+        sharedTurns.map((k) => `${k}: ${edgeOff(turnedCases[k].pair.bounds, turnedCases[k].oracleBounds)} px`).join(', '));
+    const twinned = ['rotate 90', 'rotate 180', 'rotate 270', 'same 270, nothing changed'];
+    check('the verdict and the counts are the upright comparison\'s: the same paper unturned gives the same',
+        twinned.every((k) => {
+            const r = turnedCases[k];
+            return r.twin && r.twin.verdict === r.pair.verdict && r.twin.changePixels === r.pair.changePixels && r.twin.inkPixels === r.pair.inkPixels;
+        }),
+        twinned.map((k) => `${k}: ${turnedCases[k].pair.verdict} ${turnedCases[k].pair.changePixels}/${turnedCases[k].pair.inkPixels}`).join(', '));
+    check('...and the box is the upright comparison\'s box, turned by the same transform',
+        ['rotate 90', 'rotate 180', 'rotate 270'].every((k) => JSON.stringify(turnedCases[k].twin.orientedBounds) === JSON.stringify(turnedCases[k].pair.bounds)));
+    check('one block added: CHANGE at every turn', sharedTurns.every((k) => turnedCases[k].pair.verdict === 'CHANGE'),
+        sharedTurns.map((k) => `${k}: ${turnedCases[k].pair.changePixels}px`).join(', '));
+    check('the same drawing at the same /Rotate, nothing changed: MATCH, nothing differing, shown at 270',
+        turnedCases['same 270, nothing changed'].pair.verdict === 'MATCH' && turnedCases['same 270, nothing changed'].pair.changePixels === 0
+        && turnedCases['same 270, nothing changed'].rotate === 270);
+    const mixedTurns = ['mixed 0 / 270, same drawing', 'mixed 90 / 270, same drawing', 'mixed 0 / 270, one block added'];
+    check('rotations that differ are shown on the paper, as before (the frame, unturned)',
+        mixedTurns.every((k) => turnedCases[k].rotate === 0 && turnedCases[k].pair.width === turnedCases[k].frame.width && turnedCases[k].pair.height === turnedCases[k].frame.height),
+        mixedTurns.map((k) => `${k}: ${turnedCases[k].rotate}`).join(', '));
+    probe('a /Rotate that is the only difference is not a change (MATCH, 0 px), turned or mixed',
+        turnedCases['mixed 0 / 270, same drawing'].pair.verdict === 'MATCH' && turnedCases['mixed 0 / 270, same drawing'].pair.changePixels === 0
+        && turnedCases['mixed 90 / 270, same drawing'].pair.verdict === 'MATCH' && turnedCases['mixed 90 / 270, same drawing'].pair.changePixels === 0);
+    check('...while a real change across a rotation difference is still found, with the unturned counts',
+        turnedCases['mixed 0 / 270, one block added'].pair.verdict === 'CHANGE'
+        && turnedCases['mixed 0 / 270, one block added'].pair.changePixels === turnedCases['rotate 0'].pair.changePixels);
+    const everyCase = Object.keys(turnedCases);
+    check('the Comparison PDF page is the shown picture, the right way up: its size, its image size, and its pixels',
+        everyCase.every((k) => {
+            const p = turnedCases[k].pdf;
+            return p.pages === 1 && p.sameAsShown && p.imageWidth === turnedCases[k].pair.width && p.imageHeight === turnedCases[k].pair.height
+                && Math.abs(p.widthPt - p.expectedPt.width) < 0.01 && Math.abs(p.heightPt - p.expectedPt.height) < 0.01;
+        }),
+        everyCase.map((k) => `${k}: ${turnedCases[k].pdf.widthPt}x${turnedCases[k].pdf.heightPt}pt`).join(', '));
+    check('...so a sheet turned 90 or 270 comes out landscape, and one at 0 or 180 portrait',
+        ['rotate 90', 'rotate 270', 'A3 rotate 270'].every((k) => turnedCases[k].pdf.widthPt > turnedCases[k].pdf.heightPt)
+        && ['rotate 0', 'rotate 180'].every((k) => turnedCases[k].pdf.widthPt < turnedCases[k].pdf.heightPt));
+    const reported = everyCase.filter((k) => turnedCases[k].report);
+    check('the Change Report crops the shown picture at the shown box, and its caption gives that box',
+        reported.length >= 6 && reported.every((k) => {
+            const r = turnedCases[k];
+            const b = r.pair.bounds;
+            return r.report.pages === 1 && r.report.sameAsShownCrop && r.report.imageWidth === b.width && r.report.imageHeight === b.height
+                && r.report.text.includes(`x=${b.x} y=${b.y} w=${b.width} h=${b.height}`);
+        }),
+        reported.map((k) => `${k}: ${turnedCases[k].report.text.slice(-40)}`).join(' | '));
+
     // ---- one frame per compared page (RF-J1) -----------------------------------
     //
     // A sheet inside the geometry tolerance is accepted -- and then it has to be
