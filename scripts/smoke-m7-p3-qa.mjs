@@ -413,6 +413,160 @@ async function main() {
         check('the 5000-Sheet set states all three rules (QA01, QA02, QA09 both reasons)',
             ['QA01', 'QA02', 'QA09/ACTUAL_NOT_LISTED', 'QA09/LISTED_BUT_MISSING'].every((k) => byRule(evaluation.statements).some(([key]) => key === k)));
 
+        // ------------------------------------------------------------------
+        section('9. Part of a register withdrawn: only what it alone listed closes');
+        const activeLbm = (ds, key) => ds.findings.find((f) => f.lifecycle.state === 'ACTIVE' && f.params.reason === 'LISTED_BUT_MISSING' && f.params.comparisonKey === key);
+        {
+            // Register A lists K-1, X-1, S-1; register B lists K-2, Y-1, S-1. Two Sheets carry K-1 and K-2; a third is
+            // unread, so a listed number could still be on it: X-1 closes because no live row lists it any more.
+            const sA = source('c'.repeat(64), 3), sR = source('d'.repeat(64), 2);
+            let ds = { id: crypto.randomUUID(), name: '図面一式', createdAt: at, sources: [sA, sR], titleBlockProfiles: [],
+                sheets: [sheet(sA, 1, V4('K-1')), sheet(sA, 2, V4('K-2')), sheet(sA, 3)], drawingRegisterReferences: [], analysisRuns: [], findings: [], decisions: [] };
+            ds = register.declareManualRegister(ds, { sourceId: sR.id, pageNumber: 1, rows: [ROW('K-1'), ROW('X-1'), ROW('S-1')] }, seams).drawingSet;
+            const refA = ds.drawingRegisterReferences.at(-1).id;
+            ds = register.declareManualRegister(ds, { sourceId: sR.id, pageNumber: 2, rows: [ROW('K-2'), ROW('Y-1'), ROW('S-1')] }, seams).drawingSet;
+            const r1 = qa.runQa(ds, qaSeams);
+            const was = { x: activeLbm(r1.drawingSet, 'X-1'), y: activeLbm(r1.drawingSet, 'Y-1'), s: activeLbm(r1.drawingSet, 'S-1') };
+            const qa02 = r1.ok ? r1.drawingSet.findings.find((f) => f.ruleId === qa.QA02) : null;
+            check('before: X-1 (A), Y-1 (B) and S-1 (both registers, two rows cited) are listed but missing; the unread page is QA02',
+                r1.ok && r1.created.length === 4 && was.x && was.y && was.s && was.s.registerEntryIds.length === 2 && qa02?.params.reason === 'NOT_READ');
+            const out = register.retireRegisterReference(r1.drawingSet, refA, seams);
+            const r2 = qa.runQa(out.drawingSet, qaSeams);
+            const now = (id) => r2.drawingSet.findings.find((f) => f.id === id);
+            const anl = r2.drawingSet.findings.filter((f) => f.lifecycle.state === 'ACTIVE' && f.params.reason === 'ACTUAL_NOT_LISTED');
+            check('withdrawing A, the next run closes X-1 and nothing else (NOT_REPRODUCED)',
+                r2.ok && r2.closed.length === 1 && r2.closed[0] === was.x.id && now(was.x.id).lifecycle.state === 'NOT_REPRODUCED', JSON.stringify(r2.ok && r2.closed));
+            check('Y-1, listed by B alone, and the unread page\'s QA02 stay ACTIVE as they were',
+                now(was.y.id).lifecycle.state === 'ACTIVE' && !r2.superseded.includes(was.y.id) && now(qa02.id).lifecycle.state === 'ACTIVE' && !r2.superseded.includes(qa02.id));
+            check('S-1, still listed by B, is restated citing B\'s row alone (superseded, not closed)',
+                r2.superseded.length === 1 && r2.superseded[0] === was.s.id && activeLbm(r2.drawingSet, 'S-1')?.registerEntryIds.length === 1);
+            check('K-1, listed by A only, is now a number the register does not list', anl.length === 1 && anl[0].params.comparisonKey === 'K-1');
+            const file = fileOf(r2.drawingSet);
+            const relations = checkRelations(file, { now: Date.now() });
+            check('the state after the withdrawal and the run is schema-valid, no semantic problem, no warning',
+                validate(schema, file).length === 0 && relations.problems.length === 0 && relations.warnings.length === 0);
+        }
+
+        // The rule a run closed by in 510b05e, one pass over every Sheet and row per Finding, kept here as the
+        // reference: on every state below, Production must close exactly the Findings it closed.
+        const closedByScan = (ds, ev) => ds.findings.filter((finding) => {
+            if (finding.lifecycle.state !== 'ACTIVE' || ev.byKey.has(finding.findingKey)) return false;
+            const sheetLive = (id) => { const s = ev.sheetsById.get(id); return s !== undefined && model.isLive(s); };
+            const read = (id) => sheetLive(id) && ev.inputs.get(id).origin !== 'NONE';
+            switch (finding.ruleId) {
+                case qa.QA02: return true;
+                case qa.QA01: return finding.sheetIds.every((id) => !sheetLive(id) || read(id));
+                case qa.QA09: {
+                    if (ev.register.state === 'NONE') return true;
+                    if (ev.register.state !== 'EVALUABLE') return false;
+                    if (finding.params.reason === 'ACTUAL_NOT_LISTED') return finding.sheetIds.every((id) => !sheetLive(id) || read(id));
+                    const key = finding.params.comparisonKey;
+                    const found = ev.liveSheets.some((s) => read(s.id) && qa.comparisonKey(ev.inputs.get(s.id).number) === key);
+                    const allRead = ev.liveSheets.every((s) => read(s.id));
+                    const stillListed = ev.register.entries.some((e) => qa.comparisonKey(e.drawingNumber) === key);
+                    return found || allRead || !stillListed;
+                }
+                default: return false;
+            }
+        });
+        {
+            // Seeded states: unread Sheets, numbers that collide, several registers; then rows retired or corrected,
+            // registers withdrawn, Sheets re-read or unread, the register's Source changed or removed.
+            const random = (seed) => () => {
+                seed = (seed + 0x6D2B79F5) | 0;
+                let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+            const POOL = ['P-1', 'P-2', ' P-2 ', 'P-3', 'P-4', 'P-5', 'P-6', 'P-7'];
+            let states = 0, mismatches = 0, compared = 0, closedLbm = 0, keptLbm = 0;
+            let firstMismatch = '';
+            for (let seedNo = 1; seedNo <= 150; seedNo += 1) {
+                const r = random(seedNo);
+                const pick = (list) => list[Math.floor(r() * list.length)];
+                const sD = source(sha256(Buffer.from(`diff drawings ${seedNo}`)), 8), sL = source(sha256(Buffer.from(`diff register ${seedNo}`)), 4);
+                let ds = { id: crypto.randomUUID(), name: '図面一式', createdAt: at, sources: [sD, sL], titleBlockProfiles: [],
+                    sheets: Array.from({ length: 8 }, (_, i) => sheet(sD, i + 1, r() < 0.75 ? V4(pick(POOL)) : null)),
+                    drawingRegisterReferences: [], analysisRuns: [], findings: [], decisions: [] };
+                for (let p = 1, refs = 1 + Math.floor(r() * 4); p <= refs; p += 1) {
+                    ds = register.declareManualRegister(ds, { sourceId: sL.id, pageNumber: p, rows: Array.from({ length: 1 + Math.floor(r() * 5) }, () => ROW(pick(POOL))) }, seams).drawingSet;
+                }
+                for (let round = 0; round < 3; round += 1) {
+                    const ran = qa.runQa(ds, qaSeams);
+                    if (!ran.ok) break;
+                    ds = ran.drawingSet;
+                    for (let m = 0, moves = 1 + Math.floor(r() * 3); m < moves; m += 1) {
+                        const liveRefs = ds.drawingRegisterReferences.filter(model.isLive);
+                        const ref = liveRefs.length > 0 ? pick(liveRefs) : null;
+                        const liveRows = ref ? ref.entries.filter(model.isLive) : [];
+                        const move = Math.floor(r() * 8);
+                        let next = null;
+                        if (move === 0 && ref) next = register.retireRegisterReference(ds, ref.id, seams).drawingSet;
+                        else if (move === 1 && liveRows.length > 0) next = register.retireRegisterEntry(ds, { referenceId: ref.id, entryId: pick(liveRows).id }, seams).drawingSet;
+                        else if (move === 2 && liveRows.length > 0) next = register.editRegisterEntry(ds, { referenceId: ref.id, entryId: pick(liveRows).id, values: ROW(pick(POOL)) }, seams).drawingSet;
+                        else if (move === 3 || move === 4) {
+                            // A Sheet confirmed with another number, or left with no QA input.
+                            const target = Math.floor(r() * ds.sheets.length);
+                            const confirmation = move === 3 ? sheet(sD, 1, V4(pick(POOL))).confirmation : null;
+                            next = { ...ds, sheets: ds.sheets.map((s, i) => (i === target ? { ...s, confirmation } : s)) };
+                        } else if (move === 5 && r() < 0.3) next = model.retireSource(ds, sL.id);
+                        else if (move === 6 && r() < 0.3) {
+                            next = { ...ds, sources: ds.sources.map((s) => (s.id === sL.id ? { ...s, fingerprint: { ...s.fingerprint, sha256: sha256(Buffer.from(`changed ${seedNo}`)) } } : s)) };
+                        } else if (move === 7) {
+                            next = register.declareManualRegister(ds, { sourceId: sL.id, pageNumber: 1 + Math.floor(r() * 4), rows: [ROW(pick(POOL))] }, seams).drawingSet ?? null;
+                        }
+                        if (next) ds = next;
+                    }
+                    const ev = qa.evaluateQa(ds);
+                    const got = qa.planQa(ds, ev).closes.map((f) => f.id).sort();
+                    const want = closedByScan(ds, ev).map((f) => f.id).sort();
+                    states += 1;
+                    compared += ds.findings.filter((f) => f.lifecycle.state === 'ACTIVE').length;
+                    const lbm = ds.findings.filter((f) => f.lifecycle.state === 'ACTIVE' && f.params.reason === 'LISTED_BUT_MISSING' && !ev.byKey.has(f.findingKey));
+                    closedLbm += lbm.filter((f) => want.includes(f.id)).length;
+                    keptLbm += lbm.filter((f) => !want.includes(f.id)).length;
+                    if (got.join() !== want.join()) {
+                        mismatches += 1;
+                        if (!firstMismatch) firstMismatch = `seed ${seedNo} round ${round}: ${got.length} vs ${want.length}`;
+                    }
+                }
+            }
+            note('seeded states compared', `${states} states, ${compared} ACTIVE Findings; listed-but-missing no longer stated: ${closedLbm} closed, ${keptLbm} kept open`);
+            check('on every seeded state, the run closes exactly the Findings the per-Finding scan closed', states > 0 && mismatches === 0, firstMismatch);
+            check('the seeded states reach both outcomes for a listed-but-missing Finding no longer stated (closed, and kept open)', closedLbm > 0 && keptLbm > 0, `${closedLbm} / ${keptLbm}`);
+        }
+        {
+            // 24 registers kept (24000 rows) and 24 withdrawn (24000 rows, each number listed nowhere else).
+            const pad = (i) => String(i).padStart(5, '0');
+            const drawings = Array.from({ length: 10 }, (_, i) => source(sha256(Buffer.from(`withdraw drawings ${i}`)), 100));
+            const sL = source(sha256(Buffer.from('withdraw register')), 48);
+            let ds = { id: crypto.randomUUID(), name: '図面一式', createdAt: at, sources: [...drawings, sL], titleBlockProfiles: [],
+                sheets: drawings.flatMap((src, i) => Array.from({ length: 100 }, (_, p) => sheet(src, p + 1, V4(`L-${pad(i * 100 + p + 1)}`)))),
+                drawingRegisterReferences: [], analysisRuns: [], findings: [], decisions: [] };
+            for (let k = 0; k < 24; k += 1) ds = register.declareManualRegister(ds, { sourceId: sL.id, pageNumber: k + 1, rows: Array.from({ length: 1000 }, (_, j) => ROW(`L-${pad(k * 1000 + j + 1)}`)) }, seams).drawingSet;
+            const withdraw = [];
+            for (let k = 0; k < 24; k += 1) {
+                ds = register.declareManualRegister(ds, { sourceId: sL.id, pageNumber: 25 + k, rows: Array.from({ length: 1000 }, (_, j) => ROW(`M-${pad(k * 1000 + j + 1)}`)) }, seams).drawingSet;
+                withdraw.push(ds.drawingRegisterReferences.at(-1).id);
+            }
+            const r1 = qa.runQa(ds, qaSeams);
+            let out = r1.drawingSet;
+            for (const id of withdraw) out = register.retireRegisterReference(out, id, seams).drawingSet;
+            const [ev, evMs] = time(() => qa.evaluateQa(out));
+            const [assessed, assessedMs] = time(() => qa.assessQa(out, bindAll, ev));
+            const [r2, r2Ms] = time(() => qa.runQa(out, qaSeams, ev));
+            const before = new Map(out.findings.map((f) => [f.id, f]));
+            const closedKeys = r2.ok ? r2.closed.map((id) => before.get(id).params.comparisonKey) : [];
+            const open = r2.ok ? r2.drawingSet.findings.filter((f) => f.lifecycle.state === 'ACTIVE') : [];
+            note('1000 Sheets; 24 of 48 registers withdrawn', `${r1.ok ? r1.created.length : 'refused'} listed-but-missing before (24000 withdrawn, 23000 kept)`);
+            note('evaluate after the withdrawal', `${evMs.toFixed(0)} ms`);
+            note('assessment after the withdrawal (what the QA screen shows)', `${assessedMs.toFixed(0)} ms (refusal ${assessed.refusal.length})`);
+            note('the run after the withdrawal', `${r2Ms.toFixed(0)} ms (${r2.ok ? counts(r2) : 'refused'})`);
+            check('after 24 of 48 registers are withdrawn, the run closes the 24000 numbers they alone listed, and only those',
+                r1.ok && r1.created.length === 47000 && r2.ok && closedKeys.length === 24000 && closedKeys.every((k) => k.startsWith('M-')) && r2.created.length === 0 && r2.superseded.length === 0);
+            check('the 23000 numbers the kept registers list stay ACTIVE as they were', open.length === 23000 && open.every((f) => f.params.comparisonKey.startsWith('L-') && before.has(f.id)));
+        }
+
         exitCode = checks.every((c) => c.ok) ? 0 : 1;
     } finally {
         await server.close();

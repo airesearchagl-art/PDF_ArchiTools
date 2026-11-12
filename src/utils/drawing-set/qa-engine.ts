@@ -182,6 +182,10 @@ export interface QaEvaluation {
     readonly register: RegisterView;
     /** A row is live when it and its reference are both live (R4-C). */
     readonly liveEntryIds: ReadonlySet<Uuid>;
+    /** The comparison key of every live Sheet that has a QA input. */
+    readonly carriedKeys: ReadonlySet<string>;
+    /** The comparison key of every live row, when the register is EVALUABLE; empty otherwise (QA09 reads none then). */
+    readonly listedKeys: ReadonlySet<string>;
     readonly coverage: { sheetsEvaluated: number; sheetsExcluded: number };
     readonly manifestDigest: Sha256Hex;
     /** Every Sheet and Source, retired ones included, by id. */
@@ -293,10 +297,11 @@ export function evaluateQa(set: DrawingSet): QaEvaluation {
 
     // QA09: only when every live reference is current, against all their live rows together.
     const register = registerStateOf(set);
+    const evaluated = live.filter((sheet) => inputs.get(sheet.id)!.origin !== 'NONE');
+    // An empty key is in these sets too; every statement below skips an empty key before it looks.
+    const carried = new Set(evaluated.map((sheet) => comparisonKey(inputs.get(sheet.id)!.number!)));
+    const listed = new Set(register.state === 'EVALUABLE' ? register.entries.map((entry) => comparisonKey(entry.drawingNumber)) : []);
     if (register.state === 'EVALUABLE') {
-        const listed = new Set(register.entries.map((entry) => comparisonKey(entry.drawingNumber)));
-        const evaluated = live.filter((sheet) => inputs.get(sheet.id)!.origin !== 'NONE');
-        const carried = new Set(evaluated.map((sheet) => comparisonKey(inputs.get(sheet.id)!.number!)).filter((key) => key !== ''));
         const allReferences: [Uuid, Sha256Hex][] = register.references.map((reference) => [reference.id, reference.sourceSha256]);
         for (const sheet of evaluated) {
             const input = inputs.get(sheet.id)!;
@@ -335,7 +340,7 @@ export function evaluateQa(set: DrawingSet): QaEvaluation {
     const byKey = new Map(out.map((st) => [st.findingKey, st]));
     // By construction no question is asked twice in one run (R4-D); a second one would be a defect here.
     if (byKey.size !== out.length) throw new Error('a QA run stated the same findingKey twice');
-    const sheetsEvaluated = live.filter((sheet) => inputs.get(sheet.id)!.origin !== 'NONE').length;
+    const sheetsEvaluated = evaluated.length;
     return {
         set,
         statements: out,
@@ -344,6 +349,8 @@ export function evaluateQa(set: DrawingSet): QaEvaluation {
         inputs,
         register,
         liveEntryIds: new Set(register.entries.map((entry) => entry.id)),
+        carriedKeys: carried,
+        listedKeys: listed,
         coverage: { sheetsEvaluated, sheetsExcluded: live.length - sheetsEvaluated },
         manifestDigest: manifestDigest(set),
         sheetsById,
@@ -378,10 +385,12 @@ function couldEvaluate(finding: Finding, evaluation: QaEvaluation): boolean {
             if (evaluation.register.state === 'NONE') return true; // MD-2 A: every reference withdrawn
             if (evaluation.register.state !== 'EVALUABLE') return false;
             if (finding.params.reason === 'ACTUAL_NOT_LISTED') return finding.sheetIds.every((id) => !sheetLive(id) || read(id));
+            // Looked up in the evaluation's sets, built once per run: closing many Findings after part of a large
+            // register is withdrawn stays one pass, not a pass over every Sheet and row per Finding.
             const key = finding.params.comparisonKey;
-            const found = evaluation.liveSheets.some((sheet) => read(sheet.id) && comparisonKey(evaluation.inputs.get(sheet.id)!.number!) === key);
-            const allRead = evaluation.liveSheets.every((sheet) => read(sheet.id));
-            const stillListed = evaluation.register.entries.some((entry) => comparisonKey(entry.drawingNumber) === key);
+            const found = key !== undefined && evaluation.carriedKeys.has(key); // a live Sheet with an input carries it
+            const allRead = evaluation.coverage.sheetsExcluded === 0; // every live Sheet has a QA input
+            const stillListed = key !== undefined && evaluation.listedKeys.has(key); // a live row still lists it
             return found || allRead || !stillListed;
         }
         default:
