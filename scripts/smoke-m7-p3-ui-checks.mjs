@@ -38,6 +38,24 @@ export async function runP3UiChecks(ctx) {
         await page.click('[data-ds-view-tab="qa"]');
         await page.waitForSelector('[data-ds-qa]');
     };
+    const showPages = async () => {
+        await page.click('[data-ds-view-tab="pages"]');
+        await page.waitForFunction(() => document.querySelector('[data-ds-view]')?.dataset.dsView === 'pages' && !document.querySelector('[data-ds-qa]'), { polling: 50 });
+    };
+    const valueOf = (selector) => page.$eval(selector, (el) => el.value);
+    const setValue = (selector, value) => page.$eval(selector, (input, v) => {
+        const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value').set;
+        setter.call(input, v);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, value);
+    /** A Decision form as the screen shows it: the outcome chosen (if any) and the comment typed. */
+    const formOf = (findingId) => page.evaluate((id) => {
+        const card = document.querySelector(`[data-ds-finding="${id}"]`);
+        return card ? {
+            outcome: card.querySelector('[data-ds-decision-outcome-input]:checked')?.value ?? null,
+            comment: card.querySelector('[data-ds-decision-comment-input]')?.value ?? null,
+        } : null;
+    }, findingId);
 
     // ------------------------------------------------------------------
     section('9l. M7-P3: QA on the screen');
@@ -87,6 +105,27 @@ export async function runP3UiChecks(ctx) {
     const sequence = await page.evaluate((id) => [...document.querySelectorAll(`[data-ds-finding="${id}"] [data-ds-decision]`)].map((d) => `${d.dataset.dsDecision}:${d.dataset.dsDecisionOutcome}`), target);
     check('the history reads 1: HOLD, 2: ACTION_REQUIRED', sequence.join(',') === '1:HOLD,2:ACTION_REQUIRED', sequence.join(','));
 
+    // A Decision chosen and typed but not recorded, on another Finding: to the page view and back.
+    const pending = qa02[1].id;
+    const typed = '記録前のコメント\n2 行目も残る';
+    await page.click(`[data-ds-finding="${pending}"] [data-ds-decision-outcome-input="INTENTIONAL"]`);
+    await page.type(`[data-ds-finding="${pending}"] [data-ds-decision-comment-input]`, typed);
+    await showPages();
+    await showQa();
+    const kept = await formOf(pending);
+    check('a Decision not yet recorded survives ページ表示 and back: the outcome chosen and the comment as typed',
+        kept?.outcome === 'INTENTIONAL' && kept.comment === typed, JSON.stringify(kept));
+    check('...and nothing was recorded by the round trip', (await cards()).find((c) => c.id === pending)?.decisions === 0);
+    await page.click(`[data-ds-finding="${pending}"] [data-ds-decision-submit]`);
+    await page.waitForFunction((id) => document.querySelectorAll(`[data-ds-finding="${id}"] [data-ds-decision]`).length === 1, { polling: 50 }, pending);
+    const recordedKept = (await cards()).find((c) => c.id === pending);
+    await showPages();
+    await showQa();
+    const afterRecord = await formOf(pending);
+    check('recorded, the Decision is the one typed, and the form starts over (still empty after another round trip)',
+        recordedKept.effective === 'INTENTIONAL' && recordedKept.text.includes(typed) && afterRecord?.outcome === null && afterRecord.comment === '',
+        JSON.stringify({ effective: recordedKept.effective, afterRecord }));
+
     // ------------------------------------------------------------------
     section('9m. M7-P3: a drawing register typed on its page');
     await page.click('[data-ds-view-tab="pages"]');
@@ -99,6 +138,19 @@ export async function runP3UiChecks(ctx) {
     await page.type('[data-ds-register-input="1:drawingTitle"]', '配置図');
     await page.type('[data-ds-register-input="3:drawingNumber"]', 'A-002');
     await page.type('[data-ds-register-input="4:drawingTitle"]', '番号なし');
+    await page.click('[data-ds-register-add-rows]');
+    await page.type('[data-ds-register-input="7:drawingNumber"]', 'A-009');
+    const typedRows = async () => page.evaluate(() => [...document.querySelectorAll('[data-ds-register-input]')].filter((i) => i.value !== '').map((i) => `${i.dataset.dsRegisterInput}=${i.value}`).join(' '));
+    const beforeTrip = await typedRows();
+    await showQa();
+    await showPages();
+    await page.waitForSelector('[data-ds-register-declare]');
+    const afterTrip = await typedRows();
+    const tripRows = await count('[data-ds-register-input-row]');
+    check('rows typed but not declared survive QA・図面一覧 and back: every value in its row, the added rows too',
+        afterTrip === beforeTrip && afterTrip === '1:drawingNumber=A-001 1:drawingTitle=配置図 3:drawingNumber=A-002 4:drawingTitle=番号なし 7:drawingNumber=A-009' && tripRows === 10,
+        `${afterTrip} (${tripRows} rows)`);
+    await setValue('[data-ds-register-input="7:drawingNumber"]', '');
     await page.click('[data-ds-register-declare-submit]');
     await page.waitForSelector('[data-ds-register-declare-refused]');
     const refusedDeclare = await text('[data-ds-register-declare-refused]');
@@ -126,13 +178,21 @@ export async function runP3UiChecks(ctx) {
 
     await page.click('[data-ds-register-row="2"] [data-ds-register-edit]');
     await page.waitForSelector('[data-ds-register-edit-input="drawingNumber"]');
-    await page.$eval('[data-ds-register-edit-input="drawingNumber"]', (input) => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(input, 'A-003');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+    await setValue('[data-ds-register-edit-input="drawingNumber"]', 'A-003');
+    await setValue('[data-ds-register-edit-input="drawingTitle"]', '平面図');
+    await showPages();
+    await showQa();
+    const editKept = await page.evaluate(() => {
+        const row = document.querySelector('[data-ds-register-row="2"]');
+        return { number: row?.querySelector('[data-ds-register-edit-input="drawingNumber"]')?.value ?? null, title: row?.querySelector('[data-ds-register-edit-input="drawingTitle"]')?.value ?? null };
     });
+    check('a row correction not yet applied survives ページ表示 and back, still open on its row', editKept.number === 'A-003' && editKept.title === '平面図', JSON.stringify(editKept));
     await page.click('[data-ds-register-edit-save]');
     await page.waitForFunction(() => document.querySelector('[data-ds-register-row="2"]')?.textContent.includes('A-003'), { polling: 50 });
+    await showPages();
+    await showQa();
+    check('applied, the correction is over: after another round trip no row is open for correction',
+        (await count('[data-ds-register-edit-input]')) === 0 && (await text('[data-ds-register-row="2"]')).includes('平面図'));
     list = await cards();
     check('a row corrected in place (A-002 -> A-003): the LBM Finding for A-002 is now STALE until QA runs again',
         list.some((c) => c.reason === 'LISTED_BUT_MISSING' && c.lifecycle === 'ACTIVE' && c.text.includes('A-002') && c.currency === 'STALE'));
@@ -164,6 +224,17 @@ export async function runP3UiChecks(ctx) {
     await page.waitForFunction(() => document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState === 'rendered', { timeout: 60_000, polling: 100 }).catch(() => { });
     const back = await page.evaluate(() => ({ view: document.querySelector('[data-ds-view]')?.dataset.dsView, render: document.querySelector('[data-ds-viewer]')?.dataset.dsRenderState ?? null, qa: Boolean(document.querySelector('[data-ds-qa]')) }));
     check('back on the page view, the page is drawn again and the QA view is gone', back.view === 'pages' && back.render === 'rendered' && !back.qa, JSON.stringify(back));
+    await page.click('[data-ds-register-declare-here]');
+    await page.waitForSelector('[data-ds-register-declare]');
+    await page.type('[data-ds-register-input="1:drawingNumber"]', 'Z-999');
+    await page.click('[data-ds-register-declare-cancel]');
+    await page.waitForFunction(() => !document.querySelector('[data-ds-register-declare]'), { polling: 50 });
+    await page.click('[data-ds-register-declare-here]');
+    await page.waitForSelector('[data-ds-register-declare]');
+    const restarted = await typedRows();
+    check('a declaration given up (やめる) keeps nothing: declaring again starts with empty rows', restarted === '', restarted);
+    await page.click('[data-ds-register-declare-cancel]');
+    await page.waitForFunction(() => !document.querySelector('[data-ds-register-declare]'), { polling: 50 });
     await page.click('[data-ds-reset]');
     await page.waitForSelector('[data-ds-confirm="reset"]');
     await page.click('[data-ds-confirm-yes]');

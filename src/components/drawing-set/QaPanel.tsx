@@ -5,6 +5,8 @@ import { REVIEW_OUTCOMES, isLive } from '../../utils/drawing-set/model';
 import type { FindingCurrency, LimitExcess, QaAssessment } from '../../utils/drawing-set/qa-engine';
 import { QA01, QA02, QA09 } from '../../utils/drawing-set/qa-engine';
 import type { DrawingSetStore } from '../../utils/drawing-set/workspace-store';
+import { QA_VIEW_DRAFT, decisionDraftKey, useDraft } from './drafts';
+import type { DraftBook } from './drafts';
 import {
     BLOCKERS_HEAD_TEXT, BLOCKER_LABEL, FINAL_UNAVAILABLE_TEXT, FINDING_CURRENCY_LABEL, LIFECYCLE_LABEL, NOT_EVALUATED_LABEL, NO_BLOCKERS_TEXT,
     OUTCOME_LABEL, QA02_REASON_LABEL, QA09_REASON_LABEL, QA_NOT_RUN_TEXT, QA_REFUSED_HEAD, QA_REFUSED_TAIL, QA_RESULT_NOT_CURRENT_TEXT,
@@ -24,10 +26,16 @@ import { RegisterPanel } from './RegisterPanel';
  * past, and nothing about the results moves. Whatever the state, the screen
  * says the final check is not available: three of the rules are implemented,
  * not all of them.
+ *
+ * A Decision being typed, a register row being corrected and how far each list
+ * is opened are the workspace's drafts (drafts.ts): this view is taken off the
+ * screen while the page view is shown, and they are there again when it comes
+ * back.
  */
 
 interface Props {
     store: DrawingSetStore;
+    drafts: DraftBook;
     drawingSet: DrawingSet;
     locked: boolean;
     selectedSheet: Sheet | null;
@@ -48,11 +56,13 @@ type RunMessage = { kind: 'applied'; text: string } | { kind: 'refused'; text: s
 
 const formatTime = (timestamp: string): string => new Date(timestamp).toLocaleString('ja-JP');
 
-export const QaPanel: React.FC<Props> = ({ store, drawingSet, locked, selectedSheet, onDeclare, onNotice }) => {
+export const QaPanel: React.FC<Props> = ({ store, drafts, drawingSet, locked, selectedSheet, onDeclare, onNotice }) => {
     const assessment = store.qaAssessment();
     const [message, setMessage] = useState<RunMessage>(null);
-    const [shown, setShown] = useState<Record<string, number>>({});
-    const [showHistory, setShowHistory] = useState(false);
+    const [listView, setListView] = useDraft<{ shown: Record<string, number>; history: boolean }>(drafts, QA_VIEW_DRAFT, () => ({ shown: {}, history: false }));
+    const { shown, history: showHistory } = listView;
+    const setShown = (next: (current: Record<string, number>) => Record<string, number>): void => setListView((v) => ({ ...v, shown: next(v.shown) }));
+    const setShowHistory = (next: (current: boolean) => boolean): void => setListView((v) => ({ ...v, history: next(v.history) }));
 
     const labels = useMemo(() => subjectLabels(drawingSet), [drawingSet]);
     if (!assessment) return null;
@@ -152,6 +162,7 @@ export const QaPanel: React.FC<Props> = ({ store, drawingSet, locked, selectedSh
 
             <RegisterPanel
                 store={store}
+                drafts={drafts}
                 drawingSet={drawingSet}
                 register={evaluation.register}
                 locked={locked}
@@ -174,7 +185,7 @@ export const QaPanel: React.FC<Props> = ({ store, drawingSet, locked, selectedSh
                             <div className="ds-finding-group-title">{group.title}（{list.length} 件）</div>
                             <ul>
                                 {list.slice(0, limit).map((finding) => (
-                                    <FindingCard key={finding.id} store={store} finding={finding} assessment={assessment} labels={labels} locked={locked} />
+                                    <FindingCard key={finding.id} store={store} drafts={drafts} finding={finding} assessment={assessment} labels={labels} locked={locked} />
                                 ))}
                             </ul>
                             {list.length > limit && (
@@ -193,7 +204,7 @@ export const QaPanel: React.FC<Props> = ({ store, drawingSet, locked, selectedSh
                         {showHistory && (
                             <ul>
                                 {history.slice(-(shown.history ?? PAGE)).reverse().map((finding) => (
-                                    <FindingCard key={finding.id} store={store} finding={finding} assessment={assessment} labels={labels} locked={locked} />
+                                    <FindingCard key={finding.id} store={store} drafts={drafts} finding={finding} assessment={assessment} labels={labels} locked={locked} />
                                 ))}
                             </ul>
                         )}
@@ -256,8 +267,8 @@ function describeFinding(finding: Finding, labels: SubjectLabels): string {
     }
 }
 
-const FindingCard: React.FC<{ store: DrawingSetStore; finding: Finding; assessment: QaAssessment; labels: SubjectLabels; locked: boolean }> = ({
-    store, finding, assessment, labels, locked,
+const FindingCard: React.FC<{ store: DrawingSetStore; drafts: DraftBook; finding: Finding; assessment: QaAssessment; labels: SubjectLabels; locked: boolean }> = ({
+    store, drafts, finding, assessment, labels, locked,
 }) => {
     const currency: FindingCurrency = assessment.currency.get(finding.id) ?? 'HISTORICAL';
     const decisions = assessment.decisions.get(finding.id) ?? [];
@@ -287,7 +298,7 @@ const FindingCard: React.FC<{ store: DrawingSetStore; finding: Finding; assessme
             {decisions.length > 0 && <DecisionHistory decisions={decisions} />}
             {state === 'ACTIVE' && (
                 currency === 'CURRENT'
-                    ? <DecisionForm store={store} finding={finding} locked={locked} />
+                    ? <DecisionForm store={store} drafts={drafts} finding={finding} locked={locked} />
                     : <p className="ds-muted ds-small" data-ds-decision-blocked>判断を記録できるのは、現在の内容と一致する指摘だけです。{currency === 'STALE' ? 'QA を実行し直してください。' : 'ファイルを照合するか、番号を読めていないページを読み取ってください。'}</p>
             )}
         </li>
@@ -307,16 +318,19 @@ const DecisionHistory: React.FC<{ decisions: ReviewDecision[] }> = ({ decisions 
     </ol>
 );
 
-const DecisionForm: React.FC<{ store: DrawingSetStore; finding: Finding; locked: boolean }> = ({ store, finding, locked }) => {
-    const [outcome, setOutcome] = useState<ReviewOutcome | null>(null);
-    const [comment, setComment] = useState('');
+const DecisionForm: React.FC<{ store: DrawingSetStore; drafts: DraftBook; finding: Finding; locked: boolean }> = ({ store, drafts, finding, locked }) => {
+    // The outcome chosen and the comment typed are a draft until recorded; a Decision recorded starts the form over.
+    const [draft, setDraft, discardDraft] = useDraft<{ outcome: ReviewOutcome | null; comment: string }>(
+        drafts, decisionDraftKey(finding.id), () => ({ outcome: null, comment: '' }));
+    const { outcome, comment } = draft;
+    const setOutcome = (value: ReviewOutcome): void => setDraft((d) => ({ ...d, outcome: value }));
+    const setComment = (value: string): void => setDraft((d) => ({ ...d, comment: value }));
     const [refusal, setRefusal] = useState<{ message: string; exceeded: LimitExcess[] } | null>(null);
     const submit = (): void => {
         if (!outcome) return;
         const result = store.decide(finding.id, outcome, comment);
         if (result.ok) {
-            setOutcome(null);
-            setComment('');
+            discardDraft();
             setRefusal(null);
         } else {
             setRefusal({ message: result.refusal.message, exceeded: result.refusal.exceeded ?? [] });

@@ -21,6 +21,7 @@
         import { createRoot } from 'react-dom/client';
         import '/src/components/drawing-set/DrawingSetWorkspace.css';
         import { QaPanel } from '/src/components/drawing-set/QaPanel.tsx';
+        import { DraftBook } from '/src/components/drawing-set/drafts.ts';
         import { FIELD_NAMES } from '/src/utils/drawing-set/model.ts';
         import { sha256Hex } from '/src/utils/drawing-set/incremental-sha256.ts';
         import { PdfDocumentGate } from '/src/utils/drawing-set/pdf-document-gate.ts';
@@ -292,11 +293,13 @@
             host.className = 'ds-workspace';
             document.body.append(host);
             const root = createRoot(host);
+            // The workspace's drafts (drafts.ts), one book per mounted screen as in the workspace.
+            const drafts = new DraftBook();
             const View = () => {
                 const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
                 if (!snapshot.state.ok) return null;
                 return React.createElement(QaPanel, {
-                    store, drawingSet: snapshot.state.session.drawingSet, locked: snapshot.operation !== null, selectedSheet: null, onDeclare() {}, onNotice() {},
+                    store, drafts, drawingSet: snapshot.state.session.drawingSet, locked: snapshot.operation !== null, selectedSheet: null, onDeclare() {}, onNotice() {},
                 });
             };
             return { host, root, View, unmount: () => { root.unmount(); host.remove(); } };
@@ -385,7 +388,70 @@
             return plainly({ sheets: 5000, declareMs, firstRenderMs, runRenderMs, runPaintMs, rerunRenderMs, moreMs, afterRun, findingsAfterRerun, cardsAfterMore });
         }
 
-        window.__m7p3 = { flow, refusalScreen, screen5000 };
+        /**
+         * Part of a large register withdrawn, on the QA screen: 1000 Sheets carry L-00001..L-01000; 24 registers list
+         * L-00001..L-24000 and 24 more M-00001..M-24000. After a first run (47000 LISTED_BUT_MISSING), withdraw the M
+         * registers -- one, then the other 23 -- and run QA again. Each step is drawn synchronously (flushSync), so its
+         * time includes the assessment the screen makes. Times only, no threshold.
+         */
+        async function screenWithdraw() {
+            const pad = (i) => String(i).padStart(5, '0');
+            const s = seeded({ sources: 10, pages: 100, number: (n) => `L-${pad(n)}` });
+            const { store } = s;
+            const on = s.sources[0].id;
+            for (let r = 0; r < 24; r += 1) store.declareRegister(on, r + 1, Array.from({ length: 1000 }, (_, j) => ROW(`L-${pad(r * 1000 + j + 1)}`)));
+            const withdraw = [];
+            for (let r = 0; r < 24; r += 1) withdraw.push(store.declareRegister(on, 25 + r, Array.from({ length: 1000 }, (_, j) => ROW(`M-${pad(r * 1000 + j + 1)}`))).referenceId);
+            const m = mount(store);
+            flushSync(() => m.root.render(React.createElement(m.View)));
+            await frame();
+            let t0 = performance.now();
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            const firstRunMs = performance.now() - t0;
+            const before = Number(m.host.querySelector('[data-ds-findings]')?.dataset.dsFindingsActive ?? 0);
+            await frame();
+            // Each withdrawal step in three parts: the store command, the assessment the screen asks for (kept, so
+            // the render that follows reuses it), and the render.
+            const step = async (ids) => {
+                let t = performance.now();
+                for (const id of ids) store.retireRegisterReference(id);
+                const commandMs = performance.now() - t;
+                t = performance.now();
+                store.qaAssessment();
+                const assessMs = performance.now() - t;
+                t = performance.now();
+                flushSync(() => {});
+                const renderMs = performance.now() - t;
+                await frame();
+                return { commandMs, assessMs, renderMs, paintMs: performance.now() - t };
+            };
+            const one = await step(withdraw.slice(0, 1));
+            const rest = await step(withdraw.slice(1));
+            const rowsShown = m.host.querySelectorAll('[data-ds-register-row]').length;
+            const set = store.currentSet();
+            const activeBefore = new Set(set.findings.filter((f) => f.lifecycle.state === 'ACTIVE').map((f) => f.id));
+            t0 = performance.now();
+            flushSync(() => m.host.querySelector('[data-ds-qa-run]').click());
+            const runMs = performance.now() - t0;
+            await frame();
+            const after = store.currentSet().findings;
+            const closed = after.filter((f) => activeBefore.has(f.id) && f.lifecycle.state === 'NOT_REPRODUCED');
+            const open = after.filter((f) => f.lifecycle.state === 'ACTIVE');
+            const out = {
+                firstRunMs, one, rest, rowsShown, runMs, before,
+                result: m.host.querySelector('[data-ds-qa-result]')?.dataset.dsQaResult ?? null,
+                shownActive: Number(m.host.querySelector('[data-ds-findings]')?.dataset.dsFindingsActive ?? 0),
+                closed: closed.length,
+                closedAllM: closed.every((f) => f.params.comparisonKey.startsWith('M-')),
+                open: open.length,
+                openAllKeptL: open.every((f) => f.params.comparisonKey.startsWith('L-') && activeBefore.has(f.id)),
+            };
+            m.unmount();
+            await s.dispose();
+            return plainly(out);
+        }
+
+        window.__m7p3 = { flow, refusalScreen, screen5000, screenWithdraw };
         window.__m7p3Ready = true;
         document.getElementById('state').textContent = 'ready';
     </script>

@@ -17,6 +17,7 @@ import type { StoreIntakeResult } from '../../utils/drawing-set/workspace-store'
 import { DrawingSetStore, OCR_RELEASE_UNCONFIRMED_MESSAGE } from '../../utils/drawing-set/workspace-store';
 import { GATE_MESSAGES } from '../../utils/drawing-set/pdf-document-gate';
 import { ConfirmationPanel } from './ConfirmationPanel';
+import { DECLARE_DRAFT, DraftBook } from './drafts';
 import { confirmationText, confirmedNumberTitle } from './title-block-labels';
 import type { DraftFields } from './ProfileEditor';
 import { FieldRectsOverlay, ProfileEditorPanel } from './ProfileEditor';
@@ -162,6 +163,15 @@ export const DrawingSetWorkspace: React.FC = () => {
     const [view, setView] = useState<'pages' | 'qa'>('pages');
     /** The Sheet a drawing register is being typed in on, if any. */
     const [declaring, setDeclaring] = useState<string | null>(null);
+    /**
+     * What is typed and not yet recorded in the panels of either view (drafts.ts). Switching the view keeps it.
+     * Ending a declaration drops its rows; a new Drawing Set drops everything.
+     */
+    const [drafts] = useState(() => new DraftBook());
+    const endDeclare = (): void => {
+        drafts.discard(DECLARE_DRAFT);
+        setDeclaring(null);
+    };
     /** Where the viewer last drew the selected page, for the profile editor. */
     const geometryRef = useRef<{ sheetId: string; geometry: ViewerGeometry } | null>(null);
     const owner = store.owner;
@@ -311,6 +321,7 @@ export const DrawingSetWorkspace: React.FC = () => {
         setShowFullSha(false);
         setChecked(new Set());
         closeEditor();
+        drafts.clear();
         setDeclaring(null);
         setView('pages');
         setNotice('新しい図面一式を始めました。前の図面一式の内容は破棄されました。');
@@ -358,7 +369,7 @@ export const DrawingSetWorkspace: React.FC = () => {
             }
             // A register is typed in on the page it is on; choosing another ends the typing.
             if (declaring) {
-                setDeclaring(null);
+                endDeclare();
                 setNotice('別のページを選んだため、図面一覧の宣言をやめました。入力した内容は記録されていません。');
             }
         }
@@ -369,6 +380,8 @@ export const DrawingSetWorkspace: React.FC = () => {
     const startDeclare = (): void => {
         if (!selectedSheet || editor) return;
         setView('pages');
+        // The rows typed so far stay with the declaration on this page; a declaration on another page starts empty.
+        if (declaring !== selectedSheet.id) drafts.discard(DECLARE_DRAFT);
         setDeclaring(selectedSheet.id);
     };
 
@@ -385,7 +398,7 @@ export const DrawingSetWorkspace: React.FC = () => {
     const startEditor = (profile: TitleBlockProfile | null): void => {
         const shown = geometryRef.current;
         if (!selectedSheet || !shown || shown.sheetId !== selectedSheet.id) return;
-        setDeclaring(null);
+        endDeclare();
         setEditorMessage(null);
         setDrawingField(FIELD_NAMES[0]);
         if (profile) {
@@ -697,7 +710,7 @@ export const DrawingSetWorkspace: React.FC = () => {
                             )}
                         </div>
                         {view === 'qa' && drawingSet ? (
-                            <QaPanel store={store} drawingSet={drawingSet} locked={locked} selectedSheet={selectedSheet} onDeclare={startDeclare} onNotice={setNotice} />
+                            <QaPanel store={store} drafts={drafts} drawingSet={drawingSet} locked={locked} selectedSheet={selectedSheet} onDeclare={startDeclare} onNotice={setNotice} />
                         ) : <>
                         {selectedSheet && selectedSource && selectedFile ? (
                             <ReadOnlySheetViewer
@@ -735,14 +748,15 @@ export const DrawingSetWorkspace: React.FC = () => {
                             <RegisterDeclarePanel
                                 key={selectedSheet.id}
                                 store={store}
+                                drafts={drafts}
                                 sheet={selectedSheet}
                                 source={selectedSource}
                                 locked={locked}
                                 onDone={(message) => {
-                                    setDeclaring(null);
+                                    endDeclare();
                                     setNotice(message);
                                 }}
-                                onCancel={() => setDeclaring(null)}
+                                onCancel={endDeclare}
                             />
                         ) : selectedSheet && (
                             <ConfirmationPanel

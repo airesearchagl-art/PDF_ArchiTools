@@ -91,7 +91,7 @@ export async function runP3Checks(ctx) {
     probe('the QA screen claims nothing about the drawings (no 確認済み, 正しい, 承認, 検証済み)', !OVERCLAIM.test(r.refused.panel), '');
 
     // ------------------------------------------------------------------
-    section('53. M7-P3: the QA screen at 5000 Sheets (times recorded, no threshold)');
+    section('53. M7-P3: the QA screen at 5000 Sheets, and with a large register partly withdrawn (times recorded, no threshold)');
     const p = await call('screen5000');
     note('5000 Sheets, 50 Sources, 5 typed registers x 1000 rows: declaring them through the store', `${p.declareMs.toFixed(0)} ms`);
     note('first render of the QA screen (assessment included)', `${p.firstRenderMs.toFixed(0)} ms`);
@@ -104,6 +104,17 @@ export async function runP3Checks(ctx) {
         p.afterRun.result === 'applied' && p.afterRun.findings > 0 && p.findingsAfterRerun === p.afterRun.findings, JSON.stringify(p.afterRun).slice(0, 200));
     check('the screen draws at most 50 cards per group, not every Finding', p.afterRun.cards <= 4 * 50 && p.afterRun.active > p.afterRun.cards, `${p.afterRun.cards} of ${p.afterRun.active}`);
     check('the readiness area at 5000 Sheets: FINAL_UNAVAILABLE, nothing that reads as a pass', p.afterRun.status === 'FINAL_UNAVAILABLE' && !PASS_WORDS.test(p.afterRun.readiness));
+
+    // Part of a large register withdrawn: 24 of 48 registers, 24000 LISTED_BUT_MISSING to close, 24000 rows kept.
+    const w = await call('screenWithdraw');
+    note('1000 Sheets, 48 typed registers x 1000 rows: QA を実行, run and render', `${w.firstRunMs.toFixed(0)} ms, ${w.before} ACTIVE`);
+    const parts = (x) => `store ${x.commandMs.toFixed(0)} ms, assessment ${x.assessMs.toFixed(0)} ms, render ${x.renderMs.toFixed(0)} ms (to the next frame ${x.paintMs.toFixed(0)} ms)`;
+    note('one register withdrawn', parts(w.one));
+    note('the other 23 withdrawn', `${parts(w.rest)}; register rows drawn after: ${w.rowsShown}`);
+    note('QA を実行 after the withdrawal: run, assessment and render', `${w.runMs.toFixed(0)} ms, ${w.closed} closed, ${w.open} ACTIVE`);
+    check('on the screen, the run after 24 of 48 registers are withdrawn closes the 24000 numbers only they listed, and only those',
+        w.result === 'applied' && w.before === 47000 && w.closed === 24000 && w.closedAllM && w.open === 23000 && w.openAllKeptL && w.shownActive === 23000,
+        JSON.stringify({ result: w.result, before: w.before, closed: w.closed, closedAllM: w.closedAllM, open: w.open, openAllKeptL: w.openAllKeptL, shown: w.shownActive }));
 
     // ------------------------------------------------------------------
     section('54. M7-P3: what the source holds to');

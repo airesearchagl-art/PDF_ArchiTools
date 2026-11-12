@@ -4,17 +4,22 @@ import { MAX_REGISTER_ENTRIES } from '../../utils/drawing-set/field-bounds';
 import type { Sheet, Source } from '../../utils/drawing-set/model';
 import { FIELD_NAMES } from '../../utils/drawing-set/model';
 import type { DrawingSetStore } from '../../utils/drawing-set/workspace-store';
+import { DECLARE_DRAFT, useDraft } from './drafts';
+import type { DraftBook } from './drafts';
 import { FIELD_LABEL } from './title-block-labels';
 
 /**
  * Declaring a typed drawing register (M7-P3) on the page shown in the viewer
  * above: a person types the rows of the list they see on it. A row left
  * entirely empty is not part of the declaration; a row with anything in it
- * needs a drawing number. Nothing is read from the page.
+ * needs a drawing number. Nothing is read from the page. The rows typed so far
+ * are the workspace's draft: they come back after a look at QA・図面一覧, and
+ * the workspace drops them when the declaration ends.
  */
 
 interface Props {
     store: DrawingSetStore;
+    drafts: DraftBook;
     sheet: Sheet;
     source: Source;
     locked: boolean;
@@ -25,8 +30,8 @@ interface Props {
 const EMPTY: RegisterRowInput = { drawingNumber: '', drawingTitle: '', revision: '', issueDate: '' };
 const START_ROWS = 5;
 
-export const RegisterDeclarePanel: React.FC<Props> = ({ store, sheet, source, locked, onDone, onCancel }) => {
-    const [rows, setRows] = useState<RegisterRowInput[]>(() => Array.from({ length: START_ROWS }, () => ({ ...EMPTY })));
+export const RegisterDeclarePanel: React.FC<Props> = ({ store, drafts, sheet, source, locked, onDone, onCancel }) => {
+    const [rows, setRows] = useDraft<RegisterRowInput[]>(drafts, DECLARE_DRAFT, () => Array.from({ length: START_ROWS }, () => ({ ...EMPTY })));
     const [message, setMessage] = useState<string | null>(null);
     // The rows declared, and where each sits in the inputs: an empty row is left out and the rest numbered 1..n.
     const filledAt = rows.flatMap((row, index) => (FIELD_NAMES.some((name) => row[name] !== '') ? [index] : []));

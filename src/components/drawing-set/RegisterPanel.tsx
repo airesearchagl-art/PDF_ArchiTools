@@ -4,6 +4,8 @@ import type { DrawingRegisterReference, DrawingSet, RegisterEntry, Sheet } from 
 import { FIELD_NAMES, isLive } from '../../utils/drawing-set/model';
 import type { RegisterView } from '../../utils/drawing-set/qa-engine';
 import type { DrawingSetStore } from '../../utils/drawing-set/workspace-store';
+import { REGISTER_EDIT_DRAFT, useDraft } from './drafts';
+import type { DraftBook } from './drafts';
 import { FIELD_LABEL } from './title-block-labels';
 
 /**
@@ -15,6 +17,7 @@ import { FIELD_LABEL } from './title-block-labels';
 
 interface Props {
     store: DrawingSetStore;
+    drafts: DraftBook;
     drawingSet: DrawingSet;
     register: RegisterView;
     locked: boolean;
@@ -30,8 +33,9 @@ const rowInput = (entry: RegisterEntry): RegisterRowInput => ({
     issueDate: entry.issueDate ?? '',
 });
 
-export const RegisterPanel: React.FC<Props> = ({ store, drawingSet, register, locked, selectedSheet, onDeclare, onNotice }) => {
-    const [editing, setEditing] = useState<{ referenceId: string; entryId: string; values: RegisterRowInput } | null>(null);
+export const RegisterPanel: React.FC<Props> = ({ store, drafts, drawingSet, register, locked, selectedSheet, onDeclare, onNotice }) => {
+    // The correction being typed is the workspace's draft: it is still there after a look at the page view.
+    const [editing, setEditing, endEditing] = useDraft<{ referenceId: string; entryId: string; values: RegisterRowInput } | null>(drafts, REGISTER_EDIT_DRAFT, () => null);
     const [withdrawing, setWithdrawing] = useState<string | null>(null);
     const [message, setMessage] = useState<string | null>(null);
     const [showRetired, setShowRetired] = useState(false);
@@ -51,7 +55,7 @@ export const RegisterPanel: React.FC<Props> = ({ store, drawingSet, register, lo
     const saveRow = (): void => {
         if (!editing) return;
         const result = store.editRegisterEntry(editing.referenceId, editing.entryId, editing.values);
-        if (result.ok) setEditing(null);
+        if (result.ok) endEditing();
         answer(result, '図面一覧の行を修正しました。QA を実行し直すと照合に反映されます。');
     };
     const retireRow = (referenceId: string, entry: RegisterEntry): void => {
@@ -109,7 +113,8 @@ export const RegisterPanel: React.FC<Props> = ({ store, drawingSet, register, lo
                             </thead>
                             <tbody>
                                 {reference.entries.map((entry) => {
-                                    const isEditing = editing?.entryId === entry.id;
+                                    // A row withdrawn meanwhile (its Source removed, say) is no longer corrected.
+                                    const isEditing = editing?.entryId === entry.id && isLive(entry);
                                     return (
                                         <tr key={entry.id} className={isLive(entry) ? '' : 'is-retired'} data-ds-register-row={entry.row} data-ds-register-row-live={String(isLive(entry))}>
                                             <td>{entry.row}</td>
@@ -131,7 +136,7 @@ export const RegisterPanel: React.FC<Props> = ({ store, drawingSet, register, lo
                                                     : isEditing ? (
                                                         <>
                                                             <button type="button" className="ds-link-button" onClick={saveRow} disabled={locked} data-ds-register-edit-save>修正を反映</button>
-                                                            <button type="button" className="ds-link-button" onClick={() => setEditing(null)}>やめる</button>
+                                                            <button type="button" className="ds-link-button" onClick={endEditing} data-ds-register-edit-cancel>やめる</button>
                                                         </>
                                                     ) : (
                                                         <>
