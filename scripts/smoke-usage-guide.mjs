@@ -431,6 +431,7 @@ try {
     const cardOf = (head) => releaseCards.find((c) => c.head === head) ?? { head: '', items: [] };
     const entryOf = (tool, version) => releaseHeads.filter((h) => h.includes(tool) && h.endsWith(`v${version}`));
     const latest = [
+        { tool: 'PDF抽出・統合', version: '2.0.14', key: 'splitMerge', heading: 'ページを選んでもサムネイルが消えないように修正', phrase: 'すべてのサムネイルが「…」に戻り', header: 'split-merge' },
         { tool: '図面管理', version: '0.3.0', key: 'drawingSet', heading: '図面一式のチェックと判断記録を追加', phrase: '図面番号の重複、表題欄の未確定項目', header: 'drawing-set' },
         { tool: 'PDF加工', version: '1.5.1', key: 'tools', heading: '高さの低いウィンドウでも「実行開始」まで操作可能に', phrase: '高さの低いウィンドウでも「実行開始」', header: 'processor' },
         { tool: 'PDF比較', version: '1.2.1', key: 'comparator', heading: '回転設定がそろった図面を本来の向きで表示', phrase: '回転設定だけの違いは差分として数えません', header: 'comparator' },
@@ -453,16 +454,24 @@ try {
     }
     const processor150 = entryOf('PDF加工', '1.5.0');
     check('the earlier PDF加工 1.5.0 entry is dated 2026/10/31',
-        processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[3] === processor150[0], releaseHeads[3]);
+        processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[4] === processor150[0], releaseHeads[4]);
     const processor140 = entryOf('PDF加工', '1.4.0');
     check('the earlier PDF加工 1.4.0 entry is dated 2026/10/03',
-        processor140.length === 1 && processor140[0].startsWith('2026/10/03') && releaseHeads[6] === processor140[0], releaseHeads[6]);
+        processor140.length === 1 && processor140[0].startsWith('2026/10/03') && releaseHeads[7] === processor140[0], releaseHeads[7]);
     const drawingSet020 = entryOf('図面管理', '0.2.0');
     check('the earlier 図面管理 0.2.0 entry is dated 2026/10/20',
-        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[4] === drawingSet020[0], releaseHeads[4]);
+        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[5] === drawingSet020[0], releaseHeads[5]);
     const drawingSet010 = entryOf('図面管理', '0.1.0');
     check('the earlier 図面管理 0.1.0 entry is dated 2026/10/10',
-        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[5] === drawingSet010[0], releaseHeads[5]);
+        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[6] === drawingSet010[0], releaseHeads[6]);
+    // 2.0.14 says what was wrong in words a person saw, and that cancelling is unchanged.
+    const sm2014 = cardOf(entryOf('PDF抽出・統合', '2.0.14')[0]).items.join('\n');
+    check('the PDF抽出・統合 2.0.14 entry: the thumbnails, the tab trip, and that a selection change still cancels an export',
+        sm2014.includes('「抽出」でページを選ぶと') && sm2014.includes('「統合」のタブに切り替えてから「抽出」に戻ったとき')
+        && sm2014.includes('実行中の書き出しはこれまでどおり中止します') && sm2014.includes('書き出したPDFの内容は変わりません'), 'thumbnails');
+    check('the earlier PDF抽出・統合 2.0.13 entry is kept as it shipped',
+        entryOf('PDF抽出・統合', '2.0.13').length === 1 && entryOf('PDF抽出・統合', '2.0.13')[0].startsWith('2026/09/27'),
+        entryOf('PDF抽出・統合', '2.0.13').join(','));
     check('versions.ts gives the app 1.3.0', /export const APP_VERSION = '1\.3\.0';/.test(versionsSource), 'APP_VERSION');
     // 1.5.0: the layer, what it is not, what 両方実行 shows with it off, and when it stops.
     const p150 = cardOf(processor150[0]).items.join('\n');
