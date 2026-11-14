@@ -52,6 +52,7 @@ import { assertEnforceablePolicy, ADOPTED_POLICY } from './policy';
 import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
 import {
+    autoStateLoss,
     carryOptionalContent,
     describeOptionalContent,
     planOptionalContent,
@@ -686,6 +687,8 @@ export async function runMerge(
     const collisions = new Set((plan.detail?.collisions as string[]) ?? []);
     const out = await PDFDocument.create({ updateMetadata: false });
     const losses: LossRecord[] = [...plan.losses];
+    /** OC-U: output tags carried unregistered on purpose, across every source. */
+    const carriedUnregistered = new Set<string>();
     const seenLoss = new Set(losses.map((l) => `${l.kind}|${l.what ?? ''}`));
     const addLoss = (loss: LossRecord): void => {
         const key = `${loss.kind}|${loss.what ?? ''}`;
@@ -1159,6 +1162,10 @@ export async function runMerge(
                     ...e,
                     pageIndex: e.pageIndex + firstNewPage,
                 })),
+                unregisteredPageProperties: sanitizedOc.unregisteredPageProperties.map((e) => ({
+                    ...e,
+                    pageIndex: e.pageIndex + firstNewPage,
+                })),
             };
             const carried = carryOptionalContent(source, shifted, out);
             if (carried.status === 'REFUSED') {
@@ -1171,6 +1178,10 @@ export async function runMerge(
                     losses,
                 );
             }
+            for (const tag of carried.unregistered ?? []) carriedUnregistered.add(tag);
+            // OC-C2: shown per source, with the count the carry left out.
+            const autoState = autoStateLoss(carried.autoStateGroupsDropped ?? 0, input.name);
+            if (autoState) addLoss(autoState);
         }
 
         if (sourceFields.length > 0) {
@@ -1355,7 +1366,7 @@ export async function runMerge(
         return sum + (record?.pageCount ?? 0);
     }, 0);
 
-    const readback = await readbackArtifact(bytes);
+    const readback = await readbackArtifact(bytes, carriedUnregistered);
     const invariant = checkArtifactInvariants(readback, expectedPages);
     if (invariant) {
         return refusedMerge(
