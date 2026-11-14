@@ -22,7 +22,8 @@ None of these changes modifies M7-P1 Production or implements Portable Project I
   Source observations may remain for `CANCELLED` / `FAILED` runs; uncompleted
   Source results do not publish; coverage is scoped to targeted Sheets.
   AnalysisRun is append-only in memory, with the already adopted P4
-  save-time pruning exception.
+  save-time pruning exception. That exception is replaced by CAN-04 P4-D2
+  (Human-adopted 2026-11-14): P4 saves every Analysis Run, referenced or not.
 
 **Byte-level clarification of an existing rule (not a new Meaning Delta):**
 the exact sorted JSON / UTF-8 / SHA-256 serialization and test vectors for
@@ -475,6 +476,9 @@ current one, publishing the run/Findings/lifecycle changes together. Perform the
 same all-or-nothing check for Decision appends (§H). These refusal rules belong
 to P3; they are not deferred to save/import in P4. Numeric bounds and their
 candidate/freeze statuses remain unchanged; P4 decides their eventual values.
+That decision is made: CAN-04 P4-L1 (Human-adopted 2026-11-14) adopts the
+current values for `schemaVersion` 1, and the freeze takes effect in the
+implementation PR that releases P4.
 
 ## G. QA Finding
 
@@ -510,10 +514,14 @@ candidate/freeze statuses remain unchanged; P4 decides their eventual values.
   it `ACTIVE`, its currency derived (§I). A Finding is never deleted to resolve it.
 - **A finding in a file is recognised, never believed** (D). When a Project is opened, what the screen
   shows is derived again — the statements a run would make now are matched with the file's findings by key
-  and evidence (§I, R4-E; §J, R4-H) — but opening appends no run and changes no lifecycle (CAN-04 P4-D3). A
-  well-formed finding the metadata does not support is `STALE` until the next QA run the person starts, which
-  closes or supersedes it. What the file contributes is identity and Human history, not truth. (The declared
-  register is the one input believed as written, because a person wrote it.)
+  and evidence (§I, R4-E; §J, R4-H) — but opening appends no run and changes no lifecycle (CAN-04 P4-D3).
+  Each finding's currency on opening is decided by the §I precedence (R4-E): `HISTORICAL`, then `STALE`, then
+  `UNVERIFIED`, then `CURRENT`; a well-formed finding the current state would not restate is therefore
+  `STALE`, unless an earlier step applies. The next QA run the person starts closes it (`NOT_REPRODUCED`) or
+  supersedes it **only** when that run can evaluate its question and the existing closing or superseding
+  conditions above (Re-run, R4-D) hold. A run that cannot evaluate it leaves it `ACTIVE`, its currency
+  derived (§I). What the file contributes is identity and Human history, not truth. (The declared register
+  is the one input believed as written, because a person wrote it.)
 
 **Rules** (`ruleId`, all present in the schema; none says a drawing is wrong, none infers design intent, none
 closes itself):
