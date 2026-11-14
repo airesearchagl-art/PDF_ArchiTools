@@ -108,7 +108,10 @@ nesting depth 16, 5000 Sheets, 5000 Sources, 50000 Findings, 100000 Decisions an
 are **candidate pre-release bounds**, not shipping guarantees. The one separately adopted value is
 `maxFieldRawTextLength` = 1000 characters per title-block field. The 256 MiB per-Source ceiling is M6's adopted
 value, which Architecture v1 lets M7 reuse; M7's own PDF.js intake gate is defined in M7-P1. Production values
-are frozen by M7-P4 (and M7-P1 for the PDF intake gate).
+are frozen by M7-P4 (and M7-P1 for the PDF intake gate). **CAN-04 (Human-adopted 2026-11-14)** freezes them
+for `schemaVersion` 1 at the values in `semantic-contract.md` "Resource limits", every schema `x-limit`
+unchanged; the status recorded in `contract-manifest.json` changes only in the P4 implementation PR that
+releases the format.
 
 ## Where it is used — the M7 split
 
@@ -183,6 +186,36 @@ separate independent Contract Review of its exact head.
   No Version, product, ADV-37-01/03 status, cacheMethod, Notion or Vault change
   is made by this publication. P3 requires a separate Human gate after this
   contract has passed independent review and merged.
+
+## CAN-04 — P4 save / resume (Human-adopted 2026-11-14)
+
+Adopted by an explicit Human decision on 2026-11-14 and published before any P4
+implementation depends on it. It serves the initial M7-P4 scope: save as JSON in
+the browser, open in a new session, rebind Sources with the same SHA-256.
+
+- **P4-D1:** while QA10 is unimplemented, warnings are shown when a file opens and
+  create no Finding; problems still refuse the file.
+- **P4-D2:** no Analysis Run is pruned at save (replaces the former save-time
+  pruning exception).
+- **P4-D3:** opening derives what the screen shows and appends no run; a QA run is
+  appended only when the person runs QA.
+- **P4-D4:** a save runs the whole import order on its own bytes and is all or
+  nothing; a refused save keeps the work and the last save's lineage.
+- **P4-D5:** what each pre-parse scanner bound counts.
+- **P4-L1:** freeze the bounds for `schemaVersion` 1; no schema value changes.
+
+Adopted with these parameters: every bound at its current candidate value
+(64 MiB; strings 24000 UTF-16 code units); exactly one leading UTF-8 byte-order
+mark accepted and counted in the file size; escaped lone surrogates preserved;
+invalid UTF-8 refused; no measurement at 128 MiB.
+
+Three of these (P4-D1, P4-D2, P4-D3) change wording adopted earlier; the Human
+decision adopts them explicitly as amendments (see "Changing this contract").
+**Zero machine delta:** schema, executable validator, `schemaVersion` and the
+manifest's `resourceLimitsStatus` are unchanged; the status changes in the P4
+implementation PR together with the checks that pin it. Independent Contract
+Review of this change's head is required before the P4 implementation; it
+authorizes no implementation, Ready, merge or deploy.
 
 ## Changing this contract
 
