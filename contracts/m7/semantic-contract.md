@@ -22,7 +22,8 @@ None of these changes modifies M7-P1 Production or implements Portable Project I
   Source observations may remain for `CANCELLED` / `FAILED` runs; uncompleted
   Source results do not publish; coverage is scoped to targeted Sheets.
   AnalysisRun is append-only in memory, with the already adopted P4
-  save-time pruning exception.
+  save-time pruning exception. That exception is replaced by CAN-04 P4-D2
+  (Human-adopted 2026-11-14): P4 saves every Analysis Run, referenced or not.
 
 **Byte-level clarification of an existing rule (not a new Meaning Delta):**
 the exact sorted JSON / UTF-8 / SHA-256 serialization and test vectors for
@@ -67,13 +68,52 @@ are unchanged. The reviewed proposal generator is a test oracle, not Production
 code or an implementation authorization. The adopted rules do not freeze QA01B
 or the other deferred QA parameters.
 
+## M7-CAN-04 — P4 save / resume D rules and v1 bounds (Human-adopted 2026-11-14)
+
+**Status: Human-adopted on 2026-11-14** (P4-D1–D5 and P4-L1, with the parameters
+below). P4-D1, P4-D2 and P4-D3 amend wording adopted earlier and are adopted
+explicitly as such. The sections they amend below are marked "CAN-04"; the earlier
+wording is in this file's history. Adoption authorizes this contract change only:
+independent Contract Review of its publication head is required before the P4
+implementation depends on it. The initial M7-P4 scope it serves is:
+save the Project as JSON in the browser, open it in a new session, and rebind
+Sources whose bytes have the same SHA-256. Accepting changed bytes for a Source,
+migration of an older `schemaVersion`, the remaining QA rules and the Final QA
+Report stay with later phases.
+
+| Decision | Meaning | Kind |
+|---|---|---|
+| P4-D1 | While QA10 is unimplemented, an import whose relation check reports **warnings only** is accepted and the warnings are shown to the person when the file opens (what, where, in plain words). They are not stored and **no Finding is created**. A problem (R) still refuses the whole file. | amends the §"How to read it" W consequence for the period before QA10 |
+| P4-D2 | **No save-time pruning.** The P4 writer saves every Analysis Run, referenced or not. An unreferenced completed QA run still carries information: MD-3 reads the latest completed QA run's `manifestDigest`, so pruning it would change readiness after a resume. | replaces the save-time pruning exception (§A delete behaviour, §F, CAN-02 HDR-36-02 wording) |
+| P4-D3 | **Opening derives, it does not run.** When a Project is opened, the app derives what it shows — currency (§I, R4-E), register state, readiness (§J, R4-H) — from the file and the session's binding. Opening appends no Analysis Run and changes no lifecycle. A QA run is appended only when the person runs QA; that run closes or supersedes Findings as §G says. | amends §G "re-evaluated when a Project is opened … closed by that first run" |
+| P4-D4 | **A save is all or nothing, and the writer's output opens.** The writer runs the whole §M import order on its own bytes — scanner bounds included — before anything is written. If any step refuses, nothing is written; the in-memory work and the lineage of the last save (`projectFileId`, `saveSequence`) are unchanged; the person is told which bound or rule refused. A warning does not refuse a save. | new normative D (extends §L export) |
+| P4-D5 | **Scanner bound definitions** (units of the §M pre-parse scan): see §M. | clarifies the candidate scanner bounds of "Resource limits" |
+| P4-L1 | **Freeze the bounds for `schemaVersion` 1** at the values in "Resource limits" (column "v1 (CAN-04)"). Every schema `x-limit` keeps its value, so the schema does not change. The freeze takes effect with the P4 implementation that releases the format. | freezes candidate values (README "Status of the numbers") |
+
+**Parameters adopted with it (2026-11-14):**
+- Every bound keeps its current candidate value: `maxProjectBytes` 64 MiB, `maxStringSourceLength` 24000
+  UTF-16 code units, and the others as listed under "Resource limits".
+- Exactly one leading UTF-8 byte-order mark is accepted, and its three bytes count toward
+  `maxProjectBytes` (§M).
+- A lone surrogate written as a `\uXXXX` escape is preserved (§M).
+- Invalid UTF-8 is refused (§M).
+- No measurement at 128 MiB or above is made; none is needed while `maxProjectBytes` stays 64 MiB.
+- The manifest's `resourceLimitsStatus` changes from `CANDIDATE_PRE_RELEASE` in the P4 implementation PR,
+  together with the checks that pin it; this contract change leaves it as it is.
+
+**Zero machine delta:** the JSON Schema, the executable S/R/W validator and
+`schemaVersion` are unchanged. The header comment of `portable-project.semantic.mjs`
+("not wired into the Production app", and its QA10 sentence) is left as it is by this
+change; the P4 implementation that first imports it updates that comment only, with
+the body digest unchanged.
+
 ## How to read it — where each rule lives
 
 | Mark | Enforced by | When | On violation |
 |---|---|---|---|
 | **S** | `portable-project.schema.json` | import; export validates its own output the same way | the file is refused |
 | **R** | `portable-project.semantic.mjs`, a *problem* (`REL_*`) | import, after the schema accepts | the file is refused whole |
-| **W** | `portable-project.semantic.mjs`, a *warning* (`WARN_*`) | import | the file is accepted; the oddity becomes a QA10 `PROJECT_FILE_ANOMALY` finding |
+| **W** | `portable-project.semantic.mjs`, a *warning* (`WARN_*`) | import | the file is accepted; the oddity becomes a QA10 `PROJECT_FILE_ANOMALY` finding — until QA10 is implemented, it is shown when the file opens and no finding is created (CAN-04 P4-D1) |
 | **D** | derived at runtime, never stored | M7-P1…P4 implementation (not present in the app yet) | as the rule says |
 
 The two machine-readable files are canonical for **S**, **R** and **W**; for **D** this document, with
@@ -120,9 +160,9 @@ dated before its Finding, or anything dated after the file's `savedAt` (W `WARN_
 
 **Delete behaviour.** Nothing a person removes is deleted. A Source, Sheet, Profile, Register Reference or
 Register Entry is *retired* (`retiredAt`), stays in the file and keeps every reference to it valid. A replaced
-fingerprint or confirmation moves to its history list. A Finding is never removed to resolve it. The one
-exception is an Analysis Run that nothing refers to any more, which carries no information and is pruned at
-save (D).
+fingerprint or confirmation moves to its history list. A Finding is never removed to resolve it. An Analysis
+Run is never removed either, in memory or at save, even when nothing refers to it any more (D; CAN-04 P4-D2
+replaces the former save-time pruning exception).
 
 ---
 
@@ -364,12 +404,12 @@ REGISTER_NOT_CURRENT without requiring redeclaration.
   counts the other targeted Sheets, including skipped, interrupted, or refused
   ones. The sum describes that run's scope, not every Sheet in the Drawing Set;
   `COMPLETED` can still have excluded Sheets. QA-run coverage is separate.
-- **Append-only versus P4 save pruning (D).** Once appended, an in-memory run is
-  not rewritten or deleted merely because it has no current references.
-  §A's exception applies only at M7-P4 save: an unreferenced run may be
-  excluded from the saved file if no observation, finding, or finding-closing
-  `runId` refers to it. A zero-observation terminal run may remain in a
-  browser-local P2 session, and the P2 runtime never uses save-time pruning.
+- **Append-only, also at save (D; CAN-04 P4-D2).** Once appended, a run is not
+  rewritten or deleted merely because it has no current references — neither in
+  memory nor when the Project is saved: the P4 writer saves every run. A run
+  nothing refers to can still carry information; MD-3 reads the latest completed
+  QA run's `manifestDigest`, and a QA run that wrote and closed nothing is such a
+  run. (This replaces the former P4 save-time pruning exception.)
 
 ### CAN-03 R4-G — completed QA runs and coverage (D)
 
@@ -436,6 +476,9 @@ current one, publishing the run/Findings/lifecycle changes together. Perform the
 same all-or-nothing check for Decision appends (§H). These refusal rules belong
 to P3; they are not deferred to save/import in P4. Numeric bounds and their
 candidate/freeze statuses remain unchanged; P4 decides their eventual values.
+That decision is made: CAN-04 P4-L1 (Human-adopted 2026-11-14) adopts the
+current values for `schemaVersion` 1, and the freeze takes effect in the
+implementation PR that releases P4.
 
 ## G. QA Finding
 
@@ -469,11 +512,16 @@ candidate/freeze statuses remain unchanged; P4 decides their eventual values.
   key, different evidence → a new Finding, the old one `SUPERSEDED`, its decisions kept as history; a run that
   could evaluate the question and did not find it → `NOT_REPRODUCED`; a run that could not evaluate it leaves
   it `ACTIVE`, its currency derived (§I). A Finding is never deleted to resolve it.
-- **A finding in a file is recognised, never believed** (D). QA is re-evaluated when a Project is opened and
-  the file's findings are matched with the fresh result by key and evidence; a well-formed finding the
-  metadata does not support is closed by that first run. What the file contributes is identity and Human
-  history, not truth. (The declared register is the one input believed as written, because a person wrote
-  it.)
+- **A finding in a file is recognised, never believed** (D). When a Project is opened, what the screen
+  shows is derived again — the statements a run would make now are matched with the file's findings by key
+  and evidence (§I, R4-E; §J, R4-H) — but opening appends no run and changes no lifecycle (CAN-04 P4-D3).
+  Each finding's currency on opening is decided by the §I precedence (R4-E): `HISTORICAL`, then `STALE`, then
+  `UNVERIFIED`, then `CURRENT`; a well-formed finding the current state would not restate is therefore
+  `STALE`, unless an earlier step applies. The next QA run the person starts closes it (`NOT_REPRODUCED`) or
+  supersedes it **only** when that run can evaluate its question and the existing closing or superseding
+  conditions above (Re-run, R4-D) hold. A run that cannot evaluate it leaves it `ACTIVE`, its currency
+  derived (§I). What the file contributes is identity and Human history, not truth. (The declared register
+  is the one input believed as written, because a person wrote it.)
 
 **Rules** (`ruleId`, all present in the schema; none says a drawing is wrong, none infers design intent, none
 closes itself):
@@ -856,6 +904,11 @@ authorize the initial P3 implementation or Final output.
 - **Export is allow-list based**: only schema-declared fields are copied, and the result is validated as
   untrusted input before it is written. Runtime binding state, stale flags, file handles, paths, bytes,
   images, page text and the author of a decision never reach the file.
+- **A save is all or nothing (D; CAN-04 P4-D4).** "Validated as untrusted input" means the whole §M import
+  order, scanner bounds included, run on the bytes about to be written. If any step refuses, nothing is
+  written, the in-memory work and the lineage of the last save are unchanged, and the person is told which
+  bound or rule refused. A file the writer produced therefore opens with the same `schemaVersion`. A
+  warning does not refuse a save.
 
 ### CAN-03 R4-I — runtime-only QA data (D)
 
@@ -878,7 +931,21 @@ params.values hints; a future QA01B decision must settle hints and their evidenc
   new version with a migration.
 - **Import** is fail-closed and all-or-nothing, in this order: file byte bound → strict UTF-8 → bounded
   pre-parse scan (bounds cost; refuses duplicate keys) → `JSON.parse` → `format` / `schemaVersion` → schema
-  (S) → semantic relations and lifecycle (R / W) → a Project, or a refusal.
+  (S) → semantic relations and lifecycle (R / W) → a Project, or a refusal. A refusal changes nothing: the
+  work already open in the session stays as it was, and the person is told the reason (CAN-04).
+- **What the scanner bounds count (D; CAN-04 P4-D5).** `maxProjectBytes` is the file's size in bytes,
+  checked before it is read, a leading byte-order mark included. Exactly one leading UTF-8 byte-order mark
+  (`EF BB BF`) is accepted and skipped (RFC 8259 §8.1); any further U+FEFF before the root value refuses
+  the file, and the writer never writes one. Strict UTF-8 refuses any invalid sequence — an overlong form, a
+  surrogate code point encoded in UTF-8, a truncated sequence — before anything is parsed. A lone surrogate
+  written as a `\uXXXX` escape is valid JSON and is preserved: it is kept in memory as that code unit and
+  written again as the same escape, so it survives a save and an open. The scan then runs on the decoded text:
+  `maxNestingDepth` counts the arrays and objects open at once (the root object is depth 1);
+  `maxJsonValues` counts every value, arrays and objects included, but not member names;
+  `maxObjectKeys` counts the members of one object; `maxKeySourceLength` and `maxStringSourceLength`
+  count the UTF-16 code units of a name or string token as written between its quotes, escape sequences
+  as written. A member name written twice in one object, compared after its escapes are decoded, is
+  refused.
 - An unknown field or an unknown enum value is refused. A **future `schemaVersion` is refused** before any
   schema is consulted — not even opened read-only.
 - An **old `schemaVersion`** is validated against *its own* frozen schema, migrated in memory step by step,
@@ -922,26 +989,48 @@ fail-closed principle to planned QA output and Decision appends before any write
 Overflow refuses the entire operation without history deletion or partial output.
 This changes neither the values nor the statuses in the table below.
 
-| `x-limit` (in the schema) | Value | Status |
-|---|---|---|
-| `maxFieldRawTextLength` | 1000 characters | **Human-adopted** (decision 5) |
-| `maxSourceBytes` | 268435456 (256 MiB) | candidate in M7 — the M6-adopted per-source ceiling, which Architecture v1 lets M7 reuse; M7's own PDF.js intake gate is defined in P1 |
-| `maxSheets` · `maxSources` | 5000 each | candidate |
-| `maxFindings` | 50000 | candidate |
-| `maxDecisions` | 100000 | candidate |
-| `maxPagesPerSource` | 5000 | candidate |
-| `maxSubjectsPerFinding` | 5000 | candidate |
-| `maxPagePoints` | 14400 pt | candidate |
-| `maxFileNameLength` | 255 | candidate |
-| `maxProfiles` · `maxRegisterReferences` | 64 each | candidate (not measured) |
-| `maxAnalysisRuns` | 2000 | candidate (not measured) |
-| `maxFingerprintHistoryPerSource` · `maxConfirmationHistoryPerSheet` | 64 · 32 | candidate (not measured) |
-| `maxRegisterEntriesPerReference` | 1000 | candidate (not measured) |
-| `maxNameLength` · `maxFieldValueLength` · `maxCommentLength` | 200 · 300 · 4000 | candidate (not measured) |
+| `x-limit` (in the schema) | Value | Status | v1 (CAN-04) |
+|---|---|---|---|
+| `maxFieldRawTextLength` | 1000 characters | **Human-adopted** (decision 5) | unchanged |
+| `maxSourceBytes` | 268435456 (256 MiB) | candidate in M7 — the M6-adopted per-source ceiling, which Architecture v1 lets M7 reuse; M7's own PDF.js intake gate is defined in P1 | frozen at this value |
+| `maxSheets` · `maxSources` | 5000 each | candidate | frozen at these values |
+| `maxFindings` | 50000 | candidate | frozen at this value |
+| `maxDecisions` | 100000 | candidate | frozen at this value |
+| `maxPagesPerSource` | 5000 | candidate | frozen at this value |
+| `maxSubjectsPerFinding` | 5000 | candidate | frozen at this value |
+| `maxPagePoints` | 14400 pt | candidate | frozen at this value |
+| `maxFileNameLength` | 255 | candidate | frozen at this value |
+| `maxProfiles` · `maxRegisterReferences` | 64 each | candidate (not measured) | frozen at these values |
+| `maxAnalysisRuns` | 2000 | candidate (not measured) | frozen at this value |
+| `maxFingerprintHistoryPerSource` · `maxConfirmationHistoryPerSheet` | 64 · 32 | candidate (not measured) | frozen at these values |
+| `maxRegisterEntriesPerReference` | 1000 | candidate (not measured) | frozen at this value |
+| `maxNameLength` · `maxFieldValueLength` · `maxCommentLength` | 200 · 300 · 4000 | candidate (not measured) | frozen at these values |
 
 The bounded pre-parse scan has its own candidate bounds, which are not schema keywords and belong to the
 Production import implementation (M7-P4): `maxProjectBytes` 64 MiB, `maxNestingDepth` 16, `maxJsonValues`
 4000000, `maxObjectKeys` 32, `maxKeySourceLength` 64, `maxStringSourceLength` 24000 — all candidates.
+**CAN-04 (Human-adopted 2026-11-14):** all six are frozen at these values for `schemaVersion` 1, counted as
+§M says (P4-D5); `maxStringSourceLength` is 24000 UTF-16 code units. The "Status" column and the manifest's
+`resourceLimitsStatus` keep reading "candidate" until the P4 implementation that releases the format; the
+"v1 (CAN-04)" column is what that release freezes.
+
+**Why every value can stay (CAN-04 evidence, synthetic data, 2026-11-13).** The bounds are consistent with
+what the writer can produce:
+- **Schema-derived bounds:** the deepest nesting the schema allows is 8, the most members of one object is
+  15 (a Finding), and the longest member name is 25 code units (`drawingRegisterReferences`).
+- **Longest string token:** the longest one `JSON.stringify` can write for a schema-valid value is exactly
+  24000 code units — a 4000-character comment of lone surrogates, each written `\uXXXX`.
+- **Value density:** a writer-produced file holds about 31 500–37 800 values per MiB, so about 2.0–2.4
+  million at 64 MiB.
+- **Size of a representative large set:** 5000 pages, all read and confirmed, two re-confirmations each,
+  eight registers of 625 rows, 150 runs, 10 000 Findings and 15 000 Decisions: 28.1 MiB.
+- **Open and save at 64 MiB:** the representative set with longer comments, 64 MiB and 0.89 million values,
+  opened through the whole §M order in about 0.53 s and saved (written, then checked as P4-D4 says) in about
+  0.73 s, in both Chrome 157 and Edge 157. A file one KiB over the bound was refused before it was read.
+- **Every count at its bound at once:** 175 MiB, so P4-D4 refuses that save; no value is lowered to avoid it.
+- **Not measured:** files of 128 MiB and above, and the densest layout at full size (the run was stopped
+  for low memory on the measuring machine; by the adoption decision it is not repeated). The densest layout
+  was measured at one tenth of its size for the values-per-MiB figure.
 
 Format bounds the schema states without `x-limit` (UUID, SHA-256, timestamp, version string, reason code,
 `saveSequence`, `ruleVersion`, `params` sizes) and the constants inside `portable-project.semantic.mjs` (a
@@ -985,3 +1074,15 @@ and change only through the same review.
   Publication only: independent Contract Review of the publication head remains
   required before any dependent implementation; P3/P4 and Ready/merge/deploy
   are not authorized. No approval URL or additional approval id is asserted.
+
+- **M7-CAN-04 Human adoption — 2026-11-14:** explicit adoption in this PDF ArchiTools
+  conversation of P4-D1–D5 and P4-L1 as stated in the M7-CAN-04 section, including the
+  explicit amendments P4-D1, P4-D2 and P4-D3. Proposal written 2026-11-13 from the
+  initial M7-P4 scope instruction and the synthetic measurements summarised under
+  "Resource limits". Adopted parameters: current candidate values (64 MiB; 24000 UTF-16
+  code units); one leading UTF-8 byte-order mark accepted and counted in the size;
+  escaped lone surrogates preserved; invalid UTF-8 refused; no 128 MiB measurement;
+  `resourceLimitsStatus` changes in the P4 implementation PR. Contract change and Draft
+  PR only: independent Contract Review of the publication head is required before the
+  P4 implementation; Ready/merge/deploy are not authorized. No approval URL or approval
+  id is asserted.
