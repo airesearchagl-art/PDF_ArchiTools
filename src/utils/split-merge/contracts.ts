@@ -243,7 +243,14 @@ export type M6Loss =
      * broken when a whole file had been left out.
      */
     | 'excluded-source'
-    | 'article-threads';
+    | 'article-threads'
+    /**
+     * OC-C2: `/D /AS` (the layer settings a viewer applies automatically when
+     * viewing, printing or exporting) named layers no output page uses, and
+     * those references were left out. Disclosed, not gated: the layers the
+     * output keeps, their initial state and their toggling are unchanged.
+     */
+    | 'layer-auto-state';
 
 export const M6_LOSS_LABEL_JA: Record<M6Loss, string> = {
     tagging: 'タグ構造（読み上げ順・アクセシビリティ情報）',
@@ -257,6 +264,7 @@ export const M6_LOSS_LABEL_JA: Record<M6Loss, string> = {
     'empty-signature-field': '未署名の署名欄',
     'excluded-source': '統合に含まれなかったPDF',
     'article-threads': '記事スレッド（/B）',
+    'layer-auto-state': 'レイヤーの自動表示設定（出力に含まれないレイヤー分）',
 };
 
 /**

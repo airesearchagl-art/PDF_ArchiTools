@@ -55,6 +55,7 @@ import {
     wouldBreakNavigation,
 } from './destinations';
 import {
+    autoStateLoss,
     carryOptionalContent,
     describeOptionalContent,
     planOptionalContent,
@@ -581,6 +582,9 @@ export async function planExtract(
     if (hasPageLabels(doc)) {
         addPlanned({ kind: 'page-labels', why: 'ページラベルは引き継がれません（今回の対応範囲外）。' });
     }
+    // OC-C2: disclosed before the run, from the description that decided it.
+    const plannedAutoState = autoStateLoss(oc.autoStatesPresent ? oc.autoStateGroupsDropped.length : 0);
+    if (plannedAutoState) addPlanned(plannedAutoState);
     // RF-R4-6: one entry per attachment, named, by the same labels the facts
     // were read with — so the planned removal and the disclosed one agree.
     for (const loss of attachmentLosses(plannedAttachments.names, '添付ファイルは引き継がれません。')) {
@@ -856,6 +860,8 @@ export async function runExtract(
     const removedAnnots = [...rebuiltDestinations.removed, ...rebuiltPageRefs.removed];
 
     // Supported and unchanged, both proven above; there is no silent branch.
+    const carriedUnregistered = new Set<string>();
+    let carriedAutoState: LossRecord | null = null;
     if (ocDescription.present) {
         const carried = carryOptionalContent(working, ocDescription, out);
         if (carried.status === 'REFUSED') {
@@ -866,6 +872,8 @@ export async function runExtract(
                 { unsupported: carried.unsupported },
             );
         }
+        for (const tag of carried.unregistered ?? []) carriedUnregistered.add(tag);
+        carriedAutoState = autoStateLoss(carried.autoStateGroupsDropped ?? 0);
     }
 
     if (formPlan.status === 'CARRY') {
@@ -1017,7 +1025,7 @@ export async function runExtract(
         );
     }
 
-    const readback = await readbackArtifact(bytes);
+    const readback = await readbackArtifact(bytes, carriedUnregistered);
     const invariant = checkArtifactInvariants(readback, selection.length);
     if (invariant) {
         return refusedResult(M6_STATUS.INVARIANT_VIOLATED, invariant.reason, outputName, {
@@ -1046,6 +1054,15 @@ export async function runExtract(
         if (seenLoss.has(key)) continue;
         seenLoss.add(key);
         losses.push(loss);
+    }
+    // OC-C2: what the carry actually left out. The plan disclosed the same
+    // count from the same description; a different one is still reported.
+    if (carriedAutoState) {
+        const key = `${carriedAutoState.kind}|${carriedAutoState.what ?? ''}|`;
+        if (!seenLoss.has(key)) {
+            seenLoss.add(key);
+            losses.push(carriedAutoState);
+        }
     }
     for (const kind of removedAttachments.removedActions) {
         const key = `internal-links|/${kind}|`;

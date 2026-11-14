@@ -73,6 +73,7 @@ import {
     verifySanitizedOptionalContent,
     optionalContentSemantics,
     classifyAttachments,
+    carryOptionalContent,
 } from '/src/utils/split-merge/index.ts';
 // Round 12B: how much reading the action walks do, counted rather than timed. The
 // index does not export it; a test measures the shape of the work through it.
@@ -2211,6 +2212,225 @@ Object.assign(window.__m6, {
         if (!result.bytes) return plainly({ status: result.status, before, after: null });
         const after = await pdfjsVisibility(result.bytes);
         return plainly({ status: result.status, before, after });
+    },
+});
+
+// ---------------------------------------------------------------------------
+// OC-U / OC-C2 — unregistered page layers and the `/D /AS` trim
+// ---------------------------------------------------------------------------
+
+/** The three marks every OC-U fixture paints: always, unregistered, registered. */
+const OCU_POINTS = [{ x: 100, y: 20 }, { x: 100, y: 100 }, { x: 15, y: 180 }];
+
+/**
+ * The colours at the fixture's points on every page, with the layer panel in
+ * one of three positions: as the document opens, every listed layer off, every
+ * listed layer on. pdf.js is the reader that shares no code with the writer.
+ */
+async function ocuRaster(bytes, mode) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    const doc = await pdfjsLib.getDocument({ data: copy, useWorkerFetch: false }).promise;
+    const config = await doc.getOptionalContentConfig();
+    const ids = (config.getOrder() || []).filter((id) => typeof id === 'string');
+    if (mode !== 'default') for (const [id] of config) config.setVisibility(id, mode === 'on');
+    const pages = [];
+    for (let n = 1; n <= doc.numPages; n += 1) {
+        const pg = await doc.getPage(n);
+        const viewport = pg.getViewport({ scale: 1 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        await pg.render({ canvasContext: context, viewport, optionalContentConfigPromise: Promise.resolve(config) }).promise;
+        pages.push(OCU_POINTS.map(({ x, y }) => {
+            const [cx, cy] = viewport.convertToViewportPoint(x, y);
+            const d = context.getImageData(Math.floor(cx), Math.floor(cy), 1, 1).data;
+            return d[2] > 200 && d[0] < 80 && d[1] < 80 ? 'blue'
+                : d[0] > 200 && d[1] < 80 && d[2] < 80 ? 'red'
+                    : d[1] > 200 && d[0] < 80 && d[2] < 80 ? 'green'
+                        : d[0] > 240 && d[1] > 240 && d[2] > 240 ? 'white'
+                            : `rgb(${d[0]},${d[1]},${d[2]})`;
+        }).join('/'));
+    }
+    await doc.destroy();
+    return { panel: ids.length, pages };
+}
+
+/** Rasters in all three panel positions. */
+async function ocuViews(bytes) {
+    return {
+        default: await ocuRaster(bytes, 'default'),
+        off: await ocuRaster(bytes, 'off'),
+        on: await ocuRaster(bytes, 'on'),
+    };
+}
+
+/** What the artifact holds: registered groups, `/AS` and its members, by raw structure. */
+async function ocuStructure(bytes) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    const ctx = doc.context;
+    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    if (!(oc instanceof PDFDict)) return { ocProperties: false };
+    const groups = oc.lookup(PDFName.of('OCGs'));
+    const d = oc.lookup(PDFName.of('D'));
+    const registered = new Set(groups instanceof PDFArray ? groups.asArray().map((g) => String(g)) : []);
+    const asArr = d instanceof PDFDict ? d.lookup(PDFName.of('AS')) : undefined;
+    let asEntries = 0; let asMembers = 0; let asUnregistered = 0;
+    if (asArr instanceof PDFArray) {
+        for (const e of asArr.asArray()) {
+            asEntries += 1;
+            const members = ctx.lookup(e).lookup(PDFName.of('OCGs'));
+            if (members instanceof PDFArray) for (const m of members.asArray()) {
+                asMembers += 1;
+                if (!registered.has(String(m))) asUnregistered += 1;
+            }
+        }
+    }
+    const listNames = (key) => {
+        const a = d instanceof PDFDict ? d.lookup(PDFName.of(key)) : undefined;
+        return a instanceof PDFArray ? a.size() : 0;
+    };
+    let ocgObjects = 0;
+    for (const [, obj] of ctx.enumerateIndirectObjects()) {
+        if (obj instanceof PDFDict && String(obj.get(PDFName.of('Type'))) === '/OCG') ocgObjects += 1;
+    }
+    return {
+        ocProperties: true, registered: registered.size, ocgObjects,
+        on: listNames('ON'), off: listNames('OFF'), asEntries, asMembers, asUnregistered,
+    };
+}
+
+const ocuFacts = (readback) => readback && {
+    unregisteredUses: readback.optionalContentUnregisteredUses,
+    configErrors: readback.optionalContentConfigErrors,
+    danglingUses: readback.optionalContentDanglingUses,
+    registeredGroups: readback.optionalContentRegisteredGroups,
+    detail: readback.optionalContentDetail,
+    censusComplete: readback.censusComplete,
+};
+
+Object.assign(window.__m6, {
+    /** Extract through the production planner and runner, then read the result three ways. */
+    async ocuExtract(name, selection) {
+        const source = await bytesOf(name);
+        const plan = await planExtract(source, { selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY });
+        const described = describeOptionalContent(await PDFDocument.load(source, { updateMetadata: false }), selection);
+        const base = {
+            plan: plan.status,
+            reason: plan.reason ?? null,
+            unsupported: described.unsupported,
+            unregistered: described.unregisteredPageProperties.length,
+            planLosses: (plan.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null, why: l.why })),
+        };
+        if (plan.status !== M6_STATUS.READY) return plainly({ ...base, run: null });
+        const result = await runExtract(source, { selection, sourceName: `${name}.pdf`, policy: ADOPTED_POLICY });
+        if (!result.bytes) return plainly({ ...base, run: result.status, runReason: result.reason ?? null });
+        return plainly({
+            ...base,
+            run: result.status,
+            losses: result.losses.map((l) => ({ kind: l.kind, what: l.what ?? null, why: l.why })),
+            facts: ocuFacts(result.readback),
+            unreachable: result.readback.unreachableObjects,
+            structure: await ocuStructure(result.bytes),
+            source: await ocuViews(source),
+            output: await ocuViews(result.bytes),
+        });
+    },
+
+    /** Merge whole sources, in order, and read the result the same three ways. */
+    async ocuMerge(names) {
+        const inputs = [];
+        for (const name of names) {
+            inputs.push({ id: name, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        if (!result.bytes) return plainly({ run: result.status, reason: result.reason ?? null });
+        const sources = [];
+        for (const input of inputs) sources.push(await ocuViews(input.bytes));
+        return plainly({
+            run: result.status,
+            losses: result.losses.map((l) => ({ kind: l.kind, what: l.what ?? null, why: l.why })),
+            facts: ocuFacts(result.readback),
+            unreachable: result.readback.unreachableObjects,
+            structure: await ocuStructure(result.bytes),
+            sources,
+            output: await ocuViews(result.bytes),
+        });
+    },
+
+    /**
+     * The carry's own checks, driven with a description that no longer matches
+     * the written pages — the only way to reach them, because a real copy
+     * always matches. Each tamper must be a refusal.
+     */
+    async ocuTamper(name, tamper) {
+        const source = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const description = describeOptionalContent(source, [0]);
+        const out = await PDFDocument.create();
+        const [page] = await out.copyPages(source, [0]);
+        out.addPage(page);
+        let changed = description;
+        if (tamper === 'name') {
+            changed = {
+                ...description,
+                unregisteredPageProperties: description.unregisteredPageProperties.map((e) => ({ ...e, name: `${e.name}-x` })),
+            };
+        } else if (tamper === 'key') {
+            changed = {
+                ...description,
+                unregisteredPageProperties: description.unregisteredPageProperties.map((e) => ({ ...e, key: '/MCX' })),
+            };
+        } else if (tamper === 'unproven') {
+            changed = { ...description, autoStateGroupsDropped: description.autoStateGroupsDropped.slice(1) };
+        } else if (tamper === 'overclaimed') {
+            changed = {
+                ...description,
+                autoStateGroupsDropped: [...description.autoStateGroupsDropped, ...description.xobjectUsages.map((u) => u.ref.tag)],
+            };
+        }
+        const carried = carryOptionalContent(source, changed, out);
+        return plainly({
+            status: carried.status,
+            reason: carried.reason ?? null,
+            dropped: description.autoStateGroupsDropped.length,
+            unregistered: description.unregisteredPageProperties.length,
+        });
+    },
+
+    /**
+     * The census backstop: an artifact holding a group that is neither
+     * registered nor declared as carried unregistered must not pass, and the
+     * same artifact read with the run's own declaration must.
+     */
+    async ocuCensus(name) {
+        const source = await bytesOf(name);
+        const result = await runExtract(source, { selection: [0], sourceName: `${name}.pdf`, policy: ADOPTED_POLICY });
+        if (!result.bytes) return plainly({ run: result.status, reason: result.reason ?? null });
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const blind = censusOptionalContent(doc);
+        const declared = new Set();
+        for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+            if (obj instanceof PDFDict && String(obj.get(PDFName.of('Type'))) === '/OCG') declared.add(ref.tag);
+        }
+        const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+        const groups = oc instanceof PDFDict ? oc.lookup(PDFName.of('OCGs')) : undefined;
+        if (groups instanceof PDFArray) for (const g of groups.asArray()) declared.delete(g.tag);
+        const told = censusOptionalContent(doc, declared);
+        const pick = (c) => (c.complete ? {
+            unregisteredUses: c.value.unregisteredUses,
+            carriedUnregisteredUses: c.value.carriedUnregisteredUses,
+            configErrors: c.value.configErrors,
+            detail: c.value.detail,
+        } : { incomplete: c.reason });
+        return plainly({ run: result.status, blind: pick(blind), told: pick(told), declared: declared.size });
     },
 });
 
