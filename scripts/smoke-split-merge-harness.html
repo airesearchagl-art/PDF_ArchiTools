@@ -2551,6 +2551,15 @@ Object.assign(window.__m6, {
             // purpose — on the same page (a === b) or another one.
             props(b).set(PDFName.of('MC7'), props(a).get(PDFName.of('MC0')));
             break;
+        case 'res-share': {
+            // Shared-resources RF-01: page b names page a's indirect
+            // /Resources, so a map some pages expect now sits on one that
+            // expects nothing from it.
+            const shared = doc.getPages()[a].node.get(PDFName.of('Resources'));
+            if (!(shared instanceof PDFRef)) throw new Error(`page ${a} /Resources is not indirect`);
+            doc.getPages()[b].node.set(PDFName.of('Resources'), shared);
+            break;
+        }
         case 'as-event': {
             const now = String(asEntry(0).get(PDFName.of('Event')));
             asEntry(0).set(PDFName.of('Event'), PDFName.of(now === '/View' ? 'Print' : 'View'));
@@ -2578,8 +2587,16 @@ Object.assign(window.__m6, {
             throw new Error(`unknown tamper ${tamper.kind}`);
         }
         const reread = await PDFDocument.load(await doc.save(), { updateMetadata: false });
+        // Which object each page's /Resources is, before and after the tamper
+        // (null: held directly), so a test can show the sharing is real.
+        const resourcesOf = (d) => d.getPages().map((p) => {
+            const raw = p.node.get(PDFName.of('Resources'));
+            return raw instanceof PDFRef ? raw.tag : null;
+        });
         return plainly({
             run: result.status,
+            resourcesBefore: resourcesOf(original),
+            resourcesAfter: resourcesOf(reread),
             sources: expectations.length,
             asEntries: expectations.reduce((n, e) => n + e.autoStates.length, 0),
             control: pick(control),

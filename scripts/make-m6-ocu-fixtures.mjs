@@ -173,5 +173,28 @@ write('occ2-zero-order-indirect-child', layered({
     extra: { 21: `[(Layers) ${r(6)}]` },
 }));
 
+// ---- shared resources round (PR #48) ------------------------------------------
+// Independent RF-01 (shared indirect /Resources): pages 1 and 2 name one
+// indirect /Resources (object 30) whose /Properties /MC0 is the unregistered
+// CAD layer and whose form draws the registered one; page 3 uses no layer and
+// has its own, empty, /Resources. A use on a shared map is expected only if
+// every page that names the map expects it.
+{
+    const objs = new Map();
+    objs.set(1, '<< /Type /Catalog /Pages 2 0 R '
+        + `/OCProperties << /OCGs [${r(6)}] /D << /ON [${r(6)}] /AS [${as(6)}] >> >> >>`);
+    objs.set(2, '<< /Type /Pages /Kids [100 0 R 103 0 R 106 0 R] /Count 3 >>');
+    objs.set(5, '<< /Type /OCG /Name (WAKU) >>');
+    objs.set(6, '<< /Type /OCG /Name (Watermark) >>');
+    objs.set(30, '<< /Properties << /MC0 5 0 R >> /XObject << /Fm0 31 0 R >> >>');
+    objs.set(31, stream('<< /Type /XObject /Subtype /Form /BBox [0 0 200 200] /Resources << >> /OC 6 0 R >>', MARK_PAINT));
+    for (const [pageNum, shared] of [[100, true], [103, true], [106, false]]) {
+        objs.set(pageNum, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] '
+            + `/Resources ${shared ? '30 0 R' : '<< >>'} /Contents ${pageNum + 1} 0 R >>`);
+        objs.set(pageNum + 1, stream('<< >>', shared ? CONTENT : PAGE_PAINT));
+    }
+    write('ocu-shared-res', doc(objs));
+}
+
 console.log(`wrote ${written.length} fixtures to ${path.relative(ROOT, OUT)}:`);
 for (const name of written) console.log(`  ${name}.pdf`);

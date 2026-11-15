@@ -2313,6 +2313,46 @@ try {
                 t.told?.configErrors > 0, JSON.stringify(t.told));
         }
 
+        // Shared-resources RF-01: pages 1–2 of ocu-shared-res name one indirect
+        // /Resources; page 3 uses no layer. Pointing a page that expects
+        // nothing at the shared object puts the carried layer on it, while a
+        // page that does expect the use still holds the same map.
+        for (const [mode, names, selection, pages, title, sharers] of [
+            ['extract', ['ocu-shared-res'], [0, 1, 2], [0, 2], 'the layer-free page names the shared /Resources', [0, 1]],
+            ['extract', ['ocu-shared-res'], [0, 2], [0, 1], 'one sharing page kept; the layer-free page names its /Resources', null],
+            ['merge', ['ocu-shared-res', 'ocu-shared-res'], null, [0, 2], 'the first source\'s layer-free page names its shared /Resources', [0, 1]],
+            ['merge', ['ocu-shared-res', 'ocu-shared-res'], null, [0, 5], 'the second source\'s layer-free page names the first source\'s shared /Resources', [0, 1]],
+            ['merge', ['ocu-shared-res', 'ocu-shared-res'], null, [3, 2], 'the first source\'s layer-free page names the second source\'s shared /Resources', [3, 4]],
+        ]) {
+            const t = await call('ocuReadbackTamper', mode, names, selection, { kind: 'res-share', pages });
+            const label = `${mode} ${names.join('+')} ${JSON.stringify(selection)}: ${title}`;
+            const before = t.resourcesBefore || [];
+            const after = t.resourcesAfter || [];
+            if (sharers) {
+                check(`${label} — the output keeps pages ${sharers.map((i) => i + 1).join(' and ')} on one indirect /Resources`,
+                    before[sharers[0]] !== null && before[sharers[0]] !== undefined && before[sharers[0]] === before[sharers[1]],
+                    JSON.stringify(before));
+            }
+            check(`${label} — the untampered artifact, shared map and all, matches its expectation`,
+                t.run === 'READY' && t.control?.configErrors === 0, JSON.stringify(t.control ?? t));
+            check(`${label} — after the tamper, page ${pages[1] + 1} really names the same indirect /Resources as page ${pages[0] + 1}`,
+                before[pages[1]] !== before[pages[0]] && after[pages[1]] !== null && after[pages[1]] === after[pages[0]],
+                JSON.stringify({ before, after }));
+            check(`${label} — the census alone does not see it`,
+                t.blind?.configErrors === 0 && t.blind?.unregisteredUses === 0, JSON.stringify(t.blind));
+            check(`${label} — the use on the page that expects nothing is refused`,
+                t.told?.configErrors > 0 && (t.told?.detail || []).some((d) => d.includes('carried unregistered, where no source had it')),
+                JSON.stringify(t.told));
+        }
+        // A correct share through the production runner: both sharing pages,
+        // one of them alone, and two sources each with their own share.
+        for (const [selection, witnesses] of [[[0, 1], 2], [[1], 1], [[0, 1, 2], 2]]) {
+            const r = await call('ocuExtract', 'ocu-shared-res', selection);
+            check(`ocu-shared-res ${JSON.stringify(selection)}: a correct shared /Resources is extracted (${witnesses} unregistered use(s) expected)`,
+                r.plan === 'READY' && r.run === 'READY' && r.unregistered === witnesses,
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}${r.runReason ?? ''} unregistered=${r.unregistered}`);
+        }
+
         // RF-02 through the production runner: a layer-free page from a layered
         // document, with and without `/Order`.
         for (const fixture of ['occ2-zero-as', 'occ2-zero-order']) {

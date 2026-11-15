@@ -2737,6 +2737,13 @@ export function censusOptionalContent(
      * A map is placed on pages by the object that holds it: a page that
      * holds its `/Resources` directly, or the indirect `/Resources` a page
      * names (shared resources place it on every page that names them).
+     *
+     * Shared-resources RF-01: a use on a shared map is on every page that
+     * names the map, so it is expected only if each of those pages expects
+     * that key naming that object. One page that does is not enough: the
+     * others would carry a layer use their source never had. A map placed on
+     * no page — a form's, an inherited one — has no page to be expected on,
+     * and is not allowed.
      */
     const allowedUnregisteredUse = new Set<string>();
     const pagesOfRoot = new Map<string, number[]>();
@@ -2758,8 +2765,11 @@ export function censusOptionalContent(
             if (resources instanceof PDFRef) place(resources.tag);
         });
     }
-    const isExpectedUnregisteredUse = (rootTag: string, key: string, tag: string): boolean =>
-        (pagesOfRoot.get(rootTag) ?? []).some((index) => allowedUnregisteredUse.has(`${index}|${key}|${tag}`));
+    const isExpectedUnregisteredUse = (rootTag: string, key: string, tag: string): boolean => {
+        const pages = pagesOfRoot.get(rootTag) ?? [];
+        return pages.length > 0
+            && pages.every((index) => allowedUnregisteredUse.has(`${index}|${key}|${tag}`));
+    };
 
     for (const { rootTag, raw } of propertyMaps) {
         const mapRead = resolve(doc, raw);
