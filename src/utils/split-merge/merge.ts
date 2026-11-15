@@ -52,12 +52,14 @@ import { assertEnforceablePolicy, ADOPTED_POLICY } from './policy';
 import type { M6Policy } from './policy';
 import { classifyLoadError, readSourceFacts } from './source-facts';
 import {
+    autoStateLoss,
     carryOptionalContent,
     describeOptionalContent,
+    expectOptionalContent,
     planOptionalContent,
     verifySanitizedOptionalContent,
 } from './optional-content';
-import type { OptionalContentDescription } from './optional-content';
+import type { OptionalContentDescription, OptionalContentExpectation } from './optional-content';
 import {
     assessSourceActionStructure,
     closeSourcePageRefs,
@@ -686,9 +688,18 @@ export async function runMerge(
     const collisions = new Set((plan.detail?.collisions as string[]) ?? []);
     const out = await PDFDocument.create({ updateMetadata: false });
     const losses: LossRecord[] = [...plan.losses];
-    const seenLoss = new Set(losses.map((l) => `${l.kind}|${l.what ?? ''}`));
-    const addLoss = (loss: LossRecord): void => {
-        const key = `${loss.kind}|${loss.what ?? ''}`;
+    /** OC-U: output tags carried unregistered on purpose, across every source. */
+    const carriedUnregistered = new Set<string>();
+    /** Independent RF-01: per carried source, in carry order, from its description. */
+    const ocExpectations: OptionalContentExpectation[] = [];
+    const seenLoss = new Set(losses.map((l) => `${l.kind}|${l.what ?? ''}|`));
+    /**
+     * `identity` separates records that read alike but come from different
+     * inputs. Main RF-01: two files with the same name and the same count
+     * collapsed into one notice, so the second source's trim was never shown.
+     */
+    const addLoss = (loss: LossRecord, identity = ''): void => {
+        const key = `${loss.kind}|${loss.what ?? ''}|${identity}`;
         if (seenLoss.has(key)) return;
         seenLoss.add(key);
         losses.push(loss);
@@ -1159,6 +1170,10 @@ export async function runMerge(
                     ...e,
                     pageIndex: e.pageIndex + firstNewPage,
                 })),
+                unregisteredPageProperties: sanitizedOc.unregisteredPageProperties.map((e) => ({
+                    ...e,
+                    pageIndex: e.pageIndex + firstNewPage,
+                })),
             };
             const carried = carryOptionalContent(source, shifted, out);
             if (carried.status === 'REFUSED') {
@@ -1171,6 +1186,15 @@ export async function runMerge(
                     losses,
                 );
             }
+            for (const tag of carried.unregistered ?? []) carriedUnregistered.add(tag);
+            ocExpectations.push(expectOptionalContent(shifted, carried.written));
+            // OC-C2: shown per source, with the count the carry left out.
+            // Main RF-01: keyed by the input, not by how it reads, and a name
+            // another input shares is told apart by its place in the order.
+            const sharedName = ordered.some((other, i) => i !== index && other.name === input.name);
+            const label = sharedName ? `${input.name}（${index + 1}番目）` : input.name;
+            const autoState = autoStateLoss(carried.autoStateGroupsDropped ?? 0, label);
+            if (autoState) addLoss(autoState, `input:${input.id}:${index}`);
         }
 
         if (sourceFields.length > 0) {
@@ -1355,7 +1379,7 @@ export async function runMerge(
         return sum + (record?.pageCount ?? 0);
     }, 0);
 
-    const readback = await readbackArtifact(bytes);
+    const readback = await readbackArtifact(bytes, carriedUnregistered, ocExpectations);
     const invariant = checkArtifactInvariants(readback, expectedPages);
     if (invariant) {
         return refusedMerge(

@@ -95,8 +95,10 @@ export {
     carryOptionalContent,
     censusOptionalContent,
     describeOptionalContent,
+    expectOptionalContent,
     optionalContentSemantics,
     planOptionalContent,
+    verifyOptionalContentExpectation,
     verifySanitizedOptionalContent,
     HANDLED_D_KEYS,
     SUPPORTED_AS_EVENTS,
@@ -105,6 +107,7 @@ export {
 export type {
     AutoStateEntry,
     OptionalContentDescription,
+    OptionalContentExpectation,
     OptionalContentFacts,
     PagePropertyEntry,
     SanitizedOptionalContentVerdict,

@@ -21,6 +21,7 @@
  *       node scripts/make-m6-round3-fixtures.mjs
  *       node scripts/make-m6-round4-fixtures.mjs
  *       node scripts/make-m6-round5-fixtures.mjs
+ *       node scripts/make-m6-ocu-fixtures.mjs
  *       node scripts/smoke-split-merge-ui.mjs
  */
 import fs from 'node:fs';
@@ -1052,6 +1053,46 @@ try {
     const live13d = await liveImages();
     check('13d: clicking the Extract tab while on it releases nothing',
         live13d.total > 0 && live13d.live === live13d.total, `${live13d.live}/${live13d.total} answer`);
+
+    // ---- 14. OC-U / OC-C2: the trimmed /AS is shown, the file is written ------
+    //
+    // MLIT vol. 2's shape, synthetic (make-m6-ocu-fixtures.mjs): extracting page 1
+    // keeps one registered layer and leaves two `/AS` references out. The person
+    // is told how many, and the export is not held behind a confirmation.
+    console.log('\n=== 14. OC-U / OC-C2 the /AS trim is disclosed on screen ===');
+    {
+        await openSplitMerge();
+        const ocuInput = await page.$('input[type="file"]');
+        await ocuInput.uploadFile(fixture('ocu-vol2like'));
+        await settle(3000);
+        await page.evaluate(() => {
+            document.querySelector('[data-usage-target="extract-pages"] > div')?.click();
+        });
+        await settle(500);
+        const beforeOcu = fs.readdirSync(downloads).filter((f) => f.endsWith('.pdf')).length;
+        await page.evaluate(() => {
+            document.querySelector('[data-usage-target="extract-export"]')?.click();
+        });
+        await settle(4000);
+        const ocuNotice = await page.evaluate(
+            () => document.querySelector('[data-usage-target="m6-notice"]')?.textContent ?? '');
+        const afterOcu = fs.readdirSync(downloads).filter((f) => f.endsWith('.pdf')).length;
+        check('14: the unregistered-layer document is written with one click',
+            afterOcu === beforeOcu + 1 && !ocuNotice.includes('内容を了承して'),
+            `${afterOcu - beforeOcu} new file(s)`);
+        check('14: the notice names the layer auto-state trim and its count',
+            ocuNotice.includes('レイヤーの自動表示設定') && ocuNotice.includes('2件'),
+            ocuNotice.slice(0, 240));
+        // PR #48 review (main RF-02 / independent RF-03): what was done and how
+        // much, and what the kept layers keep — no blanket promise about how
+        // the drawing looks, which no viewer was checked for here.
+        check('14: the notice says what was done, with the count, and what the kept layers keep',
+            ocuNotice.includes('出力するページで使わないレイヤー2件分を除いて書き出しました')
+            && ocuNotice.includes('初期表示と切り替えの設定は、元のPDFから引き継ぎます'),
+            ocuNotice.slice(0, 240));
+        check('14: the notice makes no blanket promise about how the drawing looks',
+            ocuNotice.length > 0 && !ocuNotice.includes('見え方'), ocuNotice.slice(0, 240));
+    }
 
     check('no uncaught page error during any of it',
         pageErrors.length === 0, pageErrors.join(' | '));

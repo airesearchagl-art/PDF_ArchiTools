@@ -264,7 +264,20 @@ try {
     check('comparator: match colour and opacity',
         c.includes('一致している部分の色') && c.includes('透明度'), 'match controls');
     check('comparator: the change report', c.includes('変更箇所抽出レポート'));
-    check('comparator: the diff threshold', c.includes('Diff Threshold') && c.includes('0〜5px'));
+    check('comparator: the tolerance matches the screen and SPATIAL_TOLERANCE_POLICY (0–0.15 mm, 0.05 mm steps, default 0)',
+        c.includes('許容値（同じ位置とみなす距離）：0〜0.15 mm（0.05 mm刻み、既定値0）'), 'tolerance');
+    check('comparator: the tolerance warns that changes can be missed, as the screen does',
+        c.includes('小さな文字・寸法・記号・形状の変更も検出されにくくなる場合があります'), 'disclosure');
+    check('comparator: the old pixel threshold is gone',
+        !c.includes('Diff Threshold') && !c.includes('0〜5px') && !c.includes('わずかなずれを変更として扱わない'), 'no px');
+    check('comparator: the card heading uses the screen\'s name 許容値, not 差分しきい値',
+        c.includes('ページ移動・ズーム・許容値') && !c.includes('差分しきい値'), 'heading');
+    {
+        const badgeSource = fs.readFileSync(path.join(ROOT, 'src', 'components', 'usageScreenshotBadges.ts'), 'utf8');
+        check('comparator: the screenshot badge for the view controls says 許容値 too',
+            badgeSource.includes("targets: ['comparator-view'], desc: 'ページ移動・ズーム・許容値'")
+            && !badgeSource.includes('差分しきい値'), 'badge');
+    }
     check('comparator: export scope options',
         c.includes('すべて') && c.includes('現在のページ') && c.includes('範囲指定'), 'scope');
     check('comparator: per-file visibility', c.includes('表示・非表示'));
@@ -316,6 +329,17 @@ try {
         s.includes('クリックすると選択') && s.includes('元のページ順に並びます'), 'extract');
     check('split-merge: merge ordering and removal',
         s.includes('順番を入れ替え') && s.includes('リストの順番どおり'), 'merge');
+    check('split-merge: some PDFs with unregistered layers are now accepted and those layers stay unregistered',
+        s.includes('レイヤー一覧に登録されていないレイヤーを含む一部のPDF') && s.includes('登録されないまま出力に残ります'), 'some PDFs');
+    check('split-merge: left-out layer display settings are counted on screen, and kept layers keep their settings',
+        s.includes('出力するページで使わないレイヤーの分は除いて書き出します') && s.includes('その件数を画面でお知らせします')
+        && s.includes('初期表示と切り替えの設定は、元のPDFから引き継ぎます'), 'count');
+    check('split-merge: the guide makes no blanket promise about how the drawing looks',
+        !s.includes('見え方は変わりません'), 'no blanket guarantee');
+    check('split-merge: the layer list in a viewer can have fewer items',
+        s.includes('レイヤー一覧の項目が元のPDFより少なくなる場合があります'), 'fewer items');
+    check('split-merge: unreadable layer settings still stop with a reason',
+        s.includes('レイヤー設定を安全に読み取れないPDFは、これまでどおり理由を表示して中止します'), 'still stops');
 
     // PDFテキスト化 -- three outputs, and the limits of the newest one.
     const t = text.textifier;
@@ -430,40 +454,68 @@ try {
     const releaseHeads = releaseCards.map((card) => card.head);
     const cardOf = (head) => releaseCards.find((c) => c.head === head) ?? { head: '', items: [] };
     const entryOf = (tool, version) => releaseHeads.filter((h) => h.includes(tool) && h.endsWith(`v${version}`));
-    const latest = [
-        { tool: 'PDF抽出・統合', version: '2.0.14', key: 'splitMerge', heading: 'ページを選んでもサムネイルが消えないように修正', phrase: 'すべてのサムネイルが「…」に戻り', header: 'split-merge' },
-        { tool: '図面管理', version: '0.3.0', key: 'drawingSet', heading: '図面一式のチェックと判断記録を追加', phrase: '図面番号の重複、表題欄の未確定項目', header: 'drawing-set' },
-        { tool: 'PDF加工', version: '1.5.1', key: 'tools', heading: '高さの低いウィンドウでも「実行開始」まで操作可能に', phrase: '高さの低いウィンドウでも「実行開始」', header: 'processor' },
-        { tool: 'PDF比較', version: '1.2.1', key: 'comparator', heading: '回転設定がそろった図面を本来の向きで表示', phrase: '回転設定だけの違いは差分として数えません', header: 'comparator' },
-    ];
     const versionsSource = fs.readFileSync(path.join(ROOT, 'src', 'config', 'versions.ts'), 'utf8');
+    const declaredOf = (key) => new RegExp(`${key}:\\s*\\{\\s*version:\\s*'([^']+)',\\s*lastUpdate:\\s*'([^']+)'`).exec(versionsSource);
     const banners = await page.evaluate(() => [...document.querySelectorAll('p')]
         .map((p) => (p.textContent || '').replace(/\s+/g, ' ').trim())
         .filter((s) => s.includes('最近の更新')));
     const banner = banners[0] ?? '';
     check('there is one 最近の更新 banner', banners.length === 1, `${banners.length}`);
-    for (const [index, entry] of latest.entries()) {
-        const heads = entryOf(entry.tool, entry.version);
-        const declared = new RegExp(`${entry.key}:\\s*\\{\\s*version:\\s*'([^']+)',\\s*lastUpdate:\\s*'([^']+)'`).exec(versionsSource);
-        check(`${entry.tool}: header, current version and latest history agree`,
-            heads.length === 1 && releaseHeads[index] === heads[0] && heads[0].startsWith('2026/11/13')
-            && versions[entry.header] === entry.version && declared?.[1] === entry.version && declared?.[2] === '2026/11/13', heads[0]);
-        check(`${entry.tool}: its change is described in both the banner and its release entry`,
-            banner.includes(`${entry.tool}：${entry.heading}（v${entry.version}）`)
-            && cardOf(heads[0]).items.some((item) => item.includes(entry.phrase)), banner);
+    // The newest date (2026/11/15) is PDF抽出・統合 2.0.15 alone, so it alone is in 最近の更新.
+    const newest = { tool: 'PDF抽出・統合', version: '2.0.15', key: 'splitMerge', heading: 'レイヤーを含む一部のPDFで抽出・統合の対応を改善', phrase: 'レイヤー一覧に登録されていないレイヤーを含む一部のPDF', header: 'split-merge' };
+    {
+        const heads = entryOf(newest.tool, newest.version);
+        const declared = declaredOf(newest.key);
+        check(`${newest.tool}: header, current version and latest history agree`,
+            heads.length === 1 && releaseHeads[0] === heads[0] && heads[0].startsWith('2026/11/15')
+            && versions[newest.header] === newest.version && declared?.[1] === newest.version && declared?.[2] === '2026/11/15', heads[0]);
+        check(`${newest.tool}: its change is described in both the banner and its release entry`,
+            banner.includes(`${newest.tool}：${newest.heading}（v${newest.version}）`)
+            && cardOf(heads[0]).items.some((item) => item.includes(newest.phrase)), banner);
     }
+    // 2026/11/13 is now one date back: still in the history in the same order, no longer in the banner.
+    const previous = [
+        { tool: 'PDF抽出・統合', version: '2.0.14', key: null, heading: 'ページを選んでもサムネイルが消えないように修正', phrase: 'すべてのサムネイルが「…」に戻り', header: null },
+        { tool: '図面管理', version: '0.3.0', key: 'drawingSet', heading: '図面一式のチェックと判断記録を追加', phrase: '図面番号の重複、表題欄の未確定項目', header: 'drawing-set' },
+        { tool: 'PDF加工', version: '1.5.1', key: 'tools', heading: '高さの低いウィンドウでも「実行開始」まで操作可能に', phrase: '高さの低いウィンドウでも「実行開始」', header: 'processor' },
+        { tool: 'PDF比較', version: '1.2.1', key: 'comparator', heading: '回転設定がそろった図面を本来の向きで表示', phrase: '回転設定だけの違いは差分として数えません', header: 'comparator' },
+    ];
+    for (const [offset, entry] of previous.entries()) {
+        const heads = entryOf(entry.tool, entry.version);
+        const declared = entry.key ? declaredOf(entry.key) : null;
+        check(`${entry.tool} v${entry.version}: the 2026/11/13 entry sits right after the newest`,
+            heads.length === 1 && releaseHeads[offset + 1] === heads[0] && heads[0].startsWith('2026/11/13')
+            && (entry.key === null
+                || (versions[entry.header] === entry.version && declared?.[1] === entry.version && declared?.[2] === '2026/11/13')),
+            heads[0]);
+        check(`${entry.tool} v${entry.version}: its entry keeps its change, and the banner no longer lists it`,
+            cardOf(heads[0]).items.some((item) => item.includes(entry.phrase))
+            && !banner.includes(entry.heading) && !banner.includes(`（v${entry.version}）`), banner);
+    }
+    // 2.0.15: what now opens, what is left out and told, what a viewer's layer list shows, and what still stops.
+    const sm2015 = cardOf(entryOf('PDF抽出・統合', '2.0.15')[0]).items.join('\n');
+    check('the PDF抽出・統合 2.0.15 entry: some PDFs now open, the left-out settings are counted on screen, the layer list can shrink, unsafe input still stops',
+        sm2015.includes('含む一部のPDF') && sm2015.includes('抽出・統合できるようになりました') && sm2015.includes('登録されないまま出力に残ります')
+        && sm2015.includes('出力するページで使わないレイヤーの分は除いて書き出します') && sm2015.includes('その件数を画面でお知らせします')
+        && sm2015.includes('初期表示と切り替えの設定は、元のPDFから引き継ぎます')
+        && sm2015.includes('レイヤー一覧の項目が元のPDFより少なくなる場合があります')
+        && sm2015.includes('これまでどおり理由を表示して中止します'), 'layers');
+    check('the PDF抽出・統合 2.0.15 entry stays out of PDF internals and review IDs',
+        sm2015.length > 0 && !/OCG|OCProperties|\/AS|\/D\b|OC-U|OC-C|pdf\.js|PDF\.js|Watermark|BLK-|RF-?\d/.test(sm2015), 'no internals');
+    check('the PDF抽出・統合 2.0.15 entry and banner make no blanket promise about how the drawing looks',
+        !sm2015.includes('見え方は変わりません') && !banner.includes('見え方'), 'no blanket guarantee');
     const processor150 = entryOf('PDF加工', '1.5.0');
     check('the earlier PDF加工 1.5.0 entry is dated 2026/10/31',
-        processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[4] === processor150[0], releaseHeads[4]);
+        processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[5] === processor150[0], releaseHeads[5]);
     const processor140 = entryOf('PDF加工', '1.4.0');
     check('the earlier PDF加工 1.4.0 entry is dated 2026/10/03',
-        processor140.length === 1 && processor140[0].startsWith('2026/10/03') && releaseHeads[7] === processor140[0], releaseHeads[7]);
+        processor140.length === 1 && processor140[0].startsWith('2026/10/03') && releaseHeads[8] === processor140[0], releaseHeads[8]);
     const drawingSet020 = entryOf('図面管理', '0.2.0');
     check('the earlier 図面管理 0.2.0 entry is dated 2026/10/20',
-        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[5] === drawingSet020[0], releaseHeads[5]);
+        drawingSet020.length === 1 && drawingSet020[0].startsWith('2026/10/20') && releaseHeads[6] === drawingSet020[0], releaseHeads[6]);
     const drawingSet010 = entryOf('図面管理', '0.1.0');
     check('the earlier 図面管理 0.1.0 entry is dated 2026/10/10',
-        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[6] === drawingSet010[0], releaseHeads[6]);
+        drawingSet010.length === 1 && drawingSet010[0].startsWith('2026/10/10') && releaseHeads[7] === drawingSet010[0], releaseHeads[7]);
     // 2.0.14 says what was wrong in words a person saw, and that cancelling is unchanged.
     const sm2014 = cardOf(entryOf('PDF抽出・統合', '2.0.14')[0]).items.join('\n');
     check('the PDF抽出・統合 2.0.14 entry: the thumbnails, the tab trip, and that a selection change still cancels an export',

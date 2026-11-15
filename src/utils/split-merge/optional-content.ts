@@ -37,6 +37,7 @@ import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNull, PDFRef, PDFString } 
 import type { PDFDocument, PDFPage } from 'pdf-lib';
 import { censusIndirectObjects } from './census';
 import type { CensusOutcome } from './census';
+import type { LossRecord } from './contracts';
 import { MECHANISM_BOUNDS } from './policy';
 import { pdfTextObject, pdfTextOf, readPdfText } from './pdf-text';
 import type { PdfText } from './pdf-text';
@@ -199,6 +200,20 @@ export interface OptionalContentDescription {
     orderShape: unknown;
     configs: number;
     pageProperties: PagePropertyEntry[];
+    /**
+     * OC-U — page `/Properties` entries naming, by reference, a group the
+     * source's `/OCProperties /OCGs` does not list. Carried as they are:
+     * copied with the page and left unregistered in the output, never added to
+     * `/OCGs`, `/ON`, `/OFF`, `/Order` or `/AS`, so a viewer treats them in the
+     * artifact exactly as it treats them in the source.
+     */
+    unregisteredPageProperties: PagePropertyEntry[];
+    /**
+     * OC-C2 — the groups `/D /AS` names that no kept page uses, by source tag.
+     * Their references are left out of the artifact's `/AS`; the carry checks
+     * it drops exactly these and nothing else, and the count is shown.
+     */
+    autoStateGroupsDropped: string[];
     /** Form XObjects whose `/OC` this reader supports and carries. OC-A / OC-B. */
     xobjectUsages: XObjectOcUsage[];
     /** `/D /AS`, in order. Empty when the key is absent. OC-C. */
@@ -1058,6 +1073,8 @@ export function describeOptionalContent(
         orderShape: null,
         configs: 0,
         pageProperties: [],
+        unregisteredPageProperties: [],
+        autoStateGroupsDropped: [],
         xobjectUsages: [],
         autoStates: [],
         autoStatesPresent: false,
@@ -1336,10 +1353,28 @@ export function describeOptionalContent(
                 continue;
             }
             if (!registered.has(raw.tag)) {
-                out.unsupported.push(
-                    `page ${sourceIndex} /Properties ${key.asString()} `
-                    + 'names a group /OCProperties does not register',
-                );
+                /**
+                 * OC-U (Human-adopted with conditions, 2026-11-15) — carried
+                 * unregistered, never registered.
+                 *
+                 * BLK-R7-B's failure was registering such a group in the
+                 * output, which gave it the source's `/D` state. This keeps the
+                 * source's non-registration instead: the group is copied with
+                 * the page, matched back to this source group in the carry
+                 * (same `(page, key)`, an indirect `/OCG` with the same
+                 * `/Name`, one source group to one written group), and the
+                 * readback proves it is not registered and that nothing else
+                 * unregistered reached the artifact. A group the source's `/D`
+                 * mentions anyway is refused below: that is a statement about
+                 * it this reader cannot reproduce.
+                 */
+                out.unregisteredPageProperties.push({
+                    sourcePageIndex: sourceIndex,
+                    pageIndex: position,
+                    key: key.asString(),
+                    ref: raw,
+                    name: pdfTextOf(look(doc, value.get(PDFName.of('Name')))),
+                });
                 continue;
             }
             out.pageProperties.push({
@@ -1366,6 +1401,39 @@ export function describeOptionalContent(
      * document in `/AS`, and an extract of some of its pages keeps only the
      * layers those pages use.
      */
+    /**
+     * OC-U condition: an unregistered group the source's `/D` nevertheless
+     * names in `/ON`, `/OFF` or `/Order` is given a state or a panel position
+     * by the very configuration that does not list it. Readers disagree on
+     * what that means, so it stays refused, as before. (`/D /AS` members are
+     * already refused when unregistered, in `readAutoState`.)
+     */
+    if (out.unregisteredPageProperties.length > 0 && d) {
+        const unregisteredTags = new Set(out.unregisteredPageProperties.map((e) => e.ref.tag));
+        const named = new Set<string>([...out.onRefs, ...out.offRefs]);
+        const collectOrder = (node: unknown, depth: number): void => {
+            if (depth > MECHANISM_BOUNDS.maxOrderDepth) return;
+            if (node instanceof PDFRef) {
+                named.add(node.tag);
+                const value = look(doc, node);
+                if (value instanceof PDFArray) {
+                    for (let i = 0; i < value.size(); i += 1) collectOrder(value.get(i), depth + 1);
+                }
+                return;
+            }
+            if (node instanceof PDFArray) {
+                for (let i = 0; i < node.size(); i += 1) collectOrder(node.get(i), depth + 1);
+            }
+        };
+        collectOrder(d.get(PDFName.of('Order')), 0);
+        const stated = [...unregisteredTags].filter((tag) => named.has(tag));
+        if (stated.length > 0) {
+            out.unsupported.push(
+                `/D names ${stated.length} group(s) /OCProperties /OCGs does not register (${stated.slice(0, 6).join(', ')})`,
+            );
+        }
+    }
+
     if (out.autoStates.length > 0) {
         const used = new Set<string>();
         for (const entry of out.pageProperties) used.add(entry.ref.tag);
@@ -1374,11 +1442,23 @@ export function describeOptionalContent(
         for (const entry of out.autoStates) {
             for (const ref of entry.ocgs) if (!used.has(ref.tag)) missing.add(ref.tag);
         }
-        if (missing.size > 0) {
-            out.unsupported.push(
-                `/D /AS names ${missing.size} group(s) no selected page uses`,
-            );
-        }
+        /**
+         * OC-C2 (Human-adopted with conditions, 2026-11-15) — instead of
+         * refusing, the carry leaves those references out.
+         *
+         * "Not used" is the complete answer here, not a guess: every place a
+         * kept page can use a group is either read into `pageProperties` /
+         * `xobjectUsages` or refused (annotations, `/OCMD` shapes this reader
+         * does not reduce, direct dictionaries), so a group outside `used` is
+         * not reachable from the kept pages through anything this reader
+         * accepted. The carry drops exactly this set and refuses if it would
+         * drop anything else, and the readback refuses an artifact in which a
+         * content use names a group that is not registered (or carried
+         * unregistered on purpose). An auto state only acts on the groups it
+         * names, so a reference to a group the artifact does not hold does
+         * nothing a viewer could show; the count is shown to the person.
+         */
+        out.autoStateGroupsDropped = [...missing];
     }
 
     return out;
@@ -1424,6 +1504,10 @@ export function optionalContentSemantics(oc: OptionalContentDescription): Record
         pageProperties: field(sorted(oc.pageProperties.map((p) => JSON.stringify(
             [p.sourcePageIndex, p.pageIndex, p.key, p.ref.tag, p.name],
         )))),
+        unregisteredPageProperties: field(sorted(oc.unregisteredPageProperties.map((p) => JSON.stringify(
+            [p.sourcePageIndex, p.pageIndex, p.key, p.ref.tag, p.name],
+        )))),
+        autoStateGroupsDropped: field(sorted([...oc.autoStateGroupsDropped])),
         xobjectUsages: field(sorted(oc.xobjectUsages.map((u) => JSON.stringify(
             [u.sourcePageIndex, u.pageIndex, u.path, u.ref.tag, u.name, u.viaOcmd, u.ocRef, u.formRef],
         )))),
@@ -1486,8 +1570,42 @@ export function verifySanitizedOptionalContent(
     return null;
 }
 
+/**
+ * OC-C2: the disclosure shown to the person when `/D /AS` references were left
+ * out. Extract and Merge build it from the same counts, at plan and at run, so
+ * the two never word the same fact differently. `from` names the Merge source.
+ *
+ * Main RF-02 / independent RF-03: it says what was done and how much, and the
+ * one thing the carry preserves by construction — the kept layers' initial
+ * state and toggle settings. It makes no promise about how a viewer draws the
+ * result; that depends on the viewer and was not, and cannot be, verified here.
+ */
+export function autoStateLoss(groups: number, from?: string): LossRecord | null {
+    if (groups <= 0) return null;
+    return {
+        kind: 'layer-auto-state',
+        what: from ? `${from}：${groups}件` : `${groups}件`,
+        why: `レイヤーの自動表示設定（表示・印刷・書き出し時の設定）から、出力するページで使わないレイヤー${groups}件分を除いて書き出しました。`
+            + '出力に残るレイヤーの初期表示と切り替えの設定は、元のPDFから引き継ぎます。',
+    };
+}
+
 export type CarryOutcome =
-    | { status: 'CARRIED'; carried: number; on: number; off: number; mapped: number }
+    | {
+        status: 'CARRIED'; carried: number; on: number; off: number; mapped: number;
+        /** OC-U: output tags of groups carried unregistered, for the readback. */
+        unregistered?: string[];
+        /** OC-C2: groups whose `/D /AS` references were left out (shown to the person). */
+        autoStateGroupsDropped?: number;
+        /** OC-C2: `/D /AS` entries left with no group, and so left out. */
+        autoStateEntriesDropped?: number;
+        /**
+         * Independent RF-01: source tag → the output tag the carry matched it
+         * to, registered and unregistered alike. Lets the readback pin each
+         * witness to its object, not only to an object with the same name.
+         */
+        written?: Record<string, string>;
+    }
     | { status: 'REFUSED'; reason: string; unsupported: string[] };
 
 /**
@@ -1519,6 +1637,55 @@ export function carryOptionalContent(
         if (!(raw instanceof PDFRef)) continue;
         sourceRefToOutputRef.set(entry.ref.tag, raw);
         outputRefByTag.set(raw.tag, raw);
+    }
+
+    /**
+     * OC-U: each unregistered group is matched back to the source group it
+     * came from, or the run is refused. Found again through the same
+     * `(page, key)` pair; the written object has to be an indirect `/OCG`
+     * with the same `/Name`; and the mapping has to be one-to-one — one
+     * source group to one written group, never two sources to one. Kept apart
+     * from the registered map so nothing below can register it.
+     */
+    const unregisteredOutput = new Map<string, PDFRef>();
+    const writtenUnregisteredBySource = new Map<string, string>();
+    const sourceUnregisteredByWritten = new Map<string, string>();
+    const unmatched = (entry: PagePropertyEntry, what: string): CarryOutcome => {
+        const message = `page ${entry.pageIndex} /Properties ${entry.key} ${what}`;
+        return {
+            status: 'REFUSED',
+            reason: `オプショナルコンテンツの対象を再現できません: ${message}`,
+            unsupported: [message],
+        };
+    };
+    for (const entry of description.unregisteredPageProperties) {
+        const page = outPages[entry.pageIndex];
+        const resources = page?.node.lookup(PDFName.of('Resources'));
+        const properties = resources instanceof PDFDict
+            ? resources.lookup(PDFName.of('Properties'))
+            : undefined;
+        const raw = properties instanceof PDFDict
+            ? properties.get(PDFName.of(entry.key.replace(/^\//, '')))
+            : undefined;
+        if (!(raw instanceof PDFRef)) return unmatched(entry, 'did not survive the copy');
+        const written = out.context.lookup(raw);
+        if (!(written instanceof PDFDict) || nameOf(written.get(PDFName.of('Type'))) !== '/OCG') {
+            return unmatched(entry, 'is not a group in the written page');
+        }
+        if (pdfTextOf(written.lookup(PDFName.of('Name'))) !== entry.name) {
+            return unmatched(entry, 'names a group whose /Name differs from the source group');
+        }
+        const previousWritten = writtenUnregisteredBySource.get(entry.ref.tag);
+        if (previousWritten !== undefined && previousWritten !== raw.tag) {
+            return unmatched(entry, 'is one source group found as two written groups');
+        }
+        const previousSource = sourceUnregisteredByWritten.get(raw.tag);
+        if (previousSource !== undefined && previousSource !== entry.ref.tag) {
+            return unmatched(entry, 'is a written group two source groups both lead to');
+        }
+        writtenUnregisteredBySource.set(entry.ref.tag, raw.tag);
+        sourceUnregisteredByWritten.set(raw.tag, entry.ref.tag);
+        unregisteredOutput.set(raw.tag, raw);
     }
 
     /**
@@ -1647,8 +1814,150 @@ export function carryOptionalContent(
     }
     for (const ref of outputRefByTag.values()) pushOnce(ref);
 
+    // OC-U: a group cannot be both. Not reachable from a source this reader
+    // accepted, and checked rather than assumed.
+    for (const tag of unregisteredOutput.keys()) {
+        if (outputRefByTag.has(tag)) {
+            const message = `${tag} is carried both registered and unregistered`;
+            return {
+                status: 'REFUSED',
+                reason: `オプショナルコンテンツの対象を再現できません: ${message}`,
+                unsupported: [message],
+            };
+        }
+    }
+
+    /**
+     * OC-C: every `/AS` entry, remapped. OC-C2: a reference to a group no kept
+     * page uses — proven so by the description — is left out, and an entry
+     * left naming nothing goes with it; both are counted and shown. The state
+     * an entry applies to a group the artifact keeps is unchanged.
+     *
+     * Only the references the description proved unused may be left out. A
+     * reference this carry cannot map that the description did not name — or
+     * one it named that the carry *can* map — means the two readings disagree,
+     * and that is a refusal, not a guess. Independent RF-02: the same rule on
+     * both paths, including the one where no registered group is kept at all.
+     */
+    const carryAutoStates = ():
+        | { ok: true; entries: { Event: PDFName; Category: PDFName[]; OCGs: PDFRef[] }[]; entriesDropped: number }
+        | { ok: false; refusal: CarryOutcome } => {
+        const entries: { Event: PDFName; Category: PDFName[]; OCGs: PDFRef[] }[] = [];
+        let entriesDropped = 0;
+        const provenUnused = new Set(description.autoStateGroupsDropped);
+        const dropped = new Set<string>();
+        const refuse = (message: string): { ok: false; refusal: CarryOutcome } => ({
+            ok: false,
+            refusal: {
+                status: 'REFUSED',
+                reason: `オプショナルコンテンツの自動状態を再現できません: ${message}`,
+                unsupported: [message],
+            },
+        });
+        for (const entry of description.autoStates) {
+            const mapped: PDFRef[] = [];
+            for (const ref of entry.ocgs) {
+                const target = sourceRefToOutputRef.get(ref.tag);
+                if (!target) {
+                    if (!provenUnused.has(ref.tag)) {
+                        return refuse(`/D /AS names ${ref.tag}, which no kept page was shown not to use`);
+                    }
+                    dropped.add(ref.tag);
+                    continue;
+                }
+                if (!mapped.some((r) => r.tag === target.tag)) mapped.push(target);
+            }
+            if (mapped.length === 0) {
+                entriesDropped += 1;
+                continue;
+            }
+            entries.push({
+                Event: PDFName.of(entry.event.replace(LEADING_SLASH, '')),
+                Category: entry.categories.map((c) => PDFName.of(c.replace(LEADING_SLASH, ''))),
+                OCGs: mapped,
+            });
+        }
+        if (dropped.size !== provenUnused.size) {
+            return refuse(`/D /AS: ${provenUnused.size} group(s) were shown unused but ${dropped.size} were left out`);
+        }
+        return { ok: true, entries, entriesDropped };
+    };
+
     if (ordered.length === 0) {
-        return { status: 'CARRIED', carried: 0, on: 0, off: 0, mapped: 0 };
+        /**
+         * OC-U: unregistered groups with no registered group beside them would
+         * leave an artifact with no `/OCProperties` at all — a different
+         * statement from the source's, so it is refused rather than guessed.
+         */
+        if (unregisteredOutput.size > 0) {
+            const message = 'only groups /OCProperties does not register remain on the kept pages';
+            return {
+                status: 'REFUSED',
+                reason: `オプショナルコンテンツの構成を再現できません: ${message}`,
+                unsupported: [message],
+            };
+        }
+        /**
+         * Independent RF-02 — no registered group is kept, so nothing is
+         * written, as before. What this path no longer does is take that on
+         * trust. It is reached either because the kept pages use no group,
+         * or because groups they do use were not found in the written pages;
+         * only the first may write a file with no layer configuration.
+         *
+         * `/Order`: a group the description says a kept page uses, named
+         * there and not reproduced, is the same refusal the other path makes.
+         * A group no kept page uses is left out with the rest, as on main —
+         * a page without layers from a layered document is still extracted.
+         * Human decision, 2026-11-15: reconcile, do not refuse more than main.
+         *
+         * `/AS`: the dropped set is reconciled against the proven-unused set
+         * exactly as on the other path.
+         */
+        const usedTags = new Set<string>([
+            ...description.pageProperties.map((e) => e.ref.tag),
+            ...description.xobjectUsages.map((u) => u.ref.tag),
+        ]);
+        if (description.orderPresent && sourceD instanceof PDFDict) {
+            let problem: string | null = null;
+            const walk = (node: unknown, depth: number): void => {
+                if (problem !== null) return;
+                if (depth > MECHANISM_BOUNDS.maxOrderDepth) {
+                    problem = '/D /Order nested too deep to reproduce';
+                    return;
+                }
+                // Re-review RF-02: resolve first, as `mapOrder` does. The root
+                // and any child may be an indirect *array*; a reference is a
+                // group only once it is known not to be one.
+                const value = look(source, node);
+                if (value instanceof PDFArray) {
+                    for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+                    return;
+                }
+                if (node instanceof PDFRef && usedTags.has(node.tag)) {
+                    problem = `/D /Order names ${node.tag}, which a kept page uses and the written pages do not reproduce`;
+                }
+            };
+            walk(sourceD.get(PDFName.of('Order')), 0);
+            if (problem !== null) {
+                return {
+                    status: 'REFUSED',
+                    reason: `オプショナルコンテンツの表示順を再現できません: ${problem}`,
+                    unsupported: [problem],
+                };
+            }
+        }
+        let entriesDropped = 0;
+        if (description.autoStatesPresent) {
+            const autoStates = carryAutoStates();
+            if (!autoStates.ok) return autoStates.refusal;
+            // Nothing is mapped on this path, so nothing can be kept.
+            entriesDropped = autoStates.entriesDropped;
+        }
+        return {
+            status: 'CARRIED', carried: 0, on: 0, off: 0, mapped: 0,
+            autoStateGroupsDropped: description.autoStatesPresent ? description.autoStateGroupsDropped.length : 0,
+            autoStateEntriesDropped: entriesDropped,
+        };
     }
 
     /**
@@ -1721,32 +2030,12 @@ export function carryOptionalContent(
     if (description.dNameValue !== null) d.Name = pdfTextObject(description.dNameValue);
     if (description.baseState === SUPPORTED_BASE_STATE) d.BaseState = PDFName.of('ON');
 
-    // OC-C: every `/AS` entry, remapped. An entry naming a group no kept page
-    // uses is a refusal rather than an entry quietly dropped — the state it
-    // applies is part of what the author asked a viewer to do.
+    let autoStateEntriesDropped = 0;
     if (description.autoStatesPresent) {
-        const autoStates: unknown[] = [];
-        for (const entry of description.autoStates) {
-            const mapped: PDFRef[] = [];
-            for (const ref of entry.ocgs) {
-                const target = sourceRefToOutputRef.get(ref.tag);
-                if (!target) {
-                    const message = '/D /AS names a group no kept page uses';
-                    return {
-                        status: 'REFUSED',
-                        reason: `オプショナルコンテンツの自動状態を再現できません: ${message}`,
-                        unsupported: [message],
-                    };
-                }
-                if (!mapped.some((r) => r.tag === target.tag)) mapped.push(target);
-            }
-            autoStates.push({
-                Event: PDFName.of(entry.event.replace(LEADING_SLASH, '')),
-                Category: entry.categories.map((c) => PDFName.of(c.replace(LEADING_SLASH, ''))),
-                OCGs: mapped,
-            });
-        }
-        d.AS = autoStates;
+        const autoStates = carryAutoStates();
+        if (!autoStates.ok) return autoStates.refusal;
+        autoStateEntriesDropped = autoStates.entriesDropped;
+        d.AS = autoStates.entries;
     }
     // OC-D: the empty array is the only supported value, and it is written back
     // as the empty array rather than left out.
@@ -1843,7 +2132,252 @@ export function carryOptionalContent(
         on: on.length,
         off: off.length,
         mapped: sourceRefToOutputRef.size,
+        unregistered: [...unregisteredOutput.keys()],
+        autoStateGroupsDropped: description.autoStatesPresent ? description.autoStateGroupsDropped.length : 0,
+        autoStateEntriesDropped,
+        written: Object.fromEntries([
+            ...[...sourceRefToOutputRef].map(([sourceTag, ref]) => [sourceTag, ref.tag]),
+            ...writtenUnregisteredBySource,
+        ]),
     };
+}
+
+/**
+ * Independent RF-01 — what one carried source must leave in the artifact,
+ * derived from that source's description, never from the carry's own maps.
+ *
+ * The census below can say an artifact's references are *well formed*: every
+ * group registered or carried on purpose, every `/AS` member registered. It
+ * cannot say they are the *right* ones — a page property pointed at another
+ * carried group, or an `/AS` entry whose event, category or groups were
+ * swapped, has the same counts and the same shapes. This is what lets the
+ * readback tell: every witness the source had, at the output page it landed
+ * on, and every `/AS` entry the source kept, in order.
+ *
+ * Page indices are output indices (Merge shifts them before the carry).
+ * Groups are named by their *source* tag; the readback finds what each became
+ * through the witnesses, so one source group must become exactly one written
+ * group, and no written group may stand for two.
+ */
+export interface OptionalContentExpectation {
+    /** Registered groups named by a page's `/Properties`. */
+    registeredProperties: { pageIndex: number; key: string; sourceTag: string }[];
+    /** Registered groups named by a form XObject's `/OC`, found again by path. */
+    registeredForms: { pageIndex: number; path: string[]; sourceTag: string }[];
+    /** OC-U: groups carried unregistered, with the `/Name` they must still have. */
+    unregistered: { pageIndex: number; key: string; sourceTag: string; name: string | null }[];
+    /** OC-C2: the `/AS` entries that must survive, in order, by source group. */
+    autoStates: { event: string; categories: string[]; sourceTags: string[] }[];
+    /**
+     * Source tag → the output tag the carry matched it to. The carry proved
+     * the match against the source (same `(page, key)`, same `/Name`, one to
+     * one); pinning it here means anything that re-points a witness between
+     * the carry and the bytes — even to an identical twin — is seen.
+     */
+    written: Record<string, string>;
+}
+
+export function expectOptionalContent(
+    description: OptionalContentDescription,
+    written: Record<string, string> = {},
+): OptionalContentExpectation {
+    const provenUnused = new Set(description.autoStateGroupsDropped);
+    const autoStates: OptionalContentExpectation['autoStates'] = [];
+    if (description.autoStatesPresent) {
+        for (const entry of description.autoStates) {
+            const kept: string[] = [];
+            for (const ref of entry.ocgs) {
+                if (provenUnused.has(ref.tag) || kept.includes(ref.tag)) continue;
+                kept.push(ref.tag);
+            }
+            if (kept.length === 0) continue;
+            autoStates.push({
+                event: `/${entry.event.replace(LEADING_SLASH, '')}`,
+                categories: entry.categories.map((c) => `/${c.replace(LEADING_SLASH, '')}`),
+                sourceTags: kept,
+            });
+        }
+    }
+    return {
+        registeredProperties: description.pageProperties.map((e) => ({
+            pageIndex: e.pageIndex, key: e.key, sourceTag: e.ref.tag,
+        })),
+        registeredForms: description.xobjectUsages.map((u) => ({
+            pageIndex: u.pageIndex, path: [...u.path], sourceTag: u.ref.tag,
+        })),
+        unregistered: description.unregisteredPageProperties.map((e) => ({
+            pageIndex: e.pageIndex, key: e.key, sourceTag: e.ref.tag, name: e.name,
+        })),
+        autoStates,
+        written: { ...written },
+    };
+}
+
+/**
+ * Independent RF-01 — the artifact, reloaded, against what each carried
+ * source said it must hold. Returns what did not match; empty is a match.
+ *
+ * Every lookup is direct, on a path the expectation names: a page's
+ * `/Resources /Properties` entry, or a form reached through `/XObject` keys.
+ * A witness that is not there, points elsewhere, or disagrees with another
+ * witness of the same source group is named.
+ */
+export function verifyOptionalContentExpectation(
+    doc: PDFDocument,
+    expectations: readonly OptionalContentExpectation[],
+): string[] {
+    const problems: string[] = [];
+    const pages = doc.getPages();
+    /** Written tag → which source group (by expectation index) it stands for. */
+    const sourceOfWritten = new Map<string, string>();
+    /** Per expectation: source tag → the written tag its witnesses agree on. */
+    const writtenBySource: Map<string, string>[] = [];
+
+    const propertyRef = (pageIndex: number, key: string): PDFRef | null => {
+        const page = pages[pageIndex];
+        if (!page) return null;
+        const resources = page.node.lookup(PDFName.of('Resources'));
+        const properties = resources instanceof PDFDict ? resources.lookup(PDFName.of('Properties')) : undefined;
+        if (!(properties instanceof PDFDict)) return null;
+        const raw = properties.get(PDFName.of(key.replace(LEADING_SLASH, '')));
+        return raw instanceof PDFRef ? raw : null;
+    };
+    const formOcRef = (pageIndex: number, path: string[]): PDFRef | null => {
+        const page = pages[pageIndex];
+        if (!page) return null;
+        let resources: unknown = page.node.lookup(PDFName.of('Resources'));
+        let form: PDFDict | null = null;
+        for (const key of path) {
+            if (!(resources instanceof PDFDict)) return null;
+            const xobjects = resources.lookup(PDFName.of('XObject'));
+            if (!(xobjects instanceof PDFDict)) return null;
+            const dict = dictOf(xobjects.lookup(PDFName.of(key)));
+            if (!dict) return null;
+            form = dict;
+            resources = dict.lookup(PDFName.of('Resources'));
+        }
+        const raw = form?.get(PDFName.of('OC'));
+        return raw instanceof PDFRef ? raw : null;
+    };
+    const isGroup = (ref: PDFRef): PDFDict | null => {
+        const target = look(doc, ref);
+        return target instanceof PDFDict && nameOf(target.get(PDFName.of('Type'))) === '/OCG' ? target : null;
+    };
+
+    expectations.forEach((expected, s) => {
+        const writtenOf = new Map<string, string>();
+        const bind = (sourceTag: string, written: PDFRef, where: string): void => {
+            const pinned = expected.written[sourceTag];
+            if (pinned === undefined) {
+                problems.push(`${where}: source group ${sourceTag} was not matched by the carry`);
+                return;
+            }
+            if (pinned !== written.tag) {
+                problems.push(`${where} names ${written.tag}, but the carry matched source group ${sourceTag} to ${pinned}`);
+                return;
+            }
+            const previous = writtenOf.get(sourceTag);
+            if (previous !== undefined && previous !== written.tag) {
+                problems.push(`${where}: source group ${sourceTag} is written as ${written.tag} here and ${previous} elsewhere`);
+                return;
+            }
+            const identity = `${s}:${sourceTag}`;
+            const owner = sourceOfWritten.get(written.tag);
+            if (owner !== undefined && owner !== identity) {
+                problems.push(`${where}: written group ${written.tag} stands for both ${owner} and ${identity}`);
+                return;
+            }
+            writtenOf.set(sourceTag, written.tag);
+            sourceOfWritten.set(written.tag, identity);
+        };
+
+        for (const e of expected.registeredProperties) {
+            const where = `page ${e.pageIndex} /Properties ${e.key}`;
+            const ref = propertyRef(e.pageIndex, e.key);
+            if (!ref || !isGroup(ref)) {
+                problems.push(`${where} no longer names a group`);
+                continue;
+            }
+            bind(e.sourceTag, ref, where);
+        }
+        for (const e of expected.registeredForms) {
+            const where = `page ${e.pageIndex} /XObject ${e.path.join(' /XObject ')} /OC`;
+            const ref = formOcRef(e.pageIndex, e.path);
+            if (!ref || !isGroup(ref)) {
+                problems.push(`${where} no longer names a group`);
+                continue;
+            }
+            bind(e.sourceTag, ref, where);
+        }
+        for (const e of expected.unregistered) {
+            const where = `page ${e.pageIndex} /Properties ${e.key}`;
+            const ref = propertyRef(e.pageIndex, e.key);
+            const group = ref ? isGroup(ref) : null;
+            if (!ref || !group) {
+                problems.push(`${where} no longer names the group carried unregistered`);
+                continue;
+            }
+            if (pdfTextOf(look(doc, group.get(PDFName.of('Name')))) !== e.name) {
+                problems.push(`${where} names a group whose /Name is not the source group's`);
+                continue;
+            }
+            bind(e.sourceTag, ref, where);
+        }
+        writtenBySource[s] = writtenOf;
+    });
+
+    // `/AS`: every source's kept entries, in source order, as the carry
+    // appends them — compared entry by entry, not counted.
+    const want: { event: string; categories: string[]; tags: string[]; from: string }[] = [];
+    expectations.forEach((expected, s) => {
+        const writtenOf = writtenBySource[s];
+        expected.autoStates.forEach((entry, i) => {
+            const tags: string[] = [];
+            for (const sourceTag of entry.sourceTags) {
+                const written = writtenOf.get(sourceTag);
+                if (written === undefined) {
+                    problems.push(`source ${s} /AS[${i}] keeps ${sourceTag}, which no kept page was found to use`);
+                    continue;
+                }
+                if (!tags.includes(written)) tags.push(written);
+            }
+            want.push({ event: entry.event, categories: entry.categories, tags, from: `source ${s} /AS[${i}]` });
+        });
+    });
+
+    const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+    const d = oc instanceof PDFDict ? oc.lookup(PDFName.of('D')) : undefined;
+    const asRaw = d instanceof PDFDict ? d.lookup(PDFName.of('AS')) : undefined;
+    const have: { event: string; categories: string[]; tags: string[] }[] = [];
+    if (asRaw instanceof PDFArray) {
+        for (let i = 0; i < asRaw.size(); i += 1) {
+            const entry = dictOf(look(doc, asRaw.get(i)));
+            const categories = entry?.lookup(PDFName.of('Category'));
+            const groups = entry?.lookup(PDFName.of('OCGs'));
+            have.push({
+                event: entry ? nameOf(look(doc, entry.get(PDFName.of('Event')))) : '',
+                categories: categories instanceof PDFArray
+                    ? categories.asArray().map((c) => nameOf(c)) : [],
+                tags: groups instanceof PDFArray
+                    ? groups.asArray().map((g) => (g instanceof PDFRef ? g.tag : '?')) : [],
+            });
+        }
+    }
+    if (have.length !== want.length) {
+        problems.push(`/D /AS holds ${have.length} entr(ies) where the sources keep ${want.length}`);
+    }
+    for (let i = 0; i < Math.min(have.length, want.length); i += 1) {
+        const a = have[i];
+        const b = want[i];
+        if (a.event !== b.event) problems.push(`/D /AS[${i}] /Event is ${a.event || 'missing'}, ${b.from} has ${b.event}`);
+        if (a.categories.join(' ') !== b.categories.join(' ')) {
+            problems.push(`/D /AS[${i}] /Category is [${a.categories.join(' ')}], ${b.from} has [${b.categories.join(' ')}]`);
+        }
+        if (a.tags.join(' ') !== b.tags.join(' ')) {
+            problems.push(`/D /AS[${i}] /OCGs are [${a.tags.join(' ')}], ${b.from} keeps [${b.tags.join(' ')}]`);
+        }
+    }
+    return problems;
 }
 
 /**
@@ -1859,6 +2393,8 @@ export interface OptionalContentFacts {
     danglingUses: number;
     /** `/OC` entries naming a group `/OCProperties` does not register. Must be 0. */
     unregisteredUses: number;
+    /** OC-U: page properties naming a group the run carried unregistered on purpose. */
+    carriedUnregisteredUses: number;
     /** `/OC` entries still naming a membership dictionary. Must be 0. */
     ocmdSurvivors: number;
     /**
@@ -1903,12 +2439,26 @@ const OC_DETAIL_CAP = 6;
  * REFUSED; a structure it can read and that does not hold together is counted.
  * Both stop an artifact being handed over.
  */
-export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalContentFacts> {
+export function censusOptionalContent(
+    doc: PDFDocument,
+    /**
+     * OC-U: output tags the run carried unregistered on purpose. A page
+     * property naming one of these, unregistered, is counted apart; one of
+     * these found registered is a configuration error (BLK-R7-B).
+     */
+    carriedUnregistered: ReadonlySet<string> = new Set(),
+    /**
+     * Independent RF-01: one per carried source, in carry order, derived from
+     * its description. Absent means "not checked" (callers outside a run).
+     */
+    expectations?: readonly OptionalContentExpectation[],
+): CensusOutcome<OptionalContentFacts> {
     const facts: OptionalContentFacts = {
         uses: 0,
         registeredGroups: 0,
         danglingUses: 0,
         unregisteredUses: 0,
+        carriedUnregisteredUses: 0,
         ocmdSurvivors: 0,
         propertyUses: 0,
         configErrors: 0,
@@ -2174,6 +2724,53 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
      * whose meaning cannot be known. An ordinary property list — marked content
      * that is not optional content — is not a use, and is left alone.
      */
+    /**
+     * Re-review RF-01 — the uses actually found, not only the ones expected.
+     *
+     * The expectation check confirms that every witness the sources had is
+     * where it should be. It cannot see a witness nobody expected: one more
+     * `/Properties` key naming a group already carried unregistered, on the
+     * same page or another, leaves every expected one in place. So each use
+     * of such a group found here has to be one of the expected witnesses —
+     * that page, that key, that object — or it is counted.
+     *
+     * A map is placed on pages by the object that holds it: a page that
+     * holds its `/Resources` directly, or the indirect `/Resources` a page
+     * names (shared resources place it on every page that names them).
+     *
+     * Shared-resources RF-01: a use on a shared map is on every page that
+     * names the map, so it is expected only if each of those pages expects
+     * that key naming that object. One page that does is not enough: the
+     * others would carry a layer use their source never had. A map placed on
+     * no page — a form's, an inherited one — has no page to be expected on,
+     * and is not allowed.
+     */
+    const allowedUnregisteredUse = new Set<string>();
+    const pagesOfRoot = new Map<string, number[]>();
+    if (expectations !== undefined) {
+        for (const expected of expectations) {
+            for (const e of expected.unregistered) {
+                const pinned = expected.written[e.sourceTag];
+                if (pinned !== undefined) allowedUnregisteredUse.add(`${e.pageIndex}|${e.key}|${pinned}`);
+            }
+        }
+        doc.getPages().forEach((page, index) => {
+            const place = (tag: string): void => {
+                const list = pagesOfRoot.get(tag) ?? [];
+                list.push(index);
+                pagesOfRoot.set(tag, list);
+            };
+            place(page.ref.tag);
+            const resources = page.node.get(PDFName.of('Resources'));
+            if (resources instanceof PDFRef) place(resources.tag);
+        });
+    }
+    const isExpectedUnregisteredUse = (rootTag: string, key: string, tag: string): boolean => {
+        const pages = pagesOfRoot.get(rootTag) ?? [];
+        return pages.length > 0
+            && pages.every((index) => allowedUnregisteredUse.has(`${index}|${key}|${tag}`));
+    };
+
     for (const { rootTag, raw } of propertyMaps) {
         const mapRead = resolve(doc, raw);
         if (!mapRead.ok) {
@@ -2204,6 +2801,17 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
             if (!(entry instanceof PDFRef)) {
                 facts.unregisteredUses += 1;
                 note(`${name} is a group written directly rather than by reference`);
+            } else if (carriedUnregistered.has(entry.tag)) {
+                if (registered.has(entry.tag)) {
+                    facts.configErrors += 1;
+                    note(`${name} names a group carried unregistered that the artifact registers`);
+                } else if (expectations !== undefined
+                    && !isExpectedUnregisteredUse(rootTag, key.asString(), entry.tag)) {
+                    facts.configErrors += 1;
+                    note(`${name} names ${entry.tag}, carried unregistered, where no source had it`);
+                } else {
+                    facts.carriedUnregisteredUses += 1;
+                }
             } else if (!registered.has(entry.tag)) {
                 facts.unregisteredUses += 1;
                 note(
@@ -2252,6 +2860,25 @@ export function censusOptionalContent(doc: PDFDocument): CensusOutcome<OptionalC
                     : `object ${rootTag} /OC names a group, and the artifact declares no /OCProperties`,
             );
         }
+    }
+
+    /**
+     * OC-U / OC-C2: every group object the artifact holds is accounted for —
+     * registered, or carried unregistered on purpose. A group that is neither
+     * is one this run neither configured nor matched to its source (a group
+     * an `/AS` reference was dropped for that came along anyway, say), and it
+     * is counted rather than trusted to be harmless.
+     */
+    for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+        if (!(obj instanceof PDFDict) || nameOf(obj.get(PDFName.of('Type'))) !== '/OCG') continue;
+        if (registered.has(ref.tag) || carriedUnregistered.has(ref.tag)) continue;
+        configError(`group ${ref.tag} is in the artifact but neither registered nor carried unregistered`);
+    }
+
+    // Independent RF-01: well formed is not enough; each witness and each
+    // kept `/AS` entry has to be the one its source said it would be.
+    if (expectations !== undefined) {
+        for (const problem of verifyOptionalContentExpectation(doc, expectations)) configError(problem);
     }
 
     return { complete: true, value: facts, nodes: outcome.nodes, roots: outcome.roots };

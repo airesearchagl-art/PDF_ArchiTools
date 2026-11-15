@@ -123,6 +123,7 @@ jobs:
           node scripts/make-m6-round11-fixtures.mjs
           node scripts/make-m6-round12-fixtures.mjs
           node scripts/make-m6-round12b-fixtures.mjs
+          node scripts/make-m6-ocu-fixtures.mjs
           node scripts/make-m7-p1-fixtures.mjs
 
       # The gates below are run as separate steps rather than one script, so a

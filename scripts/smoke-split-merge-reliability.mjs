@@ -14,7 +14,8 @@
  * customer document, no secret.
  *
  * Run:
- *   node scripts/make-m6-split-merge-fixtures.mjs
+ *   node scripts/make-m6-split-merge-fixtures.mjs   (and every other make-m6-*-fixtures.mjs,
+ *                                                     including make-m6-ocu-fixtures.mjs)
  *   node scripts/smoke-split-merge-reliability.mjs
  */
 import fs from 'node:fs';
@@ -1979,7 +1980,6 @@ try {
             ['r7-ocmd-p', '/P', 'OC-B: an /OCMD with /P stays refused'],
             ['r7-ocmd-two', 'naming 2 groups', 'OC-B: an /OCMD with two groups stays refused'],
             ['r7-ocmd-malformed', 'not a reference to a group', 'OC-B: a malformed /OCGs stays refused'],
-            ['r7-as-unmapped', 'no selected page uses', 'OC-C: /AS naming an unused group is refused'],
             ['r7-as-bad-category', '/Category', 'OC-C: a malformed /Category is refused'],
             ['r7-as-bad-event', '/Event', 'OC-C: an unsupported /Event is refused'],
             ['r7-as-extra-key', '/Intent', 'OC-C: an extra semantic key is refused'],
@@ -1992,6 +1992,17 @@ try {
                 r.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' && said.includes(fragment),
                 `${r.plan}: ${said.slice(0, 120)}`);
         }
+
+        // OC-C2 (2026-11-15) replaced the refusal this fixture pinned: the
+        // reference to the unused group is left out of `/AS`, and the rest of
+        // the configuration is carried.
+        const unmapped = await call('r7Oc', 'r7-as-unmapped', [0]);
+        check('OC-C2: /AS naming an unused group is trimmed rather than refused',
+            unmapped.plan === 'READY' && unmapped.run === 'READY' && unmapped.unreachable === 0
+            && unmapped.output && unmapped.output.asDangling === 0
+            && unmapped.oc && unmapped.oc.configErrors === 0 && unmapped.oc.unregisteredUses === 0,
+            `plan=${unmapped.plan} run=${unmapped.run} ${(unmapped.unsupported || []).join(' | ')} `
+            + `${JSON.stringify(unmapped.oc)}`);
 
         // The visibility oracle. This is the one that matters: the measured
         // failure was a copied `/OC` surviving into an artifact with no
@@ -2121,6 +2132,297 @@ try {
                 `${r.plan} :: ${said}`);
             check(`${fixture}: and publishes nothing`, r.run === null, `run=${r.run}`);
         }
+    }
+
+    // ---- 55b. OC-U / OC-C2 (Human-adopted with conditions, 2026-11-15) -------
+    //
+    // MLIT 建築工事標準詳細図 vol. 2 was refused for two shapes, rebuilt here
+    // synthetically: CAD layers a page's `/Properties` names and `/OCGs` never
+    // registers (OC-U: carried unregistered, matched to the source, never
+    // registered), and a `/D /AS` naming layers no output page uses (OC-C2: those
+    // references left out, counted and shown). The conditions: only groups
+    // matched to the input, only references proven unused, the kept layers'
+    // initial state and toggling unchanged, and every shape that cannot be
+    // decided still refused.
+    console.log('\n=== 55b. OC-U unregistered page layers / OC-C2 /AS trim ===');
+    {
+        const sameViews = (r, sourceViews, pagesOf) => ['default', 'off', 'on'].every((mode) =>
+            JSON.stringify(r.output[mode].pages) === JSON.stringify(pagesOf(sourceViews, mode)));
+        const census0 = (r) => r.facts && r.facts.unregisteredUses === 0 && r.facts.configErrors === 0
+            && r.facts.danglingUses === 0 && r.facts.censusComplete === true && r.unreachable === 0;
+
+        // OC-U alone.
+        const basic = await call('ocuExtract', 'ocu-basic', [0]);
+        check('ocu-basic: an unregistered page layer beside a registered one is carried',
+            basic.plan === 'READY' && basic.run === 'READY' && basic.unregistered === 1,
+            `${basic.plan}/${basic.run} ${(basic.unsupported || []).join(' | ')}${basic.runReason ?? ''}`);
+        if (basic.structure) {
+            check('ocu-basic: the unregistered layer stays unregistered; only the registered one is listed',
+                basic.structure.registered === 1 && basic.structure.ocgObjects === 2,
+                JSON.stringify(basic.structure));
+            check('ocu-basic: the output census accounts for every group', census0(basic), JSON.stringify(basic.facts));
+            check('ocu-basic: the page looks the same in every panel position',
+                sameViews(basic, basic.source, (s, m) => s[m].pages.slice(0, 1)),
+                JSON.stringify({ source: basic.source, output: basic.output }));
+            check('ocu-basic: the unregistered layer is drawn even with every listed layer off, as in the source',
+                basic.source.off.pages[0] === 'green/blue/white' && basic.output.off.pages[0] === 'green/blue/white',
+                `${basic.source.off.pages[0]} -> ${basic.output.off.pages[0]}`);
+            check('ocu-basic: nothing was left out of /AS, so nothing is reported for it',
+                !basic.losses.some((l) => l.kind === 'layer-auto-state'), JSON.stringify(basic.losses));
+        }
+
+        // The vol. 2 shape: extract one page, both pages; merge.
+        const one = await call('ocuExtract', 'ocu-vol2like', [0]);
+        check('ocu-vol2like [0]: READY', one.plan === 'READY' && one.run === 'READY',
+            `${one.plan}/${one.run} ${(one.unsupported || []).join(' | ')}${one.runReason ?? ''}`);
+        if (one.structure) {
+            check('ocu-vol2like [0]: /AS keeps the kept layer in all three entries and nothing else',
+                one.structure.registered === 1 && one.structure.asEntries === 3
+                && one.structure.asMembers === 3 && one.structure.asUnregistered === 0,
+                JSON.stringify(one.structure));
+            check('ocu-vol2like [0]: the two references left out are disclosed, before and after the run',
+                one.planLosses.some((l) => l.kind === 'layer-auto-state' && l.what === '2件')
+                && one.losses.some((l) => l.kind === 'layer-auto-state' && l.what === '2件'),
+                JSON.stringify({ plan: one.planLosses, run: one.losses }));
+            check('ocu-vol2like [0]: census holds', census0(one), JSON.stringify(one.facts));
+            check('ocu-vol2like [0]: page 1 looks the same, as opened, all off and all on',
+                sameViews(one, one.source, (s, m) => s[m].pages.slice(0, 1)),
+                JSON.stringify({ source: one.source, output: one.output }));
+        }
+        const both = await call('ocuExtract', 'ocu-vol2like', [0, 1]);
+        check('ocu-vol2like [0,1]: READY, only the orphan layer is left out of /AS',
+            both.run === 'READY' && both.structure && both.structure.registered === 2
+            && both.structure.asMembers === 6
+            && both.losses.some((l) => l.kind === 'layer-auto-state' && l.what === '1件'),
+            JSON.stringify({ run: both.run, structure: both.structure, losses: both.losses, why: both.unsupported }));
+        if (both.output) {
+            check('ocu-vol2like [0,1]: both pages look the same in every panel position',
+                sameViews(both, both.source, (s, m) => s[m].pages), JSON.stringify({ s: both.source, o: both.output }));
+            check('ocu-vol2like [0,1]: the panel lists the used layers only (3 -> 2)',
+                both.source.default.panel === 3 && both.output.default.panel === 2,
+                `${both.source.default.panel} -> ${both.output.default.panel}`);
+        }
+
+        // The kept layer's initial OFF survives the trim, and still toggles.
+        const off = await call('ocuExtract', 'ocu-vol2like-off', [0]);
+        check('ocu-vol2like-off [0]: READY', off.run === 'READY',
+            `${off.plan}/${off.run} ${(off.unsupported || []).join(' | ')}${off.runReason ?? ''}`);
+        if (off.output) {
+            check('ocu-vol2like-off [0]: the registered layer stays OFF as opened, in source and output',
+                off.source.default.pages[0] === 'green/blue/white' && off.output.default.pages[0] === 'green/blue/white',
+                `${off.source.default.pages[0]} -> ${off.output.default.pages[0]}`);
+            check('ocu-vol2like-off [0]: and switching it on draws it in both',
+                off.source.on.pages[0] === 'green/blue/red' && off.output.on.pages[0] === 'green/blue/red',
+                `${off.source.on.pages[0]} -> ${off.output.on.pages[0]}`);
+            check('ocu-vol2like-off [0]: /D /OFF still names it', off.structure.off === 1, JSON.stringify(off.structure));
+        }
+
+        const merged = await call('ocuMerge', ['ocu-vol2like', 'ocu-basic']);
+        check('merge ocu-vol2like + ocu-basic: READY', merged.run === 'READY', `${merged.run} ${merged.reason ?? ''}`);
+        if (merged.output) {
+            check('merge: the census accounts for every group, three carried unregistered',
+                census0(merged) && merged.structure.registered === 3 && merged.structure.ocgObjects === 6,
+                JSON.stringify({ facts: merged.facts, structure: merged.structure }));
+            check('merge: each page looks the same as its source page in every panel position',
+                sameViews(merged, null, (_s, m) => [...merged.sources[0][m].pages, ...merged.sources[1][m].pages]),
+                JSON.stringify({ s: merged.sources, o: merged.output }));
+            check('merge: the orphan layer left out of /AS is disclosed for its own source only',
+                merged.losses.filter((l) => l.kind === 'layer-auto-state').length === 1
+                && merged.losses.some((l) => l.kind === 'layer-auto-state' && l.what === 'ocu-vol2like.pdf：1件'),
+                JSON.stringify(merged.losses));
+        }
+
+        // Still refused: the shapes the conditions keep out.
+        for (const [fixture, selection, fragment, title] of [
+            ['ocu-unreg-in-order', [0], 'does not register', 'an unregistered layer /D /Order places'],
+            ['ocu-unreg-in-as', [0], 'does not register', 'an unregistered layer /D /AS acts on'],
+            ['r8-props-unregistered-on', [0], 'does not register', 'an unregistered layer /D /ON names'],
+            ['r8-props-unregistered-off', [0], 'does not register', 'an unregistered layer /D /OFF names'],
+            ['occ2-order-unused', [0], 'no kept page uses', '/D /Order naming a layer no kept page uses'],
+            ['ocu-only-unregistered', [0], 'does not register remain', 'a page left with only unregistered layers'],
+        ]) {
+            const r = await call('ocuExtract', fixture, selection);
+            const said = [...(r.unsupported || []), r.reason ?? '', r.runReason ?? ''].join(' | ');
+            check(`${fixture}: ${title} is still refused, and says why`,
+                (r.plan === 'UNSUPPORTED_OPTIONAL_CONTENT' || r.run === 'UNSUPPORTED_OPTIONAL_CONTENT')
+                && said.includes(fragment) && !r.output,
+                `${r.plan}/${r.run} :: ${said.slice(0, 200)}`);
+        }
+
+        // The carry's matching, reached by handing it a description the written
+        // page does not match.
+        for (const [fixture, tamper, fragment] of [
+            ['ocu-basic', 'name', '/Name differs'],
+            ['ocu-basic', 'key', 'did not survive the copy'],
+            ['ocu-vol2like', 'unproven', 'no kept page was shown not to use'],
+            ['ocu-vol2like', 'overclaimed', 'were left out'],
+        ]) {
+            const t = await call('ocuTamper', fixture, tamper);
+            check(`carry refuses a ${tamper} mismatch (${fixture})`,
+                t.status === 'REFUSED' && String(t.reason).includes(fragment), JSON.stringify(t));
+        }
+
+        // The census backstop, with and without the run's declaration.
+        const census = await call('ocuCensus', 'ocu-basic');
+        check('census: without the declaration, the carried unregistered layer is an error',
+            census.blind.unregisteredUses > 0 && census.blind.configErrors > 0, JSON.stringify(census.blind));
+        check('census: with it, the same artifact holds together',
+            census.declared === 1 && census.told.unregisteredUses === 0 && census.told.configErrors === 0
+            && census.told.carriedUnregisteredUses === 1, JSON.stringify(census.told));
+    }
+
+    // ---- 55c. PR #48 review round ---------------------------------------------
+    //
+    // Independent RF-01: the readback compares each carried source's witnesses
+    // and kept `/AS` entries with what its description says they must be. The
+    // tampers keep every count and every shape, so the census alone (blind)
+    // passes them; the expectation (told) must not. Independent RF-02: the path
+    // where no registered group is kept reconciles `/Order` and `/AS` like the
+    // other path (Human, 2026-11-15: reconcile only; a layer-free page from a
+    // document with `/Order` is still extracted, as on main). Main RF-01: two
+    // Merge sources with one name and one count are both disclosed.
+    console.log('\n=== 55c. PR #48 review: readback expectation / zero-group path / per-source notice ===');
+    {
+        for (const [mode, names, selection, tamper, title] of [
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-swap' }, 'two pages swap their unregistered layers'],
+            ['extract', ['ocu-samename'], [0, 1], { kind: 'unreg-redirect' }, 'a page points at the other page\'s same-named unregistered layer'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-missing' }, 'a page loses its unregistered layer entry'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-event' }, 'an /AS entry\'s Event is changed'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-category' }, 'an /AS entry\'s Category is changed'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-ocgs-drop' }, 'an /AS entry loses a kept layer'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-entry-drop' }, 'a kept /AS entry is removed'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-swap', pages: [0, 2] }, 'pages of two sources swap same-named unregistered layers'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-redirect', pages: [0, 2] }, 'a page points at another source\'s unregistered layer'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-ocgs-cross' }, 'two sources\' /AS entries trade their layers'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-event' }, 'the first source\'s /AS Event is changed'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-entry-drop' }, 'the second source\'s last /AS entry is removed'],
+            // Re-review RF-01: an extra key naming a group already carried
+            // unregistered — every expected witness is still in place.
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-extra', pages: [0, 0] }, 'an extra key on the same page names its carried layer again'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-extra', pages: [0, 1] }, 'an extra key on another page names page 1\'s carried layer'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-extra', pages: [2, 2] }, 'an extra key on the second source\'s page names its own carried layer'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-extra', pages: [0, 2] }, 'an extra key on the second source\'s page names the first source\'s carried layer'],
+        ]) {
+            const t = await call('ocuReadbackTamper', mode, names, selection, tamper);
+            const label = `${mode} ${names.join('+')}: ${title}`;
+            check(`${label} — the untampered artifact matches its expectation`,
+                t.run === 'READY' && t.control?.configErrors === 0, JSON.stringify(t.control ?? t));
+            check(`${label} — the census alone does not see it (same counts, same shapes)`,
+                t.blind?.configErrors === 0 && t.blind?.unregisteredUses === 0, JSON.stringify(t.blind));
+            check(`${label} — the expectation does`,
+                t.told?.configErrors > 0, JSON.stringify(t.told));
+        }
+
+        // Shared-resources RF-01: pages 1–2 of ocu-shared-res name one indirect
+        // /Resources; page 3 uses no layer. Pointing a page that expects
+        // nothing at the shared object puts the carried layer on it, while a
+        // page that does expect the use still holds the same map.
+        for (const [mode, names, selection, pages, title, sharers] of [
+            ['extract', ['ocu-shared-res'], [0, 1, 2], [0, 2], 'the layer-free page names the shared /Resources', [0, 1]],
+            ['extract', ['ocu-shared-res'], [0, 2], [0, 1], 'one sharing page kept; the layer-free page names its /Resources', null],
+            ['merge', ['ocu-shared-res', 'ocu-shared-res'], null, [0, 2], 'the first source\'s layer-free page names its shared /Resources', [0, 1]],
+            ['merge', ['ocu-shared-res', 'ocu-shared-res'], null, [0, 5], 'the second source\'s layer-free page names the first source\'s shared /Resources', [0, 1]],
+            ['merge', ['ocu-shared-res', 'ocu-shared-res'], null, [3, 2], 'the first source\'s layer-free page names the second source\'s shared /Resources', [3, 4]],
+        ]) {
+            const t = await call('ocuReadbackTamper', mode, names, selection, { kind: 'res-share', pages });
+            const label = `${mode} ${names.join('+')} ${JSON.stringify(selection)}: ${title}`;
+            const before = t.resourcesBefore || [];
+            const after = t.resourcesAfter || [];
+            if (sharers) {
+                check(`${label} — the output keeps pages ${sharers.map((i) => i + 1).join(' and ')} on one indirect /Resources`,
+                    before[sharers[0]] !== null && before[sharers[0]] !== undefined && before[sharers[0]] === before[sharers[1]],
+                    JSON.stringify(before));
+            }
+            check(`${label} — the untampered artifact, shared map and all, matches its expectation`,
+                t.run === 'READY' && t.control?.configErrors === 0, JSON.stringify(t.control ?? t));
+            check(`${label} — after the tamper, page ${pages[1] + 1} really names the same indirect /Resources as page ${pages[0] + 1}`,
+                before[pages[1]] !== before[pages[0]] && after[pages[1]] !== null && after[pages[1]] === after[pages[0]],
+                JSON.stringify({ before, after }));
+            check(`${label} — the census alone does not see it`,
+                t.blind?.configErrors === 0 && t.blind?.unregisteredUses === 0, JSON.stringify(t.blind));
+            check(`${label} — the use on the page that expects nothing is refused`,
+                t.told?.configErrors > 0 && (t.told?.detail || []).some((d) => d.includes('carried unregistered, where no source had it')),
+                JSON.stringify(t.told));
+        }
+        // A correct share through the production runner: both sharing pages,
+        // one of them alone, and two sources each with their own share.
+        for (const [selection, witnesses] of [[[0, 1], 2], [[1], 1], [[0, 1, 2], 2]]) {
+            const r = await call('ocuExtract', 'ocu-shared-res', selection);
+            check(`ocu-shared-res ${JSON.stringify(selection)}: a correct shared /Resources is extracted (${witnesses} unregistered use(s) expected)`,
+                r.plan === 'READY' && r.run === 'READY' && r.unregistered === witnesses,
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}${r.runReason ?? ''} unregistered=${r.unregistered}`);
+        }
+
+        // RF-02 through the production runner: a layer-free page from a layered
+        // document, with and without `/Order`.
+        for (const fixture of ['occ2-zero-as', 'occ2-zero-order']) {
+            const r = await call('ocuExtract', fixture, [0]);
+            check(`${fixture} [0]: a page that uses no layer is extracted, as on main`,
+                r.plan === 'READY' && r.run === 'READY' && r.structure?.ocProperties === false,
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}${r.runReason ?? ''} ${JSON.stringify(r.structure)}`);
+            check(`${fixture} [0]: the /AS reference left out is disclosed, before and after the run`,
+                (r.planLosses || []).some((l) => l.kind === 'layer-auto-state' && l.what === '1件')
+                && (r.losses || []).some((l) => l.kind === 'layer-auto-state' && l.what === '1件'),
+                JSON.stringify({ plan: r.planLosses, run: r.losses }));
+        }
+        // RF-02 at the carry, on a single-source and a multi-source output.
+        for (const mode of ['extract', 'merge']) {
+            const asOnly = await call('ocuZeroCarry', mode, 'occ2-zero-as', false);
+            check(`${mode}: zero kept groups, /AS only — the unused reference is left out and counted`,
+                asOnly.status === 'CARRIED' && asOnly.carried === 0
+                && asOnly.autoStateGroupsDropped === 1 && asOnly.autoStateEntriesDropped === 3
+                && asOnly.asEntriesInOutput === (mode === 'merge' ? 3 : 0),
+                JSON.stringify(asOnly));
+            const orderUnused = await call('ocuZeroCarry', mode, 'occ2-zero-order', false);
+            check(`${mode}: zero kept groups, /Order naming an unused layer — written, as on main`,
+                orderUnused.status === 'CARRIED' && orderUnused.autoStateGroupsDropped === 1,
+                JSON.stringify(orderUnused));
+            const orderUsed = await call('ocuZeroCarry', mode, 'occ2-zero-order', true);
+            check(`${mode}: zero kept groups, /Order naming a layer a kept page uses but the output lost — refused`,
+                orderUsed.status === 'REFUSED'
+                && String(orderUsed.reason).includes('a kept page uses and the written pages do not reproduce'),
+                JSON.stringify(orderUsed));
+            const asUsed = await call('ocuZeroCarry', mode, 'occ2-zero-as', true);
+            check(`${mode}: zero kept groups, /AS naming a layer a kept page uses but the output lost — refused`,
+                asUsed.status === 'REFUSED' && String(asUsed.reason).includes('no kept page was shown not to use'),
+                JSON.stringify(asUsed));
+        }
+
+        // Re-review RF-02: `/Order` through indirect arrays (root, child), no
+        // `/AS`. The layer-free cover page is still written; a group a kept
+        // page uses and the output lost is refused at the carry.
+        for (const fixture of ['occ2-zero-order-indirect-root', 'occ2-zero-order-indirect-child']) {
+            const r = await call('ocuExtract', fixture, [0]);
+            check(`${fixture} [0]: the layer-free page is extracted, with nothing to disclose (no /AS)`,
+                r.plan === 'READY' && r.run === 'READY' && r.structure?.ocProperties === false
+                && !(r.losses || []).some((l) => l.kind === 'layer-auto-state'),
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}${r.runReason ?? ''} ${JSON.stringify(r.structure)}`);
+            for (const mode of ['extract', 'merge']) {
+                const unused = await call('ocuZeroCarry', mode, fixture, false);
+                check(`${mode} ${fixture}: an indirect /Order naming only an unused layer is written, as on main`,
+                    unused.status === 'CARRIED' && unused.autoStateGroupsDropped === 0, JSON.stringify(unused));
+                const used = await call('ocuZeroCarry', mode, fixture, true);
+                check(`${mode} ${fixture}: an indirect /Order naming a layer a kept page uses but the output lost is refused`,
+                    used.status === 'REFUSED'
+                    && String(used.reason).includes('a kept page uses and the written pages do not reproduce'),
+                    JSON.stringify(used));
+            }
+        }
+
+        // Main RF-01: one file name, one count, two sources — two notices.
+        const named = await call('ocuMergeNamed', ['ocu-vol2like', 'ocu-vol2like-off'], 'drawing.pdf');
+        const autoStateNotices = (named.losses || []).filter((l) => l.kind === 'layer-auto-state');
+        check('merge of two different files both named drawing.pdf: READY',
+            named.run === 'READY', `${named.run} ${named.reason ?? ''}`);
+        check('merge of two different files both named drawing.pdf: each source\'s count is shown, told apart by its place',
+            autoStateNotices.length === 2
+            && autoStateNotices.some((l) => l.what === 'drawing.pdf（1番目）：1件')
+            && autoStateNotices.some((l) => l.what === 'drawing.pdf（2番目）：1件'),
+            JSON.stringify(autoStateNotices));
+        check('the notice states what was done and the count, and no blanket promise about the drawing',
+            autoStateNotices.length > 0 && autoStateNotices.every((l) => l.why.includes('1件分を除いて書き出しました')
+                && l.why.includes('元のPDFから引き継ぎます') && !l.why.includes('見え方')),
+            JSON.stringify(autoStateNotices.map((l) => l.why)));
     }
 
     // ---- 56. RF-R8-1: the artifact proves its own optional content -----------

@@ -49,7 +49,7 @@ export const USAGE_SCREENSHOTS: Record<string, UsageScreenshot> = {
             { targets: ['comparator-files'], desc: 'PDFの読み込み（最大4つ・色分け）と表示切替' },
             { targets: ['comparator-match'], desc: '一致箇所の色と透明度' },
             { targets: ['comparator-report'], desc: '変更箇所抽出レポート' },
-            { targets: ['comparator-view'], desc: 'ページ移動・ズーム・差分しきい値' },
+            { targets: ['comparator-view'], desc: 'ページ移動・ズーム・許容値' },
             { targets: ['comparator-export'], desc: '書き出し設定と実行' },
         ],
     },
