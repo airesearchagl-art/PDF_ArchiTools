@@ -270,6 +270,14 @@ try {
         c.includes('小さな文字・寸法・記号・形状の変更も検出されにくくなる場合があります'), 'disclosure');
     check('comparator: the old pixel threshold is gone',
         !c.includes('Diff Threshold') && !c.includes('0〜5px') && !c.includes('わずかなずれを変更として扱わない'), 'no px');
+    check('comparator: the card heading uses the screen\'s name 許容値, not 差分しきい値',
+        c.includes('ページ移動・ズーム・許容値') && !c.includes('差分しきい値'), 'heading');
+    {
+        const badgeSource = fs.readFileSync(path.join(ROOT, 'src', 'components', 'usageScreenshotBadges.ts'), 'utf8');
+        check('comparator: the screenshot badge for the view controls says 許容値 too',
+            badgeSource.includes("targets: ['comparator-view'], desc: 'ページ移動・ズーム・許容値'")
+            && !badgeSource.includes('差分しきい値'), 'badge');
+    }
     check('comparator: export scope options',
         c.includes('すべて') && c.includes('現在のページ') && c.includes('範囲指定'), 'scope');
     check('comparator: per-file visibility', c.includes('表示・非表示'));
@@ -321,11 +329,13 @@ try {
         s.includes('クリックすると選択') && s.includes('元のページ順に並びます'), 'extract');
     check('split-merge: merge ordering and removal',
         s.includes('順番を入れ替え') && s.includes('リストの順番どおり'), 'merge');
-    check('split-merge: PDFs with unregistered layers are now accepted and those layers stay unregistered',
-        s.includes('レイヤー一覧に登録されていないレイヤーを含むPDF') && s.includes('登録されないまま出力に残ります'), 'more PDFs');
-    check('split-merge: left-out layer display settings are counted on screen, and the drawing looks the same',
+    check('split-merge: some PDFs with unregistered layers are now accepted and those layers stay unregistered',
+        s.includes('レイヤー一覧に登録されていないレイヤーを含む一部のPDF') && s.includes('登録されないまま出力に残ります'), 'some PDFs');
+    check('split-merge: left-out layer display settings are counted on screen, and kept layers keep their settings',
         s.includes('出力するページで使わないレイヤーの分は除いて書き出します') && s.includes('その件数を画面でお知らせします')
-        && s.includes('図面の見え方は変わりません'), 'count');
+        && s.includes('初期表示と切り替えの設定は、元のPDFから引き継ぎます'), 'count');
+    check('split-merge: the guide makes no blanket promise about how the drawing looks',
+        !s.includes('見え方は変わりません'), 'no blanket guarantee');
     check('split-merge: the layer list in a viewer can have fewer items',
         s.includes('レイヤー一覧の項目が元のPDFより少なくなる場合があります'), 'fewer items');
     check('split-merge: unreadable layer settings still stop with a reason',
@@ -452,7 +462,7 @@ try {
     const banner = banners[0] ?? '';
     check('there is one 最近の更新 banner', banners.length === 1, `${banners.length}`);
     // The newest date (2026/11/15) is PDF抽出・統合 2.0.15 alone, so it alone is in 最近の更新.
-    const newest = { tool: 'PDF抽出・統合', version: '2.0.15', key: 'splitMerge', heading: '登録されていないレイヤーを含むPDFに対応', phrase: 'レイヤー一覧に登録されていないレイヤーを含むPDF', header: 'split-merge' };
+    const newest = { tool: 'PDF抽出・統合', version: '2.0.15', key: 'splitMerge', heading: 'レイヤーを含む一部のPDFで抽出・統合の対応を改善', phrase: 'レイヤー一覧に登録されていないレイヤーを含む一部のPDF', header: 'split-merge' };
     {
         const heads = entryOf(newest.tool, newest.version);
         const declared = declaredOf(newest.key);
@@ -484,14 +494,16 @@ try {
     }
     // 2.0.15: what now opens, what is left out and told, what a viewer's layer list shows, and what still stops.
     const sm2015 = cardOf(entryOf('PDF抽出・統合', '2.0.15')[0]).items.join('\n');
-    check('the PDF抽出・統合 2.0.15 entry: more PDFs open, the left-out settings are counted on screen, the layer list can shrink, unsafe input still stops',
-        sm2015.includes('抽出・統合できるようになりました') && sm2015.includes('登録されないまま出力に残ります')
+    check('the PDF抽出・統合 2.0.15 entry: some PDFs now open, the left-out settings are counted on screen, the layer list can shrink, unsafe input still stops',
+        sm2015.includes('含む一部のPDF') && sm2015.includes('抽出・統合できるようになりました') && sm2015.includes('登録されないまま出力に残ります')
         && sm2015.includes('出力するページで使わないレイヤーの分は除いて書き出します') && sm2015.includes('その件数を画面でお知らせします')
-        && sm2015.includes('図面の見え方は変わりません')
+        && sm2015.includes('初期表示と切り替えの設定は、元のPDFから引き継ぎます')
         && sm2015.includes('レイヤー一覧の項目が元のPDFより少なくなる場合があります')
         && sm2015.includes('これまでどおり理由を表示して中止します'), 'layers');
     check('the PDF抽出・統合 2.0.15 entry stays out of PDF internals and review IDs',
         sm2015.length > 0 && !/OCG|OCProperties|\/AS|\/D\b|OC-U|OC-C|pdf\.js|PDF\.js|Watermark|BLK-|RF-?\d/.test(sm2015), 'no internals');
+    check('the PDF抽出・統合 2.0.15 entry and banner make no blanket promise about how the drawing looks',
+        !sm2015.includes('見え方は変わりません') && !banner.includes('見え方'), 'no blanket guarantee');
     const processor150 = entryOf('PDF加工', '1.5.0');
     check('the earlier PDF加工 1.5.0 entry is dated 2026/10/31',
         processor150.length === 1 && processor150[0].startsWith('2026/10/31') && releaseHeads[5] === processor150[0], releaseHeads[5]);
