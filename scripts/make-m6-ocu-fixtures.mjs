@@ -131,5 +131,29 @@ write('occ2-order-unused', layered({
     d: `/ON [${r(6, 10)}] /Order [${r(6, 10)}]`,
 }));
 
+// ---- review round (PR #48) ---------------------------------------------------
+// Independent RF-01: two pages whose unregistered CAD layers share a /Name, so
+// pointing one page at the other's group keeps every count and every name.
+write('ocu-samename', layered({
+    pages: [{ cad: 5, mark: 6 }, { cad: 9, mark: 8 }],
+    groups: { 5: 'WAKU', 6: 'Watermark', 8: 'Watermark', 9: 'WAKU' },
+    registered: [6, 8],
+    d: `/ON [${r(6, 8)}] /AS [${as(6, 8)}]`,
+}));
+// Independent RF-02: page 1 uses no layer; page 2 uses the only registered
+// one. Extracting page 1 reaches the path where no registered group is kept.
+write('occ2-zero-as', layered({
+    pages: [{ cad: null, mark: null }, { cad: null, mark: 6 }],
+    groups: { 6: 'Watermark' }, registered: [6],
+    d: `/ON [${r(6)}] /AS [${as(6)}]`,
+}));
+// The same, with an `/Order` naming that group: a layer-free page is still
+// extracted (as on main); the group is refused only if a kept page used it.
+write('occ2-zero-order', layered({
+    pages: [{ cad: null, mark: null }, { cad: null, mark: 6 }],
+    groups: { 6: 'Watermark' }, registered: [6],
+    d: `/ON [${r(6)}] /Order [${r(6)}] /AS [${as(6)}]`,
+}));
+
 console.log(`wrote ${written.length} fixtures to ${path.relative(ROOT, OUT)}:`);
 for (const name of written) console.log(`  ${name}.pdf`);

@@ -1081,9 +1081,17 @@ try {
             afterOcu === beforeOcu + 1 && !ocuNotice.includes('内容を了承して'),
             `${afterOcu - beforeOcu} new file(s)`);
         check('14: the notice names the layer auto-state trim and its count',
-            ocuNotice.includes('レイヤーの自動表示設定') && ocuNotice.includes('2件')
-            && ocuNotice.includes('図面の見え方は変わりません'),
+            ocuNotice.includes('レイヤーの自動表示設定') && ocuNotice.includes('2件'),
             ocuNotice.slice(0, 240));
+        // PR #48 review (main RF-02 / independent RF-03): what was done and how
+        // much, and what the kept layers keep — no blanket promise about how
+        // the drawing looks, which no viewer was checked for here.
+        check('14: the notice says what was done, with the count, and what the kept layers keep',
+            ocuNotice.includes('出力するページで使わないレイヤー2件分を除いて書き出しました')
+            && ocuNotice.includes('初期表示と切り替えの設定は、元のPDFから引き継ぎます'),
+            ocuNotice.slice(0, 240));
+        check('14: the notice makes no blanket promise about how the drawing looks',
+            ocuNotice.length > 0 && !ocuNotice.includes('見え方'), ocuNotice.slice(0, 240));
     }
 
     check('no uncaught page error during any of it',

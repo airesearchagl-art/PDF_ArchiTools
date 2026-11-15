@@ -2271,6 +2271,93 @@ try {
             && census.told.carriedUnregisteredUses === 1, JSON.stringify(census.told));
     }
 
+    // ---- 55c. PR #48 review round ---------------------------------------------
+    //
+    // Independent RF-01: the readback compares each carried source's witnesses
+    // and kept `/AS` entries with what its description says they must be. The
+    // tampers keep every count and every shape, so the census alone (blind)
+    // passes them; the expectation (told) must not. Independent RF-02: the path
+    // where no registered group is kept reconciles `/Order` and `/AS` like the
+    // other path (Human, 2026-11-15: reconcile only; a layer-free page from a
+    // document with `/Order` is still extracted, as on main). Main RF-01: two
+    // Merge sources with one name and one count are both disclosed.
+    console.log('\n=== 55c. PR #48 review: readback expectation / zero-group path / per-source notice ===');
+    {
+        for (const [mode, names, selection, tamper, title] of [
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-swap' }, 'two pages swap their unregistered layers'],
+            ['extract', ['ocu-samename'], [0, 1], { kind: 'unreg-redirect' }, 'a page points at the other page\'s same-named unregistered layer'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-missing' }, 'a page loses its unregistered layer entry'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-event' }, 'an /AS entry\'s Event is changed'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-category' }, 'an /AS entry\'s Category is changed'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-ocgs-drop' }, 'an /AS entry loses a kept layer'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'as-entry-drop' }, 'a kept /AS entry is removed'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-swap', pages: [0, 2] }, 'pages of two sources swap same-named unregistered layers'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-redirect', pages: [0, 2] }, 'a page points at another source\'s unregistered layer'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-ocgs-cross' }, 'two sources\' /AS entries trade their layers'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-event' }, 'the first source\'s /AS Event is changed'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-entry-drop' }, 'the second source\'s last /AS entry is removed'],
+        ]) {
+            const t = await call('ocuReadbackTamper', mode, names, selection, tamper);
+            const label = `${mode} ${names.join('+')}: ${title}`;
+            check(`${label} — the untampered artifact matches its expectation`,
+                t.run === 'READY' && t.control?.configErrors === 0, JSON.stringify(t.control ?? t));
+            check(`${label} — the census alone does not see it (same counts, same shapes)`,
+                t.blind?.configErrors === 0 && t.blind?.unregisteredUses === 0, JSON.stringify(t.blind));
+            check(`${label} — the expectation does`,
+                t.told?.configErrors > 0, JSON.stringify(t.told));
+        }
+
+        // RF-02 through the production runner: a layer-free page from a layered
+        // document, with and without `/Order`.
+        for (const fixture of ['occ2-zero-as', 'occ2-zero-order']) {
+            const r = await call('ocuExtract', fixture, [0]);
+            check(`${fixture} [0]: a page that uses no layer is extracted, as on main`,
+                r.plan === 'READY' && r.run === 'READY' && r.structure?.ocProperties === false,
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}${r.runReason ?? ''} ${JSON.stringify(r.structure)}`);
+            check(`${fixture} [0]: the /AS reference left out is disclosed, before and after the run`,
+                (r.planLosses || []).some((l) => l.kind === 'layer-auto-state' && l.what === '1件')
+                && (r.losses || []).some((l) => l.kind === 'layer-auto-state' && l.what === '1件'),
+                JSON.stringify({ plan: r.planLosses, run: r.losses }));
+        }
+        // RF-02 at the carry, on a single-source and a multi-source output.
+        for (const mode of ['extract', 'merge']) {
+            const asOnly = await call('ocuZeroCarry', mode, 'occ2-zero-as', false);
+            check(`${mode}: zero kept groups, /AS only — the unused reference is left out and counted`,
+                asOnly.status === 'CARRIED' && asOnly.carried === 0
+                && asOnly.autoStateGroupsDropped === 1 && asOnly.autoStateEntriesDropped === 3
+                && asOnly.asEntriesInOutput === (mode === 'merge' ? 3 : 0),
+                JSON.stringify(asOnly));
+            const orderUnused = await call('ocuZeroCarry', mode, 'occ2-zero-order', false);
+            check(`${mode}: zero kept groups, /Order naming an unused layer — written, as on main`,
+                orderUnused.status === 'CARRIED' && orderUnused.autoStateGroupsDropped === 1,
+                JSON.stringify(orderUnused));
+            const orderUsed = await call('ocuZeroCarry', mode, 'occ2-zero-order', true);
+            check(`${mode}: zero kept groups, /Order naming a layer a kept page uses but the output lost — refused`,
+                orderUsed.status === 'REFUSED'
+                && String(orderUsed.reason).includes('a kept page uses and the written pages do not reproduce'),
+                JSON.stringify(orderUsed));
+            const asUsed = await call('ocuZeroCarry', mode, 'occ2-zero-as', true);
+            check(`${mode}: zero kept groups, /AS naming a layer a kept page uses but the output lost — refused`,
+                asUsed.status === 'REFUSED' && String(asUsed.reason).includes('no kept page was shown not to use'),
+                JSON.stringify(asUsed));
+        }
+
+        // Main RF-01: one file name, one count, two sources — two notices.
+        const named = await call('ocuMergeNamed', ['ocu-vol2like', 'ocu-vol2like-off'], 'drawing.pdf');
+        const autoStateNotices = (named.losses || []).filter((l) => l.kind === 'layer-auto-state');
+        check('merge of two different files both named drawing.pdf: READY',
+            named.run === 'READY', `${named.run} ${named.reason ?? ''}`);
+        check('merge of two different files both named drawing.pdf: each source\'s count is shown, told apart by its place',
+            autoStateNotices.length === 2
+            && autoStateNotices.some((l) => l.what === 'drawing.pdf（1番目）：1件')
+            && autoStateNotices.some((l) => l.what === 'drawing.pdf（2番目）：1件'),
+            JSON.stringify(autoStateNotices));
+        check('the notice states what was done and the count, and no blanket promise about the drawing',
+            autoStateNotices.length > 0 && autoStateNotices.every((l) => l.why.includes('1件分を除いて書き出しました')
+                && l.why.includes('元のPDFから引き継ぎます') && !l.why.includes('見え方')),
+            JSON.stringify(autoStateNotices.map((l) => l.why)));
+    }
+
     // ---- 56. RF-R8-1: the artifact proves its own optional content -----------
     //
     // Discovery decides what may be carried; this decides whether what was

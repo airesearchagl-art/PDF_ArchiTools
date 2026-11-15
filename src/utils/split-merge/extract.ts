@@ -58,9 +58,11 @@ import {
     autoStateLoss,
     carryOptionalContent,
     describeOptionalContent,
+    expectOptionalContent,
     planOptionalContent,
     verifySanitizedOptionalContent,
 } from './optional-content';
+import type { OptionalContentExpectation } from './optional-content';
 import { sanitizeJavaScript } from './javascript';
 import { planFormForExtract, readForm, rebuildAcroForm, removeSignatureWidgets } from './forms';
 import {
@@ -862,6 +864,7 @@ export async function runExtract(
     // Supported and unchanged, both proven above; there is no silent branch.
     const carriedUnregistered = new Set<string>();
     let carriedAutoState: LossRecord | null = null;
+    const ocExpectations: OptionalContentExpectation[] = [];
     if (ocDescription.present) {
         const carried = carryOptionalContent(working, ocDescription, out);
         if (carried.status === 'REFUSED') {
@@ -874,6 +877,8 @@ export async function runExtract(
         }
         for (const tag of carried.unregistered ?? []) carriedUnregistered.add(tag);
         carriedAutoState = autoStateLoss(carried.autoStateGroupsDropped ?? 0);
+        // Independent RF-01: the readback checks the artifact against this.
+        ocExpectations.push(expectOptionalContent(ocDescription, carried.written));
     }
 
     if (formPlan.status === 'CARRY') {
@@ -1025,7 +1030,7 @@ export async function runExtract(
         );
     }
 
-    const readback = await readbackArtifact(bytes, carriedUnregistered);
+    const readback = await readbackArtifact(bytes, carriedUnregistered, ocExpectations);
     const invariant = checkArtifactInvariants(readback, selection.length);
     if (invariant) {
         return refusedResult(M6_STATUS.INVARIANT_VIOLATED, invariant.reason, outputName, {

@@ -74,6 +74,7 @@ import {
     optionalContentSemantics,
     classifyAttachments,
     carryOptionalContent,
+    expectOptionalContent,
 } from '/src/utils/split-merge/index.ts';
 // Round 12B: how much reading the action walks do, counted rather than timed. The
 // index does not export it; a test measures the shape of the work through it.
@@ -2431,6 +2432,227 @@ Object.assign(window.__m6, {
             detail: c.value.detail,
         } : { incomplete: c.reason });
         return plainly({ run: result.status, blind: pick(blind), told: pick(told), declared: declared.size });
+    },
+
+    /**
+     * PR #48 review, independent RF-01: a production artifact, tampered after
+     * it was written in ways that keep every count and every shape, then read
+     * back three ways — untampered with the run's expectation (the control),
+     * tampered without it (what the census alone saw), tampered with it.
+     *
+     * The expectation is rebuilt here from the source description, as the run
+     * builds it; Merge shifts each source's page indices by the pages before it.
+     */
+    async ocuReadbackTamper(mode, names, selection, tamper) {
+        let result;
+        const expectations = [];
+        if (mode === 'extract') {
+            const source = await bytesOf(names[0]);
+            result = await runExtract(source, { selection, sourceName: `${names[0]}.pdf`, policy: ADOPTED_POLICY });
+            expectations.push(expectOptionalContent(
+                describeOptionalContent(await PDFDocument.load(source, { updateMetadata: false }), selection)));
+        } else {
+            const inputs = [];
+            for (const [i, name] of names.entries()) {
+                inputs.push({ id: `${name}#${i}`, name: `${name}.pdf`, type: 'application/pdf', bytes: await bytesOf(name) });
+            }
+            const intake = await intakeSources(inputs);
+            const plan = planMerge(intake, {});
+            result = await runMerge(inputs, plan, {
+                confirmedLosses: plan.requiresConfirmation,
+                confirmedFingerprint: mergeConfirmationFingerprint(plan),
+            });
+            let offset = 0;
+            for (const input of inputs) {
+                const doc = await PDFDocument.load(input.bytes, { updateMetadata: false });
+                const d = describeOptionalContent(doc, null);
+                const shift = (list) => list.map((e) => ({ ...e, pageIndex: e.pageIndex + offset }));
+                expectations.push(expectOptionalContent({
+                    ...d,
+                    pageProperties: shift(d.pageProperties),
+                    xobjectUsages: shift(d.xobjectUsages),
+                    unregisteredPageProperties: shift(d.unregisteredPageProperties),
+                }));
+                offset += doc.getPageCount();
+            }
+        }
+        if (!result.bytes) return plainly({ run: result.status, reason: result.reason ?? null });
+
+        const carriedOf = (doc) => {
+            const tags = new Set();
+            for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {
+                if (obj instanceof PDFDict && String(obj.get(PDFName.of('Type'))) === '/OCG') tags.add(ref.tag);
+            }
+            const oc = doc.catalog.lookup(PDFName.of('OCProperties'));
+            const groups = oc instanceof PDFDict ? oc.lookup(PDFName.of('OCGs')) : undefined;
+            if (groups instanceof PDFArray) for (const g of groups.asArray()) tags.delete(g.tag);
+            return tags;
+        };
+        const pick = (c) => (c.complete
+            ? { configErrors: c.value.configErrors, unregisteredUses: c.value.unregisteredUses, detail: c.value.detail }
+            : { incomplete: c.reason });
+
+        const original = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const carried = carriedOf(original);
+        // The run pins each source group to the object its carry matched. The
+        // harness cannot see the carry's map, so it reads the same pins off the
+        // untampered artifact through the same witnesses — the state the run
+        // checked — and the tamper then has to disagree with them.
+        for (const e of expectations) {
+            const ref = (pageIndex, key) => {
+                const res = original.getPages()[pageIndex]?.node.lookup(PDFName.of('Resources'));
+                const p = res instanceof PDFDict ? res.lookup(PDFName.of('Properties')) : undefined;
+                const raw = p instanceof PDFDict ? p.get(PDFName.of(key.replace(/^\//, ''))) : undefined;
+                return raw instanceof PDFRef ? raw.tag : undefined;
+            };
+            const formRef = (pageIndex, path) => {
+                let res = original.getPages()[pageIndex]?.node.lookup(PDFName.of('Resources'));
+                let form;
+                for (const key of path) {
+                    const xo = res instanceof PDFDict ? res.lookup(PDFName.of('XObject')) : undefined;
+                    form = xo instanceof PDFDict ? xo.lookup(PDFName.of(key)) : undefined;
+                    if (!(form instanceof PDFRawStream) && !(form?.dict instanceof PDFDict)) return undefined;
+                    res = form.dict.lookup(PDFName.of('Resources'));
+                }
+                const raw = form?.dict.get(PDFName.of('OC'));
+                return raw instanceof PDFRef ? raw.tag : undefined;
+            };
+            for (const w of [...e.registeredProperties, ...e.unregistered]) {
+                const tag = ref(w.pageIndex, w.key);
+                if (tag) e.written[w.sourceTag] = tag;
+            }
+            for (const w of e.registeredForms) {
+                const tag = formRef(w.pageIndex, w.path);
+                if (tag) e.written[w.sourceTag] = tag;
+            }
+        }
+        const control = censusOptionalContent(original, carried, expectations);
+
+        const doc = await PDFDocument.load(result.bytes, { updateMetadata: false });
+        const props = (i) => doc.getPages()[i].node.lookup(PDFName.of('Resources')).lookup(PDFName.of('Properties'));
+        const asList = () => doc.catalog.lookup(PDFName.of('OCProperties')).lookup(PDFName.of('D')).lookup(PDFName.of('AS'));
+        const asEntry = (i) => doc.context.lookup(asList().get(i));
+        const [a, b] = tamper.pages ?? [0, 1];
+        switch (tamper.kind) {
+        case 'unreg-swap': {
+            const x = props(a).get(PDFName.of('MC0'));
+            props(a).set(PDFName.of('MC0'), props(b).get(PDFName.of('MC0')));
+            props(b).set(PDFName.of('MC0'), x);
+            break;
+        }
+        case 'unreg-redirect':
+            props(b).set(PDFName.of('MC0'), props(a).get(PDFName.of('MC0')));
+            break;
+        case 'unreg-missing':
+            props(b).delete(PDFName.of('MC0'));
+            break;
+        case 'as-event': {
+            const now = String(asEntry(0).get(PDFName.of('Event')));
+            asEntry(0).set(PDFName.of('Event'), PDFName.of(now === '/View' ? 'Print' : 'View'));
+            break;
+        }
+        case 'as-category':
+            asEntry(0).set(PDFName.of('Category'), doc.context.obj([PDFName.of('Export')]));
+            break;
+        case 'as-ocgs-drop': {
+            const groups = asEntry(0).lookup(PDFName.of('OCGs'));
+            asEntry(0).set(PDFName.of('OCGs'), doc.context.obj([groups.get(0)]));
+            break;
+        }
+        case 'as-ocgs-cross': {
+            const last = asList().size() - 1;
+            const x = asEntry(0).get(PDFName.of('OCGs'));
+            asEntry(0).set(PDFName.of('OCGs'), asEntry(last).get(PDFName.of('OCGs')));
+            asEntry(last).set(PDFName.of('OCGs'), x);
+            break;
+        }
+        case 'as-entry-drop':
+            asList().remove(asList().size() - 1);
+            break;
+        default:
+            throw new Error(`unknown tamper ${tamper.kind}`);
+        }
+        const reread = await PDFDocument.load(await doc.save(), { updateMetadata: false });
+        return plainly({
+            run: result.status,
+            sources: expectations.length,
+            asEntries: expectations.reduce((n, e) => n + e.autoStates.length, 0),
+            control: pick(control),
+            blind: pick(censusOptionalContent(reread, carried)),
+            told: pick(censusOptionalContent(reread, carried, expectations)),
+        });
+    },
+
+    /**
+     * PR #48 review, independent RF-02: the carry path where no registered
+     * group is kept. `claimUsed` makes the description say a kept page uses
+     * the source's group although the written page does not have it — the
+     * only way to reach the disagreement, since a real copy always matches.
+     * `mode: 'merge'` appends a whole first source (carried normally) before
+     * this one, so the path runs on a multi-source output with shifted pages;
+     * `runMerge` itself refuses a source whose pages use no declared group
+     * before the carry, which is why Merge is driven at this level.
+     */
+    async ocuZeroCarry(mode, name, claimUsed) {
+        const out = await PDFDocument.create();
+        let offset = 0;
+        if (mode === 'merge') {
+            const first = await PDFDocument.load(await bytesOf('ocu-vol2like'), { updateMetadata: false });
+            const pages = await out.copyPages(first, first.getPageIndices());
+            for (const p of pages) out.addPage(p);
+            const carriedFirst = carryOptionalContent(first, describeOptionalContent(first, null), out);
+            if (carriedFirst.status !== 'CARRIED') return plainly({ first: carriedFirst.status, reason: carriedFirst.reason });
+            offset = pages.length;
+        }
+        const source = await PDFDocument.load(await bytesOf(name), { updateMetadata: false });
+        const [page] = await out.copyPages(source, [0]);
+        out.addPage(page);
+        const described = describeOptionalContent(source, [0]);
+        let description = {
+            ...described,
+            pageProperties: described.pageProperties.map((e) => ({ ...e, pageIndex: e.pageIndex + offset })),
+            xobjectUsages: described.xobjectUsages.map((e) => ({ ...e, pageIndex: e.pageIndex + offset })),
+            unregisteredPageProperties: described.unregisteredPageProperties.map((e) => ({ ...e, pageIndex: e.pageIndex + offset })),
+        };
+        if (claimUsed) {
+            const group = source.catalog.lookup(PDFName.of('OCProperties')).lookup(PDFName.of('OCGs')).get(0);
+            description = {
+                ...description,
+                pageProperties: [{ pageIndex: offset, key: '/MC9', ref: group, name: 'Watermark' }],
+                autoStateGroupsDropped: description.autoStateGroupsDropped.filter((t) => t !== group.tag),
+            };
+        }
+        const carried = carryOptionalContent(source, description, out);
+        const oc = out.catalog.lookup(PDFName.of('OCProperties'));
+        const asArr = oc instanceof PDFDict ? oc.lookup(PDFName.of('D')).lookup(PDFName.of('AS')) : undefined;
+        return plainly({
+            status: carried.status,
+            reason: carried.reason ?? null,
+            carried: carried.carried ?? null,
+            autoStateGroupsDropped: carried.autoStateGroupsDropped ?? null,
+            autoStateEntriesDropped: carried.autoStateEntriesDropped ?? null,
+            pages: out.getPageCount(),
+            asEntriesInOutput: asArr instanceof PDFArray ? asArr.size() : 0,
+        });
+    },
+
+    /** PR #48 review, main RF-01: Merge sources renamed to one shared file name. */
+    async ocuMergeNamed(names, sharedName) {
+        const inputs = [];
+        for (const [i, name] of names.entries()) {
+            inputs.push({ id: `${name}#${i}`, name: sharedName, type: 'application/pdf', bytes: await bytesOf(name) });
+        }
+        const intake = await intakeSources(inputs);
+        const plan = planMerge(intake, {});
+        const result = await runMerge(inputs, plan, {
+            confirmedLosses: plan.requiresConfirmation,
+            confirmedFingerprint: mergeConfirmationFingerprint(plan),
+        });
+        return plainly({
+            run: result.status,
+            reason: result.reason ?? null,
+            losses: (result.losses ?? []).map((l) => ({ kind: l.kind, what: l.what ?? null, why: l.why })),
+        });
     },
 });
 

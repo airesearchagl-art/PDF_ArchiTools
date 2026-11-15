@@ -16,7 +16,7 @@ import type { ReadbackFacts } from './contracts';
 import { countSourcePageReferences, measureDestinationInvariants } from './destinations';
 import { scanJavaScript } from './javascript';
 import { countOrphanWidgets } from './forms';
-import { censusOptionalContent } from './optional-content';
+import { censusOptionalContent, type OptionalContentExpectation } from './optional-content';
 import {
     censusAttachments,
     censusJavaScript,
@@ -36,6 +36,8 @@ export async function readbackArtifact(
     bytes: Uint8Array,
     /** OC-U: output tags the run carried unregistered on purpose. */
     carriedUnregistered: ReadonlySet<string> = new Set(),
+    /** Independent RF-01: what each carried source must have left, from its description. */
+    optionalContentExpectations?: readonly OptionalContentExpectation[],
 ): Promise<ReadbackFacts> {
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
     const destinations = measureDestinationInvariants(doc);
@@ -45,7 +47,7 @@ export async function readbackArtifact(
     const attachments = censusAttachments(doc);
     const tagging = censusTagging(doc);
     const signatures = censusSignatures(doc);
-    const optionalContent = censusOptionalContent(doc, carriedUnregistered);
+    const optionalContent = censusOptionalContent(doc, carriedUnregistered, optionalContentExpectations);
 
     const refusals = [js, attachments, tagging, signatures, optionalContent]
         .filter((c) => !c.complete)
