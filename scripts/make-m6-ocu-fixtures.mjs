@@ -58,8 +58,9 @@ const CONTENT = `${PAGE_PAINT}/OC /MC0 BDC\n${CAD_PAINT}EMC\n/Fm0 Do\n`;
  * names. `groups` are object numbers → names; `registered` lists the ones
  * `/OCGs` holds; `d` is the `/D` body.
  */
-function layered({ pages, groups, registered, d }) {
+function layered({ pages, groups, registered, d, extra = {} }) {
     const objs = new Map();
+    for (const [num, body] of Object.entries(extra)) objs.set(Number(num), body);
     const kids = [];
     let next = 100;
     for (const p of pages) {
@@ -153,6 +154,23 @@ write('occ2-zero-order', layered({
     pages: [{ cad: null, mark: null }, { cad: null, mark: 6 }],
     groups: { 6: 'Watermark' }, registered: [6],
     d: `/ON [${r(6)}] /Order [${r(6)}] /AS [${as(6)}]`,
+}));
+
+// ---- re-review round (PR #48) ------------------------------------------------
+// Independent RF-02: `/Order` held through indirect arrays, with no `/AS` at
+// all. Page 1 uses no layer; page 2 uses the only registered one. The root is
+// an indirect array, and the group sits inside an indirect child array.
+write('occ2-zero-order-indirect-root', layered({
+    pages: [{ cad: null, mark: null }, { cad: null, mark: 6 }],
+    groups: { 6: 'Watermark' }, registered: [6],
+    d: `/ON [${r(6)}] /Order 20 0 R`,
+    extra: { 20: `[${r(6)}]` },
+}));
+write('occ2-zero-order-indirect-child', layered({
+    pages: [{ cad: null, mark: null }, { cad: null, mark: 6 }],
+    groups: { 6: 'Watermark' }, registered: [6],
+    d: `/ON [${r(6)}] /Order [21 0 R]`,
+    extra: { 21: `[(Layers) ${r(6)}]` },
 }));
 
 console.log(`wrote ${written.length} fixtures to ${path.relative(ROOT, OUT)}:`);

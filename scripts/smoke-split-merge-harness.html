@@ -2546,6 +2546,11 @@ Object.assign(window.__m6, {
         case 'unreg-missing':
             props(b).delete(PDFName.of('MC0'));
             break;
+        case 'unreg-extra':
+            // Re-review RF-01: one more key naming a group already carried on
+            // purpose — on the same page (a === b) or another one.
+            props(b).set(PDFName.of('MC7'), props(a).get(PDFName.of('MC0')));
+            break;
         case 'as-event': {
             const now = String(asEntry(0).get(PDFName.of('Event')));
             asEntry(0).set(PDFName.of('Event'), PDFName.of(now === '/View' ? 'Print' : 'View'));

@@ -1925,15 +1925,16 @@ export function carryOptionalContent(
                     problem = '/D /Order nested too deep to reproduce';
                     return;
                 }
-                if (node instanceof PDFRef) {
-                    if (usedTags.has(node.tag)) {
-                        problem = `/D /Order names ${node.tag}, which a kept page uses and the written pages do not reproduce`;
-                    }
-                    return;
-                }
+                // Re-review RF-02: resolve first, as `mapOrder` does. The root
+                // and any child may be an indirect *array*; a reference is a
+                // group only once it is known not to be one.
                 const value = look(source, node);
                 if (value instanceof PDFArray) {
                     for (let i = 0; i < value.size(); i += 1) walk(value.get(i), depth + 1);
+                    return;
+                }
+                if (node instanceof PDFRef && usedTags.has(node.tag)) {
+                    problem = `/D /Order names ${node.tag}, which a kept page uses and the written pages do not reproduce`;
                 }
             };
             walk(sourceD.get(PDFName.of('Order')), 0);
@@ -2723,6 +2724,43 @@ export function censusOptionalContent(
      * whose meaning cannot be known. An ordinary property list — marked content
      * that is not optional content — is not a use, and is left alone.
      */
+    /**
+     * Re-review RF-01 — the uses actually found, not only the ones expected.
+     *
+     * The expectation check confirms that every witness the sources had is
+     * where it should be. It cannot see a witness nobody expected: one more
+     * `/Properties` key naming a group already carried unregistered, on the
+     * same page or another, leaves every expected one in place. So each use
+     * of such a group found here has to be one of the expected witnesses —
+     * that page, that key, that object — or it is counted.
+     *
+     * A map is placed on pages by the object that holds it: a page that
+     * holds its `/Resources` directly, or the indirect `/Resources` a page
+     * names (shared resources place it on every page that names them).
+     */
+    const allowedUnregisteredUse = new Set<string>();
+    const pagesOfRoot = new Map<string, number[]>();
+    if (expectations !== undefined) {
+        for (const expected of expectations) {
+            for (const e of expected.unregistered) {
+                const pinned = expected.written[e.sourceTag];
+                if (pinned !== undefined) allowedUnregisteredUse.add(`${e.pageIndex}|${e.key}|${pinned}`);
+            }
+        }
+        doc.getPages().forEach((page, index) => {
+            const place = (tag: string): void => {
+                const list = pagesOfRoot.get(tag) ?? [];
+                list.push(index);
+                pagesOfRoot.set(tag, list);
+            };
+            place(page.ref.tag);
+            const resources = page.node.get(PDFName.of('Resources'));
+            if (resources instanceof PDFRef) place(resources.tag);
+        });
+    }
+    const isExpectedUnregisteredUse = (rootTag: string, key: string, tag: string): boolean =>
+        (pagesOfRoot.get(rootTag) ?? []).some((index) => allowedUnregisteredUse.has(`${index}|${key}|${tag}`));
+
     for (const { rootTag, raw } of propertyMaps) {
         const mapRead = resolve(doc, raw);
         if (!mapRead.ok) {
@@ -2757,6 +2795,10 @@ export function censusOptionalContent(
                 if (registered.has(entry.tag)) {
                     facts.configErrors += 1;
                     note(`${name} names a group carried unregistered that the artifact registers`);
+                } else if (expectations !== undefined
+                    && !isExpectedUnregisteredUse(rootTag, key.asString(), entry.tag)) {
+                    facts.configErrors += 1;
+                    note(`${name} names ${entry.tag}, carried unregistered, where no source had it`);
                 } else {
                     facts.carriedUnregisteredUses += 1;
                 }

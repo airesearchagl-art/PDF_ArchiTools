@@ -2296,6 +2296,12 @@ try {
             ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-ocgs-cross' }, 'two sources\' /AS entries trade their layers'],
             ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-event' }, 'the first source\'s /AS Event is changed'],
             ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'as-entry-drop' }, 'the second source\'s last /AS entry is removed'],
+            // Re-review RF-01: an extra key naming a group already carried
+            // unregistered — every expected witness is still in place.
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-extra', pages: [0, 0] }, 'an extra key on the same page names its carried layer again'],
+            ['extract', ['ocu-vol2like'], [0, 1], { kind: 'unreg-extra', pages: [0, 1] }, 'an extra key on another page names page 1\'s carried layer'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-extra', pages: [2, 2] }, 'an extra key on the second source\'s page names its own carried layer'],
+            ['merge', ['ocu-vol2like', 'ocu-vol2like-off'], null, { kind: 'unreg-extra', pages: [0, 2] }, 'an extra key on the second source\'s page names the first source\'s carried layer'],
         ]) {
             const t = await call('ocuReadbackTamper', mode, names, selection, tamper);
             const label = `${mode} ${names.join('+')}: ${title}`;
@@ -2340,6 +2346,27 @@ try {
             check(`${mode}: zero kept groups, /AS naming a layer a kept page uses but the output lost — refused`,
                 asUsed.status === 'REFUSED' && String(asUsed.reason).includes('no kept page was shown not to use'),
                 JSON.stringify(asUsed));
+        }
+
+        // Re-review RF-02: `/Order` through indirect arrays (root, child), no
+        // `/AS`. The layer-free cover page is still written; a group a kept
+        // page uses and the output lost is refused at the carry.
+        for (const fixture of ['occ2-zero-order-indirect-root', 'occ2-zero-order-indirect-child']) {
+            const r = await call('ocuExtract', fixture, [0]);
+            check(`${fixture} [0]: the layer-free page is extracted, with nothing to disclose (no /AS)`,
+                r.plan === 'READY' && r.run === 'READY' && r.structure?.ocProperties === false
+                && !(r.losses || []).some((l) => l.kind === 'layer-auto-state'),
+                `${r.plan}/${r.run} ${(r.unsupported || []).join(' | ')}${r.runReason ?? ''} ${JSON.stringify(r.structure)}`);
+            for (const mode of ['extract', 'merge']) {
+                const unused = await call('ocuZeroCarry', mode, fixture, false);
+                check(`${mode} ${fixture}: an indirect /Order naming only an unused layer is written, as on main`,
+                    unused.status === 'CARRIED' && unused.autoStateGroupsDropped === 0, JSON.stringify(unused));
+                const used = await call('ocuZeroCarry', mode, fixture, true);
+                check(`${mode} ${fixture}: an indirect /Order naming a layer a kept page uses but the output lost is refused`,
+                    used.status === 'REFUSED'
+                    && String(used.reason).includes('a kept page uses and the written pages do not reproduce'),
+                    JSON.stringify(used));
+            }
         }
 
         // Main RF-01: one file name, one count, two sources — two notices.
