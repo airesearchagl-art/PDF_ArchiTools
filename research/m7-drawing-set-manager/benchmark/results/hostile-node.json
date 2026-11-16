@@ -1,0 +1,220 @@
+{
+  "notice": "RESEARCH ONLY / NOT PRODUCTION / NOT CANONICAL. Synthetic inputs generated in memory. NODE evidence -- not a browser measurement.",
+  "runtime": "node",
+  "environment": {
+    "node": "v24.15.0",
+    "v8": "13.6.233.17-node.48",
+    "platform": "win32 10.0.26200",
+    "cpu": "Intel(R) Core(TM) Ultra 9 285K"
+  },
+  "notes": [
+    "Each case ran in its own child process (node --expose-gc --max-old-space-size=8192); peakRssMiB is that process's peak resident set, which includes building the input.",
+    "retainedHeapMiB is V8 heap still reachable after a forced GC, with the parsed value held.",
+    "bounded = the real import pipeline with CANDIDATE_LIMITS. unbounded = JSON.parse alone."
+  ],
+  "hostile": [
+    {
+      "input": "deep nesting, 1,000,000 levels",
+      "bounded": {
+        "inputMiB": 1.91,
+        "status": "REJECTED",
+        "stage": "scan",
+        "code": "NESTING_TOO_DEEP",
+        "refusedInMs": 0.9,
+        "reachedJsonParse": false,
+        "peakRssMiB": 61.1
+      },
+      "unbounded": {
+        "inputMiB": 1.91,
+        "jsonParse": "parsed",
+        "parseMs": 117,
+        "retainedHeapMiB": 55.4,
+        "heapPerInputByte": 29,
+        "recursiveWalk": "RangeError: Maximum call stack size exceeded",
+        "peakRssMiB": 151.3
+      }
+    },
+    {
+      "input": "array of 16,000,000 numbers",
+      "bounded": {
+        "inputMiB": 30.52,
+        "status": "REJECTED",
+        "stage": "scan",
+        "code": "TOO_MANY_VALUES",
+        "refusedInMs": 45.2,
+        "reachedJsonParse": false,
+        "peakRssMiB": 148.4
+      },
+      "unbounded": {
+        "inputMiB": 30.52,
+        "jsonParse": "parsed",
+        "parseMs": 122,
+        "retainedHeapMiB": 152.6,
+        "heapPerInputByte": 5,
+        "recursiveWalk": "walked in 74 ms",
+        "peakRssMiB": 268.9
+      }
+    },
+    {
+      "input": "array of 10,000,000 empty objects",
+      "bounded": {
+        "inputMiB": 28.61,
+        "status": "REJECTED",
+        "stage": "scan",
+        "code": "TOO_MANY_VALUES",
+        "refusedInMs": 103.7,
+        "reachedJsonParse": false,
+        "peakRssMiB": 150.6
+      },
+      "unbounded": {
+        "inputMiB": 28.61,
+        "jsonParse": "parsed",
+        "parseMs": 1564,
+        "retainedHeapMiB": 639,
+        "heapPerInputByte": 22.3,
+        "recursiveWalk": "walked in 144 ms",
+        "peakRssMiB": 1155.1
+      }
+    },
+    {
+      "input": "one 32 MiB string",
+      "bounded": {
+        "inputMiB": 32,
+        "status": "REJECTED",
+        "stage": "scan",
+        "code": "STRING_TOO_LONG",
+        "refusedInMs": 11.6,
+        "reachedJsonParse": false,
+        "peakRssMiB": 151.6
+      },
+      "unbounded": {
+        "inputMiB": 32,
+        "jsonParse": "parsed",
+        "parseMs": 23,
+        "retainedHeapMiB": 64.1,
+        "heapPerInputByte": 2,
+        "recursiveWalk": "walked in 0 ms",
+        "peakRssMiB": 119.5
+      }
+    },
+    {
+      "input": "object with 2,000,000 distinct keys",
+      "bounded": {
+        "inputMiB": 23.74,
+        "status": "REJECTED",
+        "stage": "scan",
+        "code": "TOO_MANY_KEYS",
+        "refusedInMs": 7.9,
+        "reachedJsonParse": false,
+        "peakRssMiB": 390.4
+      },
+      "unbounded": {
+        "inputMiB": 23.74,
+        "jsonParse": "parsed",
+        "parseMs": 743,
+        "retainedHeapMiB": 141.9,
+        "heapPerInputByte": 6,
+        "recursiveWalk": "walked in 1321 ms",
+        "peakRssMiB": 541.7
+      }
+    },
+    {
+      "input": "worst case inside the bounds: 3,999,990 empty objects",
+      "bounded": {
+        "inputMiB": 11.44,
+        "status": "REJECTED",
+        "stage": "schema",
+        "code": "SCHEMA_REQUIRED",
+        "refusedInMs": 539.7,
+        "reachedJsonParse": true,
+        "peakRssMiB": 567.4
+      },
+      "unbounded": {
+        "inputMiB": 11.44,
+        "jsonParse": "parsed",
+        "parseMs": 385,
+        "retainedHeapMiB": 255.6,
+        "heapPerInputByte": 22.3,
+        "recursiveWalk": "walked in 65 ms",
+        "peakRssMiB": 508.5
+      }
+    },
+    {
+      "input": "500,000 strings of 100 characters",
+      "bounded": {
+        "inputMiB": 49.11,
+        "status": "REJECTED",
+        "stage": "schema",
+        "code": "SCHEMA_REQUIRED",
+        "refusedInMs": 133.4,
+        "reachedJsonParse": true,
+        "peakRssMiB": 277.7
+      },
+      "unbounded": {
+        "inputMiB": 49.11,
+        "jsonParse": "parsed",
+        "parseMs": 60,
+        "retainedHeapMiB": 110.2,
+        "heapPerInputByte": 2.2,
+        "recursiveWalk": "walked in 7 ms",
+        "peakRssMiB": 190.1
+      }
+    }
+  ],
+  "largestAccepted": [
+    {
+      "targetMiB": 16,
+      "bytes": 16308681,
+      "MiB": 15.55,
+      "decisions": 1865,
+      "status": "ACCEPTED",
+      "exportMs": 114,
+      "importMs": 120,
+      "stages": {
+        "decodeMs": 8,
+        "scanMs": 46,
+        "parseMs": 17,
+        "schemaMs": 25,
+        "relationsMs": 23
+      },
+      "retainedHeapMiB": 16.8,
+      "peakRssMiB": 245.4
+    },
+    {
+      "targetMiB": 32,
+      "bytes": 33080124,
+      "MiB": 31.55,
+      "decisions": 3236,
+      "status": "ACCEPTED",
+      "exportMs": 170,
+      "importMs": 155,
+      "stages": {
+        "decodeMs": 16,
+        "scanMs": 54,
+        "parseMs": 26,
+        "schemaMs": 34,
+        "relationsMs": 25
+      },
+      "retainedHeapMiB": 27.7,
+      "peakRssMiB": 311.9
+    },
+    {
+      "targetMiB": 63,
+      "bytes": 65595438,
+      "MiB": 62.56,
+      "decisions": 5894,
+      "status": "ACCEPTED",
+      "exportMs": 212,
+      "importMs": 208,
+      "stages": {
+        "decodeMs": 32,
+        "scanMs": 69,
+        "parseMs": 37,
+        "schemaMs": 42,
+        "relationsMs": 29
+      },
+      "retainedHeapMiB": 48.9,
+      "peakRssMiB": 406.5
+    }
+  ]
+}
